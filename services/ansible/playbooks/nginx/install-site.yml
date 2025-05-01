@@ -1,0 +1,52 @@
+- name: Configure Nginx site and install Let's Encrypt certificate
+  hosts: waf_nodes
+  become: yes
+  vars:
+    domain_name: example.com
+    email: admin@example.com
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+    - name: Create Nginx configuration for the site
+      copy:
+        dest: /etc/nginx/sites-available/{{ domain_name }}
+        content: |
+          server {
+              listen 80;
+              server_name {{ domain_name }};
+              
+              location / {
+                  proxy_pass {{ proxy_pass_url }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+          }
+      notify: Reload Nginx
+
+    - name: Enable the site
+      file:
+        src: /etc/nginx/sites-available/{{ domain_name }}
+        dest: /etc/nginx/sites-enabled/{{ domain_name }}
+        state: link
+      notify: Reload Nginx
+
+    - name: Obtain SSL certificate using Let's Encrypt
+      command: >
+        certbot --nginx -d {{ domain_name }} --non-interactive --agree-tos --email {{ email }}
+      register: certbot_output
+
+    - name: Display Certbot output
+      debug:
+        var: certbot_output.stdout
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
