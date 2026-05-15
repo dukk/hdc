@@ -1,0 +1,12 @@
+---
+description: HDC CLI unit tests and coverage expectations
+globs: tools/hdc/**/*.mjs
+alwaysApply: false
+---
+
+# HDC testing
+
+- After changing anything under `tools/hdc/`, run `npm run test` from the repo root. Before merging substantive CLI or library changes, run `npm run test:coverage` and keep Vitest coverage thresholds green (`vitest.config.mjs`).
+- Prefer extending `runCli(argv, deps)` in `tools/hdc/lib/cli-app.mjs` with **dependency-injected** `CliDeps` (`tools/hdc/lib/cli-app.mjs` typedef, factory in `tools/hdc/lib/node-cli-deps.mjs`, fakes in `tools/hdc/test/memory-cli-deps.mjs`) instead of new direct `process.exit` / global `console` coupling.
+- The thin entry `tools/hdc/cli.mjs` is excluded from coverage totals; behavior is covered via `runCli` tests and a subprocess smoke check. Treat `lib/cli-app.mjs` as the primary coverage target for command logic.
+- New commands or flags need **unit tests** alongside implementation (happy path, invalid argv, and one failure mode). Pure helpers belong in small modules (e.g. `lib/split-run-args.mjs`) with focused tests.

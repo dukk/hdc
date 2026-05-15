@@ -1,0 +1,15 @@
+{
+  "id": "nagios",
+  "title": "Nagios monitoring",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/systems/pve-a.inventory.json",
+    "inventory/manual/systems/pve-b.inventory.json",
+    "inventory/manual/systems/pve-c.inventory.json"
+  ],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

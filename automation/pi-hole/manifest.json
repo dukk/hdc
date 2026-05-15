@@ -1,0 +1,11 @@
+{
+  "id": "pi-hole",
+  "title": "Pi-hole DNS filtering",
+  "env_required": [],
+  "inventory_docs": [],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "unifi-network",
+  "title": "UniFi Network",
+  "env_required": [],
+  "inventory_docs": ["inventory/automated/network.json"],
+  "verbs": {
+    "query": { "script": "run.mjs" }
+  }
+}

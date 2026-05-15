@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/inventory.system.schema.json",
+  "title": "HDC inventory sidecar — system",
+  "description": "Physical or virtual machine, cluster, or hypervisor row.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "id", "kind"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "const": "system" },
+    "system_class": { "enum": ["physical", "virtual"] },
+    "hosted_on_system_id": { "type": "string", "minLength": 1 },
+    "virtual_hardware": { "type": "object" },
+    "hardware": { "type": "array" },
+    "access": { "type": "object" },
+    "auth": { "type": "object" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "automation_targets": { "type": "array", "items": { "type": "string" } },
+    "services": {
+      "type": "array",
+      "description": "Refs to separate kind services sidecars (by id only). Optional nodes lists access node names where this service runs (subset of access.nodes[].name).",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "nodes": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "notes": { "type": "string" },
+    "last_verified": { "type": ["string", "null"] },
+    "proxmox_cluster": {
+      "type": "object",
+      "description": "Logical Proxmox site: multi-node cluster id with role node, or standalone site id with role standalone.",
+      "required": ["id", "role"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable cluster or site id (e.g. proxmox-primary-cluster, proxmox-home-standalone)."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["node", "standalone"],
+          "description": "node = member of a multi-node cluster; standalone = single-machine site."
+        }
+      },
+      "additionalProperties": false
+    },
+    "query_last": {}
+  }
+}

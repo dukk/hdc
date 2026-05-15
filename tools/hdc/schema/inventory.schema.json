@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/inventory.schema.json",
+  "title": "HDC inventory sidecar",
+  "description": "Discriminated union: use the branch that matches \"kind\".",
+  "oneOf": [
+    { "$ref": "inventory.system.schema.json" },
+    { "$ref": "inventory.network.schema.json" },
+    { "$ref": "inventory.target.schema.json" },
+    { "$ref": "inventory.services.schema.json" }
+  ]
+}

@@ -1,0 +1,12 @@
+---
+description: Proxmox VM/CT resource planning — capacity, inventory, no invented facts.
+globs: "**/*proxmox*"
+alwaysApply: false
+---
+
+# Proxmox resource planning (HDC)
+
+- **Source of truth**: Treat `inventory/manual/**/*.inventory.json` (and matching `.md`) plus `inventory/automated/systems.json` and user-provided live metrics as authoritative. Do not invent hostnames, IPs, bridges, VLANs, pool names, or cluster capacity.
+- **Full workflow**: When planning or deploying a new VM or container on Proxmox, read and follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](../skills/proxmox-resource-planning/SKILL.md).
+- **After capacity or topology changes**: Update the relevant sidecar `hardware` / `notes` / `access` fields, then run `node tools/hdc/cli.mjs docs lint` (see project automation rule).
+- **Ops commands**: Use `node tools/hdc/cli.mjs` / `hdc.cmd` per the hdc-ops skill; never put secrets in sidecars or chat (env var names only).
