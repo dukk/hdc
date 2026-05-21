@@ -1,0 +1,11 @@
+{
+  "id": "homeassistant",
+  "title": "Home Assistant",
+  "env_required": [],
+  "inventory_docs": ["inventory/manual/systems/vm-homeassistant-a.json"],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "unifi-network",
+  "title": "UniFi Network",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/targets/unifi-network.json",
+    "inventory/automated/networks/",
+    "inventory/automated/systems/",
+    "inventory/automated/policies/"
+  ],
+  "verbs": {
+    "query": { "script": "run.mjs" }
+  }
+}

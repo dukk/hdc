@@ -1,0 +1,11 @@
+{
+  "id": "minecraft",
+  "title": "Minecraft server",
+  "env_required": [],
+  "inventory_docs": ["inventory/manual/systems/vm-minecraft-a.json"],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}
