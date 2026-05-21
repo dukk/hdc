@@ -1,8 +1,8 @@
 ---
 name: hdc-ops
 description: >-
-  Runs Home Data Center (HDC) operations via the Node.js hdc CLI: list targets,
-  run deploy/maintain/query plugins, lint inventory JSON, or validate with docs sync. Use when the user asks to deploy, maintain, query, discover state,
+  Runs Home Data Center (HDC) operations via the Node.js hdc CLI: list packages,
+  run deploy/maintain/query for a package, lint inventory JSON, or validate with docs sync. Use when the user asks to deploy, maintain, query, discover state,
   lint inventory, or update manually-deployed docs.
 disable-model-invocation: true
 ---
@@ -23,11 +23,11 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
 ## Commands
 
-1. **List** automation targets and inventory sidecars:
+1. **List** hdc packages and inventory sidecars:
 
    `node tools/hdc/cli.mjs list`
 
-2. **Run** a plugin verb (`deploy`, `maintain`, `query`). Extra args after `--` go to the plugin:
+2. **Run** a package verb (`deploy`, `maintain`, `query`). Extra args after `--` go to the package script:
 
    `node tools/hdc/cli.mjs run pi-hole query`
 
@@ -43,7 +43,7 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
 4. **Apply** query JSON output into a sidecar (explicit merge of `query_last` and `last_verified`):
 
-   `node tools/hdc/cli.mjs inventory apply --sidecar inventory/manual/systems/foo.inventory.json --from-json /path/to/query.json`
+   `node tools/hdc/cli.mjs inventory apply --sidecar inventory/manual/systems/foo.json --from-json /path/to/query.json`
 
 ## After query output
 
@@ -54,3 +54,12 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 ## Secrets
 
 Do not put secret values in sidecars, markdown, or chat. Only env var **names** in `auth` and similar fields.
+
+## System naming
+
+When creating or renaming `kind: "system"` inventory ids, follow **`.cursor/rules/hdc-inventory-naming.mdc`**:
+
+- Physical: no class prefix (`pve-h`, `nas-primary`)
+- VMs: `vm-<role>-<letter>` (e.g. `vm-nginx-proxy-a`)
+- Containers: `ct-<role>-<letter>`
+- Use alphabet instance suffixes (`-a`, `-b`), not numbers (`-1`, `-2`)

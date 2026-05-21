@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "primary_proxmox_cluster_id": "proxmox-primary-cluster",
+  "nrpe_node_ids": ["pve-a", "pve-b", "pve-c"],
+  "central_cluster_document": {
+    "id": "pve-a",
+    "kind": "system",
+    "nagios": {
+      "central": {
+        "address": "10.0.0.1",
+        "ssh": "ssh://root@10.0.0.1"
+      },
+      "auth": {
+        "ssh_user_env": "HDC_NAGIOS_SSH_USER"
+      }
+    },
+    "auth": {
+      "ssh_user_env": "HDC_PROXMOX_SSH_USER"
+    },
+    "access": {
+      "nodes": [
+        {
+          "name": "node",
+          "ip": "10.0.0.1",
+          "web_ui": "https://10.0.0.1:8006",
+          "ssh": "ssh://root@10.0.0.1"
+        }
+      ]
+    },
+    "proxmox_cluster": {
+      "id": "proxmox-primary-cluster",
+      "role": "standalone"
+    }
+  },
+  "monitored_systems": [
+    {
+      "id": "pve-a",
+      "kind": "system",
+      "access": {
+        "nodes": [
+          {
+            "name": "node",
+            "ip": "10.0.0.1",
+            "web_ui": "https://10.0.0.1:8006",
+            "ssh": "ssh://root@10.0.0.1"
+          }
+        ]
+      },
+      "proxmox_cluster": {
+        "id": "proxmox-primary-cluster",
+        "role": "standalone"
+      },
+      "nagios": {
+        "central": {
+          "address": "10.0.0.1",
+          "ssh": "ssh://root@10.0.0.1"
+        },
+        "auth": {
+          "ssh_user_env": "HDC_NAGIOS_SSH_USER"
+        }
+      },
+      "auth": {
+        "ssh_user_env": "HDC_PROXMOX_SSH_USER"
+      }
+    },
+    {
+      "id": "pve-b",
+      "kind": "system",
+      "access": {
+        "nodes": [
+          {
+            "name": "node",
+            "ip": "10.0.0.2",
+            "web_ui": "https://10.0.0.2:8006",
+            "ssh": "ssh://root@10.0.0.2"
+          }
+        ]
+      },
+      "proxmox_cluster": {
+        "id": "proxmox-primary-cluster",
+        "role": "node"
+      },
+      "auth": {
+        "ssh_user_env": "HDC_PROXMOX_SSH_USER"
+      }
+    }
+  ]
+}

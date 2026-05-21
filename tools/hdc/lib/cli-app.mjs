@@ -1,20 +1,11 @@
 import {
-  applyQueryToSidecar,
-  automationTargetIds,
-  AUTOMATION_TARGET_INVENTORY_FILENAME,
-  findInventorySidecars,
-  loadManualInventoryIdKindMap,
-  mergeAutomatedSystemsFromPlugin,
-  mergeQueryStdoutIntoAutomationInventory,
-  tryParseJsonObject,
-  validateSidecar,
-} from "../inventory.mjs";
-import {
   discoverManifests,
   envRequired,
   inventoryDocs,
+  formatManifestServiceInvoke,
   manifestById,
   manifestId,
+  manifestServices,
   manifestTitle,
   verbSpec,
   VERBS,
@@ -22,12 +13,9 @@ import {
 import { writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
+import { collectHdcEnvRows } from "./hdc-env-report.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import { runUsersBootstrapHdc } from "./users-bootstrap-hdc.mjs";
-import {
-  ensureLocalSystemAutomatedInventory,
-  shouldSkipLocalSystemInventoryCollection,
-} from "./local-system-automated-inventory.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -40,7 +28,7 @@ import {
  * @property {(...args: unknown[]) => void} error
  * @property {(...args: unknown[]) => void} warn
  * @property {() => string} repoRoot
- * @property {(root: string) => string} automationDir
+ * @property {(root: string) => string} packagesDir
  * @property {typeof import("node:path").join} join
  * @property {typeof import("node:path").resolve} resolve
  * @property {typeof import("node:path").isAbsolute} isAbsolute
@@ -87,16 +75,14 @@ function usage(deps) {
 Usage:
   ${c} help [ <topic> ... ]
   ${c} list
-  ${c} run <target> <verb> [-- <extra args...>]
-  ${c} docs lint
-  ${c} docs sync [--dry-run]
-  ${c} inventory apply --sidecar <path> --from-json <path>
+  ${c} run <package> <verb> [-- <extra args...>]
   ${c} secrets path
   ${c} secrets init   # new vault: passphrase prompt, or HDC_VAULT_PASSPHRASE once
   ${c} secrets set <ENV_NAME> [--stdin | --value <s>]
   ${c} secrets delete <ENV_NAME>
   ${c} secrets list
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
+  ${c} env              # HDC_* variables (secrets redacted)
 
 verbs: ${VERBS.join(", ")}
 
@@ -130,11 +116,10 @@ function cmdHelp(deps, root, topics) {
     deps.log(`Topic tree (each prints more detail):
   ${c} help help
   ${c} help list
-  ${c} help run [ <target> [ <verb> ] ]
-  ${c} help docs [ lint | sync ]
-  ${c} help inventory [ apply ]
+  ${c} help run [ <package> [ <verb> ] ]
   ${c} help secrets [ path | init | set | list | delete ]
-  ${c} help users [ bootstrap-hdc ]`);
+  ${c} help users [ bootstrap-hdc ]
+  ${c} help env`);
     return;
   }
 
@@ -151,8 +136,26 @@ for the command summary, or add topics to drill down, for example:
   ${c} help run proxmox query
   ${c} help secrets set
 
-Topics mirror real commands: "run" is followed by an automation target id (from manifest.json),
-then a verb (${VERBS.join(", ")}). Target scripts live under automation/<target>/<verb>/.
+Topics mirror real commands: "run" is followed by a package id (from manifest.json under packages/<folder>/),
+then a verb (${VERBS.join(", ")}). Package scripts live under packages/<package>/<verb>/.
+`);
+    return;
+  }
+
+  if (a0 === "env") {
+    if (topics.length > 1) die(deps, `help: too many arguments after "env"`);
+    const c = helpExe(deps);
+    deps.log(`env — show HDC_* environment variables
+
+Prints every variable in the current process whose name starts with ${JSON.stringify("HDC_")},
+sorted by name. Values that look like secrets (names containing PASSWORD, TOKEN, etc.) are not
+shown in full — only length — so you can safely copy this output into chats or tickets.
+
+The repo ${JSON.stringify(".env")} file is loaded at CLI startup for most commands, but only for keys
+that are not already defined in the parent environment (see ${c} secrets path and vault docs).
+
+Examples:
+  ${c} env
 `);
     return;
   }
@@ -160,33 +163,13 @@ then a verb (${VERBS.join(", ")}). Target scripts live under automation/<target>
   if (a0 === "list") {
     if (topics.length > 1) die(deps, `help: too many arguments after "list"`);
     const c = helpExe(deps);
-    deps.log(`list — show automation targets and inventory sidecars
+    deps.log(`list — show hdc packages (from packages/*/manifest.json)
 
-Output has three sections:
+Each row is a package id, title, and which verbs exist (deploy / maintain / query). These are the
+hdc entrypoints (${c} run <package> <verb>).
 
-1) Automation targets — each row is a plugin under automation/<name>/ (from manifest.json): id,
-   title, and which verbs exist (deploy / maintain / query). These are the automation entrypoints
-   (${c} run <target> <verb>).
-
-2) Automation inventory — one path per target: automation/<name>/${AUTOMATION_TARGET_INVENTORY_FILENAME}.
-   Shown as "exists" or "(created on first qualifying query)". After a successful query whose stdout
-   is a single JSON object, hdc writes query_last and last_verified there (see ${c} help run).
-
-3) Inventory sidecars — every *.inventory.json under inventory/manual/<kind>/ (repo-relative
-   paths). A sidecar is structured data for equipment you run yourself (not fully driven by a
-   single plugin): stable id, kind (system | network | target | services), access (nodes with IPs,
-   Web UI / SSH URLs), tags, optional automation_targets (must name ids from section 1), notes, etc.
-   Auth values are env var *names* only (e.g. HDC_PROXMOX_SSH_USER); never put secrets in JSON —
-   use ${c} secrets … and reference keys from auth.
-
-Optional sibling *.md files (e.g. systems/nas.md) are for human or agent notes only; hdc does not
-read or write them.
-
-Workflow after editing JSON: ${c} docs lint (or ${c} docs sync — same validation, no markdown changes).
-
-For automation plugins, a successful ${c} run <target> query that prints one JSON object on stdout
-updates automation/<target>/${AUTOMATION_TARGET_INVENTORY_FILENAME} automatically (query_last).
-To merge query output into a *docs* sidecar instead, use ${c} inventory apply (see ${c} help inventory apply).
+Structured facts for automation live in optional per-package config.json files under
+packages/infrastructure/<id>/ and packages/services/<id>/ (see each package's config.example.json).
 
 Examples:
   ${c} list
@@ -197,49 +180,39 @@ Examples:
   if (a0 === "run") {
     if (topics.length === 1) {
       const c = helpExe(deps);
-      deps.log(`run — execute an automation plugin script
+      deps.log(`run — execute a package script
 
 Usage:
-  ${c} run <target> <verb> [-- <extra args...>]
+  ${c} run <package> <verb> [-- <extra args...>]
 
-- <target> is the manifest "id" (or the automation folder name if id is missing).
+- <package> is the manifest "id" (or the packages/ folder name if id is missing).
 - <verb> must be one of: ${VERBS.join(", ")}.
-- Everything after "--" is forwarded to the target script (not parsed by hdc).
+- Everything after "--" is forwarded to the package script (not parsed by hdc).
 
-The child process uses cwd automation/<folder>/<verb>/ and runs:
+The child process uses cwd packages/<folder>/<verb>/ and runs:
   <node> <script path> <extra args...>
 
-When a query plugin exits 0 and prints a single JSON object to stdout (and nothing else you need
-preserved), hdc writes/updates automation/<target>/${AUTOMATION_TARGET_INVENTORY_FILENAME} with
-query_last set to that object and last_verified set to the current time. Other top-level keys in
-that file are kept. If stdout is empty or not valid JSON, the file is left unchanged and hdc logs
-a short warning. Valid JSON stdout also merges into inventory/automated/systems.json (per-plugin
-sources plus optional systems[] entries).
+When a query or deploy plugin exits 0 and prints JSON to stdout, hdc forwards that output to the
+terminal unchanged. Package scripts do not update repo inventory paths.
 
-On successful deploy, hdc always updates inventory/automated/systems.json (per-plugin deploy
-timestamp); if stdout is a JSON object, it is merged the same way as query payloads.
-
-Discover targets:
+Discover packages:
   ${c} list
-Drill into one target or verb:
-  ${c} help run <target>
-  ${c} help run <target> <verb>
-
-Inventory sidecars (structured facts for gear you run by hand) live under inventory/manual/
-— the same ${c} list output explains them; see ${c} help list and ${c} help docs.
+Drill into one package or verb:
+  ${c} help run <package>
+  ${c} help run <package> <verb>
 `);
       return;
     }
     if (topics.length > 3) die(deps, `help: too many arguments after "run ${a1} ${a2}"`);
 
-    const manifests = discoverManifests(deps.automationDir(root));
-    const target = a1;
-    const m = manifestById(manifests, target);
-    if (!m) die(deps, `help run: unknown target ${JSON.stringify(target)}`);
+    const manifests = discoverManifests(deps.packagesDir(root));
+    const packageId = a1;
+    const m = manifestById(manifests, packageId);
+    if (!m) die(deps, `help run: unknown package ${JSON.stringify(packageId)}`);
 
     if (topics.length === 2) {
       const lines = [];
-      lines.push(`run — target ${manifestId(m)} (${manifestTitle(m)})`);
+      lines.push(`run — package ${manifestId(m)} (${manifestTitle(m)})`);
       lines.push("");
       lines.push(`Manifest: ${deps.relative(root, m.path).replace(/\\/g, "/")}`);
       const req = envRequired(m);
@@ -248,10 +221,24 @@ Inventory sidecars (structured facts for gear you run by hand) live under invent
       const invDocs = inventoryDocs(m);
       if (invDocs.length) lines.push(`inventory_docs: ${invDocs.join(", ")}`);
       lines.push("");
-      lines.push("Verbs (see help run <target> <verb> for script path and preview):");
+      lines.push("Verbs (see help run <package> <verb> for script path and preview):");
       for (const v of VERBS) {
         const spec = verbSpec(m, v);
         lines.push(spec ? `  ${v}\t${spec.script}` : `  ${v}\t(not configured)`);
+      }
+      const services = manifestServices(m);
+      if (services.length) {
+        lines.push("");
+        lines.push("Services (capabilities exposed by this package):");
+        const pkg = manifestId(m);
+        const c = helpExe(deps);
+        for (const svc of services) {
+          const inv = formatManifestServiceInvoke(svc, pkg);
+          const invokePart = svc.invoke ? ` → ${svc.invoke}` : "";
+          lines.push(`  ${svc.id}\t${svc.verb}${invokePart}\t${svc.title}`);
+          if (svc.summary) lines.push(`\t${svc.summary}`);
+          lines.push(`\t${c} ${inv} …`);
+        }
       }
       lines.push("");
       lines.push(`Example: ${helpExe(deps)} run ${manifestId(m)} <verb> [-- ...]`);
@@ -262,22 +249,16 @@ Inventory sidecars (structured facts for gear you run by hand) live under invent
     const verb = a2;
     if (!VERBS.includes(verb)) die(deps, `help run: verb must be one of: ${VERBS.join(", ")}`);
     const spec = verbSpec(m, verb);
-    if (!spec) die(deps, `help run: target ${JSON.stringify(target)} has no ${verb} script in manifest`);
+    if (!spec) die(deps, `help run: package ${JSON.stringify(packageId)} has no ${verb} script in manifest`);
     const cwd = deps.join(m.dir, verb);
     const scriptAbs = deps.join(cwd, spec.script);
     const relScript = deps.relative(root, scriptAbs).replace(/\\/g, "/");
     const c = helpExe(deps);
-    const invRel = deps
-      .relative(root, deps.join(m.dir, AUTOMATION_TARGET_INVENTORY_FILENAME))
-      .replace(/\\/g, "/");
-    const autoRel = deps.relative(root, deps.join(root, "inventory", "automated", "systems.json")).replace(/\\/g, "/");
     const queryNote =
-      verb === "query"
-        ? `On exit 0, stdout is written to the terminal, then parsed; if it is one JSON object, hdc updates ${invRel} (query_last + last_verified) and merges into ${autoRel} when JSON is valid.\n\n`
-        : verb === "deploy"
-          ? `On exit 0, hdc updates ${autoRel} (deploy timestamp; optional JSON stdout merges like query).\n\n`
-          : "";
-    deps.log(`run — target ${manifestId(m)} (${manifestTitle(m)}), verb ${verb}
+      verb === "query" || verb === "deploy"
+        ? `On exit 0, stdout from the script is written to the terminal as received (no hdc post-processing).\n\n`
+        : "";
+    deps.log(`run — package ${manifestId(m)} (${manifestTitle(m)}), verb ${verb}
 
 Manifest: ${deps.relative(root, m.path).replace(/\\/g, "/")}
 Working directory (spawn cwd): ${deps.relative(root, cwd).replace(/\\/g, "/")}
@@ -299,121 +280,6 @@ ${queryNote}If the script file is missing on disk, "run" exits with an error (sa
       deps.log(head);
     }
     return;
-  }
-
-  if (a0 === "docs") {
-    if (topics.length === 1) {
-      const c = helpExe(deps);
-      deps.log(`docs — inventory sidecars (JSON only for hdc)
-
-Inventory sidecars live under inventory/manual/*/*.inventory.json. They hold machine-readable
-facts about manually deployed systems. Companion *.md files beside a sidecar are optional and are
-not read or written by hdc (use them for human or agent notes only).
-
-${c} docs lint checks every sidecar JSON (see tools/hdc/schema/inventory.*.schema.json: system, network, target, services).
-
-${c} docs sync runs the same JSON checks as lint; it does not modify any markdown files.
-
-Examples:
-  ${c} docs lint
-  ${c} docs sync [--dry-run]
-
-More:
-  ${c} help docs lint
-  ${c} help docs sync`);
-      return;
-    }
-    if (topics.length > 2) die(deps, `help: too many arguments after "docs ${a1}"`);
-    if (a1 === "lint") {
-      const c = helpExe(deps);
-      deps.log(`docs lint — validate inventory sidecars
-
-Walks inventory/manual/*/*.inventory.json and flags problems before you commit.
-
-Checks include: parseable JSON; schema_version 1; non-empty id; kind in system | network | target | services;
-system.services refs (id of a kind services sidecar, optional nodes); duplicate ids across manual files;
-kind target requires automation_target naming a manifest id; virtual systems require hosted_on_system_id;
-optional automation_targets (system/network/services) entries must match automation/*/ manifest ids; auth fields must
-look like HDC_* env names (not inline passwords); heuristic scan for PEM / huge base64 blobs.
-
-Companion *.md files are not validated or required by hdc.
-
-Examples:
-  ${c} docs lint
-`);
-      return;
-    }
-    if (a1 === "sync") {
-      const c = helpExe(deps);
-      deps.log(`docs sync — validate inventory JSON (no markdown updates)
-
-Runs the same checks as ${c} docs lint on each *.inventory.json under inventory/manual/. Optional
-sibling *.md files are ignored by hdc.
-
-Use --dry-run for the same validation and logging (no side effects either way).
-
-Examples:
-  ${c} docs sync
-  ${c} docs sync --dry-run
-`);
-      return;
-    }
-    die(deps, `help docs: unknown subtopic ${JSON.stringify(a1)} (try: lint, sync)`);
-  }
-
-  if (a0 === "inventory") {
-    if (topics.length === 1) {
-      const c = helpExe(deps);
-      deps.log(`inventory — sidecar JSON maintenance
-
-Automation targets also keep automation/<id>/${AUTOMATION_TARGET_INVENTORY_FILENAME}; that file is
-updated automatically when ${c} run <id> query exits 0 with JSON stdout (no manual step).
-
-Inventory sidecars (*.inventory.json under inventory/manual/) describe manually operated
-systems. The apply subcommand is for tucking the *last* structured output from a query plugin into
-the sidecar: it sets query_last to the JSON object from --from-json and sets last_verified to the
-current UTC time, then re-validates like ${c} docs lint.
-
-Use this when you captured query JSON and want it in an inventory/manual sidecar (human
-system/network record).
-
-Example:
-  ${c} help inventory apply`);
-      return;
-    }
-    if (topics.length > 2) die(deps, `help: too many arguments after "inventory ${a1}"`);
-    if (a1 === "apply") {
-      const c = helpExe(deps);
-      deps.log(`inventory apply — merge query JSON into a sidecar
-
-Usage:
-  ${c} inventory apply --sidecar <path> --from-json <path>
-
---sidecar   Target inventory JSON (repo-relative or absolute), e.g.
-            inventory/manual/systems/pve-a.inventory.json
---from-json File containing one JSON object (e.g. saved stdout from ${c} run <target> query).
-
-The sidecar is read (or treated as empty if missing), then query_last is replaced with the parsed
-object from --from-json and last_verified is set. The file is written back and validated the same
-way as ${c} docs lint. (Per-target automation inventory under automation/<target>/${AUTOMATION_TARGET_INVENTORY_FILENAME}
-is updated by successful query runs and does not use this command.)
-
-End-to-end example (shell saves query output, merges into sidecar, refreshes docs):
-
-  ${c} run proxmox query > /tmp/proxmox-query.json
-  ${c} inventory apply \\
-    --sidecar inventory/manual/systems/pve-a.inventory.json \\
-    --from-json /tmp/proxmox-query.json
-  ${c} docs lint
-
-On Windows PowerShell you might use Set-Content or Out-File instead of > to capture UTF-8 JSON.
-
-Single-command illustration (paths illustrative):
-  ${c} inventory apply --sidecar inventory/manual/systems/x.inventory.json --from-json query-out.json
-`);
-      return;
-    }
-    die(deps, `help inventory: unknown subtopic ${JSON.stringify(a1)} (try: apply)`);
   }
 
   if (a0 === "secrets") {
@@ -509,7 +375,7 @@ Examples:
       deps.log(`users — host-local user operations
 
 Subcommands:
-  bootstrap-hdc  Create/update the "hdc" Linux user over SSH for matching inventory sidecars.
+  bootstrap-hdc  Create/update the "hdc" Linux user over SSH for hosts listed in package config or explicit JSON sidecars.
 
 Example:
   ${c} help users bootstrap-hdc`);
@@ -523,20 +389,20 @@ Example:
 Usage:
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
 
-- With no --sidecar, hdc scans inventory/manual/**/*.inventory.json and selects sidecars
-  whose tags include "proxmox" or "ubuntu" (case-insensitive), then uses access.nodes[].ssh plus
-  auth.ssh_user_env to decide SSH targets.
-- With one or more --sidecar paths, only those files are used (still requires SSH targets inside).
+- With no --sidecar, hdc reads bootstrap_hosts from packages/infrastructure/ubuntu/config.json and
+  packages/infrastructure/proxmox/config.json (if present). Each host entry uses the same shape as
+  a legacy system sidecar: tags (include "ubuntu" and/or "proxmox"), access.nodes[].ssh, auth.ssh_user_env.
+- With one or more --sidecar paths, only those JSON files are used (same field expectations).
 
 Non-dry-run requires vault unlock (passphrase / HDC_VAULT_PASSPHRASE) to store generated passwords.
 
 Flags:
   --dry-run        Log what would happen; no vault writes and no ssh.
-  --sidecar <path> Limit to specific inventory JSON files (repeatable).
+  --sidecar <path> Limit to specific JSON files (repeatable).
 
 Examples:
   ${c} users bootstrap-hdc --dry-run
-  ${c} users bootstrap-hdc --sidecar inventory/manual/systems/p.inventory.json
+  ${c} users bootstrap-hdc --sidecar path/to/host.json
 `);
       return;
     }
@@ -545,7 +411,7 @@ Examples:
 
   die(
     deps,
-    `help: unknown topic ${JSON.stringify(a0)} (try: help, list, run, docs, inventory, secrets, users)`,
+    `help: unknown topic ${JSON.stringify(a0)} (try: help, list, run, secrets, users, env)`,
   );
 }
 
@@ -680,30 +546,40 @@ async function cmdUsers(deps, argv) {
  * @param {CliDeps} deps
  * @param {string} root
  */
+function cmdEnv(deps, root) {
+  const relDotenv = deps.relative(root, deps.join(root, ".env")).replace(/\\/g, "/");
+  const dotenvPath = deps.join(root, ".env");
+  const dotenvPresent = deps.existsSync(dotenvPath);
+  deps.log(
+    `HDC_* variables in the CLI process environment (.env: ${relDotenv} ${dotenvPresent ? "exists" : "missing"}; load skips keys already set outside .env).`,
+  );
+  const rows = collectHdcEnvRows(deps.env);
+  if (!rows.length) {
+    deps.log("(none set)");
+    return;
+  }
+  for (const { key, display } of rows) {
+    deps.log(`${key}=${display}`);
+  }
+}
+
 function cmdList(deps, root) {
-  const manifests = discoverManifests(deps.automationDir(root));
-  deps.log("Automation targets (manifest.json):");
+  const manifests = discoverManifests(deps.packagesDir(root));
+  deps.log("Packages (manifest.json):");
   for (const m of manifests) {
     const verbs = VERBS.filter((v) => verbSpec(m, v)).join(", ") || "(none)";
-    deps.log(`  ${manifestId(m)}\t${manifestTitle(m)}\tverbs: ${verbs}`);
+    const svc = manifestServices(m);
+    const svcBrief = svc.length
+      ? `\tservices: ${svc.map((s) => (s.invoke ? `${s.id}(${s.verb}/${s.invoke})` : `${s.id}(${s.verb})`)).join(", ")}`
+      : "";
+    deps.log(`  ${manifestId(m)}\t${manifestTitle(m)}\tverbs: ${verbs}${svcBrief}`);
   }
-  deps.log(`\nAutomation inventory (${AUTOMATION_TARGET_INVENTORY_FILENAME} next to manifest, updated after successful query with JSON stdout):`);
+  deps.log("\nOptional per-package config (packages/<tier>/<id>/config.json; see config.example.json):");
   for (const m of manifests) {
-    const inv = deps.join(m.dir, AUTOMATION_TARGET_INVENTORY_FILENAME);
-    const rel = deps.relative(root, inv).replace(/\\/g, "/");
-    const state = deps.existsSync(inv) ? "exists" : "(created on first qualifying query)";
+    const cfg = deps.join(m.dir, "config.json");
+    const rel = deps.relative(root, cfg).replace(/\\/g, "/");
+    const state = deps.existsSync(cfg) ? "exists" : "(optional)";
     deps.log(`  ${manifestId(m)}\t${rel}\t${state}`);
-  }
-  const autoSystems = deps.join(root, "inventory", "automated", "systems.json");
-  deps.log(
-    `\nRoot automated systems inventory: ${deps.relative(root, autoSystems).replace(/\\/g, "/")}\t${
-      deps.existsSync(autoSystems) ? "exists" : "(created on first qualifying query/deploy merge)"
-    }`,
-  );
-  const sidecars = findInventorySidecars(root);
-  deps.log("\nInventory sidecars:");
-  for (const p of sidecars) {
-    deps.log(`  ${deps.relative(root, p).replace(/\\/g, "/")}`);
   }
 }
 
@@ -714,20 +590,20 @@ function cmdList(deps, root) {
  */
 function cmdRun(deps, root, argv) {
   const { forward, extra } = splitRunArgs(argv);
-  const target = forward[0];
+  const packageId = forward[0];
   const verb = forward[1];
-  if (!target || !verb) die(deps, "run: need <target> <verb>");
+  if (!packageId || !verb) die(deps, "run: need <package> <verb>");
   if (!VERBS.includes(verb)) die(deps, `run: verb must be one of: ${VERBS.join(", ")}`);
-  const manifests = discoverManifests(deps.automationDir(root));
-  const m = manifestById(manifests, target);
-  if (!m) die(deps, `run: unknown target ${JSON.stringify(target)}`);
+  const manifests = discoverManifests(deps.packagesDir(root));
+  const m = manifestById(manifests, packageId);
+  if (!m) die(deps, `run: unknown package ${JSON.stringify(packageId)}`);
   for (const key of envRequired(m)) {
     if (!deps.env[key]) {
       deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
     }
   }
   const spec = verbSpec(m, verb);
-  if (!spec) die(deps, `run: target ${target} has no ${verb} script in manifest`);
+  if (!spec) die(deps, `run: package ${packageId} has no ${verb} script in manifest`);
   const cwd = deps.join(m.dir, verb);
   const script = deps.join(cwd, spec.script);
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
@@ -749,145 +625,7 @@ function cmdRun(deps, root, argv) {
       : "";
   if (verb === "query" && stdoutStr) deps.stdoutWrite(stdoutStr);
   else if (verb === "deploy" && stdoutStr) deps.stdoutWrite(stdoutStr);
-  const targetId = manifestId(m);
-  if (status === 0 && verb === "query") {
-    const invPath = deps.join(m.dir, AUTOMATION_TARGET_INVENTORY_FILENAME);
-    const merged = mergeQueryStdoutIntoAutomationInventory(invPath, stdoutStr);
-    if (merged.ok) {
-      deps.log(`wrote query snapshot -> ${deps.relative(root, invPath).replace(/\\/g, "/")}`);
-    } else {
-      deps.warn(`query: did not update ${AUTOMATION_TARGET_INVENTORY_FILENAME}: ${merged.reason}`);
-    }
-    const parsed = tryParseJsonObject(stdoutStr);
-    if (parsed) {
-      mergeAutomatedSystemsFromPlugin(root, targetId, "query", parsed);
-      deps.log(
-        `updated automated systems inventory -> ${deps.relative(root, deps.join(root, "inventory", "automated", "systems.json")).replace(/\\/g, "/")}`,
-      );
-    }
-  }
-  if (status === 0 && verb === "deploy") {
-    const parsed = tryParseJsonObject(stdoutStr);
-    mergeAutomatedSystemsFromPlugin(root, targetId, "deploy", parsed);
-    deps.log(
-      `updated automated systems inventory -> ${deps.relative(root, deps.join(root, "inventory", "automated", "systems.json")).replace(/\\/g, "/")}`,
-    );
-  }
   throw new CliExit(status);
-}
-
-/**
- * @param {CliDeps} deps
- * @param {string} root
- */
-function cmdDocsLint(deps, root) {
-  const autoIds = automationTargetIds(root);
-  const sidecars = findInventorySidecars(root);
-  const { idToKind, duplicateIds } = loadManualInventoryIdKindMap(root, (p) => deps.readFileSync(p, "utf8"));
-  /** @type {{ idToKind: Map<string, string> }} */
-  const refCtx = { idToKind };
-  let errors = 0;
-  for (const id of duplicateIds) {
-    deps.error(`duplicate inventory id across manual files: ${JSON.stringify(id)}`);
-    errors++;
-  }
-  for (const p of sidecars) {
-    let data;
-    try {
-      data = JSON.parse(deps.readFileSync(p, "utf8"));
-    } catch (e) {
-      deps.error(`${p}: invalid JSON`, e);
-      errors++;
-      continue;
-    }
-    const issues = validateSidecar(data, autoIds, refCtx);
-    if (issues.length) {
-      deps.error(`${p}:`);
-      for (const i of issues) deps.error(`  - ${i}`);
-      errors++;
-    } else {
-      deps.log(`ok ${p}`);
-    }
-  }
-  if (sidecars.length === 0) {
-    deps.log("no *.inventory.json files under inventory/manual/");
-  }
-  throw new CliExit(errors ? 1 : 0);
-}
-
-/**
- * @param {CliDeps} deps
- * @param {string} root
- * @param {boolean} dryRun
- */
-function cmdDocsSync(deps, root, dryRun) {
-  const sidecars = findInventorySidecars(root);
-  const autoIds = automationTargetIds(root);
-  const { idToKind, duplicateIds } = loadManualInventoryIdKindMap(root, (p) => deps.readFileSync(p, "utf8"));
-  /** @type {{ idToKind: Map<string, string> }} */
-  const refCtx = { idToKind };
-  let problems = 0;
-  const prefix = dryRun ? "dry-run: " : "";
-  for (const id of duplicateIds) {
-    deps.error(`duplicate inventory id across manual files: ${JSON.stringify(id)}`);
-    problems++;
-  }
-  for (const p of sidecars) {
-    let data;
-    try {
-      data = JSON.parse(deps.readFileSync(p, "utf8"));
-    } catch (e) {
-      deps.error(`${p}: ${e}`);
-      problems++;
-      continue;
-    }
-    const issues = validateSidecar(data, autoIds, refCtx);
-    if (issues.length) {
-      deps.error(`${p}: fix lint errors before sync:`);
-      issues.forEach((i) => deps.error(`  - ${i}`));
-      problems++;
-      continue;
-    }
-    deps.log(`${prefix}ok ${p} (companion .md not used by hdc)`);
-  }
-  if (sidecars.length === 0) {
-    deps.log("no *.inventory.json files under inventory/manual/");
-  }
-  throw new CliExit(problems ? 1 : 0);
-}
-
-/**
- * @param {CliDeps} deps
- * @param {string} root
- * @param {string[]} argv
- */
-function cmdInventoryApply(deps, root, argv) {
-  let sidecar = null;
-  let fromJson = null;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--sidecar") sidecar = argv[++i];
-    else if (argv[i] === "--from-json") fromJson = argv[++i];
-  }
-  if (!sidecar || !fromJson) die(deps, "inventory apply: require --sidecar and --from-json");
-  const sp = deps.isAbsolute(sidecar) ? sidecar : deps.resolve(root, sidecar);
-  const jp = deps.isAbsolute(fromJson) ? fromJson : deps.resolve(root, fromJson);
-  if (!deps.existsSync(sp)) die(deps, `sidecar not found: ${sp}`);
-  if (!deps.existsSync(jp)) die(deps, `json not found: ${jp}`);
-  applyQueryToSidecar(sp, jp);
-  const data = JSON.parse(deps.readFileSync(sp, "utf8"));
-  const { idToKind, duplicateIds } = loadManualInventoryIdKindMap(root, (p) => deps.readFileSync(p, "utf8"));
-  if (duplicateIds.length) {
-    deps.error("duplicate inventory ids in manual tree:");
-    duplicateIds.forEach((id) => deps.error(`  - ${JSON.stringify(id)}`));
-    throw new CliExit(1);
-  }
-  const issues = validateSidecar(data, automationTargetIds(root), { idToKind });
-  if (issues.length) {
-    deps.error("Sidecar failed validation after apply:");
-    issues.forEach((i) => deps.error(`  - ${i}`));
-    throw new CliExit(1);
-  }
-  deps.log(`updated ${sp}`);
 }
 
 /**
@@ -905,10 +643,6 @@ export async function runCli(argv, deps) {
     const cmd = argv[0];
     const rest = argv.slice(1);
 
-    if (!shouldSkipLocalSystemInventoryCollection(argv, deps.env)) {
-      ensureLocalSystemAutomatedInventory(deps, root);
-    }
-
     if (cmd === "help") {
       cmdHelp(deps, root, rest);
       return 0;
@@ -917,16 +651,12 @@ export async function runCli(argv, deps) {
       cmdList(deps, root);
       return 0;
     }
+    if (cmd === "env") {
+      cmdEnv(deps, root);
+      return 0;
+    }
     if (cmd === "run") {
       cmdRun(deps, root, rest);
-    } else if (cmd === "docs" && rest[0] === "lint") {
-      cmdDocsLint(deps, root);
-    } else if (cmd === "docs" && rest[0] === "sync") {
-      const dry = rest.includes("--dry-run");
-      cmdDocsSync(deps, root, dry);
-    } else if (cmd === "inventory" && rest[0] === "apply") {
-      cmdInventoryApply(deps, root, rest.slice(1));
-      return 0;
     } else if (cmd === "secrets") {
       if (rest.length === 0) {
         die(deps, "secrets: need a subcommand (path, init, set, list, delete)");

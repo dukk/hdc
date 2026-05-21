@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/proxmox.config.schema.json",
+  "title": "HDC package config — Proxmox infrastructure",
+  "description": "packages/infrastructure/proxmox/config.json — hypervisor clusters, provision defaults, optional bootstrap_hosts for users bootstrap-hdc.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "clusters"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "clusters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/cluster" }
+    },
+    "provision": { "$ref": "#/$defs/provision" },
+    "bootstrap_hosts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/bootstrap_host" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "cluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hosts"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Logical cluster id (matches inventory proxmox_cluster.id when applicable)."
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/host" }
+        },
+        "api_base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Deprecated: use web_ui on each host instead."
+        }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pve_node", "ip", "web_ui", "ssh"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Inventory hypervisor id (e.g. pve-a)."
+        },
+        "pve_node": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox node name as shown in the API (often same as id)."
+        },
+        "ip": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Management/LAN IPv4 or hostname."
+        },
+        "web_ui": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox web UI URL (https://host:8006) — used as API base."
+        },
+        "ssh": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^ssh://",
+          "description": "SSH URL for bootstrap-hdc and remote ops (e.g. ssh://root@10.0.0.11)."
+        },
+        "api_base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Deprecated: use web_ui instead."
+        },
+        "proxmox_cluster": {
+          "type": "object",
+          "description": "Deprecated: cluster id is taken from clusters[].id.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "provision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "templates": { "$ref": "#/$defs/provision_templates" },
+        "host_os": { "$ref": "#/$defs/provision_host_os" },
+        "storage": { "$ref": "#/$defs/provision_storage" },
+        "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
+        "lxc": { "$ref": "#/$defs/provision_lxc" },
+        "qemu": { "$ref": "#/$defs/provision_qemu" }
+      }
+    },
+    "provision_ssh_keys": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips installing local ~/.ssh public keys on hypervisors (default true)."
+        }
+      }
+    },
+    "provision_storage": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips NAS storage ensure (default true)."
+        },
+        "ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Storage ids to ensure (default nas-1, nas-2)."
+        },
+        "discover_from_host": {
+          "type": "string",
+          "description": "Inventory host id to prefer when discovering storage definitions (e.g. pve-a)."
+        },
+        "targets": {
+          "type": "array",
+          "description": "Explicit storage definitions (Proxmox storage.cfg fields). When set, used instead of API discovery.",
+          "items": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "provision_host_os": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips apt update/upgrade on hypervisors (default true)."
+        },
+        "reboot_wait_seconds": {
+          "type": "number",
+          "description": "Max seconds to wait for SSH after each sequential reboot (default 300)."
+        }
+      }
+    },
+    "provision_templates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["ubuntu-lts", "legacy"],
+          "description": "ubuntu-lts (default): sync all supported Ubuntu LTS LXC vztmpl and QEMU templates; prune older Ubuntu templates."
+        }
+      }
+    },
+    "provision_lxc": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ostemplate": { "type": "string" },
+        "ostemplate_storage": {
+          "type": "string",
+          "description": "Storage for CT templates (vztmpl), e.g. local."
+        },
+        "default_release": {
+          "type": "string",
+          "description": "Ubuntu LTS release for default ostemplate (e.g. 22.04)."
+        },
+        "storage": { "type": "string" },
+        "rootfs_gb": { "type": "number" },
+        "memory_mb": { "type": "number" },
+        "cores": { "type": "number" },
+        "bridge": { "type": "string" },
+        "ip_config": { "type": "string" },
+        "unprivileged": { "type": ["integer", "boolean"] },
+        "onboot": { "type": ["integer", "boolean"] },
+        "vmid": { "type": "number" }
+      }
+    },
+    "provision_qemu": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "storage": { "type": "string", "description": "Disk storage for VM and cloud-init (e.g. local-lvm)." },
+        "image_storage": {
+          "type": "string",
+          "description": "Directory storage for downloaded cloud .img before import (e.g. local)."
+        },
+        "default_release": {
+          "type": "string",
+          "description": "Ubuntu LTS release for default QEMU template (e.g. 22.04 → vmid 9022)."
+        },
+        "template_vmid": {
+          "type": "number",
+          "description": "Default QEMU template vmid for create-vm (catalog: 9022=22.04, 9024=24.04, 9026=26.04)."
+        },
+        "template_name": { "type": "string", "description": "Guest name before conversion to template." },
+        "build_template": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), maintain builds template_vmid from cloud_image_url if missing."
+        },
+        "cloud_image_url": { "type": "string", "description": "HTTP(S) URL of cloud image (.img) for QEMU template build." },
+        "cloud_image_filename": { "type": "string", "description": "Filename on image_storage after download." },
+        "memory_mb": { "type": "number" },
+        "cores": { "type": "number" },
+        "bridge": { "type": "string" },
+        "vmid": { "type": "number" }
+      }
+    },
+    "bootstrap_host": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "tags"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "auth": { "type": "object" },
+        "access": { "type": "object" }
+      }
+    }
+  }
+}

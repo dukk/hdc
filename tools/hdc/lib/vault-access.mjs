@@ -1,6 +1,15 @@
 import { readVault, writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
 
+/** Process-wide vault passphrase cache (one prompt per hdc command). */
+/** @type {Map<string, string>} */
+const processPassphraseByVaultPath = new Map();
+
+/** @internal Test helper */
+export function clearVaultPassphraseProcessCache() {
+  processPassphraseByVaultPath.clear();
+}
+
 /**
  * @typedef {object} VaultAccessDeps
  * @property {NodeJS.ProcessEnv} env
@@ -57,10 +66,16 @@ export function createVaultAccess(deps) {
 
     const file = vaultPath();
     const envPass = String(deps.env.HDC_VAULT_PASSPHRASE ?? "").trim();
+    const processCached = processPassphraseByVaultPath.get(file);
+    if (processCached !== undefined && canDecrypt(processCached) && !envPass) {
+      cachedPassphrase = processCached;
+      return cachedPassphrase;
+    }
 
     if (deps.existsSync(file)) {
       if (envPass && canDecrypt(envPass)) {
         cachedPassphrase = envPass;
+        processPassphraseByVaultPath.set(file, cachedPassphrase);
         return cachedPassphrase;
       }
       if (envPass) {
@@ -76,6 +91,7 @@ export function createVaultAccess(deps) {
         }
         if (canDecrypt(p)) {
           cachedPassphrase = p;
+          processPassphraseByVaultPath.set(file, cachedPassphrase);
           return cachedPassphrase;
         }
         deps.warn("Could not decrypt the vault; try again.");
@@ -89,6 +105,7 @@ export function createVaultAccess(deps) {
     if (envPass) {
       writeVault(file, envPass, {});
       cachedPassphrase = envPass;
+      processPassphraseByVaultPath.set(file, cachedPassphrase);
       deps.log(`created vault at ${file} (passphrase from HDC_VAULT_PASSPHRASE)`);
       return cachedPassphrase;
     }
@@ -107,6 +124,7 @@ export function createVaultAccess(deps) {
     }
     writeVault(file, p1, {});
     cachedPassphrase = p1;
+    processPassphraseByVaultPath.set(file, cachedPassphrase);
     deps.log(`created vault at ${file}`);
     return cachedPassphrase;
   }

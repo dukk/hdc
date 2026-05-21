@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "deploy": {
+    "mode": "proxmox-lxc",
+    "system_id": "ct-ollama-a"
+  },
+  "proxmox": {
+    "host_id": "pve-a",
+    "lxc": {
+      "vmid": 470,
+      "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+      "storage": "local-lvm",
+      "rootfs_gb": 48,
+      "memory_mb": 8192,
+      "cores": 4,
+      "bridge": "vmbr0",
+      "ip_config": "dhcp"
+    },
+    "qemu": {
+      "vmid": 471,
+      "template_vmid": 9022,
+      "storage": "local-lvm"
+    }
+  },
+  "ubuntu": {
+    "bootstrap_host_id": "example-ubuntu-host",
+    "docker": {
+      "container_name": "ollama",
+      "host_port": 11434,
+      "docker_image": "ollama/ollama:latest"
+    }
+  }
+}

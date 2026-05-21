@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { findInventorySidecars } from "../inventory.mjs";
 import { CliExit } from "./cli-exit.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 
@@ -7,7 +6,7 @@ const TAG_PROXMOX = "proxmox";
 const TAG_UBUNTU = "ubuntu";
 
 /**
- * Vault entry for the local `hdc` user password, keyed by inventory `id`.
+ * Vault entry for the local `hdc` user password, keyed by host `id` (from sidecar or package config).
  * Example: `my-cluster` → `HDC_USER_HDC_PASSWORD_MY_CLUSTER`
  * @param {string} inventoryId
  * @returns {string}
@@ -119,6 +118,45 @@ export function listSshTargetsFromSidecar(sidecar, env) {
 }
 
 /**
+ * Host entries from `bootstrap_hosts` in infrastructure package config.json files
+ * (tags must include "proxmox" or "ubuntu", case-insensitive).
+ * @param {string} root
+ * @param {import("./cli-app.mjs").CliDeps} deps
+ * @returns {{ label: string, data: Record<string, unknown> }[]}
+ */
+export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
+  /** @type {{ label: string, data: Record<string, unknown> }[]} */
+  const out = [];
+  for (const pkg of ["ubuntu", "proxmox"]) {
+    const abs = deps.join(root, "packages", "infrastructure", pkg, "config.json");
+    if (!deps.existsSync(abs)) continue;
+    /** @type {unknown} */
+    let j;
+    try {
+      j = JSON.parse(deps.readFileSync(abs, "utf8"));
+    } catch {
+      continue;
+    }
+    if (!j || typeof j !== "object" || Array.isArray(j)) continue;
+    const hosts = /** @type {Record<string, unknown>} */ (j).bootstrap_hosts;
+    if (!Array.isArray(hosts)) continue;
+    let idx = 0;
+    for (const h of hosts) {
+      idx += 1;
+      if (!h || typeof h !== "object" || Array.isArray(h)) continue;
+      const rec = /** @type {Record<string, unknown>} */ (h);
+      if (!sidecarMatchesBootstrapTags(tagsFromSidecar(rec))) continue;
+      const id = typeof rec.id === "string" ? rec.id.trim() : "";
+      out.push({
+        label: `packages/infrastructure/${pkg}/config.json#${id || `bootstrap_hosts[${idx}]`}`,
+        data: rec,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * @param {string} passwordB64
  */
 export function remoteBootstrapHdcBash(passwordB64) {
@@ -139,8 +177,9 @@ export function generateHdcPassword() {
 /**
  * @param {string[]} argv flags after `bootstrap-hdc`
  * @param {import("./cli-app.mjs").CliDeps} deps
+ * @param {{ vault?: ReturnType<typeof createVaultAccess> }} [options]
  */
-export async function runUsersBootstrapHdc(argv, deps) {
+export async function runUsersBootstrapHdc(argv, deps, options = {}) {
   const dryRun = argv.includes("--dry-run");
   /** @type {string[]} */
   const explicitSidecars = [];
@@ -153,62 +192,70 @@ export async function runUsersBootstrapHdc(argv, deps) {
 
   const root = deps.repoRoot();
 
-  /** @type {string[]} */
-  let sidecarPaths;
+  /** @type {{ label: string; path?: string; data?: Record<string, unknown> }[]} */
+  const work = [];
   if (explicitSidecars.length) {
-    sidecarPaths = explicitSidecars.map((p) =>
-      deps.isAbsolute(p) ? p : deps.resolve(root, p),
-    );
+    for (const p of explicitSidecars) {
+      const path = deps.isAbsolute(p) ? p : deps.resolve(root, p);
+      work.push({ label: path, path });
+    }
   } else {
-    sidecarPaths = findInventorySidecars(root).filter((p) => {
-      try {
-        const data = JSON.parse(deps.readFileSync(p, "utf8"));
-        return sidecarMatchesBootstrapTags(tagsFromSidecar(data));
-      } catch {
-        return false;
-      }
-    });
+    for (const { label, data } of bootstrapHostDocsFromInfrastructureConfigs(root, deps)) {
+      work.push({ label, data });
+    }
   }
 
-  if (sidecarPaths.length === 0) {
+  if (work.length === 0) {
     deps.warn(
-      "users bootstrap-hdc: no matching inventory sidecars (use tags proxmox/ubuntu, or pass --sidecar).",
+      "users bootstrap-hdc: no bootstrap_hosts in packages/infrastructure/{ubuntu,proxmox}/config.json (or pass --sidecar).",
     );
     return;
   }
 
-  let vaultAccess = null;
+  let vaultAccess = options.vault ?? null;
   if (!dryRun) {
-    vaultAccess = createVaultAccess(vaultDepsFromCli(deps));
+    if (!vaultAccess) {
+      vaultAccess = createVaultAccess(vaultDepsFromCli(deps));
+    }
     await vaultAccess.unlock({});
   }
 
-  for (const path of sidecarPaths) {
-    if (!deps.existsSync(path)) {
-      deps.error(`users bootstrap-hdc: sidecar not found: ${path}`);
-      throw new CliExit(1);
-    }
+  for (const item of work) {
+    /** @type {Record<string, unknown>} */
     let data;
-    try {
-      data = JSON.parse(deps.readFileSync(path, "utf8"));
-    } catch (e) {
-      deps.error(`users bootstrap-hdc: invalid JSON ${path}:`, e);
+    const label = item.label;
+    if (item.path) {
+      if (!deps.existsSync(item.path)) {
+        deps.error(`users bootstrap-hdc: sidecar not found: ${item.path}`);
+        throw new CliExit(1);
+      }
+      try {
+        data = JSON.parse(deps.readFileSync(item.path, "utf8"));
+      } catch (e) {
+        deps.error(`users bootstrap-hdc: invalid JSON ${item.path}:`, e);
+        throw new CliExit(1);
+      }
+    } else if (item.data) {
+      data = item.data;
+    } else {
+      deps.error("users bootstrap-hdc: internal error (empty work item)");
       throw new CliExit(1);
     }
+
     if (!data || typeof data !== "object" || Array.isArray(data)) {
-      deps.error(`users bootstrap-hdc: invalid sidecar root: ${path}`);
+      deps.error(`users bootstrap-hdc: invalid sidecar root: ${label}`);
       throw new CliExit(1);
     }
     const o = /** @type {Record<string, unknown>} */ (data);
     const id = typeof o.id === "string" ? o.id.trim() : "";
     if (!id) {
-      deps.error(`users bootstrap-hdc: missing id in ${path}`);
+      deps.error(`users bootstrap-hdc: missing id in ${label}`);
       throw new CliExit(1);
     }
 
     const tags = tagsFromSidecar(data);
-    if (explicitSidecars.length === 0 && !sidecarMatchesBootstrapTags(tags)) {
-      deps.warn(`users bootstrap-hdc: skip ${path} (tags do not include proxmox/ubuntu)`);
+    if (explicitSidecars.length === 0 && item.path && !sidecarMatchesBootstrapTags(tags)) {
+      deps.warn(`users bootstrap-hdc: skip ${label} (tags do not include proxmox/ubuntu)`);
       continue;
     }
 

@@ -1,0 +1,14 @@
+{
+  "id": "postfix-relay",
+  "title": "Postfix SMTP relay (SMTP2GO)",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/systems/ (optional ct-postfix-relay-a)",
+    "packages/services/postfix-relay/config.json (copy config.example.json)"
+  ],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "controller_base_url": "https://unifi.example.com:8443",
+  "default_site_id": ""
+}

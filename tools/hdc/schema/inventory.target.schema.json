@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hdc.local/schema/inventory.target.schema.json",
   "title": "HDC inventory sidecar — target",
-  "description": "Extra structured data for one automation target (manifest id). Scripts may add top-level keys beyond those listed.",
+  "description": "Extra structured data for one hdc package (manifest id under packages/). Scripts may add top-level keys beyond those listed.",
   "type": "object",
   "additionalProperties": true,
   "required": ["schema_version", "id", "kind", "automation_target"],

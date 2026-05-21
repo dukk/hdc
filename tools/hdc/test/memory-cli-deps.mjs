@@ -22,7 +22,7 @@ import { join, relative, resolve, isAbsolute } from "node:path";
  * @property {import("../lib/cli-app.mjs").CliDeps["defaultVaultPath"]} [defaultVaultPath]
  * @property {import("../lib/cli-app.mjs").CliDeps["readStdinUtf8"]} [readStdinUtf8]
  * @property {import("../lib/cli-app.mjs").CliDeps["readLineQuestion"]} [readLineQuestion]
- * @property {import("../lib/cli-app.mjs").CliDeps["automationDir"]} [automationDir]
+ * @property {import("../lib/cli-app.mjs").CliDeps["packagesDir"]} [packagesDir]
  * @property {import("../lib/cli-app.mjs").CliDeps["execPath"]} [execPath]
  * @property {import("../lib/cli-app.mjs").CliDeps["cliInvocationForHelp"]} [cliInvocationForHelp]
  * @property {import("../lib/cli-app.mjs").CliDeps["stdoutWrite"]} [stdoutWrite]
@@ -53,7 +53,7 @@ export function createMemoryCliDeps(opts) {
       capture.warnLines.push(a.map(String).join(" "));
     },
     repoRoot: () => opts.root,
-    automationDir: opts.automationDir ?? ((r) => join(r, "automation")),
+    packagesDir: opts.packagesDir ?? ((r) => join(r, "packages")),
     join,
     resolve,
     isAbsolute,

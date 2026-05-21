@@ -28,8 +28,8 @@ Optional: copy [`.env.example`](.env.example) to `.env` and set values. `.env` i
 | Path | Role |
 | --- | --- |
 | [`tools/hdc/`](tools/hdc/) | Node.js CLI (`cli.mjs`) and helpers |
-| [`automation/<target>/`](automation/) | `manifest.json`, `inventory.json` (query snapshot), plus `deploy/`, `maintain/`, `query/` (`run.mjs`) |
-| [`inventory/manual/`](inventory/manual/) | `systems/`, `networks/`, `services/`, `targets/` — `*.inventory.json` sidecars; optional same-basename `*.md` for agents (hdc does not read or write those `.md` files) |
+| [`packages/<package>/`](packages/) | `manifest.json`, optional `inventory.json` (query snapshot), plus `deploy/`, `maintain/`, `query/` (`run.mjs`). *Service* packages deploy apps; *infrastructure* packages expose shared capabilities (e.g. VM/CT provisioning) for other packages. |
+| [`inventory/manual/`](inventory/manual/) | `systems/`, `networks/`, `services/`, `targets/` — `*.json` sidecars; optional same-basename `*.md` for agents (hdc does not read or write those `.md` files) |
 | [`inventory/automated/`](inventory/automated/) | `systems.json` updated by successful `hdc run … query` / `deploy` (automated overlay; use `resolveSystemById` in code) |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Markdown notes for manually operated gear (structured inventory lives under `inventory/manual/`) |
 

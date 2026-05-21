@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { inventoryManualDir } from "../../tools/hdc/paths.mjs";
 import {
-  manualSystemInventoryFileName,
   slugifyInventoryRole,
   systemIdForClass,
 } from "../../tools/hdc/lib/inventory-naming.mjs";
 
 /**
- * Canonical deploy target → inventory system id (see `.cursor/rules/hdc-inventory-naming.mdc`).
+ * Canonical deploy target → logical system id (see `.cursor/rules/hdc-inventory-naming.mdc`).
  * @type {Record<string, { workloadClass: "physical" | "vm" | "ct"; role: string; instance?: string }>}
  */
 export const DEPLOY_TARGET_WORKLOAD = {
@@ -18,16 +16,17 @@ export const DEPLOY_TARGET_WORKLOAD = {
   jenkins: { workloadClass: "vm", role: "jenkins", instance: "a" },
   homeassistant: { workloadClass: "vm", role: "homeassistant", instance: "a" },
   audiobookshelf: { workloadClass: "vm", role: "audiobookshelf", instance: "a" },
+  ollama: { workloadClass: "ct", role: "ollama", instance: "a" },
+  "postfix-relay": { workloadClass: "ct", role: "postfix-relay", instance: "a" },
 };
 
-/** Physical Proxmox cluster nodes (Nagios NRPE). */
+/** Defaults for Nagios NRPE layout (override in `packages/services/nagios/config.json`). */
 export const NAGIOS_CLUSTER_NODE_IDS = ["pve-a", "pve-b", "pve-c"];
 
-/** Sidecar holding `nagios.central` for the monitoring host. */
 export const NAGIOS_CENTRAL_SYSTEM_ID = "pve-a";
 
 /**
- * @param {string} targetId automation manifest id
+ * @param {string} targetId package manifest id
  * @returns {string}
  */
 export function deployTargetSystemId(targetId) {
@@ -39,20 +38,11 @@ export function deployTargetSystemId(targetId) {
 }
 
 /**
- * @param {string} root repo root
- * @param {string} systemId
+ * @param {string} root
+ * @param {string} serviceId
  */
-export function manualSystemInventoryPath(root, systemId) {
-  return join(inventoryManualDir(root), "systems", manualSystemInventoryFileName(systemId));
-}
-
-/**
- * Legacy UniFi automated id (`sys-<role>-<letter>`) for the same role letter.
- * @param {string} role
- * @param {string} [instance]
- */
-export function legacyAutomatedClientSystemId(role, instance = "a") {
-  return `sys-${slugifyInventoryRole(role)}-${String(instance).trim().toLowerCase() || "a"}`;
+export function servicePackageConfigPath(root, serviceId) {
+  return join(root, "packages", "services", serviceId, "config.json");
 }
 
 /**
@@ -71,26 +61,37 @@ function readJsonObject(path) {
 }
 
 /**
+ * Legacy UniFi automated id (`sys-<role>-<letter>`) for the same role letter.
+ * @param {string} role
+ * @param {string} [instance]
+ */
+export function legacyAutomatedClientSystemId(role, instance = "a") {
+  return `sys-${slugifyInventoryRole(role)}-${String(instance).trim().toLowerCase() || "a"}`;
+}
+
+/**
  * @param {string} root
  * @param {string} targetId
  */
 export function deployTargetInventory(root, targetId) {
   const systemId = deployTargetSystemId(targetId);
-  const manualPath = manualSystemInventoryPath(root, systemId);
-  const sidecar = existsSync(manualPath) ? readJsonObject(manualPath) : null;
-  const spec = DEPLOY_TARGET_WORKLOAD[targetId];
-  const legacyId = spec ? legacyAutomatedClientSystemId(spec.role, spec.instance ?? "a") : null;
-  const legacyPath = legacyId
-    ? join(root, "inventory", "automated", "systems", manualSystemInventoryFileName(legacyId))
-    : null;
+  const configPath = servicePackageConfigPath(root, targetId);
+  const cfg = existsSync(configPath) ? readJsonObject(configPath) : null;
+  const override =
+    cfg && typeof cfg.deploy === "object" && cfg.deploy !== null && !Array.isArray(cfg.deploy)
+      ? /** @type {Record<string, unknown>} */ (cfg.deploy)
+      : null;
+  const sid =
+    override && typeof override.system_id === "string" && override.system_id.trim()
+      ? override.system_id.trim()
+      : systemId;
   return {
     targetId,
-    systemId,
-    manualPath,
-    sidecar,
-    ready: sidecar !== null,
-    legacyAutomatedId: legacyId,
-    legacyAutomatedPath: legacyPath && existsSync(legacyPath) ? legacyPath : null,
+    systemId: sid,
+    configPath,
+    config: cfg,
+    deploy: override,
+    ready: cfg !== null,
   };
 }
 
@@ -100,17 +101,12 @@ export function deployTargetInventory(root, targetId) {
  * @param {ReturnType<typeof deployTargetInventory>} inv
  */
 export function logDeployInventoryStatus(targetId, verb, inv) {
-  const rel = inv.manualPath.replace(/\\/g, "/");
+  const rel = inv.configPath.replace(/\\/g, "/");
   if (inv.ready) {
-    process.stderr.write(`[hdc] ${targetId} ${verb}: inventory system ${inv.systemId} (${rel})\n`);
+    process.stderr.write(`[hdc] ${targetId} ${verb}: package config ${rel} (system_id ${inv.systemId})\n`);
     return;
   }
   process.stderr.write(
-    `[hdc] ${targetId} ${verb}: create ${rel} (canonical id per hdc-inventory-naming)\n`,
+    `[hdc] ${targetId} ${verb}: add ${rel} (copy config.example.json; expected system_id ${inv.systemId})\n`,
   );
-  if (inv.legacyAutomatedPath) {
-    process.stderr.write(
-      `[hdc] ${targetId} ${verb}: hint — UniFi client ${inv.legacyAutomatedId} at ${inv.legacyAutomatedPath.replace(/\\/g, "/")}\n`,
-    );
-  }
 }

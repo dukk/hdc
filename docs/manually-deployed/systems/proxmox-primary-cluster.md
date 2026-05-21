@@ -1,6 +1,6 @@
 # Proxmox - Primary Cluster
 
-Structured inventory lives in [`proxmox-primary-cluster.inventory.json`](proxmox-primary-cluster.inventory.json). Regenerate the block below with:
+Structured inventory lives in [`proxmox-primary-cluster.json`](proxmox-primary-cluster.json). Regenerate the block below with:
 
 `node tools/hdc/cli.mjs docs sync`
 
@@ -32,4 +32,4 @@ Structured inventory lives in [`proxmox-primary-cluster.inventory.json`](proxmox
 
 ## Nagios (central + NRPE)
 
-Central Nagios and NRPE on each hypervisor are driven by [`proxmox-primary-cluster.inventory.json`](proxmox-primary-cluster.inventory.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node tools/hdc/cli.mjs run nagios deploy`.
+Central Nagios and NRPE on each hypervisor are driven by [`proxmox-primary-cluster.json`](proxmox-primary-cluster.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node tools/hdc/cli.mjs run nagios deploy`.

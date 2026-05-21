@@ -1,27 +1,21 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { automationDir, inventoryAutomatedDir, inventoryManualDir, manuallyDeployedDir, repoRoot } from "./paths.mjs";
+import { manuallyDeployedDir, packagesDir, repoRoot } from "./paths.mjs";
 
 describe("paths", () => {
-  it("repoRoot resolves to workspace containing automation/", () => {
+  it("repoRoot resolves to workspace containing packages/", () => {
     const r = repoRoot();
-    expect(existsSync(join(r, "automation"))).toBe(true);
+    expect(existsSync(join(r, "packages"))).toBe(true);
   });
 
-  it("automationDir joins known segment", () => {
+  it("packagesDir joins known segment", () => {
     const r = repoRoot();
-    expect(automationDir(r)).toBe(join(r, "automation"));
+    expect(packagesDir(r)).toBe(join(r, "packages"));
   });
 
   it("manuallyDeployedDir joins known segment", () => {
     const r = repoRoot();
     expect(manuallyDeployedDir(r)).toBe(join(r, "docs", "manually-deployed"));
-  });
-
-  it("inventoryManualDir and inventoryAutomatedDir join known segments", () => {
-    const r = repoRoot();
-    expect(inventoryManualDir(r)).toBe(join(r, "inventory", "manual"));
-    expect(inventoryAutomatedDir(r)).toBe(join(r, "inventory", "automated"));
   });
 });

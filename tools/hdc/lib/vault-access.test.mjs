@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readVault, writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
-import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
+import { clearVaultPassphraseProcessCache, createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 
 describe("createVaultAccess", () => {
   let root = "";
   afterEach(() => {
     if (root) rmSync(root, { recursive: true, force: true });
     root = "";
+    clearVaultPassphraseProcessCache();
     vi.restoreAllMocks();
   });
 
@@ -98,6 +99,19 @@ describe("createVaultAccess", () => {
     const a = createVaultAccess(vaultDepsFromCli(deps));
     const p = await a.unlock({ createIfMissing: false });
     expect(p).toBe(null);
+  });
+
+  it("reuses process passphrase cache across vault access instances", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-va-"));
+    writeVault(join(root, "vault.enc"), "shared", { K: "v" });
+    const q = vi.fn();
+    q.mockResolvedValueOnce("shared");
+    const deps = makeDeps({ envVars: {}, readLineQuestion: q });
+    const a1 = createVaultAccess(vaultDepsFromCli(deps));
+    const a2 = createVaultAccess(vaultDepsFromCli(deps));
+    await a1.readSecrets({ createIfMissing: false });
+    await a2.readSecrets({ createIfMissing: false });
+    expect(q).toHaveBeenCalledTimes(1);
   });
 
   it("throws CliExit on empty interactive vault passphrase", async () => {

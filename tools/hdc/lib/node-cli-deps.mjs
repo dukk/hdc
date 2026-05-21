@@ -4,8 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join, relative, resolve, isAbsolute } from "node:path";
 import { cwd, stdin as input, stderr as rlOutput } from "node:process";
 import { loadDotenv } from "../env.mjs";
-import { defaultHostProbe } from "./local-system-automated-inventory.mjs";
-import { automationDir, repoRoot } from "../paths.mjs";
+import { defaultHostProbe } from "./host-probe.mjs";
+import { packagesDir, repoRoot } from "../paths.mjs";
 import { defaultVaultPath } from "../vault.mjs";
 import { readLineMasked } from "./readline-masked.mjs";
 
@@ -43,7 +43,7 @@ export function createNodeCliDeps() {
     error: (...a) => console.error(...a),
     warn: (...a) => console.warn(...a),
     repoRoot,
-    automationDir,
+    packagesDir,
     join,
     resolve,
     isAbsolute,

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import { createMemoryCliDeps } from "../test/memory-cli-deps.mjs";
 import { writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
 import {
+  bootstrapHostDocsFromInfrastructureConfigs,
   generateHdcPassword,
   inventoryIdToVaultSuffix,
   listSshTargetsFromSidecar,
@@ -86,6 +87,40 @@ describe("users-bootstrap-hdc helpers", () => {
   });
 });
 
+describe("bootstrapHostDocsFromInfrastructureConfigs", () => {
+  it("loads ubuntu/proxmox package config bootstrap_hosts with proxmox/ubuntu tags", () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-bootstrap-cfg-"));
+    try {
+      mkdirSync(join(root, "packages/infrastructure/ubuntu"), { recursive: true });
+      mkdirSync(join(root, "packages/infrastructure/proxmox"), { recursive: true });
+      writeFileSync(
+        join(root, "packages/infrastructure/ubuntu/config.json"),
+        JSON.stringify({
+          schema_version: 1,
+          bootstrap_hosts: [
+            { id: "u1", kind: "system", tags: ["ubuntu"], access: { nodes: [] } },
+            { id: "skip", tags: ["debian"], access: { nodes: [] } },
+          ],
+        }),
+        "utf8",
+      );
+      writeFileSync(
+        join(root, "packages/infrastructure/proxmox/config.json"),
+        JSON.stringify({
+          schema_version: 1,
+          bootstrap_hosts: [{ id: "p1", kind: "system", tags: ["proxmox"], access: { nodes: [] } }],
+        }),
+        "utf8",
+      );
+      const deps = createMemoryCliDeps({ root });
+      const rows = bootstrapHostDocsFromInfrastructureConfigs(root, deps);
+      expect(rows.map((r) => r.data.id)).toEqual(["u1", "p1"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("runUsersBootstrapHdc", () => {
   it("generates random passwords", () => {
     const a = generateHdcPassword();
@@ -97,7 +132,8 @@ describe("runUsersBootstrapHdc", () => {
   it("throws CliExit on invalid JSON", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-usb-"));
     try {
-      const bad = join(root, "bad.inventory.json");
+      mkdirSync(join(root, "inventory/manual/systems"), { recursive: true });
+      const bad = join(root, "inventory/manual/systems/bad.json");
       writeFileSync(bad, "{", "utf8");
       const vaultPath = join(root, "v.enc");
       writeVault(vaultPath, "p", {});
@@ -115,8 +151,9 @@ describe("runUsersBootstrapHdc", () => {
   it("throws when vault unlock is aborted (empty passphrase)", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-usb-2"));
     try {
+      mkdirSync(join(root, "inventory/manual/systems"), { recursive: true });
       writeFileSync(
-        join(root, "x.inventory.json"),
+        join(root, "inventory/manual/systems/x.json"),
         JSON.stringify({
           schema_version: 1,
           id: "x",
@@ -133,7 +170,9 @@ describe("runUsersBootstrapHdc", () => {
         envVars: { HDC_X: "root" },
         readLineQuestion: async () => "",
       });
-      await expect(runUsersBootstrapHdc(["--sidecar", "x.inventory.json"], deps)).rejects.toThrow(CliExit);
+      await expect(
+        runUsersBootstrapHdc(["--sidecar", "inventory/manual/systems/x.json"], deps),
+      ).rejects.toThrow(CliExit);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

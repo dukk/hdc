@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "clusters": [
+    {
+      "id": "proxmox-primary-cluster",
+      "hosts": [
+        {
+          "id": "pve-a",
+          "pve_node": "pve-a",
+          "ip": "10.0.0.11",
+          "web_ui": "https://10.0.0.11:8006",
+          "ssh": "ssh://root@10.0.0.11"
+        },
+        {
+          "id": "pve-b",
+          "pve_node": "pve-b",
+          "ip": "10.0.0.12",
+          "web_ui": "https://10.0.0.12:8006",
+          "ssh": "ssh://root@10.0.0.12"
+        }
+      ]
+    },
+    {
+      "id": "proxmox-home-standalone",
+      "hosts": [
+        {
+          "id": "pve-h",
+          "pve_node": "pve-h",
+          "ip": "10.0.0.14",
+          "web_ui": "https://10.0.0.14:8006",
+          "ssh": "ssh://root@10.0.0.14"
+        }
+      ]
+    }
+  ],
+  "provision": {
+    "templates": {
+      "policy": "ubuntu-lts"
+    },
+    "host_os": {
+      "enabled": true,
+      "reboot_wait_seconds": 300
+    },
+    "storage": {
+      "enabled": true,
+      "ids": ["nas-1", "nas-2"],
+      "discover_from_host": "pve-a",
+      "targets": []
+    },
+    "ssh_keys": {
+      "enabled": true
+    },
+    "lxc": {
+      "ostemplate_storage": "local",
+      "default_release": "22.04",
+      "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+      "storage": "local-lvm",
+      "rootfs_gb": 32,
+      "memory_mb": 4096,
+      "cores": 2,
+      "bridge": "vmbr0",
+      "ip_config": "dhcp",
+      "unprivileged": 1,
+      "onboot": 1
+    },
+    "qemu": {
+      "storage": "local-lvm",
+      "image_storage": "local",
+      "default_release": "22.04",
+      "template_vmid": 9022,
+      "build_template": true,
+      "memory_mb": 2048,
+      "cores": 2,
+      "bridge": "vmbr0"
+    }
+  },
+  "bootstrap_hosts": []
+}

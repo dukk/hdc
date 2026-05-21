@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./lib/cli-app.mjs";
 import { createMemoryCliDeps } from "./test/memory-cli-deps.mjs";
+import { clearVaultPassphraseProcessCache } from "./lib/vault-access.mjs";
 import { readVault, writeVault } from "./vault.mjs";
 
 function writeTree(root, /** @type {Record<string, string>} */ files) {
@@ -20,6 +21,7 @@ describe("runCli", () => {
   afterEach(() => {
     if (root) rmSync(root, { recursive: true, force: true });
     root = "";
+    clearVaultPassphraseProcessCache();
     vi.restoreAllMocks();
   });
 
@@ -36,14 +38,14 @@ describe("runCli", () => {
   it("help topics: overview, run drill-down, script preview, and errors", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/tgt/manifest.json": JSON.stringify({
+      "packages/infrastructure/tgt/manifest.json": JSON.stringify({
         id: "tgt",
         title: "Target T",
         env_required: ["HDC_X"],
         inventory_docs: ["inventory/manual/systems/x.md"],
         verbs: { query: { script: "run.mjs" } },
       }),
-      "automation/tgt/query/run.mjs": "// line1\n// line2\nprocess.exit(0)\n",
+      "packages/infrastructure/tgt/query/run.mjs": "// line1\n// line2\nprocess.exit(0)\n",
     });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({ root, capture });
@@ -63,19 +65,19 @@ describe("runCli", () => {
     capture.logLines.length = 0;
     expect(await runCli(["help", "run", "tgt", "query"], deps)).toBe(0);
     const vDetail = capture.logLines.join("\n");
-    expect(vDetail).toContain("automation/tgt/query");
+    expect(vDetail).toContain("packages/infrastructure/tgt/query");
     expect(vDetail).toContain("// line1");
 
     expect(await runCli(["help", "run", "missing", "query"], deps)).toBe(1);
     expect(await runCli(["help", "run", "tgt", "deploy"], deps)).toBe(1);
     expect(await runCli(["help", "run", "tgt", "query", "extra"], deps)).toBe(1);
     expect(await runCli(["help", "nope"], deps)).toBe(1);
-    expect(await runCli(["help", "docs", "nope"], deps)).toBe(1);
+    expect(await runCli(["help", "list", "extra"], deps)).toBe(1);
   });
 
   it("help and usage examples use cliInvocationForHelp", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    mkdirSync(join(root, "automation"), { recursive: true });
+    mkdirSync(join(root, "packages"), { recursive: true });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({
       root,
@@ -90,9 +92,31 @@ describe("runCli", () => {
     expect(h).toMatch(/printf.*\|\s*hdc secrets set/);
   });
 
-  it("help covers docs, inventory, secrets, users, and meta branches", async () => {
+  it("env command lists HDC_ variables with secrets redacted", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    mkdirSync(join(root, "automation"), { recursive: true });
+    mkdirSync(join(root, "packages"), { recursive: true });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      envVars: {
+        HDC_PROXMOX_TLS_INSECURE: "1",
+        HDC_LEAK_TEST_TOKEN: "supersecret",
+        HDC_PLAIN: "visible",
+      },
+    });
+    expect(await runCli(["env"], deps)).toBe(0);
+    const out = capture.logLines.join("\n");
+    expect(out).toContain(".env");
+    expect(out).toContain("HDC_PROXMOX_TLS_INSECURE=1");
+    expect(out).toContain("HDC_PLAIN=visible");
+    expect(out).toMatch(/HDC_LEAK_TEST_TOKEN=\(set, \d+ chars\)/);
+    expect(out).not.toContain("supersecret");
+  });
+
+  it("help covers list, secrets, users, and meta branches", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    mkdirSync(join(root, "packages"), { recursive: true });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({ root, capture });
 
@@ -102,19 +126,8 @@ describe("runCli", () => {
     expect(await runCli(["help", "help", "x"], deps)).toBe(1);
 
     expect(await runCli(["help", "list"], deps)).toBe(0);
-    expect(capture.logLines.join("\n")).toMatch(/query_last|inventory\/automated/);
-    expect(capture.logLines.join("\n")).toMatch(/agent notes|not read or write/i);
+    expect(capture.logLines.join("\n")).toMatch(/config\.json|packages\//);
     expect(await runCli(["help", "list", "x"], deps)).toBe(1);
-
-    expect(await runCli(["help", "docs"], deps)).toBe(0);
-    expect(await runCli(["help", "docs", "lint"], deps)).toBe(0);
-    expect(await runCli(["help", "docs", "sync"], deps)).toBe(0);
-    expect(await runCli(["help", "docs", "lint", "extra"], deps)).toBe(1);
-
-    expect(await runCli(["help", "inventory"], deps)).toBe(0);
-    expect(await runCli(["help", "inventory", "apply"], deps)).toBe(0);
-    expect(await runCli(["help", "inventory", "apply", "x"], deps)).toBe(1);
-    expect(await runCli(["help", "inventory", "nope"], deps)).toBe(1);
 
     expect(await runCli(["help", "secrets"], deps)).toBe(0);
     expect(await runCli(["help", "secrets", "path"], deps)).toBe(0);
@@ -129,12 +142,16 @@ describe("runCli", () => {
     expect(await runCli(["help", "users", "bootstrap-hdc"], deps)).toBe(0);
     expect(await runCli(["help", "users", "nope"], deps)).toBe(1);
     expect(await runCli(["help", "users", "bootstrap-hdc", "x"], deps)).toBe(1);
+
+    expect(await runCli(["help", "env"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toContain("HDC_");
+    expect(await runCli(["help", "env", "x"], deps)).toBe(1);
   });
 
   it("help run warns when script file missing", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/tgt/manifest.json": JSON.stringify({
+      "packages/infrastructure/tgt/manifest.json": JSON.stringify({
         id: "tgt",
         verbs: { query: { script: "run.mjs" } },
       }),
@@ -145,47 +162,25 @@ describe("runCli", () => {
     expect(capture.warnLines.join("\n")).toMatch(/script not found/);
   });
 
-  it("errors on unknown command without writing local automated inventory", async () => {
+  it("errors on unknown command", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "inventory/manual/systems/h.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "matched-box",
-        kind: "system",
-        access: { nodes: [{ hostnames: ["test-host.lab"], ip: "10.55.1.9" }] },
-      }),
-    });
+    mkdirSync(join(root, "packages"), { recursive: true });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({
-      root,
-      capture,
-      hostProbe: () => ({
-        hostname: "test-host",
-        ips: ["10.55.1.9"],
-        platform: "linux",
-        arch: "x64",
-      }),
-    });
+    const deps = createMemoryCliDeps({ root, capture });
     const code = await runCli(["nope"], deps);
     expect(code).toBe(1);
     expect(capture.errorLines.join("\n")).toMatch(/unknown command/);
-    expect(existsSync(join(root, "inventory/automated/systems.json"))).toBe(false);
   });
 
-  it("lists automation targets and inventory sidecars", async () => {
+  it("lists packages and optional per-package config.json paths", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/t1/manifest.json": JSON.stringify({
+      "packages/infrastructure/t1/manifest.json": JSON.stringify({
         id: "t1",
         title: "One",
         verbs: { query: { script: "run.mjs" } },
       }),
-      "inventory/manual/systems/x.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "x",
-        kind: "system",
-      }),
-      "inventory/manual/systems/x.md": "# x\n",
+      "packages/infrastructure/t1/config.json": JSON.stringify({ schema_version: 1 }),
     });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({ root, capture });
@@ -193,87 +188,21 @@ describe("runCli", () => {
     expect(code).toBe(0);
     const text = capture.logLines.join("\n");
     expect(text).toContain("t1");
-    expect(text).toContain("x.inventory.json");
-    expect(text).toContain("Automation inventory");
-    expect(text).toContain("automation/t1/inventory.json");
-    expect(text).toContain("inventory/automated/systems.json");
+    expect(text).toContain("packages/infrastructure/t1/config.json");
+    expect(text).toContain("exists");
   });
 
-  it("writes first automated systems row when host matches a manual system and row is missing", async () => {
+  it("run validates package, verb, script, forwards spawn status, relays query stdout", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/t1/manifest.json": JSON.stringify({ id: "t1", title: "One", verbs: {} }),
-      "inventory/manual/systems/h.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "matched-box",
-        kind: "system",
-        access: {
-          nodes: [{ name: "n", hostnames: ["test-host.lab"], ip: "10.55.1.9" }],
-        },
-      }),
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({
-      root,
-      capture,
-      hostProbe: () => ({
-        hostname: "test-host",
-        ips: ["10.55.1.9"],
-        platform: "linux",
-        arch: "x64",
-      }),
-    });
-    expect(await runCli(["list"], deps)).toBe(0);
-    const autoPath = join(root, "inventory/automated/systems.json");
-    expect(existsSync(autoPath)).toBe(true);
-    const doc = JSON.parse(readFileSync(autoPath, "utf8"));
-    expect(doc.systems["matched-box"].hdc_local_host.hostname).toBe("test-host");
-    expect(capture.logLines.join("\n")).toMatch(/local inventory: wrote first automated snapshot/);
-  });
-
-  it("does not run local inventory collection during docs lint", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-      "inventory/manual/systems/h.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "matched-box",
-        kind: "system",
-        access: { nodes: [{ hostnames: ["test-host.lab"], ip: "10.55.1.9" }] },
-      }),
-      "inventory/manual/systems/ok.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "ok",
-        kind: "system",
-      }),
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({
-      root,
-      capture,
-      hostProbe: () => ({
-        hostname: "test-host",
-        ips: ["10.55.1.9"],
-        platform: "linux",
-        arch: "x64",
-      }),
-    });
-    expect(await runCli(["docs", "lint"], deps)).toBe(0);
-    expect(existsSync(join(root, "inventory/automated/systems.json"))).toBe(false);
-    expect(capture.logLines.join("\n")).not.toMatch(/local inventory:/);
-  });
-
-  it("run validates target, verb, script, forwards spawn status, and writes automation inventory on query", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/tgt/manifest.json": JSON.stringify({
+      "packages/infrastructure/tgt/manifest.json": JSON.stringify({
         id: "tgt",
         env_required: ["HDC_MISSING_FOR_TEST"],
         verbs: { query: { script: "run.mjs" } },
       }),
-      "automation/tgt/query/run.mjs": "process.exit(0)\n",
+      "packages/infrastructure/tgt/query/run.mjs": "process.exit(0)\n",
     });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const capture = { logLines: [], errorLines: [], warnLines: [], stdoutChunks: [] };
     const spawnMock = vi.fn().mockReturnValue({ status: 0, stdout: '{"from":"query"}\n' });
     const deps = createMemoryCliDeps({
       root,
@@ -282,162 +211,63 @@ describe("runCli", () => {
     });
     expect(await runCli(["run", "tgt", "query"], deps)).toBe(0);
     expect(capture.warnLines.join("\n")).toContain("HDC_MISSING_FOR_TEST");
-    expect(capture.logLines.join("\n")).toContain("wrote query snapshot");
-    expect(capture.logLines.join("\n")).toContain("updated automated systems inventory");
-    const invPath = join(root, "automation/tgt/inventory.json");
-    expect(existsSync(invPath)).toBe(true);
-    expect(JSON.parse(readFileSync(invPath, "utf8")).query_last).toEqual({ from: "query" });
-    const autoPath = join(root, "inventory/automated/systems.json");
-    expect(existsSync(autoPath)).toBe(true);
-    expect(JSON.parse(readFileSync(autoPath, "utf8")).sources.tgt.last_payload).toEqual({ from: "query" });
+    expect((capture.stdoutChunks ?? []).join("")).toContain('"from":"query"');
+    expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
 
     expect(await runCli(["run"], deps)).toBe(1);
     expect(await runCli(["run", "tgt", "nope"], deps)).toBe(1);
     expect(await runCli(["run", "missing", "query"], deps)).toBe(1);
 
     writeFileSync(
-      join(root, "automation/tgt/manifest.json"),
+      join(root, "packages/infrastructure/tgt/manifest.json"),
       JSON.stringify({ id: "tgt", verbs: { query: { script: "run.mjs" } } }),
       "utf8",
     );
-    rmSync(join(root, "automation/tgt/query/run.mjs"));
+    rmSync(join(root, "packages/infrastructure/tgt/query/run.mjs"));
     expect(await runCli(["run", "tgt", "query"], deps)).toBe(1);
 
     spawnMock.mockReturnValue({ status: null, stdout: "" });
     writeTree(root, {
-      "automation/tgt/query/run.mjs": "process.exit(0)\n",
+      "packages/infrastructure/tgt/query/run.mjs": "process.exit(0)\n",
     });
     expect(await runCli(["run", "tgt", "query"], deps)).toBe(1);
   });
 
-  it("run query warns when stdout is not JSON but still exits with query status", async () => {
+  it("run query prints non-JSON stdout and does not touch inventory paths", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/tgt/manifest.json": JSON.stringify({ id: "tgt", verbs: { query: { script: "run.mjs" } } }),
-      "automation/tgt/query/run.mjs": "process.exit(0)\n",
+      "packages/infrastructure/tgt/manifest.json": JSON.stringify({ id: "tgt", verbs: { query: { script: "run.mjs" } } }),
+      "packages/infrastructure/tgt/query/run.mjs": "process.exit(0)\n",
     });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const capture = { logLines: [], errorLines: [], warnLines: [], stdoutChunks: [] };
     const deps = createMemoryCliDeps({
       root,
       capture,
       spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: "not-json\n" }),
     });
     expect(await runCli(["run", "tgt", "query"], deps)).toBe(0);
-    expect(capture.warnLines.join("\n")).toMatch(/not update inventory\.json/);
-    expect(existsSync(join(root, "automation/tgt/inventory.json"))).toBe(false);
+    expect((capture.stdoutChunks ?? []).join("")).toContain("not-json");
+    expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
   });
 
-  it("run deploy does not write automation inventory.json but updates root automated systems", async () => {
+  it("run deploy relays stdout without writing inventory paths", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     writeTree(root, {
-      "automation/tgt/manifest.json": JSON.stringify({
+      "packages/infrastructure/tgt/manifest.json": JSON.stringify({
         id: "tgt",
         verbs: { deploy: { script: "run.mjs" } },
       }),
-      "automation/tgt/deploy/run.mjs": "process.exit(0)\n",
+      "packages/infrastructure/tgt/deploy/run.mjs": "process.exit(0)\n",
     });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const capture = { logLines: [], errorLines: [], warnLines: [], stdoutChunks: [] };
     const deps = createMemoryCliDeps({
       root,
       capture,
-      spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: "" }),
+      spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: '{"ok":true}\n' }),
     });
     expect(await runCli(["run", "tgt", "deploy"], deps)).toBe(0);
-    expect(existsSync(join(root, "automation/tgt/inventory.json"))).toBe(false);
-    const autoPath = join(root, "inventory/automated/systems.json");
-    expect(existsSync(autoPath)).toBe(true);
-    expect(JSON.parse(readFileSync(autoPath, "utf8")).sources.tgt.last_deploy_at).toMatch(/\d{4}-\d{2}-\d{2}T/);
-  });
-
-  it("docs lint reports JSON errors and accepts sidecars without companion markdown", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-      "inventory/manual/systems/bad.inventory.json": "{",
-      "inventory/manual/systems/ok.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "ok",
-        kind: "system",
-      }),
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({ root, capture });
-    expect(await runCli(["docs", "lint"], deps)).toBe(1);
-    expect(capture.errorLines.join("\n")).toContain("invalid JSON");
-    expect(capture.errorLines.join("\n")).not.toContain("companion markdown");
-
-    rmSync(join(root, "inventory/manual/systems/bad.inventory.json"));
-    expect(await runCli(["docs", "lint"], deps)).toBe(0);
-    expect(capture.logLines.join("\n")).toContain("ok.inventory.json");
-  });
-
-  it("docs lint prints message when no sidecars", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    mkdirSync(join(root, "inventory/manual"), { recursive: true });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({ root, capture });
-    expect(await runCli(["docs", "lint"], deps)).toBe(0);
-    expect(capture.logLines.join("\n")).toContain("inventory/manual/");
-  });
-
-  it("docs sync validates JSON like lint and does not modify companion markdown", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-      "inventory/manual/systems/s.inventory.json": "{",
-      "inventory/manual/systems/g.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "g",
-        kind: "system",
-      }),
-      "inventory/manual/systems/g.md": "# g\nagent notes unchanged\n",
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({ root, capture });
-    expect(await runCli(["docs", "sync", "--dry-run"], deps)).toBe(1);
-
-    rmSync(join(root, "inventory/manual/systems/s.inventory.json"));
-    expect(await runCli(["docs", "sync", "--dry-run"], deps)).toBe(0);
-    expect(capture.logLines.join("\n")).toMatch(/dry-run:.*companion \.md not used/);
-    expect(readFileSync(join(root, "inventory/manual/systems/g.md"), "utf8")).toContain("agent notes unchanged");
-
-    expect(await runCli(["docs", "sync"], deps)).toBe(0);
-    expect(readFileSync(join(root, "inventory/manual/systems/g.md"), "utf8")).toContain("agent notes unchanged");
-    expect(capture.logLines.join("\n")).toContain("companion .md not used by hdc");
-  });
-
-  it("inventory apply validates arguments and paths", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({ root, capture });
-    expect(await runCli(["inventory", "apply"], deps)).toBe(1);
-    expect(await runCli(["inventory", "apply", "--sidecar", "x", "--from-json", "y"], deps)).toBe(1);
-  });
-
-  it("inventory apply merges query and validates sidecar", async () => {
-    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
-    writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-      "side.inventory.json": JSON.stringify({
-        schema_version: 1,
-        id: "s",
-        kind: "system",
-      }),
-      "q.json": JSON.stringify({ ping: 1 }),
-    });
-    const capture = { logLines: [], errorLines: [], warnLines: [] };
-    const deps = createMemoryCliDeps({ root, capture });
-    const code = await runCli(
-      ["inventory", "apply", "--sidecar", "side.inventory.json", "--from-json", "q.json"],
-      deps,
-    );
-    expect(code).toBe(0);
-    expect(JSON.parse(readFileSync(join(root, "side.inventory.json"), "utf8")).query_last).toEqual({
-      ping: 1,
-    });
+    expect((capture.stdoutChunks ?? []).join("")).toContain('"ok":true');
+    expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
   });
 
   it("secrets path and missing subcommand", async () => {
@@ -588,8 +418,23 @@ describe("runCli", () => {
     const vaultPath = join(root, "vault.enc");
     writeVault(vaultPath, "pw", {});
     writeTree(root, {
-      "automation/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
-      "inventory/manual/systems/p.inventory.json": JSON.stringify({
+      "packages/infrastructure/a/manifest.json": JSON.stringify({ id: "a", verbs: {} }),
+      "packages/infrastructure/ubuntu/config.json": JSON.stringify({
+        schema_version: 1,
+        bootstrap_hosts: [
+          {
+            schema_version: 1,
+            id: "p",
+            kind: "system",
+            tags: ["proxmox"],
+            auth: { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
+            access: {
+              nodes: [{ ssh: "ssh://root@10.0.0.1" }],
+            },
+          },
+        ],
+      }),
+      "inventory/manual/systems/p.json": JSON.stringify({
         schema_version: 1,
         id: "p",
         kind: "system",
@@ -626,7 +471,7 @@ describe("runCli", () => {
           "users",
           "bootstrap-hdc",
           "--sidecar",
-          "inventory/manual/systems/p.inventory.json",
+          "inventory/manual/systems/p.json",
         ],
         depsLive,
       ),
@@ -648,14 +493,14 @@ describe("runCli", () => {
           "users",
           "bootstrap-hdc",
           "--sidecar",
-          "inventory/manual/systems/p.inventory.json",
+          "inventory/manual/systems/p.json",
         ],
         depsFail,
       ),
     ).toBe(1);
 
     const emptyRoot = mkdtempSync(join(tmpdir(), "hdc-cli-empty-"));
-    mkdirSync(join(emptyRoot, "inventory/manual"), { recursive: true });
+    mkdirSync(join(emptyRoot, "packages/infrastructure/ubuntu"), { recursive: true });
     const vEmpty = join(emptyRoot, "vault.enc");
     writeVault(vEmpty, "x", {});
     const depsEmpty = createMemoryCliDeps({
@@ -665,7 +510,7 @@ describe("runCli", () => {
       envVars: { HDC_VAULT_PASSPHRASE: "x" },
     });
     expect(await runCli(["users", "bootstrap-hdc", "--dry-run"], depsEmpty)).toBe(0);
-    expect(capture.warnLines.join("\n")).toMatch(/no matching inventory sidecars/);
+    expect(capture.warnLines.join("\n")).toMatch(/no bootstrap_hosts/);
     rmSync(emptyRoot, { recursive: true, force: true });
 
     const depsUsers = createMemoryCliDeps({ root, capture, envVars: {} });

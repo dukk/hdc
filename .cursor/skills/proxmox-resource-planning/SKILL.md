@@ -15,7 +15,7 @@ disable-model-invocation: true
 
 1. **Measure before allocate**: Prefer live numbers from the Proxmox UI, `pvesh`, `pvesm status`, `zfs list`, or existing `query_last` in inventory over assumptions.
 2. **Leave headroom**: The hypervisor needs RAM and I/O for ZFS ARC, Ceph, backups, migrations, and spikes. If numbers are unknown, call that out and list what to collect.
-3. **Document in-repo**: Record durable decisions (node, pool, bridge, approximate sizing) in the matching `inventory/manual/**/*.inventory.json` and `.md` when this repo tracks that system.
+3. **Document in-repo**: Record durable decisions (node, pool, bridge, approximate sizing) in the matching `inventory/manual/{systems,networks,services,targets}/*.json` and `.md` when this repo tracks that system.
 
 ## 1. Classify the workload
 

@@ -1,0 +1,23 @@
+{
+  "id": "unifi-network",
+  "title": "UniFi Network",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/targets/unifi-network.json",
+    "inventory/automated/networks/",
+    "inventory/automated/systems/",
+    "inventory/automated/policies/",
+    "packages/infrastructure/unifi-network/config.json"
+  ],
+  "services": [
+    {
+      "id": "network-snapshot",
+      "title": "UniFi network snapshot",
+      "verb": "query",
+      "summary": "Pull sites, clients, networks, and firewall policies from the UniFi API; JSON on stdout."
+    }
+  ],
+  "verbs": {
+    "query": { "script": "run.mjs" }
+  }
+}

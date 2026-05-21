@@ -1,12 +1,12 @@
 ---
-description: When adding or editing manually deployed HDC docs, wire Nagios monitoring inventory and automation targets.
+description: When adding or editing manually deployed HDC docs, wire Nagios monitoring inventory and hdc package ids (automation_targets).
 globs: inventory/**/*,docs/manually-deployed/**/*
 alwaysApply: false
 ---
 
 # Nagios monitoring for manual inventory
 
-- Keep structured facts in the matching `*.inventory.json` sidecar next to the `.md` file. For hosts that should appear in Nagios, define `access.nodes` entries with `ip`, optional `name`, `web_ui` (for HTTPS/HTTP checks), and `ssh` (e.g. `ssh://root@10.0.0.1`) so SSH-based deploy can resolve users without guessing.
-- Add `"nagios"` to `automation_targets` when this resource is monitored or touched by the Nagios plugin so `node tools/hdc/cli.mjs docs lint` stays consistent with manifests under `automation/nagios/`.
+- Keep structured facts in the matching `*.json` sidecar next to the `.md` file. For hosts that should appear in Nagios, define `access.nodes` entries with `ip`, optional `name`, `web_ui` (for HTTPS/HTTP checks), and `ssh` (e.g. `ssh://root@10.0.0.1`) so SSH-based deploy can resolve users without guessing.
+- Add `"nagios"` to `automation_targets` when this resource is monitored or touched by the Nagios package so `node tools/hdc/cli.mjs docs lint` stays consistent with manifests under `packages/nagios/`.
 - After inventory edits, run `node tools/hdc/cli.mjs docs lint` (optional `docs sync` runs the same JSON validation; hdc does not modify companion `.md` files).
-- When checks or hosts change, redeploy: `node tools/hdc/cli.mjs run nagios deploy` (requires `nagios.central` on [`inventory/manual/systems/pve-a.inventory.json`](inventory/manual/systems/pve-a.inventory.json) and NRPE **TCP 5666** allowed from the central Nagios host to each Proxmox node).
+- When checks or hosts change, redeploy: `node tools/hdc/cli.mjs run nagios deploy` (requires `nagios.central` on [`inventory/manual/systems/pve-a.json`](inventory/manual/systems/pve-a.json) and NRPE **TCP 5666** allowed from the central Nagios host to each Proxmox node).

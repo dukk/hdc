@@ -1,0 +1,14 @@
+{
+  "id": "ollama",
+  "title": "Ollama LLM runtime",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/systems/ (optional ct-ollama-a / vm-ollama-a)",
+    "packages/services/ollama/config.json (copy config.example.json)"
+  ],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

@@ -5,9 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   discoverManifests,
   envRequired,
+  formatManifestServiceInvoke,
   inventoryDocs,
   manifestById,
   manifestId,
+  manifestServices,
   manifestTitle,
   verbSpec,
 } from "./manifests.mjs";
@@ -35,9 +37,9 @@ describe("manifests", () => {
   it("discoverManifests skips broken JSON and non-objects", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "a/manifest.json": "not json",
-      "b/manifest.json": JSON.stringify([]),
-      "c/manifest.json": JSON.stringify({ id: "ok", title: "T", verbs: {} }),
+      "infrastructure/a/manifest.json": "not json",
+      "infrastructure/b/manifest.json": JSON.stringify([]),
+      "infrastructure/c/manifest.json": JSON.stringify({ id: "ok", title: "T", verbs: {} }),
     });
     const m = discoverManifests(root);
     expect(m.map((x) => manifestId(x)).sort()).toEqual(["ok"]);
@@ -47,7 +49,7 @@ describe("manifests", () => {
   it("manifestId falls back to directory name", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "fromdir/manifest.json": JSON.stringify({ title: "x", verbs: {} }),
+      "infrastructure/fromdir/manifest.json": JSON.stringify({ title: "x", verbs: {} }),
     });
     const m = discoverManifests(root);
     expect(manifestId(m[0])).toBe("fromdir");
@@ -56,7 +58,7 @@ describe("manifests", () => {
   it("manifestTitle falls back to id", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "x/manifest.json": JSON.stringify({ id: "onlyid", verbs: {} }),
+      "services/x/manifest.json": JSON.stringify({ id: "onlyid", verbs: {} }),
     });
     const m = discoverManifests(root);
     expect(manifestTitle(m[0])).toBe("onlyid");
@@ -65,7 +67,7 @@ describe("manifests", () => {
   it("manifestById resolves or returns null", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "z/manifest.json": JSON.stringify({ id: "zid", verbs: {} }),
+      "services/z/manifest.json": JSON.stringify({ id: "zid", verbs: {} }),
     });
     const m = discoverManifests(root);
     expect(manifestById(m, "zid")).toBeTruthy();
@@ -75,7 +77,7 @@ describe("manifests", () => {
   it("envRequired and inventoryDocs tolerate bad shapes", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "p/manifest.json": JSON.stringify({
+      "infrastructure/p/manifest.json": JSON.stringify({
         id: "p",
         env_required: ["A", 1],
         inventory_docs: ["a.md", 2],
@@ -87,10 +89,30 @@ describe("manifests", () => {
     expect(inventoryDocs(m)).toEqual(["a.md", "2"]);
   });
 
+  it("manifestServices skips invalid rows and requires configured verb", () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
+    writeTree(root, {
+      "infrastructure/p/manifest.json": JSON.stringify({
+        id: "p",
+        verbs: { deploy: { script: "run.mjs" } },
+        services: [
+          { id: "ok", title: "Create", verb: "deploy", invoke: "create-x", summary: "Does x" },
+          { id: "bad-verb", title: "X", verb: "nope" },
+          { id: "no-script", title: "Y", verb: "query" },
+        ],
+      }),
+    });
+    const m = discoverManifests(root)[0];
+    const svc = manifestServices(m);
+    expect(svc).toHaveLength(1);
+    expect(svc[0].id).toBe("ok");
+    expect(formatManifestServiceInvoke(svc[0], "p")).toBe("run p deploy -- create-x");
+  });
+
   it("verbSpec rejects invalid specs", () => {
     root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
     writeTree(root, {
-      "q/manifest.json": JSON.stringify({
+      "services/q/manifest.json": JSON.stringify({
         id: "q",
         verbs: {
           deploy: "not-object",
