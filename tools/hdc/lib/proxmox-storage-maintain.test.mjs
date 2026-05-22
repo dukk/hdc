@@ -7,6 +7,7 @@ import {
   storageSpecsMatch,
   storageSpecToFormFields,
 } from "../../../packages/infrastructure/proxmox/lib/proxmox-storage-maintain.mjs";
+import { pveProfileForMajor } from "../../../packages/infrastructure/proxmox/lib/pve-version.mjs";
 
 describe("proxmox storage maintain", () => {
   it("storageIdsFromConfig defaults to nas-1 and nas-2", () => {
@@ -53,5 +54,23 @@ describe("proxmox storage maintain", () => {
     });
     expect(fields.password_vault_key).toBeUndefined();
     expect(fields.server).toBe("10.0.0.9");
+  });
+
+  it("storageSpecToFormFields forUpdate omits type and fixed NFS/CIFS fields", () => {
+    const fields = storageSpecToFormFields(
+      {
+        storage: "nas-1",
+        type: "nfs",
+        server: "10.0.0.9",
+        export: "/vol",
+        path: "/mnt/pve/nas-1",
+        share: "data",
+        nodes: "pve-a,pve-b",
+        content: "images",
+      },
+      {},
+      { forUpdate: true, profile: pveProfileForMajor(9) },
+    );
+    expect(fields).toEqual({ nodes: "pve-a,pve-b", content: "images" });
   });
 });

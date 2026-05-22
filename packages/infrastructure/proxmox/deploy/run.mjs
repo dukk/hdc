@@ -89,6 +89,11 @@ async function main() {
 
   errout.write(`[hdc] proxmox ${verb}: resolving API token and endpoint for host ${JSON.stringify(hostId)} …\n`);
   const auth = await authorizeProxmoxForHost({ packageRoot, hostId });
+  if (auth.pveVersion) {
+    errout.write(
+      `[hdc] proxmox ${verb}: PVE ${auth.pveVersion.release} (${auth.pveProfile.id}) on ${JSON.stringify(auth.host.id)}.\n`,
+    );
+  }
   errout.write(
     auth.rejectUnauthorized
       ? `[hdc] proxmox ${verb}: TLS verify ON (use HDC_PROXMOX_TLS_INSECURE=1 if needed).\n`

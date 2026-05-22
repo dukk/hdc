@@ -299,6 +299,68 @@ describe("runCli", () => {
     expect(await runCli(["secrets", "init"], deps)).toBe(1);
   });
 
+  it("secrets change-passphrase re-encrypts and preserves keys", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "old", { HDC_X: "secret" });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: { HDC_VAULT_PASSPHRASE: "old" },
+      readLineQuestion: vi
+        .fn()
+        .mockResolvedValueOnce("new")
+        .mockResolvedValueOnce("new"),
+    });
+    expect(await runCli(["secrets", "change-passphrase"], deps)).toBe(0);
+    expect(readVault(vaultPath, "new")).toEqual({ HDC_X: "secret" });
+    expect(() => readVault(vaultPath, "old")).toThrow();
+    expect(capture.warnLines.join("\n")).toContain("HDC_VAULT_PASSPHRASE");
+  });
+
+  it("secrets change-passphrase errors without vault", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => join(root, "vault.enc"),
+      envVars: {},
+    });
+    expect(await runCli(["secrets", "change-passphrase"], deps)).toBe(1);
+    expect(capture.errorLines.join("\n")).toMatch(/no vault/);
+  });
+
+  it("secrets change-passphrase rejects confirm mismatch", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "pw", { A: "1" });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: { HDC_VAULT_PASSPHRASE: "pw" },
+      readLineQuestion: vi
+        .fn()
+        .mockResolvedValueOnce("new1")
+        .mockResolvedValueOnce("new2"),
+    });
+    expect(await runCli(["secrets", "change-passphrase"], deps)).toBe(1);
+    expect(capture.errorLines.join("\n")).toMatch(/do not match/);
+    expect(readVault(vaultPath, "pw")).toEqual({ A: "1" });
+  });
+
+  it("help secrets change-passphrase", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({ root, capture });
+    expect(await runCli(["help", "secrets", "change-passphrase"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toContain("change-passphrase");
+  });
+
   it("secrets init interactively when HDC_VAULT_PASSPHRASE is unset", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     const vaultPath = join(root, "vault.enc");

@@ -14,7 +14,11 @@ import { writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
 import { collectHdcEnvRows } from "./hdc-env-report.mjs";
-import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
+import {
+  clearVaultPassphraseProcessCache,
+  createVaultAccess,
+  vaultDepsFromCli,
+} from "./vault-access.mjs";
 import { runUsersBootstrapHdc } from "./users-bootstrap-hdc.mjs";
 
 /**
@@ -78,6 +82,7 @@ Usage:
   ${c} run <package> <verb> [-- <extra args...>]
   ${c} secrets path
   ${c} secrets init   # new vault: passphrase prompt, or HDC_VAULT_PASSPHRASE once
+  ${c} secrets change-passphrase
   ${c} secrets set <ENV_NAME> [--stdin | --value <s>]
   ${c} secrets delete <ENV_NAME>
   ${c} secrets list
@@ -117,7 +122,7 @@ function cmdHelp(deps, root, topics) {
   ${c} help help
   ${c} help list
   ${c} help run [ <package> [ <verb> ] ]
-  ${c} help secrets [ path | init | set | list | delete ]
+  ${c} help secrets [ path | init | change-passphrase | set | list | delete ]
   ${c} help users [ bootstrap-hdc ]
   ${c} help env`);
     return;
@@ -290,6 +295,7 @@ ${queryNote}If the script file is missing on disk, "run" exits with an error (sa
 Subcommands:
   path    Print the vault file path.
   init    Create an empty vault (passphrase prompt, or HDC_VAULT_PASSPHRASE once).
+  change-passphrase  Re-encrypt vault with a new passphrase (current via env or prompt).
   set     Set or update a key (ENV-style name).
   list    List keys.
   delete  Remove a key.
@@ -322,6 +328,19 @@ for a passphrase and confirmation. Fails if the vault file already exists.
 
 Example:
   ${c} secrets init
+`);
+      return;
+    }
+    if (sub === "change-passphrase") {
+      const c = helpExe(deps);
+      deps.log(`secrets change-passphrase — rotate vault encryption passphrase
+
+Requires an existing vault. Unlocks with HDC_VAULT_PASSPHRASE when it decrypts the file, otherwise
+prompts for the current passphrase. Prompts twice for the new passphrase (masked). All stored keys
+are preserved. After success, update HDC_VAULT_PASSPHRASE in repo .env if you use non-interactive unlock.
+
+Example:
+  ${c} secrets change-passphrase
 `);
       return;
     }
@@ -366,7 +385,10 @@ Examples:
 `);
       return;
     }
-    die(deps, `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, set, list, delete)`);
+    die(
+      deps,
+      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, delete)`,
+    );
   }
 
   if (a0 === "users") {
@@ -464,6 +486,33 @@ async function cmdSecrets(deps, argv) {
     if (p1 !== p2) die(deps, "secrets init: passphrases do not match");
     writeVault(vaultPath, p1, {});
     deps.log(`initialized empty vault: ${vaultPath}`);
+    return;
+  }
+  if (sub === "change-passphrase") {
+    if (!deps.existsSync(vaultPath)) {
+      die(
+        deps,
+        `secrets change-passphrase: no vault at ${vaultPath} (run secrets init first)`,
+      );
+    }
+    const data = await access.readSecrets({ createIfMissing: false });
+    if (data === null) {
+      die(deps, `secrets change-passphrase: no vault at ${vaultPath}`);
+    }
+    const currentPass = await access.unlock({ createIfMissing: false });
+    const p1 = await deps.readLineQuestion("New vault passphrase: ", { mask: true });
+    if (!p1) die(deps, "secrets change-passphrase: empty passphrase");
+    const p2 = await deps.readLineQuestion("Confirm new vault passphrase: ", { mask: true });
+    if (p1 !== p2) die(deps, "secrets change-passphrase: passphrases do not match");
+    if (p1 === currentPass) {
+      die(deps, "secrets change-passphrase: new passphrase must differ from current");
+    }
+    writeVault(vaultPath, p1, data);
+    clearVaultPassphraseProcessCache();
+    deps.log(`changed vault passphrase: ${vaultPath}`);
+    if (String(deps.env.HDC_VAULT_PASSPHRASE ?? "").trim()) {
+      deps.warn("Update HDC_VAULT_PASSPHRASE in your repo .env to the new passphrase.");
+    }
     return;
   }
   if (sub === "list") {
@@ -659,7 +708,7 @@ export async function runCli(argv, deps) {
       cmdRun(deps, root, rest);
     } else if (cmd === "secrets") {
       if (rest.length === 0) {
-        die(deps, "secrets: need a subcommand (path, init, set, list, delete)");
+        die(deps, "secrets: need a subcommand (path, init, change-passphrase, set, list, delete)");
       }
       await cmdSecrets(deps, rest);
       return 0;

@@ -29,6 +29,7 @@ export function applianceTemplateFromVolid(volid) {
  * @param {string} authorization
  * @param {boolean} rejectUnauthorized
  * @param {(line: string) => void} log
+ * @param {import("./pve-version.mjs").PveProfile} [profile]
  */
 export async function downloadLxcApplianceTemplate(
   apiBase,
@@ -38,7 +39,12 @@ export async function downloadLxcApplianceTemplate(
   authorization,
   rejectUnauthorized,
   log,
+  profile,
 ) {
+  const method = profile?.lxcTemplateDownload ?? "aplinfo";
+  if (method !== "aplinfo") {
+    throw new Error(`Unsupported LXC template download method ${JSON.stringify(method)} for this PVE version`);
+  }
   const path = `/nodes/${encodeURIComponent(node)}/aplinfo`;
   const form = pveFormBody({ storage, template });
   const body = await pveJsonRequest("POST", apiBase, path, authorization, rejectUnauthorized, form);

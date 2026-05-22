@@ -1,12 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { isProxmoxConfigObject, loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
+import { clusterConfigByKey, isProxmoxConfigObject, loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
 import {
   authorizeProxmoxForClusterMembers,
-  PROXMOX_STORAGE_VERIFY_PATHS,
+  proxmoxMaintainVerifyPaths,
 } from "./proxmox-deploy-auth.mjs";
+import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
 import { pveFormBody, pveJsonRequest, pveDataArray } from "./pve-http.mjs";
+import { STORAGE_UPDATE_KEYS } from "./pve-version.mjs";
 
 const DEFAULT_STORAGE_IDS = ["nas-1", "nas-2"];
 
@@ -189,12 +191,19 @@ function normalizeNodes(nodes) {
 /**
  * @param {Record<string, unknown>} spec
  * @param {Record<string, string>} [extra]
+ * @param {{ forUpdate?: boolean; profile?: import("./pve-version.mjs").PveProfile }} [opts]
  */
-export function storageSpecToFormFields(spec, extra = {}) {
+export function storageSpecToFormFields(spec, extra = {}, opts = {}) {
+  const forUpdate = opts.forUpdate === true;
+  const updateKeys = opts.profile?.storageUpdateKeys ?? STORAGE_UPDATE_KEYS;
   /** @type {Record<string, string | number | boolean>} */
   const fields = {};
   for (const [k, v] of Object.entries(spec)) {
     if (k === "password_vault_key") continue;
+    if (forUpdate) {
+      if (k === "storage" || k === "type") continue;
+      if (!updateKeys.has(k)) continue;
+    }
     if (v === undefined || v === null) continue;
     if (typeof v === "boolean" || typeof v === "number") {
       fields[k] = v;
@@ -204,7 +213,9 @@ export function storageSpecToFormFields(spec, extra = {}) {
     }
   }
   for (const [k, v] of Object.entries(extra)) {
-    if (v) fields[k] = v;
+    if (!v) continue;
+    if (forUpdate && !updateKeys.has(k)) continue;
+    fields[k] = v;
   }
   return fields;
 }
@@ -249,10 +260,19 @@ export function pickStorageSpecsFromRows(rows, ids) {
  * @param {boolean} [opts.dryRun]
  * @param {(line: string) => void} opts.log
  * @param {import("../../../../tools/hdc/lib/vault-access.mjs").ReturnType<import("../../../../tools/hdc/lib/vault-access.mjs").createVaultAccess>} [opts.vault]
+ * @param {import("./pve-version.mjs").PveProfile} [opts.profile]
  */
 export async function ensurePveStorageSpecs(opts) {
-  const { apiBase, authorization, rejectUnauthorized, desiredSpecs, dryRun = false, log, vault } = opts;
-  const existing = await fetchPveStorageList(apiBase, authorization, rejectUnauthorized);
+  const { apiBase, authorization, rejectUnauthorized, desiredSpecs, dryRun = false, log, vault, profile } =
+    opts;
+  /** @type {Record<string, unknown>[]} */
+  let existing;
+  try {
+    existing = await fetchPveStorageList(apiBase, authorization, rejectUnauthorized);
+  } catch (e) {
+    log(`storage list failed: ${/** @type {Error} */ (e).message || e}`);
+    return { ok: false };
+  }
   let ok = true;
 
   for (const desired of desiredSpecs) {
@@ -296,7 +316,7 @@ export async function ensurePveStorageSpecs(opts) {
     log(`storage ${JSON.stringify(id)} differs — will update${dryRun ? " [dry-run]" : ""}.`);
     if (!dryRun) {
       try {
-        const form = pveFormBody(storageSpecToFormFields(desired, extra));
+          const form = pveFormBody(storageSpecToFormFields(desired, extra, { forUpdate: true, profile }));
         await pveJsonRequest(
           "PUT",
           apiBase,
@@ -352,15 +372,16 @@ export async function runProxmoxStorageMaintain(opts) {
   const storageIds = storageIdsFromConfig(cfg);
   const configTargets = storageTargetsFromConfig(cfg);
   const discoverHostId = storageDiscoverHostIdFromConfig(cfg);
+  const lxcStorage = lxcTemplateStorageFromConfig(cfg);
 
   /** @type {Map<string, Record<string, unknown>>} */
-  const canonicalById = new Map();
+  const configCanonicalById = new Map();
   if (configTargets) {
     for (const t of configTargets) {
       const id = typeof t.storage === "string" ? t.storage.trim() : "";
-      if (id) canonicalById.set(id, { ...t });
+      if (id) configCanonicalById.set(id, { ...t });
     }
-    log(`Using ${canonicalById.size} storage target(s) from config.`);
+    log(`Using ${configCanonicalById.size} storage target(s) from config.`);
   }
 
   const byCluster = loadProxmoxHostsByCluster(cfg, {
@@ -374,6 +395,9 @@ export async function runProxmoxStorageMaintain(opts) {
     return { ok: false };
   }
 
+  /** @type {Map<string, Record<string, unknown>>} */
+  const sharedCanonicalById = new Map(configCanonicalById);
+
   let ok = true;
 
   for (const clusterKey of clusterKeys) {
@@ -382,12 +406,19 @@ export async function runProxmoxStorageMaintain(opts) {
     const pveNodes = members.map((m) => m.pveNode).filter(Boolean);
     log(`Cluster ${JSON.stringify(clusterKey)}: ensure storage ${storageIds.join(", ")} (nodes: ${pveNodes.join(", ")}) …`);
 
+    /** @type {Map<string, Record<string, unknown>>} */
+    const canonicalById = new Map(sharedCanonicalById);
+
+    const lead = members[0];
+    const configCluster = clusterConfigByKey(cfg, clusterKey);
     const auth = await authorizeProxmoxForClusterMembers({
       packageRoot,
       members,
       vault,
       warn,
-      verifyPaths: PROXMOX_STORAGE_VERIFY_PATHS,
+      log,
+      configCluster,
+      verifyPaths: proxmoxMaintainVerifyPaths(lead.pveNode, lxcStorage),
     });
     if (!auth) {
       ok = false;
@@ -414,6 +445,7 @@ export async function runProxmoxStorageMaintain(opts) {
         if (discovered.length) {
           const spec = storageSpecForNodes(discovered[0], pveNodes);
           canonicalById.set(id, discovered[0]);
+          sharedCanonicalById.set(id, discovered[0]);
           desiredSpecs.push(spec);
           log(`Discovered storage ${JSON.stringify(id)} from ${JSON.stringify(auth.host.id)}.`);
         }
@@ -422,7 +454,15 @@ export async function runProxmoxStorageMaintain(opts) {
       }
     }
 
-    const missing = storageIds.filter((id) => !desiredSpecs.some((s) => s.storage === id));
+    let missing = storageIds.filter((id) => !desiredSpecs.some((s) => s.storage === id));
+    for (const id of missing.slice()) {
+      const ref = sharedCanonicalById.get(id);
+      if (!ref) continue;
+      canonicalById.set(id, ref);
+      desiredSpecs.push(storageSpecForNodes(ref, pveNodes));
+      log(`Using storage ${JSON.stringify(id)} from reference definition (discovered earlier or config).`);
+    }
+    missing = storageIds.filter((id) => !desiredSpecs.some((s) => s.storage === id));
     if (missing.length) {
       if (discoverHostId) {
         const preferred = members.find((m) => m.id === discoverHostId);
@@ -433,7 +473,7 @@ export async function runProxmoxStorageMaintain(opts) {
               members: [preferred],
               vault,
               warn,
-              verifyPaths: PROXMOX_STORAGE_VERIFY_PATHS,
+              verifyPaths: proxmoxMaintainVerifyPaths(preferred.pveNode, lxcStorage),
             });
             if (altAuth) {
               const rows = await fetchPveStorageList(
@@ -445,6 +485,7 @@ export async function runProxmoxStorageMaintain(opts) {
                 const discovered = pickStorageSpecsFromRows(rows, [id]);
                 if (discovered.length) {
                   canonicalById.set(id, discovered[0]);
+                  sharedCanonicalById.set(id, discovered[0]);
                   desiredSpecs.push(storageSpecForNodes(discovered[0], pveNodes));
                   log(`Discovered storage ${JSON.stringify(id)} from ${JSON.stringify(discoverHostId)}.`);
                 }
@@ -474,6 +515,7 @@ export async function runProxmoxStorageMaintain(opts) {
       dryRun,
       log,
       vault,
+      profile: auth.pveProfile,
     });
     if (!result.ok) ok = false;
   }

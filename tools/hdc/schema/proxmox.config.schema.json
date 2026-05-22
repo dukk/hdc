@@ -31,6 +31,11 @@
           "minLength": 1,
           "description": "Logical cluster id (matches inventory proxmox_cluster.id when applicable)."
         },
+        "pve_release": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional Proxmox VE release hint (e.g. 8.4 or 9) when API /version is unavailable; selects hdc API/CLI profile."
+        },
         "hosts": {
           "type": "array",
           "minItems": 1,
@@ -93,9 +98,29 @@
         "templates": { "$ref": "#/$defs/provision_templates" },
         "host_os": { "$ref": "#/$defs/provision_host_os" },
         "storage": { "$ref": "#/$defs/provision_storage" },
+        "api_token": { "$ref": "#/$defs/provision_api_token" },
         "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
         "lxc": { "$ref": "#/$defs/provision_lxc" },
         "qemu": { "$ref": "#/$defs/provision_qemu" }
+      }
+    },
+    "provision_api_token": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips ensuring hdc API token role/ACL via SSH (default true)."
+        },
+        "role": {
+          "type": "string",
+          "description": "Proxmox role id for the hdc API token (default HDCMaintain)."
+        },
+        "privileges": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Privilege list for the role; defaults to hdc maintain set (VM.Audit, Datastore.Audit, …)."
+        }
       }
     },
     "provision_ssh_keys": {

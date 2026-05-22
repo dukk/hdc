@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * Proxmox maintain:
- * 1. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
- * 2. Ensure NAS storage connections (nas-1, nas-2 by default) on each cluster/standalone group.
- * 3. Install local SSH public keys on each hypervisor (password from vault if needed).
- * 4. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
- * 5. Ensure local `hdc` user on bootstrap hosts (see `users bootstrap-hdc`).
+ * 1. Install local SSH public keys on each hypervisor (password from vault if needed).
+ * 2. Ensure hdc API token role/ACL (VM.Audit, Datastore.Audit, …) via pveum over SSH.
+ * 3. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
+ * 4. Ensure NAS storage connections (nas-1, nas-2 by default) on each cluster/standalone group.
+ * 5. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
+ * 6. Ensure local `hdc` user on bootstrap hosts (see `users bootstrap-hdc`).
  *
  * Flags (forwarded to bootstrap-hdc where applicable):
  *   --dry-run              Report only; no SSH password changes or template downloads
@@ -13,6 +14,7 @@
  *   --no-build-qemu        Do not build missing QEMU templates from cloud images
  *   --no-prune             Do not remove unsupported Ubuntu LXC/QEMU templates
  *   --skip-storage           Skip NAS storage ensure (nas-1, nas-2)
+ *   --skip-api-token         Skip hdc API token role/ACL ensure (pveum over SSH)
  *   --skip-ssh-keys          Skip installing local SSH keys on hypervisors
  *   --skip-os-updates      Skip apt update/upgrade and reboots on hypervisors
  *   --skip-bootstrap         Only check templates
@@ -36,6 +38,7 @@ import {
   runProxmoxHostOsMaintain,
 } from "../lib/proxmox-host-os-maintain.mjs";
 import { runProxmoxMaintainTemplates } from "../lib/proxmox-maintain-templates.mjs";
+import { runProxmoxApiTokenMaintain } from "../lib/proxmox-api-token-maintain.mjs";
 import { runProxmoxStorageMaintain } from "../lib/proxmox-storage-maintain.mjs";
 import { runProxmoxSshKeysMaintain } from "../lib/proxmox-ssh-keys-maintain.mjs";
 
@@ -61,6 +64,7 @@ async function main() {
   const skipBootstrap = argv.includes("--skip-bootstrap");
   const skipTemplates = argv.includes("--skip-templates");
   const skipStorage = argv.includes("--skip-storage");
+  const skipApiToken = argv.includes("--skip-api-token");
   const skipSshKeys = argv.includes("--skip-ssh-keys");
   const skipOsUpdates = argv.includes("--skip-os-updates");
   const dryRun = argv.includes("--dry-run");
@@ -74,7 +78,7 @@ async function main() {
   const deps = createNodeCliDeps();
   const vault = createVaultAccess(vaultDepsFromCli(deps));
 
-  const needsVault = !skipTemplates || !skipStorage || !skipSshKeys;
+  const needsVault = !skipTemplates || !skipStorage || !skipSshKeys || !skipApiToken;
   if (needsVault) {
     try {
       await vault.unlock({});
@@ -83,6 +87,51 @@ async function main() {
         process.exit(e.code);
       }
       throw e;
+    }
+  }
+
+  if (!skipSshKeys) {
+    try {
+      const sshResult = await runProxmoxSshKeysMaintain({
+        packageRoot,
+        log,
+        warn: (line) => errout.write(`[proxmox] maintain: WARN ${line}\n`),
+        vault,
+        dryRun,
+        env: deps.env,
+        spawnSync: deps.spawnSync,
+        readLineQuestion: deps.readLineQuestion,
+      });
+      if (!sshResult.ok) exitCode = 1;
+    } catch (e) {
+      if (e instanceof CliExit) {
+        exitCode = exitCode || e.code;
+      } else {
+        log(`SSH keys maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
+        exitCode = 1;
+      }
+    }
+  }
+
+  if (!skipApiToken) {
+    try {
+      const tokenResult = await runProxmoxApiTokenMaintain({
+        packageRoot,
+        log,
+        warn: (line) => errout.write(`[proxmox] maintain: WARN ${line}\n`),
+        vault,
+        env: deps.env,
+        spawnSync: deps.spawnSync,
+        dryRun,
+      });
+      if (!tokenResult.ok) exitCode = 1;
+    } catch (e) {
+      if (e instanceof CliExit) {
+        exitCode = exitCode || e.code;
+      } else {
+        log(`API token maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
+        exitCode = 1;
+      }
     }
   }
 
@@ -124,29 +173,6 @@ async function main() {
         exitCode = exitCode || e.code;
       } else {
         log(`storage maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
-        exitCode = 1;
-      }
-    }
-  }
-
-  if (!skipSshKeys) {
-    try {
-      const sshResult = await runProxmoxSshKeysMaintain({
-        packageRoot,
-        log,
-        warn: (line) => errout.write(`[proxmox] maintain: WARN ${line}\n`),
-        vault,
-        dryRun,
-        env: deps.env,
-        spawnSync: deps.spawnSync,
-        readLineQuestion: deps.readLineQuestion,
-      });
-      if (!sshResult.ok) exitCode = 1;
-    } catch (e) {
-      if (e instanceof CliExit) {
-        exitCode = exitCode || e.code;
-      } else {
-        log(`SSH keys maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
         exitCode = 1;
       }
     }

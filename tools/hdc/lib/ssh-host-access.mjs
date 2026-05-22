@@ -175,6 +175,38 @@ export function buildSshArgv(target, opts) {
 }
 
 /**
+ * Escape a string for a single-quoted POSIX shell argument.
+ * @param {string} s
+ */
+export function shellSingleQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Remote argv for `bash -lc` with the script safely quoted for OpenSSH's `/bin/sh -c` wrapper.
+ * @param {string} script
+ * @returns {string[]}
+ */
+export function sshBashLcRemoteArgv(script) {
+  return [`bash -lc ${shellSingleQuote(script)}`];
+}
+
+/**
+ * @param {{ user: string; host: string }} target
+ * @param {string} script
+ * @param {object} opts
+ * @param {typeof import("node:child_process").spawnSync} opts.spawnSync
+ * @param {NodeJS.ProcessEnv} opts.env
+ * @param {"pubkey" | "password"} opts.mode
+ * @param {{ privateKey: string; certificateFile?: string }[]} [opts.identities]
+ * @param {string} [opts.password]
+ * @param {number} [opts.timeoutMs]
+ */
+export function sshBashLc(target, script, opts) {
+  return sshSpawn(target, sshBashLcRemoteArgv(script), opts);
+}
+
+/**
  * @param {{ user: string; host: string }} target
  * @param {string[]} remoteArgv
  * @param {object} opts
@@ -301,16 +333,15 @@ export async function ensureSshAuthorizedKeys(opts) {
   const remote = remoteInstallAuthorizedKeysBash(keyLinesB64);
   log(`[${target.id}] installing ${publicKeyLines.length} SSH public key line(s) in authorized_keys …`);
 
-  const install =
-    sshReachableWithPubkey(target, spawnSync, env, identities)
-      ? sshSpawn(target, ["bash", "-lc", remote], { spawnSync, env, mode: "pubkey", identities, timeoutMs: 60_000 })
-      : sshSpawn(target, ["bash", "-lc", remote], {
-          spawnSync,
-          env,
-          mode: "password",
-          password: password ?? "",
-          timeoutMs: 60_000,
-        });
+  const install = sshReachableWithPubkey(target, spawnSync, env, identities)
+    ? sshBashLc(target, remote, { spawnSync, env, mode: "pubkey", identities, timeoutMs: 60_000 })
+    : sshBashLc(target, remote, {
+        spawnSync,
+        env,
+        mode: "password",
+        password: password ?? "",
+        timeoutMs: 60_000,
+      });
 
   if (install.status !== 0) {
     const err = `${install.stderr ?? ""}${install.stdout ?? ""}`.trim();

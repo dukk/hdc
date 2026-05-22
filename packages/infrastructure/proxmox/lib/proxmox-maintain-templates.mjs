@@ -1,8 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { isProxmoxConfigObject, loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
-import { authorizeProxmoxForClusterMembers } from "./proxmox-deploy-auth.mjs";
+import { clusterConfigByKey, isProxmoxConfigObject, loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
+import {
+  authorizeProxmoxForClusterMembers,
+  proxmoxMaintainVerifyPaths,
+} from "./proxmox-deploy-auth.mjs";
 import {
   defaultUbuntuLtsReleaseFromConfig,
   lxcTemplateStorageFromConfig,
@@ -139,9 +142,19 @@ export async function runProxmoxMaintainTemplates(opts) {
   for (const clusterKey of clusterKeys) {
     const members = byCluster.get(clusterKey);
     if (!members?.length) continue;
-    log(`Cluster ${JSON.stringify(clusterKey)}: API via host ${JSON.stringify(members[0].id)} …`);
+    const lead = members[0];
+    const lxcStorage = lxcTemplateStorageFromConfig(cfg);
+    log(`Cluster ${JSON.stringify(clusterKey)}: API via host ${JSON.stringify(lead.id)} …`);
 
-    const auth = await authorizeProxmoxForClusterMembers({ packageRoot, members, vault, warn });
+    const auth = await authorizeProxmoxForClusterMembers({
+      packageRoot,
+      members,
+      vault,
+      warn,
+      log,
+      configCluster: clusterConfigByKey(cfg, clusterKey),
+      verifyPaths: proxmoxMaintainVerifyPaths(lead.pveNode, lxcStorage),
+    });
     if (!auth) {
       ok = false;
       warn(
@@ -160,6 +173,7 @@ export async function runProxmoxMaintainTemplates(opts) {
       node: auth.host.pveNode,
       authorization: auth.authorization,
       rejectUnauthorized: auth.rejectUnauthorized,
+      pveProfile: auth.pveProfile,
       cfg,
       downloadMissing,
       buildQemuTemplate,

@@ -188,3 +188,20 @@ export function loadProxmoxHostsByCluster(cfg, opts) {
   }
   return byCluster;
 }
+
+/**
+ * @param {unknown} cfg
+ * @param {string} clusterKey
+ * @returns {Record<string, unknown> | null}
+ */
+export function clusterConfigByKey(cfg, clusterKey) {
+  if (!isProxmoxConfigObject(cfg)) return null;
+  const clusters = cfg.clusters;
+  if (!Array.isArray(clusters)) return null;
+  for (const cl of clusters) {
+    if (!isProxmoxConfigObject(cl)) continue;
+    const id = typeof cl.id === "string" ? cl.id.trim() : "";
+    if (id === clusterKey) return cl;
+  }
+  return null;
+}

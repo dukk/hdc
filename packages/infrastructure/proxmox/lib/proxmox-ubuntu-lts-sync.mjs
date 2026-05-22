@@ -43,6 +43,7 @@ export function ubuntuLtsMaintainPlanFromConfig(cfg) {
  * @param {string} opts.node
  * @param {string} opts.authorization
  * @param {boolean} opts.rejectUnauthorized
+ * @param {import("./pve-version.mjs").PveProfile} opts.pveProfile
  * @param {unknown} opts.cfg
  * @param {boolean} opts.downloadMissing
  * @param {boolean} opts.buildQemuTemplate
@@ -60,6 +61,7 @@ export async function syncUbuntuLtsTemplatesForCluster(opts) {
     node,
     authorization,
     rejectUnauthorized,
+    pveProfile,
     cfg,
     downloadMissing,
     buildQemuTemplate,
@@ -198,6 +200,7 @@ export async function syncUbuntuLtsTemplatesForCluster(opts) {
             authorization,
             rejectUnauthorized,
             log,
+            pveProfile,
           );
           volids = await fetchVztmplVolidsOnNode(
             apiBase,

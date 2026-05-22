@@ -21,6 +21,19 @@
       ]
     },
     {
+      "id": "proxmox-primary-v9-cluster",
+      "pve_release": "9",
+      "hosts": [
+        {
+          "id": "pve-d",
+          "pve_node": "pve-d",
+          "ip": "10.1.0.218",
+          "web_ui": "https://10.1.0.218:8006",
+          "ssh": "ssh://root@10.1.0.218"
+        }
+      ]
+    },
+    {
       "id": "proxmox-home-standalone",
       "hosts": [
         {
@@ -46,6 +59,10 @@
       "ids": ["nas-1", "nas-2"],
       "discover_from_host": "pve-a",
       "targets": []
+    },
+    "api_token": {
+      "enabled": true,
+      "role": "HDCMaintain"
     },
     "ssh_keys": {
       "enabled": true

@@ -22,6 +22,7 @@ import {
   proxmoxClusterRefFromHost,
 } from "../lib/proxmox-config.mjs";
 import { vaultTokenKeyForHost, normalizePveAuthorization } from "../lib/proxmox-deploy-auth.mjs";
+import { parsePveVersionBody } from "../lib/pve-version.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
 import { readLineMasked } from "../../../../tools/hdc/lib/readline-masked.mjs";
 import {
@@ -302,10 +303,14 @@ async function main() {
     });
     logUser(`Guests (qemu/lxc, non-template): ${guests.length} in group ${JSON.stringify(ck)}.`);
 
-    /** @type {unknown} */
-    let clusterVersion = null;
+    /** @type {import("../lib/pve-version.mjs").PveVersionInfo | null} */
+    let pveVersion = null;
     try {
-      clusterVersion = await pveJsonGet(lead.apiBase, "/version", authorization, rejectUnauthorized);
+      const versionBody = await pveJsonGet(lead.apiBase, "/version", authorization, rejectUnauthorized);
+      pveVersion = parsePveVersionBody(versionBody);
+      if (pveVersion) {
+        logUser(`Proxmox ${JSON.stringify(ck)}: release ${pveVersion.release} (major ${pveVersion.major}).`);
+      }
     } catch (e) {
       errout.write(
         `[proxmox] GET /version failed for cluster group ${JSON.stringify(ck)} (${/** @type {Error} */ (e).message}).\n`,
@@ -340,8 +345,14 @@ async function main() {
         ip: typeof manual.ip === "string" ? manual.ip : undefined,
         pve_node: m.pveNode,
         cluster_inventory_key: ck,
-        version:
-          clusterVersion && isObject(clusterVersion) ? clusterVersion.data ?? clusterVersion : clusterVersion,
+        version: pveVersion
+          ? {
+              release: pveVersion.release,
+              version: pveVersion.version,
+              repoid: pveVersion.repoid,
+              pve_major: pveVersion.major,
+            }
+          : undefined,
         node_status: status && isObject(status) ? status.data ?? status : status,
       };
 
