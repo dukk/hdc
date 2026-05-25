@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   apiBaseFromHostRecord,
   apiBaseFromWebUi,
+  findProxmoxHostInConfig,
+  isProxmoxHostDown,
   loadProxmoxHostsByCluster,
   proxmoxClusterRefFromHost,
   resolveProxmoxHost,
@@ -43,6 +45,34 @@ describe("proxmox-config", () => {
     expect(map.has("proxmox-primary-cluster")).toBe(true);
     expect(map.has("proxmox-home-standalone")).toBe(true);
     expect(map.get("proxmox-primary-cluster")?.length).toBe(2);
+  });
+
+  it("isProxmoxHostDown is true for down true or 1", () => {
+    expect(isProxmoxHostDown({ down: true })).toBe(true);
+    expect(isProxmoxHostDown({ down: 1 })).toBe(true);
+    expect(isProxmoxHostDown({ down: false })).toBe(false);
+    expect(isProxmoxHostDown({})).toBe(false);
+  });
+
+  it("loadProxmoxHostsByCluster excludes hosts marked down", () => {
+    const withDown = structuredClone(cfg);
+    withDown.clusters[0].hosts[0].down = true;
+    const skipped = [];
+    const map = loadProxmoxHostsByCluster(withDown, {
+      configPath: "/x/config.json",
+      configRel: "packages/infrastructure/proxmox/config.json",
+      onSkip: (id, reason) => skipped.push({ id, reason }),
+    });
+    expect(map.get("proxmox-primary-cluster")?.map((m) => m.id)).toEqual(["pve-b"]);
+    expect(skipped).toContainEqual({ id: "pve-a", reason: "marked down in config" });
+  });
+
+  it("resolveProxmoxHost returns null for down host; findProxmoxHostInConfig still resolves", () => {
+    const withDown = structuredClone(cfg);
+    withDown.clusters[0].hosts[0].down = true;
+    expect(resolveProxmoxHost(withDown, "pve-a")).toBeNull();
+    expect(findProxmoxHostInConfig(withDown, "pve-a")?.id).toBe("pve-a");
+    expect(resolveProxmoxHost(withDown, "pve-b")?.id).toBe("pve-b");
   });
 
   it("proxmoxClusterRefFromHost uses cluster id when host has no override", () => {

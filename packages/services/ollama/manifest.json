@@ -3,8 +3,9 @@
   "title": "Ollama LLM runtime",
   "env_required": [],
   "inventory_docs": [
-    "inventory/manual/systems/ (optional ct-ollama-a / vm-ollama-a)",
-    "packages/services/ollama/config.json (copy config.example.json)"
+    "inventory/manual/systems/ct-ollama-{a,b,c}.json (optional per instance)",
+    "packages/services/ollama/config.json (schema_version 2 deployments[]; deploy all if no --instance)",
+    "hdc run ollama deploy — all instances; prompts for LXC root password on create (or proxmox.lxc.password / --password)"
   ],
   "verbs": {
     "deploy": { "script": "run.mjs" },

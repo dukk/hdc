@@ -3,6 +3,10 @@ import { sshBashLcRemoteArgv } from "./ssh-host-access.mjs";
 import {
   apiTokenMaintainEnabledFromConfig,
   apiTokenPrivilegesFromConfig,
+  apiTokenUseridFromConfig,
+  hdcProxmoxTokenIdFromHostname,
+  parsePveumTokenSecret,
+  pveumCreateOrRegenerateTokenScript,
   pveumEnsureRoleAndAclScript,
   pveumEnsureRoleCommands,
   pveumEnsureTokenAclCommand,
@@ -15,6 +19,32 @@ import {
 } from "../../../packages/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 
 describe("proxmox API token maintain", () => {
+  it("hdcProxmoxTokenIdFromHostname builds hdc-prefixed slug", () => {
+    expect(hdcProxmoxTokenIdFromHostname("DUKK-LAP")).toBe("hdc-dukk-lap");
+    expect(hdcProxmoxTokenIdFromHostname("  My_Host  ")).toBe("hdc-my_host");
+  });
+
+  it("apiTokenUseridFromConfig defaults to root@pam", () => {
+    expect(apiTokenUseridFromConfig({})).toBe("root@pam");
+    expect(apiTokenUseridFromConfig({ provision: { api_token: { userid: "ops@pve" } } })).toBe("ops@pve");
+  });
+
+  it("pveumCreateOrRegenerateTokenScript branches on token list", () => {
+    const script = pveumCreateOrRegenerateTokenScript("root@pam", "hdc-dukk-lap");
+    expect(script).toContain("pveum user token list 'root@pam'");
+    expect(script).toContain("pveum user token modify 'root@pam' 'hdc-dukk-lap' --regenerate 1 --privsep 1");
+    expect(script).toContain("pveum user token add 'root@pam' 'hdc-dukk-lap' --privsep 1");
+  });
+
+  it("parsePveumTokenSecret reads JSON value field", () => {
+    const stdout = JSON.stringify({
+      data: { value: "abc-def-123", "full-tokenid": "root@pam!hdc-dukk-lap" },
+    });
+    expect(parsePveumTokenSecret(stdout, "root@pam", "hdc-dukk-lap")).toBe(
+      "root@pam!hdc-dukk-lap=abc-def-123",
+    );
+  });
+
   it("parsePveApiTokenValue accepts vault and PVEAPIToken forms", () => {
     expect(parsePveApiTokenValue("root@pam!hdc-token=secret")).toEqual({
       userid: "root@pam",

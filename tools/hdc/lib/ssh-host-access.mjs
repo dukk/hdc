@@ -294,30 +294,17 @@ export async function ensureSshAuthorizedKeys(opts) {
     log(`[${target.id}] public-key auth failed — trying vault/password for ${target.user}@${target.host} …`);
   }
 
-  const vaultKey = vaultKeyForProxmoxSshPassword(target.id);
-  /** @type {string | null} */
-  let password = null;
-  if (!dryRun) {
-    const data = (await vault.readSecrets({})) ?? {};
-    const stored = typeof data[vaultKey] === "string" ? data[vaultKey].trim() : "";
-    if (stored && sshReachableWithPassword(target, spawnSync, env, stored)) {
-      password = stored;
-    } else if (stored) {
-      warn(`[${target.id}] stored vault password for ${vaultKey} did not work — will prompt.`);
-    }
-  }
-
-  if (!dryRun && !sshReachableWithPubkey(target, spawnSync, env, identities) && !password) {
-    password = await promptAndStoreSshPassword({
-      target,
-      vaultKey,
-      vault,
-      spawnSync,
-      env,
-      readLineQuestion,
-      warn,
-    });
-  }
+  const sshAuth = await resolveProxmoxSshPassword({
+    target,
+    vault,
+    spawnSync,
+    env,
+    identities,
+    readLineQuestion,
+    warn,
+    dryRun,
+  });
+  const password = sshAuth?.mode === "password" ? sshAuth.password : null;
 
   if (dryRun) {
     log(`[${target.id}] dry-run: would install ${publicKeyLines.length} SSH public key line(s) on ${target.user}@${target.host}.`);
@@ -356,6 +343,59 @@ export async function ensureSshAuthorizedKeys(opts) {
 
   log(`[${target.id}] SSH public-key auth ready.`);
   return { ok: true, pubkeyAuth: true };
+}
+
+/**
+ * Resolve SSH auth for a Proxmox hypervisor: pubkey first, then vault password, then prompt.
+ * @param {object} opts
+ * @param {{ id: string; user: string; host: string }} opts.target
+ * @param {import("./vault-access.mjs").ReturnType<import("./vault-access.mjs").createVaultAccess>} opts.vault
+ * @param {typeof import("node:child_process").spawnSync} opts.spawnSync
+ * @param {NodeJS.ProcessEnv} opts.env
+ * @param {{ privateKey: string; certificateFile?: string }[]} opts.identities
+ * @param {(q: string, o?: { mask?: boolean }) => Promise<string>} opts.readLineQuestion
+ * @param {(line: string) => void} opts.warn
+ * @param {boolean} [opts.dryRun]
+ * @returns {Promise<{ mode: "pubkey" | "password"; password: string | null } | null>}
+ */
+export async function resolveProxmoxSshPassword(opts) {
+  const { target, vault, spawnSync, env, identities, readLineQuestion, warn, dryRun = false } = opts;
+
+  if (!dryRun && sshReachableWithPubkey(target, spawnSync, env, identities)) {
+    return { mode: "pubkey", password: null };
+  }
+
+  const vaultKey = vaultKeyForProxmoxSshPassword(target.id);
+  /** @type {string | null} */
+  let password = null;
+  if (!dryRun) {
+    const data = (await vault.readSecrets({})) ?? {};
+    const stored = typeof data[vaultKey] === "string" ? data[vaultKey].trim() : "";
+    if (stored && sshReachableWithPassword(target, spawnSync, env, stored)) {
+      password = stored;
+    } else if (stored) {
+      warn(`[${target.id}] stored vault password for ${vaultKey} did not work — will prompt.`);
+    }
+  }
+
+  if (!dryRun && !password) {
+    password = await promptAndStoreSshPassword({
+      target,
+      vaultKey,
+      vault,
+      spawnSync,
+      env,
+      readLineQuestion,
+      warn,
+    });
+  }
+
+  if (dryRun) {
+    return { mode: "pubkey", password: null };
+  }
+
+  if (!password) return null;
+  return { mode: "password", password };
 }
 
 /**

@@ -62,6 +62,7 @@
     },
     "api_token": {
       "enabled": true,
+      "userid": "root@pam",
       "role": "HDCMaintain"
     },
     "ssh_keys": {

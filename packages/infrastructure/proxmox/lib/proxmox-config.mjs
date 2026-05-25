@@ -85,6 +85,14 @@ export function proxmoxClusterRefFromHost(host, clusterId) {
 }
 
 /**
+ * @param {Record<string, unknown>} host
+ * @returns {boolean}
+ */
+export function isProxmoxHostDown(host) {
+  return host.down === true || host.down === 1;
+}
+
+/**
  * @typedef {object} ProxmoxConfigHost
  * @property {string} id
  * @property {string} pveNode
@@ -97,12 +105,38 @@ export function proxmoxClusterRefFromHost(host, clusterId) {
  */
 
 /**
+ * @param {Record<string, unknown>} h
+ * @param {Record<string, unknown>} cl
+ * @returns {ProxmoxConfigHost | null}
+ */
+function proxmoxConfigHostFromRecord(h, cl) {
+  const id = typeof h.id === "string" ? h.id.trim() : "";
+  if (!id) return null;
+  const apiBase = apiBaseFromHostRecord(h, cl);
+  if (!apiBase) return null;
+  const pveNode = typeof h.pve_node === "string" && h.pve_node.trim() ? h.pve_node.trim() : id;
+  const clusterId = clusterIdForHost(h, cl);
+  return {
+    id,
+    pveNode,
+    apiBase,
+    clusterId,
+    ip: typeof h.ip === "string" ? h.ip.trim() : undefined,
+    webUi: typeof h.web_ui === "string" ? h.web_ui.trim() : undefined,
+    ssh: typeof h.ssh === "string" ? h.ssh.trim() : undefined,
+    host: h,
+  };
+}
+
+/**
+ * Resolve a host by id including hosts marked `down` (for error messages).
  * @param {unknown} cfg
  * @param {string} hostId
  * @returns {ProxmoxConfigHost | null}
  */
-export function resolveProxmoxHost(cfg, hostId) {
+export function findProxmoxHostInConfig(cfg, hostId) {
   if (!isProxmoxConfigObject(cfg) || !hostId.trim()) return null;
+  const want = hostId.trim();
   const clusters = Array.isArray(cfg.clusters) ? cfg.clusters : [];
   for (const cl of clusters) {
     if (!isProxmoxConfigObject(cl)) continue;
@@ -110,24 +144,22 @@ export function resolveProxmoxHost(cfg, hostId) {
     for (const h of hosts) {
       if (!isProxmoxConfigObject(h)) continue;
       const id = typeof h.id === "string" ? h.id.trim() : "";
-      if (id !== hostId.trim()) continue;
-      const apiBase = apiBaseFromHostRecord(h, cl);
-      if (!apiBase) return null;
-      const pveNode = typeof h.pve_node === "string" && h.pve_node.trim() ? h.pve_node.trim() : id;
-      const clusterId = clusterIdForHost(h, cl);
-      return {
-        id,
-        pveNode,
-        apiBase,
-        clusterId,
-        ip: typeof h.ip === "string" ? h.ip.trim() : undefined,
-        webUi: typeof h.web_ui === "string" ? h.web_ui.trim() : undefined,
-        ssh: typeof h.ssh === "string" ? h.ssh.trim() : undefined,
-        host: h,
-      };
+      if (id !== want) continue;
+      return proxmoxConfigHostFromRecord(h, cl);
     }
   }
   return null;
+}
+
+/**
+ * @param {unknown} cfg
+ * @param {string} hostId
+ * @returns {ProxmoxConfigHost | null}
+ */
+export function resolveProxmoxHost(cfg, hostId) {
+  const found = findProxmoxHostInConfig(cfg, hostId);
+  if (!found || isProxmoxHostDown(found.host)) return null;
+  return found;
 }
 
 /**
@@ -161,6 +193,10 @@ export function loadProxmoxHostsByCluster(cfg, opts) {
       if (!isProxmoxConfigObject(h)) continue;
       const id = typeof h.id === "string" ? h.id.trim() : "";
       if (!id) continue;
+      if (isProxmoxHostDown(h)) {
+        onSkip?.(id, "marked down in config");
+        continue;
+      }
       const apiBase = apiBaseFromHostRecord(h, cl);
       if (!apiBase) {
         onSkip?.(id, "missing web_ui (or legacy api_base) on host or cluster");

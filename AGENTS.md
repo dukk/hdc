@@ -101,7 +101,7 @@ See [`.cursor/rules/hdc-automation-logging.mdc`](.cursor/rules/hdc-automation-lo
 | `lxc-create` | deploy | Create LXC via API (`create-container`) |
 | `qemu-clone` | deploy | Clone QEMU VM from template (`create-vm`) |
 | `qemu-list-templates` | deploy | List QEMU templates |
-| `verify-templates` | maintain | SSH keys, API token ACL, templates, NAS storage, host OS updates |
+| `verify-templates` | maintain | SSH keys, API token ACL, templates, NAS storage, host OS updates, configured load report, markdown report under `packages/infrastructure/proxmox/reports/` |
 | `bootstrap-hdc-user` | maintain | Local `hdc` user on bootstrap hosts |
 | `cluster-snapshot` | query | Cluster/guest inventory JSON on stdout |
 

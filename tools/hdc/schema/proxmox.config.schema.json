@@ -79,6 +79,10 @@
           "pattern": "^ssh://",
           "description": "SSH URL for bootstrap-hdc and remote ops (e.g. ssh://root@10.0.0.11)."
         },
+        "down": {
+          "type": ["boolean", "integer"],
+          "description": "When true, skip maintain/query/SSH iteration for this host; deploy targeting this id fails fast."
+        },
         "api_base": {
           "type": "string",
           "minLength": 1,
@@ -115,6 +119,10 @@
         "role": {
           "type": "string",
           "description": "Proxmox role id for the hdc API token (default HDCMaintain)."
+        },
+        "userid": {
+          "type": "string",
+          "description": "Proxmox user that owns the hdc API token (default root@pam)."
         },
         "privileges": {
           "type": "array",

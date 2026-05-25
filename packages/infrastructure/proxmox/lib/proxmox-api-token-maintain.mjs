@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { vaultKeyForProxmoxSshPassword } from "../../../../tools/hdc/lib/ssh-host-access.mjs";
 import {
   discoverLocalSshMaterial,
+  resolveProxmoxSshPassword,
   shellSingleQuote,
   sshBashLc,
   sshReachableWithPubkey,
@@ -16,6 +16,7 @@ import {
   pveTokenAclId,
   proxmoxMaintainVerifyPaths,
   readProxmoxApiTokenRaw,
+  vaultTokenKeyForHost,
 } from "./proxmox-deploy-auth.mjs";
 import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
 import { listProxmoxHypervisorSshTargets } from "./proxmox-host-os-maintain.mjs";
@@ -29,6 +30,84 @@ export { HDC_PROXMOX_API_PRIVILEGES } from "./pve-version.mjs";
 
 /** Proxmox role assigned to the hdc API token (created/updated via pveum over SSH). */
 export const HDC_PROXMOX_API_ROLE = "HDCMaintain";
+
+const DEFAULT_API_TOKEN_USERID = "root@pam";
+const HDC_TOKEN_PREFIX = "hdc";
+
+/**
+ * @param {string} hostname
+ * @returns {string}
+ */
+export function hdcProxmoxTokenIdFromHostname(hostname) {
+  const base = String(hostname ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const slug = base || "host";
+  const id = `${HDC_TOKEN_PREFIX}-${slug}`;
+  if (!/^[A-Za-z][A-Za-z0-9._-]*$/.test(id)) {
+    return `${HDC_TOKEN_PREFIX}-host`;
+  }
+  return id;
+}
+
+/**
+ * @param {unknown} cfg
+ * @returns {string}
+ */
+export function apiTokenUseridFromConfig(cfg) {
+  if (!isProxmoxConfigObject(cfg)) return DEFAULT_API_TOKEN_USERID;
+  const provision = cfg.provision;
+  if (!isProxmoxConfigObject(provision)) return DEFAULT_API_TOKEN_USERID;
+  const apiToken = provision.api_token;
+  if (!isProxmoxConfigObject(apiToken)) return DEFAULT_API_TOKEN_USERID;
+  const userid = apiToken.userid;
+  return typeof userid === "string" && userid.trim() ? userid.trim() : DEFAULT_API_TOKEN_USERID;
+}
+
+/**
+ * @param {string} userid
+ * @param {string} tokenid
+ */
+export function pveumCreateOrRegenerateTokenScript(userid, tokenid) {
+  const u = shellSingleQuote(userid);
+  const t = shellSingleQuote(tokenid);
+  const tGrep = shellSingleQuote(tokenid);
+  return [
+    `if pveum user token list ${u} --output-format json 2>/dev/null | grep -qF ${tGrep}; then`,
+    `pveum user token modify ${u} ${t} --regenerate 1 --privsep 1 --output-format json`,
+    `else`,
+    `pveum user token add ${u} ${t} --privsep 1 --output-format json`,
+    `fi`,
+  ].join("; ");
+}
+
+/**
+ * @param {string} stdout
+ * @param {string} userid
+ * @param {string} tokenid
+ * @returns {string | null}
+ */
+export function parsePveumTokenSecret(stdout, userid, tokenid) {
+  const text = String(stdout ?? "").trim();
+  if (!text) return null;
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const root = /** @type {Record<string, unknown>} */ (parsed);
+  const data = root.data;
+  const bag = data && typeof data === "object" ? /** @type {Record<string, unknown>} */ (data) : root;
+  const secret = bag.value;
+  if (typeof secret !== "string" || !secret.trim()) return null;
+  return `${userid}!${tokenid}=${secret.trim()}`;
+}
 
 /**
  * @param {unknown} cfg
@@ -117,8 +196,25 @@ export function pveumEnsureTokenAclCommand(tokenAcl, role) {
  * @param {boolean} opts.dryRun
  * @param {(line: string) => void} opts.log
  */
+/**
+ * @param {object} opts
+ * @param {{ mode: "pubkey" | "password"; password: string | null }} opts.sshAuth
+ */
+function sshBashLcWithAuth(target, remote, opts) {
+  const { sshAuth, spawnSync, env, identities, timeoutMs } = opts;
+  const mode = sshAuth.mode;
+  return sshBashLc(target, remote, {
+    spawnSync,
+    env,
+    mode,
+    identities,
+    password: mode === "password" ? (sshAuth.password ?? undefined) : undefined,
+    timeoutMs,
+  });
+}
+
 async function ensureTokenAclViaSsh(opts) {
-  const { target, tokenAcl, role, privs, spawnSync, env, identities, password, dryRun, log } = opts;
+  const { target, tokenAcl, role, privs, spawnSync, env, identities, sshAuth, dryRun, log } = opts;
   const script = pveumEnsureRoleAndAclScript(role, privs, tokenAcl);
 
   if (dryRun) {
@@ -126,19 +222,13 @@ async function ensureTokenAclViaSsh(opts) {
     return { ok: true };
   }
 
-  /** @type {"pubkey" | "password"} */
-  let mode = "pubkey";
-  if (!sshReachableWithPubkey(target, spawnSync, env, identities)) {
-    if (!password) return { ok: false, error: "SSH unreachable and no password in vault" };
-    mode = "password";
-  }
+  if (!sshAuth) return { ok: false, error: "SSH unreachable (no pubkey or password)" };
 
-  const r = sshBashLc(target, script, {
+  const r = sshBashLcWithAuth(target, script, {
+    sshAuth,
     spawnSync,
     env,
-    mode,
     identities,
-    password: mode === "password" ? password : undefined,
     timeoutMs: 120_000,
   });
 
@@ -151,6 +241,48 @@ async function ensureTokenAclViaSsh(opts) {
 
 /**
  * @param {object} opts
+ * @param {{ id: string; user: string; host: string }} opts.target
+ * @param {string} opts.userid
+ * @param {string} opts.tokenid
+ * @param {{ mode: "pubkey" | "password"; password: string | null }} opts.sshAuth
+ * @param {typeof import("node:child_process").spawnSync} opts.spawnSync
+ * @param {NodeJS.ProcessEnv} opts.env
+ * @param {{ privateKey: string; certificateFile?: string }[]} opts.identities
+ * @param {boolean} opts.dryRun
+ * @returns {Promise<{ ok: boolean; tokenValue?: string; error?: string }>}
+ */
+async function createApiTokenViaSsh(opts) {
+  const { target, userid, tokenid, sshAuth, spawnSync, env, identities, dryRun } = opts;
+  const script = pveumCreateOrRegenerateTokenScript(userid, tokenid);
+
+  if (dryRun) {
+    return { ok: true };
+  }
+
+  if (!sshAuth) return { ok: false, error: "SSH unreachable (no pubkey or password)" };
+
+  const r = sshBashLcWithAuth(target, script, {
+    sshAuth,
+    spawnSync,
+    env,
+    identities,
+    timeoutMs: 120_000,
+  });
+
+  if (r.status !== 0) {
+    const err = (r.stderr || r.stdout || "").trim() || `ssh exit ${r.status}`;
+    return { ok: false, error: err };
+  }
+
+  const tokenValue = parsePveumTokenSecret(r.stdout, userid, tokenid);
+  if (!tokenValue) {
+    return { ok: false, error: "could not parse pveum token secret from output" };
+  }
+  return { ok: true, tokenValue };
+}
+
+/**
+ * @param {object} opts
  * @param {string} opts.packageRoot
  * @param {(line: string) => void} opts.log
  * @param {(line: string) => void} opts.warn
@@ -158,10 +290,22 @@ async function ensureTokenAclViaSsh(opts) {
  * @param {NodeJS.ProcessEnv} opts.env
  * @param {typeof import("node:child_process").spawnSync} opts.spawnSync
  * @param {boolean} [opts.dryRun]
+ * @param {(q: string, o?: { mask?: boolean }) => Promise<string>} [opts.readLineQuestion]
+ * @param {() => import("../../../../tools/hdc/lib/host-probe.mjs").HostProbe} [opts.hostProbe]
  * @returns {Promise<{ ok: boolean }>}
  */
 export async function runProxmoxApiTokenMaintain(opts) {
-  const { packageRoot, log, warn, vault, env, spawnSync, dryRun = false } = opts;
+  const {
+    packageRoot,
+    log,
+    warn,
+    vault,
+    env,
+    spawnSync,
+    dryRun = false,
+    readLineQuestion,
+    hostProbe,
+  } = opts;
   const configPath = join(packageRoot, "config.json");
   const configRel = "packages/infrastructure/proxmox/config.json";
 
@@ -185,6 +329,8 @@ export async function runProxmoxApiTokenMaintain(opts) {
   }
 
   const role = apiTokenRoleFromConfig(cfg);
+  const tokenUserid = apiTokenUseridFromConfig(cfg);
+  const hdcTokenId = hdcProxmoxTokenIdFromHostname(hostProbe ? hostProbe().hostname : "host");
   const lxcStorage = lxcTemplateStorageFromConfig(cfg);
   const sshTargets = listProxmoxHypervisorSshTargets(cfg, env);
   const sshById = new Map(sshTargets.map((t) => [t.id, t]));
@@ -212,13 +358,67 @@ export async function runProxmoxApiTokenMaintain(opts) {
       continue;
     }
 
-    const rawToken = await readProxmoxApiTokenRaw({ vault, hostId: lead.id, env });
+    let rawToken = await readProxmoxApiTokenRaw({ vault, hostId: lead.id, env });
+    const vaultTokenKey = vaultTokenKeyForHost(lead.id);
+
     if (!rawToken) {
-      ok = false;
-      warn(
-        `Cluster ${JSON.stringify(clusterKey)}: no API token in vault for ${JSON.stringify(lead.id)} (set HDC_PROXMOX_API_TOKEN or HDC_PROXMOX_API_TOKEN_${lead.id.toUpperCase().replace(/-/g, "_")}).`,
+      if (dryRun) {
+        log(
+          `Cluster ${JSON.stringify(clusterKey)}: dry-run would create API token ${JSON.stringify(hdcTokenId)} on ${JSON.stringify(lead.id)} and store ${JSON.stringify(vaultTokenKey)}.`,
+        );
+        continue;
+      }
+      if (!readLineQuestion) {
+        ok = false;
+        warn(
+          `Cluster ${JSON.stringify(clusterKey)}: no API token in vault for ${JSON.stringify(lead.id)} (set ${vaultTokenKey} or enable interactive maintain).`,
+        );
+        continue;
+      }
+
+      log(
+        `Cluster ${JSON.stringify(clusterKey)}: creating API token ${JSON.stringify(hdcTokenId)} for ${JSON.stringify(tokenUserid)} on ${JSON.stringify(lead.id)} …`,
       );
-      continue;
+
+      const sshAuth = await resolveProxmoxSshPassword({
+        target: sshTarget,
+        vault,
+        spawnSync,
+        env,
+        identities,
+        readLineQuestion,
+        warn,
+        dryRun: false,
+      });
+
+      if (!sshAuth) {
+        ok = false;
+        warn(`Cluster ${JSON.stringify(clusterKey)}: SSH unreachable on ${JSON.stringify(lead.id)} — cannot create API token.`);
+        continue;
+      }
+
+      const created = await createApiTokenViaSsh({
+        target: sshTarget,
+        userid: tokenUserid,
+        tokenid: hdcTokenId,
+        sshAuth,
+        spawnSync,
+        env,
+        identities,
+        dryRun: false,
+      });
+
+      if (!created.ok || !created.tokenValue) {
+        ok = false;
+        warn(
+          `Cluster ${JSON.stringify(clusterKey)}: API token create on ${JSON.stringify(lead.id)} failed: ${created.error ?? "unknown"}`,
+        );
+        continue;
+      }
+
+      await vault.setSecret(vaultTokenKey, created.tokenValue);
+      log(`Cluster ${JSON.stringify(clusterKey)}: stored new API token in vault as ${JSON.stringify(vaultTokenKey)}.`);
+      rawToken = created.tokenValue;
     }
 
     const parsed = parsePveApiTokenValue(rawToken);
@@ -231,19 +431,36 @@ export async function runProxmoxApiTokenMaintain(opts) {
     const tokenAcl = pveTokenAclId(parsed);
     const configCluster = clusterConfigByKey(cfg, clusterKey);
 
-    const data = (await vault.readSecrets({})) ?? {};
-    const pwKey = vaultKeyForProxmoxSshPassword(lead.id);
-    const password = typeof data[pwKey] === "string" && data[pwKey].trim() ? data[pwKey].trim() : null;
+    /** @type {{ mode: "pubkey" | "password"; password: string | null } | null} */
+    let sshAuth = null;
+    if (!dryRun) {
+      if (readLineQuestion) {
+        sshAuth = await resolveProxmoxSshPassword({
+          target: sshTarget,
+          vault,
+          spawnSync,
+          env,
+          identities,
+          readLineQuestion,
+          warn,
+          dryRun: false,
+        });
+      } else if (sshReachableWithPubkey(sshTarget, spawnSync, env, identities)) {
+        sshAuth = { mode: "pubkey", password: null };
+      }
+    } else {
+      sshAuth = { mode: "pubkey", password: null };
+    }
 
     /** @type {string} */
     let cliVersionOutput = "";
-    if (!dryRun) {
+    if (!dryRun && sshAuth) {
       const probe = sshSpawn(sshTarget, ["pve", "version"], {
         spawnSync,
         env,
-        mode: password ? "password" : "pubkey",
+        mode: sshAuth.mode,
         identities,
-        password: password ?? undefined,
+        password: sshAuth.mode === "password" ? (sshAuth.password ?? undefined) : undefined,
         timeoutMs: 30_000,
       });
       if (probe.status === 0 && probe.stdout) cliVersionOutput = String(probe.stdout);
@@ -264,7 +481,7 @@ export async function runProxmoxApiTokenMaintain(opts) {
       spawnSync,
       env,
       identities,
-      password,
+      sshAuth,
       dryRun,
       log,
     });

@@ -72,8 +72,9 @@ export function legacyAutomatedClientSystemId(role, instance = "a") {
 /**
  * @param {string} root
  * @param {string} targetId
+ * @param {{ systemIdOverride?: string }} [opts]
  */
-export function deployTargetInventory(root, targetId) {
+export function deployTargetInventory(root, targetId, opts = {}) {
   const systemId = deployTargetSystemId(targetId);
   const configPath = servicePackageConfigPath(root, targetId);
   const cfg = existsSync(configPath) ? readJsonObject(configPath) : null;
@@ -81,10 +82,15 @@ export function deployTargetInventory(root, targetId) {
     cfg && typeof cfg.deploy === "object" && cfg.deploy !== null && !Array.isArray(cfg.deploy)
       ? /** @type {Record<string, unknown>} */ (cfg.deploy)
       : null;
+  const explicitOverride =
+    typeof opts.systemIdOverride === "string" && opts.systemIdOverride.trim()
+      ? opts.systemIdOverride.trim()
+      : null;
   const sid =
-    override && typeof override.system_id === "string" && override.system_id.trim()
+    explicitOverride ??
+    (override && typeof override.system_id === "string" && override.system_id.trim()
       ? override.system_id.trim()
-      : systemId;
+      : systemId);
   return {
     targetId,
     systemId: sid,

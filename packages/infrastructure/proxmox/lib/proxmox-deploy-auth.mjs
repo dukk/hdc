@@ -11,7 +11,13 @@ import {
   hdcTlsRejectUnauthorized,
 } from "../../../../tools/hdc/lib/tls-insecure-env.mjs";
 import { pveJsonRequest } from "./pve-http.mjs";
-import { apiBaseFromWebUi, resolveProxmoxHost, isProxmoxConfigObject } from "./proxmox-config.mjs";
+import {
+  apiBaseFromWebUi,
+  findProxmoxHostInConfig,
+  isProxmoxConfigObject,
+  isProxmoxHostDown,
+  resolveProxmoxHost,
+} from "./proxmox-config.mjs";
 import {
   formatPveVersionLog,
   parsePveVersionBody,
@@ -151,6 +157,12 @@ export async function authorizeProxmoxForHost(opts) {
   cfg = JSON.parse(readFileSync(configPath, "utf8"));
   const host = resolveProxmoxHost(cfg, hostId);
   if (!host) {
+    const raw = findProxmoxHostInConfig(cfg, hostId);
+    if (raw && isProxmoxHostDown(raw.host)) {
+      throw new Error(
+        `Proxmox host ${JSON.stringify(hostId)} is marked down in packages/infrastructure/proxmox/config.json`,
+      );
+    }
     throw new Error(
       `Unknown Proxmox host id ${JSON.stringify(hostId)} in infrastructure/proxmox/config.json (need clusters[].hosts[] with web_ui)`,
     );

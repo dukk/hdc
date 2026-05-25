@@ -1,0 +1,49 @@
+import { stdin, stderr } from "node:process";
+
+import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { readLineMasked } from "../../../../tools/hdc/lib/readline-masked.mjs";
+
+/**
+ * @param {unknown} lxc
+ */
+function passwordFromLxcConfig(lxc) {
+  if (!lxc || typeof lxc !== "object" || Array.isArray(lxc)) return null;
+  const p = /** @type {Record<string, unknown>} */ (lxc).password;
+  return typeof p === "string" && p.length > 0 ? p : null;
+}
+
+/**
+ * Root password for a new LXC: config `proxmox.lxc.password`, `--password`, or masked prompt.
+ * @param {string} systemId
+ * @param {number} vmid
+ * @param {Record<string, unknown>} lxc
+ * @param {Record<string, string>} flags
+ * @param {{ cached?: string | null; setCached?: (v: string) => void }} [opts]
+ */
+export async function resolveLxcRootPassword(systemId, vmid, lxc, flags, opts = {}) {
+  const fromFlag = flagGet(flags, "password");
+  if (fromFlag) return fromFlag;
+
+  const fromCfg = passwordFromLxcConfig(lxc);
+  if (fromCfg) return fromCfg;
+
+  if (opts.cached) return opts.cached;
+
+  if (!stdin.isTTY) {
+    throw new Error(
+      `${systemId}: cannot prompt for LXC root password (not a TTY). Set proxmox.lxc.password in config or pass --password after --`,
+    );
+  }
+
+  const line = await readLineMasked(
+    `Root password for ${systemId} (vmid ${vmid}, Proxmox LXC root): `,
+    stderr,
+    stdin,
+  );
+  const password = line.trim();
+  if (!password) {
+    throw new Error(`${systemId}: LXC root password is required to create the container`);
+  }
+  opts.setCached?.(password);
+  return password;
+}
