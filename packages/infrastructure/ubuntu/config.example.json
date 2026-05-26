@@ -12,8 +12,8 @@
         "nodes": [
           {
             "name": "primary",
-            "ip": "10.0.0.50",
-            "ssh": "ssh://ubuntu@10.0.0.50"
+            "ip": "192.0.2.50",
+            "ssh": "ssh://ubuntu@192.0.2.50"
           }
         ]
       }

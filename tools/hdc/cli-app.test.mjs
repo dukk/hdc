@@ -56,21 +56,26 @@ describe("runCli", () => {
     expect(capture.logLines.join("\n")).toMatch(/run — execute/);
 
     capture.logLines.length = 0;
-    expect(await runCli(["help", "run", "tgt"], deps)).toBe(0);
+    expect(await runCli(["help", "run", "infrastructure"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toContain("tgt");
+
+    capture.logLines.length = 0;
+    expect(await runCli(["help", "run", "infrastructure", "tgt"], deps)).toBe(0);
     const tDetail = capture.logLines.join("\n");
     expect(tDetail).toContain("Target T");
     expect(tDetail).toContain("HDC_X");
     expect(tDetail).toContain("deploy\t(not configured)");
 
     capture.logLines.length = 0;
-    expect(await runCli(["help", "run", "tgt", "query"], deps)).toBe(0);
+    expect(await runCli(["help", "run", "infrastructure", "tgt", "query"], deps)).toBe(0);
     const vDetail = capture.logLines.join("\n");
     expect(vDetail).toContain("packages/infrastructure/tgt/query");
     expect(vDetail).toContain("// line1");
 
-    expect(await runCli(["help", "run", "missing", "query"], deps)).toBe(1);
-    expect(await runCli(["help", "run", "tgt", "deploy"], deps)).toBe(1);
-    expect(await runCli(["help", "run", "tgt", "query", "extra"], deps)).toBe(1);
+    expect(await runCli(["help", "run", "infrastructure", "missing", "query"], deps)).toBe(1);
+    expect(await runCli(["help", "run", "infrastructure", "tgt", "deploy"], deps)).toBe(1);
+    expect(await runCli(["help", "run", "infrastructure", "tgt", "query", "extra"], deps)).toBe(1);
+    expect(await runCli(["help", "run", "nope"], deps)).toBe(1);
     expect(await runCli(["help", "nope"], deps)).toBe(1);
     expect(await runCli(["help", "list", "extra"], deps)).toBe(1);
   });
@@ -158,7 +163,7 @@ describe("runCli", () => {
     });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({ root, capture });
-    expect(await runCli(["help", "run", "tgt", "query"], deps)).toBe(0);
+    expect(await runCli(["help", "run", "infrastructure", "tgt", "query"], deps)).toBe(0);
     expect(capture.warnLines.join("\n")).toMatch(/script not found/);
   });
 
@@ -209,14 +214,17 @@ describe("runCli", () => {
       capture,
       spawnSync: spawnMock,
     });
-    expect(await runCli(["run", "tgt", "query"], deps)).toBe(0);
+    expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(0);
     expect(capture.warnLines.join("\n")).toContain("HDC_MISSING_FOR_TEST");
     expect((capture.stdoutChunks ?? []).join("")).toContain('"from":"query"');
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
 
     expect(await runCli(["run"], deps)).toBe(1);
-    expect(await runCli(["run", "tgt", "nope"], deps)).toBe(1);
-    expect(await runCli(["run", "missing", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "tgt", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "infrastructure", "tgt", "nope"], deps)).toBe(1);
+    expect(await runCli(["run", "infrastructure", "missing", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "service", "tgt", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "nope", "tgt", "query"], deps)).toBe(1);
 
     writeFileSync(
       join(root, "packages/infrastructure/tgt/manifest.json"),
@@ -224,13 +232,13 @@ describe("runCli", () => {
       "utf8",
     );
     rmSync(join(root, "packages/infrastructure/tgt/query/run.mjs"));
-    expect(await runCli(["run", "tgt", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(1);
 
     spawnMock.mockReturnValue({ status: null, stdout: "" });
     writeTree(root, {
       "packages/infrastructure/tgt/query/run.mjs": "process.exit(0)\n",
     });
-    expect(await runCli(["run", "tgt", "query"], deps)).toBe(1);
+    expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(1);
   });
 
   it("run query prints non-JSON stdout and does not touch inventory paths", async () => {
@@ -245,7 +253,7 @@ describe("runCli", () => {
       capture,
       spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: "not-json\n" }),
     });
-    expect(await runCli(["run", "tgt", "query"], deps)).toBe(0);
+    expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(0);
     expect((capture.stdoutChunks ?? []).join("")).toContain("not-json");
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
   });
@@ -265,7 +273,7 @@ describe("runCli", () => {
       capture,
       spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: '{"ok":true}\n' }),
     });
-    expect(await runCli(["run", "tgt", "deploy"], deps)).toBe(0);
+    expect(await runCli(["run", "infrastructure", "tgt", "deploy"], deps)).toBe(0);
     expect((capture.stdoutChunks ?? []).join("")).toContain('"ok":true');
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
   });
@@ -491,7 +499,7 @@ describe("runCli", () => {
             tags: ["proxmox"],
             auth: { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
             access: {
-              nodes: [{ ssh: "ssh://root@10.0.0.1" }],
+              nodes: [{ ssh: "ssh://root@192.0.2.1" }],
             },
           },
         ],
@@ -503,7 +511,7 @@ describe("runCli", () => {
         tags: ["proxmox"],
         auth: { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
         access: {
-          nodes: [{ ssh: "ssh://root@10.0.0.1" }],
+          nodes: [{ ssh: "ssh://root@192.0.2.1" }],
         },
       }),
     });

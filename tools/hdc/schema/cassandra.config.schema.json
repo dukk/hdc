@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/cassandra.config.schema.json",
+  "title": "HDC cassandra service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "cassandra": {
+      "type": "object",
+      "properties": {
+        "cluster_name": { "type": "string" },
+        "version": { "type": "string" },
+        "datacenter": { "type": "string" },
+        "rack": { "type": "string" },
+        "seeds": { "type": "array", "items": { "type": "string" } },
+        "replication_factor": { "type": "integer", "minimum": 1 },
+        "authenticator": { "type": "string" },
+        "superuser_vault_key": { "type": "string" }
+      }
+    },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-cassandra-[a-z]+$" },
+          "seed": { "type": "boolean" },
+          "hostname": { "type": "string" },
+          "rack": { "type": "string" },
+          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" }
+        }
+      }
+    }
+  }
+}

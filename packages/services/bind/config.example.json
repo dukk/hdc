@@ -1,0 +1,103 @@
+{
+  "schema_version": 2,
+  "zones": [
+    {
+      "id": "hdc.example.invalid",
+      "zone_type": "forward",
+      "records": [
+        { "type": "A", "name": "dns-a", "data": "192.0.2.2", "ttl": 3600 },
+        { "type": "A", "name": "dns-b", "data": "192.0.2.3", "ttl": 3600 },
+        { "type": "A", "name": "hypervisor-a", "data": "192.0.2.11", "ttl": 3600 },
+        { "type": "A", "name": "hypervisor-b", "data": "192.0.2.12", "ttl": 3600 },
+        { "type": "A", "name": "hypervisor-c", "data": "192.0.2.13", "ttl": 3600 }
+      ]
+    },
+    {
+      "id": "lan.example.invalid",
+      "zone_type": "forward",
+      "records": []
+    },
+    {
+      "id": "example.invalid",
+      "zone_type": "forward",
+      "records": [
+        { "type": "NS", "name": "@", "data": "dns-a.hdc.example.invalid." },
+        { "type": "NS", "name": "@", "data": "dns-b.hdc.example.invalid." }
+      ]
+    },
+    {
+      "id": "2.0.192.in-addr.arpa",
+      "zone_type": "reverse",
+      "subnet": "192.0.2.0/24",
+      "records": []
+    },
+    {
+      "id": "100.51.198.in-addr.arpa",
+      "zone_type": "reverse",
+      "subnet": "198.51.100.0/24",
+      "records": []
+    }
+  ],
+  "bind": {
+    "primary_ip": "192.0.2.2",
+    "secondary_ip": "192.0.2.3",
+    "hostmaster": "hostmaster.hdc.example.invalid",
+    "allow_query_cidrs": ["192.0.2.0/24", "198.51.100.0/24", "127.0.0.0/8"],
+    "recursion": true,
+    "dnssec_validation": false,
+    "forwarders": ["1.1.1.1", "1.0.0.1"],
+    "tsig_vault_key": "HDC_BIND_TSIG_KEY"
+  },
+  "defaults": {
+    "mode": "proxmox-qemu",
+    "proxmox": {
+      "qemu": {
+        "template_vmid": 9024,
+        "storage": "local-lvm",
+        "full": 1,
+        "cores": 2,
+        "memory_mb": 2048
+      },
+      "network": {
+        "bridge": "vmbr0",
+        "gateway": "192.0.2.1"
+      }
+    }
+  },
+  "deployments": [
+    {
+      "system_id": "vm-dns-a",
+      "role": "primary",
+      "hostname": "dns-a",
+      "proxmox": {
+        "host_id": "hypervisor-b",
+        "qemu": {
+          "ip": "192.0.2.2/24"
+        }
+      },
+      "configure": {
+        "ssh": {
+          "user": "root",
+          "host": "192.0.2.2"
+        }
+      }
+    },
+    {
+      "system_id": "vm-dns-b",
+      "role": "secondary",
+      "hostname": "dns-b",
+      "proxmox": {
+        "host_id": "hypervisor-c",
+        "qemu": {
+          "ip": "192.0.2.3/24"
+        }
+      },
+      "configure": {
+        "ssh": {
+          "user": "root",
+          "host": "192.0.2.3"
+        }
+      }
+    }
+  ]
+}

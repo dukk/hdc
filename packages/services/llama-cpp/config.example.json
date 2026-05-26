@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "defaults": {
+    "mode": "proxmox-lxc",
+    "proxmox": {
+      "lxc": {
+        "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+        "storage": "local-lvm",
+        "rootfs_gb": 128,
+        "memory_mb": 16384,
+        "cores": 8,
+        "bridge": "vmbr0",
+        "ip_config": "dhcp"
+      }
+    },
+    "install": {
+      "enabled": true,
+      "backend": "cpu",
+      "release": "latest"
+    },
+    "server": {
+      "port": 8080,
+      "host": "0.0.0.0",
+      "models_dir": "/var/lib/llama-cpp/models",
+      "model": null,
+      "hf_model": null,
+      "extra_args": []
+    }
+  },
+  "deployments": [
+    {
+      "system_id": "llama-cpp-a",
+      "install": { "backend": "cpu" },
+      "proxmox": {
+        "host_id": "hypervisor-d",
+        "lxc": { "vmid": 480 }
+      }
+    },
+    {
+      "system_id": "llama-cpp-b",
+      "install": { "backend": "vulkan" },
+      "proxmox": {
+        "host_id": "hypervisor-c",
+        "lxc": { "vmid": 481 }
+      }
+    }
+  ]
+}

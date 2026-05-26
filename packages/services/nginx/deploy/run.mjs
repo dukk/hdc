@@ -1,0 +1,423 @@
+#!/usr/bin/env node
+/**
+ * Deploy nginx web nodes: optional Proxmox QEMU provision, base install, sites, per-node certs.
+ *
+ * Usage: hdc run service nginx deploy -- [--instance a|b] [--skip-provision] [--destroy-existing]
+ */
+import { basename, dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { stderr as errout } from "node:process";
+
+import { deployTargetInventory, logDeployInventoryStatus } from "../../../lib/deploy-inventory.mjs";
+import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { createNginxVaultAccess } from "../lib/vault-deps.mjs";
+import {
+  nginxGlobalSettings,
+  normalizeNginxConfig,
+  resolveNginxDeployments,
+  sshTargetFromDeployment,
+} from "../lib/deployments.mjs";
+import {
+  configureNginxSites,
+  createConfigureExec,
+  ensureAcmeBootstrapVhost,
+  installNginxBase,
+} from "../lib/nginx-configure.mjs";
+import { obtainMissingCertificates } from "../lib/letsencrypt.mjs";
+import {
+  applyQemuCloudInit,
+  cloneQemuGuest,
+  locateGuest,
+  startQemuGuest,
+  stopAndDestroyQemu,
+  waitForSsh,
+} from "../lib/proxmox-qemu-redeploy.mjs";
+import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+
+
+const here = dirname(fileURLToPath(import.meta.url));
+const packageRoot = join(here, "..");
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/nginx/config.example.json";
+/** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
+let _pkgConfig = null;
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
+const target = basename(dirname(here));
+const verb = basename(here);
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+
+/** @param {unknown} v */
+function isObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function readCfg() {
+  return ensurePackageConfig().data;
+}
+
+/**
+ * @param {Record<string, string>} flags
+ */
+function destroyPolicy(flags) {
+  return flagGet(flags, "destroy-existing") !== undefined;
+}
+
+/**
+ * @param {Record<string, string>} flags
+ */
+function skipProvision(flags) {
+  return flagGet(flags, "skip-provision") !== undefined;
+}
+
+/**
+ * @param {Record<string, string>} flags
+ */
+function skipInstall(flags) {
+  return flagGet(flags, "skip-install") !== undefined;
+}
+
+/**
+ * @param {Record<string, string>} flags
+ */
+function existingGuestPolicy(flags) {
+  if (flagGet(flags, "skip-existing") !== undefined) return "skip";
+  if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
+  if (destroyPolicy(flags)) return "destroy";
+  return "prompt";
+}
+
+/**
+ * Install packages, obtain LE certs, then push site vhosts (443 needs certs on disk).
+ * @param {ReturnType<typeof resolveNginxDeployments>[number]} deployment
+ * @param {ReturnType<typeof nginxGlobalSettings>} global
+ * @param {Record<string, unknown>[]} sites
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {boolean} skipBaseInstall
+ * @param {string} email
+ * @param {string} tsigSecret
+ */
+function runDeployConfigure(deployment, global, sites, log, skipBaseInstall, email, tsigSecret) {
+  const { user, host } = sshTargetFromDeployment(deployment);
+  const exec = createConfigureExec("ssh", { user, host });
+  if (!skipBaseInstall) {
+    installNginxBase({ exec, log, global, dns01: global.challenge === "dns-01" });
+  }
+  if (global.challenge === "http-01") {
+    ensureAcmeBootstrapVhost({ exec, log, webroot: global.webroot });
+  }
+  const certificates = obtainMissingCertificates({
+    exec,
+    log,
+    global,
+    email,
+    sites,
+    tsigSecret,
+  });
+  const sitesResult = configureNginxSites({ exec, log, global, sites });
+  return { ...sitesResult, certificates };
+}
+
+/**
+ * @param {ReturnType<typeof resolveNginxDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {ReturnType<typeof nginxGlobalSettings>} global
+ * @param {Record<string, unknown>[]} sites
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {string} email
+ * @param {string} tsigSecret
+ */
+async function deployOne(deployment, flags, global, sites, log, email, tsigSecret) {
+  const inv = deployTargetInventory(root, target, { systemIdOverride: deployment.systemId });
+  logDeployInventoryStatus(target, verb, inv);
+
+  const skipBase = skipInstall(flags) || !deployment.installEnabled;
+
+  if (skipProvision(flags) || deployment.mode === "configure-only") {
+    errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} configure-only …\n`);
+    try {
+      const configure = runDeployConfigure(deployment, global, sites, log, skipBase, email, tsigSecret);
+      return { ok: true, system_id: deployment.systemId, mode: "configure-only", configure };
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId}: ${msg}\n`);
+      return { ok: false, system_id: deployment.systemId, mode: "configure-only", message: msg };
+    }
+  }
+
+  const px = deployment.proxmox;
+  if (!isObject(px)) {
+    return { ok: false, system_id: deployment.systemId, message: "missing proxmox config" };
+  }
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  if (!hostId) {
+    return { ok: false, system_id: deployment.systemId, message: "missing host_id" };
+  }
+  const q = isObject(px.qemu) ? px.qemu : {};
+  const net = isObject(px.network) ? px.network : {};
+  const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+  const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+  const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+  const gateway =
+    typeof net.gateway === "string" && net.gateway.trim()
+      ? net.gateway.trim()
+      : typeof q.gateway === "string"
+        ? q.gateway.trim()
+        : "192.0.2.1";
+  const hostname =
+    deployment.hostname ||
+    (typeof q.name === "string" && q.name.trim() ? q.name.trim() : deployment.systemId.replace(/^vm-/, ""));
+
+  if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
+    return { ok: false, system_id: deployment.systemId, message: "invalid qemu vmid, template_vmid, or ip" };
+  }
+
+  errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} on ${hostId} vmid ${vmid} …\n`);
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+  const located = await locateGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
+  const policy = existingGuestPolicy(flags);
+
+  if (located) {
+    let action = policy;
+    if (policy === "prompt") {
+      action = await promptExistingGuestAction(
+        deployment.systemId,
+        vmid,
+        located.node,
+        located.name,
+      );
+    }
+    if (action === "skip") {
+      errout.write(`[hdc] ${target} ${verb}: skipping provision for ${deployment.systemId}.\n`);
+    } else if (action === "destroy" || policy === "destroy") {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    } else {
+      errout.write(
+        `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
+      );
+      try {
+        const configure = runDeployConfigure(deployment, global, sites, log, skipBase, email, tsigSecret);
+        return {
+          ok: true,
+          system_id: deployment.systemId,
+          skipped_provision: true,
+          configure,
+        };
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        return { ok: false, system_id: deployment.systemId, skipped_provision: true, message: msg };
+      }
+    }
+  }
+
+  const prov = createProxmoxHostProvisioner({
+    apiBase: auth.host.apiBase,
+    pveNode: auth.host.pveNode,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+  });
+
+  const provisionResult = await cloneQemuGuest({
+    log,
+    provisioner: prov,
+    name: hostname,
+    vmid,
+    templateVmid,
+    parameters: { ...q, vmid, template_vmid: templateVmid },
+  });
+
+  if (!provisionResult.ok) {
+    return {
+      ok: false,
+      system_id: deployment.systemId,
+      provision: provisionResult,
+    };
+  }
+
+  const { node: cloneNode, vmid: guestVmid } = await ,
+    (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  );
+
+  await applyQemuCloudInit({
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    hostname,
+    ipCidr: ip,
+    gateway,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  await startQemuGuest({
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
+    ? deployment.configure.ssh
+    : {};
+  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+
+  errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
+  await waitForSsh({ user: sshUser, host: sshHost });
+
+  await ensureQemuGuestAgentOnDeploy({
+    apiBase: auth.host.apiBase,
+    node: cloneNode,
+    vmid: guestVmid,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    sshUser,
+    sshHost,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  try {
+    const configure = runDeployConfigure(
+      {
+        ...deployment,
+        configure: { ssh: { user: sshUser, host: sshHost } },
+      },
+      global,
+      sites,
+      log,
+      skipBase,
+      email,
+      tsigSecret,
+    );
+    return {
+      ok: true,
+      system_id: deployment.systemId,
+      provision: provisionResult,
+      configure,
+    };
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    return { ok: false, system_id: deployment.systemId, provision: provisionResult, message: msg };
+  }
+}
+
+/**
+ * @param {ReturnType<typeof nginxGlobalSettings>} global
+ * @param {Awaited<ReturnType<typeof createNginxVaultAccess>>} vault
+ */
+async function loadSecrets(global, vault) {
+  let leEmail = global.email;
+  if (!leEmail) {
+    leEmail = String(
+      await vault.getSecret(global.emailVaultKey, {
+        promptLabel: `vault secret ${global.emailVaultKey}`,
+      }),
+    ).trim();
+  }
+  let tsigSecret = "";
+  if (global.challenge === "dns-01") {
+    tsigSecret = String(
+      await vault.getSecret(global.dnsTsigVaultKey, {
+        promptLabel: `vault secret ${global.dnsTsigVaultKey}`,
+      }),
+    ).trim();
+  }
+  return { email: leEmail, tsigSecret };
+}
+
+async function main() {
+  errout.write(`[hdc] ${target} ${verb}: nginx web reverse proxy (stderr log; JSON on stdout).\n`);
+
+  if (!existsSync(ensurePackageConfig().path)) {
+    const inv = deployTargetInventory(root, target);
+    logDeployInventoryStatus(target, verb, inv);
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, target, verb, message: "package config missing — see stderr" }, null, 2)}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const cfg = readCfg();
+  const flags = parseArgvFlags(process.argv.slice(2));
+  let normalized;
+  let deployments;
+  try {
+    normalized = normalizeNginxConfig(cfg);
+    deployments = resolveNginxDeployments(cfg, flags);
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    errout.write(`[hdc] ${target} ${verb}: ${msg}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, target, verb, message: msg }, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const global = nginxGlobalSettings(normalized);
+  const sites = /** @type {Record<string, unknown>[]} */ (global.sites);
+
+  const vault = createNginxVaultAccess();
+  errout.write(`[hdc] ${target} ${verb}: unlocking vault …\n`);
+  await vault.unlock({});
+  const { email, tsigSecret } = await loadSecrets(global, vault);
+  if (!email) {
+    errout.write(
+      `[hdc] ${target} ${verb}: Let's Encrypt email missing — set letsencrypt.email or hdc secrets set ${global.emailVaultKey}\n`,
+    );
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, target, verb, message: "missing Let's Encrypt email" }, null, 2)}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const log = provisionLogFromConsole(console);
+  /** @type {Record<string, unknown>[]} */
+  const results = [];
+
+  for (const deployment of deployments) {
+    try {
+      results.push(await deployOne(deployment, flags, global, sites, log, email, tsigSecret));
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
+      results.push({ ok: false, system_id: deployment.systemId, message: msg });
+    }
+  }
+
+  const ok = results.every((r) => r.ok === true);
+  process.stdout.write(
+    `${JSON.stringify({ ok, target, verb, count: results.length, results }, null, 2)}\n`,
+  );
+  process.exitCode = ok ? 0 : 1;
+}
+
+main().catch((e) => {
+  errout.write(`[hdc] ${target} ${verb}: fatal: ${/** @type {Error} */ (e).stack || e}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ ok: false, target, verb, message: String(/** @type {Error} */ (e).message || e) }, null, 2)}\n`,
+  );
+  process.exitCode = 1;
+});

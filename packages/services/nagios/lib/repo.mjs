@@ -7,7 +7,7 @@ import {
 } from "../../../lib/deploy-inventory.mjs";
 
 /** Default logical cluster id (override with `primary_proxmox_cluster_id` in config.json). */
-export const PRIMARY_PROXMOX_CLUSTER_INVENTORY_ID = "proxmox-primary-cluster";
+export const PRIMARY_PROXMOX_CLUSTER_INVENTORY_ID = "example-proxmox-cluster";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,7 +41,7 @@ export function readNagiosServiceConfig(root) {
 export function primaryProxmoxClusterId(root) {
   const c = readNagiosServiceConfig(root);
   const v = c.primary_proxmox_cluster_id;
-  return typeof v === "string" && v.trim() ? v.trim() : "proxmox-primary-cluster";
+  return typeof v === "string" && v.trim() ? v.trim() : "example-proxmox-cluster";
 }
 
 /**

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "wol": {
+    "enabled": true,
+    "broadcast": "192.0.2.255",
+    "port": 9,
+    "packets": 3,
+    "wait_seconds": 180,
+    "poll_interval_seconds": 10
+  },
+  "bootstrap_hosts": [],
+  "hosts": [
+    {
+      "id": "pc-example",
+      "system_id": "pc-example",
+      "os": "windows",
+      "enabled": true,
+      "updates": { "enabled": true },
+      "wol": { "mac": "aa:bb:cc:dd:ee:ff" },
+      "auth": {
+        "winrm_user_env": "HDC_WINRM_USER",
+        "winrm_password_vault_suffix": "PC_EXAMPLE"
+      },
+      "access": {
+        "nodes": [
+          {
+            "name": "primary",
+            "ip": "192.0.2.0",
+            "mac": "aa:bb:cc:dd:ee:ff",
+            "winrm": { "port": 5986, "use_ssl": true, "skip_ca_check": true }
+          }
+        ]
+      }
+    },
+    {
+      "id": "ws-example",
+      "os": "ubuntu",
+      "enabled": true,
+      "updates": { "enabled": true },
+      "auth": { "ssh_user_env": "HDC_CLIENT_SSH_USER" },
+      "access": {
+        "nodes": [
+          {
+            "name": "primary",
+            "ip": "192.0.2.0",
+            "mac": "11:22:33:44:55:66",
+            "ssh": "ssh://user@192.0.2.0"
+          }
+        ]
+      }
+    }
+  ]
+}

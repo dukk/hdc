@@ -1,5 +1,14 @@
 import { readVault, writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
+import { isLocalOnlyVaultKey, isAutoSecretBackend, resolveSecretBackendMode } from "./secret-backend.mjs";
+import {
+  bwDeleteItem,
+  bwGetPassword,
+  bwListItemNames,
+  bwSetPassword,
+  ensureBwUnlocked,
+  vaultwardenCliDepsFromCli,
+} from "./vaultwarden-cli.mjs";
 
 /** Process-wide vault passphrase cache (one prompt per hdc command). */
 /** @type {Map<string, string>} */
@@ -19,6 +28,7 @@ export function clearVaultPassphraseProcessCache() {
  * @property {() => string} defaultVaultPath
  * @property {typeof import("node:fs").existsSync} existsSync
  * @property {(q: string, opts?: { mask?: boolean }) => Promise<string>} readLineQuestion
+ * @property {typeof import("node:child_process").spawnSync} [spawnSync]
  */
 
 /**
@@ -40,8 +50,17 @@ export function createVaultAccess(deps) {
   /** @type {string | null} */
   let cachedPassphrase = null;
 
+  const vwCli = vaultwardenCliDepsFromCli(deps, deps.spawnSync);
+
   function vaultPath() {
     return deps.defaultVaultPath();
+  }
+
+  /**
+   * @returns {"local" | "vaultwarden"}
+   */
+  function backendMode() {
+    return resolveSecretBackendMode(deps.env);
   }
 
   /**
@@ -133,7 +152,7 @@ export function createVaultAccess(deps) {
    * @param {UnlockOptions} [unlockOpts]
    * @returns {Promise<Record<string, string> | null>} `null` if the vault is missing and was not created (`createIfMissing: false`).
    */
-  async function readSecrets(unlockOpts = {}) {
+  async function readLocalSecrets(unlockOpts = {}) {
     const pass = await unlock(unlockOpts);
     if (pass === null) return null;
     const f = vaultPath();
@@ -142,11 +161,91 @@ export function createVaultAccess(deps) {
   }
 
   /**
+   * @param {UnlockOptions} [unlockOpts]
+   * @returns {Promise<Record<string, string> | null>}
+   */
+  async function readSecrets(unlockOpts = {}) {
+    const mode = backendMode();
+    if (mode === "vaultwarden") {
+      try {
+        const session = await ensureBwUnlocked(
+          vwCli,
+          async (key) => {
+            const data = await readLocalSecrets({ createIfMissing: false });
+            if (data === null) return null;
+            const v = data[key];
+            return typeof v === "string" && v.length > 0 ? v : null;
+          },
+          async (key, value) => {
+            await setLocalSecret(key, value);
+          },
+        );
+        const names = bwListItemNames(vwCli, session);
+        /** @type {Record<string, string>} */
+        const out = {};
+        for (const name of names) {
+          const val = bwGetPassword(vwCli, session, name);
+          if (typeof val === "string" && val.length > 0) out[name] = val;
+        }
+        const local = await readLocalSecrets(unlockOpts);
+        if (local) {
+          for (const [k, v] of Object.entries(local)) {
+            if (isLocalOnlyVaultKey(k)) out[k] = v;
+          }
+        }
+        return out;
+      } catch (e) {
+        if (isAutoSecretBackend(deps.env)) {
+          deps.warn(`Vaultwarden backend unavailable (${/** @type {Error} */ (e).message}); using local vault.`);
+          return readLocalSecrets(unlockOpts);
+        }
+        throw e;
+      }
+    }
+    return readLocalSecrets(unlockOpts);
+  }
+
+  /**
    * @param {Record<string, string>} secrets
    */
   async function writeSecrets(secrets) {
+    const mode = backendMode();
+    if (mode === "vaultwarden") {
+      const session = await ensureBwUnlocked(
+        vwCli,
+        async (key) => {
+          const data = await readLocalSecrets({ createIfMissing: false });
+          if (data === null) return null;
+          const v = data[key];
+          return typeof v === "string" && v.length > 0 ? v : null;
+        },
+        async (key, value) => {
+          await setLocalSecret(key, value);
+        },
+      );
+      for (const [key, value] of Object.entries(secrets)) {
+        if (isLocalOnlyVaultKey(key)) {
+          await setLocalSecret(key, value);
+        } else {
+          bwSetPassword(vwCli, session, key, value);
+        }
+      }
+      return;
+    }
     const pass = await unlock();
     writeVault(vaultPath(), pass, secrets);
+  }
+
+  /**
+   * @param {string} key
+   * @param {string} value
+   */
+  async function setLocalSecret(key, value) {
+    let data = await readLocalSecrets({});
+    if (data === null) data = {};
+    data[key] = value;
+    const pass = await unlock();
+    writeVault(vaultPath(), pass, data);
   }
 
   /**
@@ -155,9 +254,9 @@ export function createVaultAccess(deps) {
    * @param {GetSecretOptions} [options]
    * @returns {Promise<string>}
    */
-  async function getSecret(key, options = {}) {
+  async function getSecretLocal(key, options = {}) {
     const { promptLabel, verify, allowEmpty = false } = options;
-    let data = await readSecrets({});
+    let data = await readLocalSecrets({});
     if (data === null) data = {};
     const cur = data[key];
     if (typeof cur === "string" && cur.length > 0) return cur;
@@ -176,11 +275,67 @@ export function createVaultAccess(deps) {
           continue;
         }
       }
-      data = await readSecrets({});
+      data = await readLocalSecrets({});
       if (data === null) data = {};
       data[key] = value;
-      await writeSecrets(data);
+      const pass = await unlock();
+      writeVault(vaultPath(), pass, data);
       return value;
+    }
+  }
+
+  /**
+   * @param {string} key
+   * @param {GetSecretOptions} [options]
+   * @returns {Promise<string>}
+   */
+  async function getSecret(key, options = {}) {
+    const { promptLabel, verify, allowEmpty = false } = options;
+    const useLocalOnly = isLocalOnlyVaultKey(key) || backendMode() === "local";
+
+    if (useLocalOnly) {
+      return getSecretLocal(key, options);
+    }
+
+    try {
+      const session = await ensureBwUnlocked(
+        vwCli,
+        async (k) => {
+          const data = await readLocalSecrets({ createIfMissing: false });
+          if (data === null) return null;
+          const v = data[k];
+          return typeof v === "string" && v.length > 0 ? v : null;
+        },
+        async (k, value) => {
+          await setLocalSecret(k, value);
+        },
+      );
+      const cur = bwGetPassword(vwCli, session, key);
+      if (typeof cur === "string" && cur.length > 0) return cur;
+
+      const label = promptLabel ?? `Secret value for ${key}`;
+      for (;;) {
+        const value = await deps.readLineQuestion(`${label}: `, { mask: true });
+        if (!value && !allowEmpty) {
+          deps.error("Empty value; try again or Ctrl+C to abort.");
+          continue;
+        }
+        if (verify) {
+          const ok = await verify(value);
+          if (!ok) {
+            deps.warn("Verification failed; try again.");
+            continue;
+          }
+        }
+        if (value) bwSetPassword(vwCli, session, key, value);
+        return value;
+      }
+    } catch (e) {
+      if (isAutoSecretBackend(deps.env)) {
+        deps.warn(`Vaultwarden backend unavailable (${/** @type {Error} */ (e).message}); using local vault for ${key}.`);
+        return getSecretLocal(key, options);
+      }
+      throw e;
     }
   }
 
@@ -189,18 +344,144 @@ export function createVaultAccess(deps) {
    * @param {string} value
    */
   async function setSecret(key, value) {
-    let data = await readSecrets({});
-    if (data === null) data = {};
-    data[key] = value;
-    await writeSecrets(data);
+    if (isLocalOnlyVaultKey(key) || backendMode() === "local") {
+      await setLocalSecret(key, value);
+      return;
+    }
+    try {
+      const session = await ensureBwUnlocked(
+        vwCli,
+        async (k) => {
+          const data = await readLocalSecrets({ createIfMissing: false });
+          if (data === null) return null;
+          const v = data[k];
+          return typeof v === "string" && v.length > 0 ? v : null;
+        },
+        async (k, val) => {
+          await setLocalSecret(k, val);
+        },
+      );
+      bwSetPassword(vwCli, session, key, value);
+    } catch (e) {
+      if (isAutoSecretBackend(deps.env)) {
+        deps.warn(`Vaultwarden backend unavailable (${/** @type {Error} */ (e).message}); saving ${key} to local vault.`);
+        await setLocalSecret(key, value);
+      } else {
+        throw e;
+      }
+    }
   }
 
-  return { unlock, readSecrets, writeSecrets, getSecret, setSecret, canDecrypt, vaultPath };
+  /**
+   * @param {string} key
+   */
+  async function deleteSecret(key) {
+    if (isLocalOnlyVaultKey(key) || backendMode() === "local") {
+      let data = await readLocalSecrets({ createIfMissing: false });
+      if (data === null) return false;
+      if (!(key in data)) return false;
+      delete data[key];
+      const pass = await unlock();
+      writeVault(vaultPath(), pass, data);
+      return true;
+    }
+    try {
+      const session = await ensureBwUnlocked(
+        vwCli,
+        async (k) => {
+          const data = await readLocalSecrets({ createIfMissing: false });
+          if (data === null) return null;
+          const v = data[k];
+          return typeof v === "string" && v.length > 0 ? v : null;
+        },
+        async (k, val) => {
+          await setLocalSecret(k, val);
+        },
+      );
+      return bwDeleteItem(vwCli, session, key);
+    } catch (e) {
+      if (isAutoSecretBackend(deps.env)) {
+        let data = await readLocalSecrets({ createIfMissing: false });
+        if (data === null || !(key in data)) return false;
+        delete data[key];
+        const pass = await unlock();
+        writeVault(vaultPath(), pass, data);
+        return true;
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Pre-unlock Vaultwarden when the secret backend is active.
+   */
+  async function unlockVaultwarden() {
+    if (backendMode() === "local") {
+      deps.warn("HDC_SECRET_BACKEND is local; Vaultwarden unlock skipped.");
+      return;
+    }
+    await ensureBwUnlocked(
+      vwCli,
+      async (k) => {
+        const data = await readLocalSecrets({ createIfMissing: false });
+        if (data === null) return null;
+        const v = data[k];
+        return typeof v === "string" && v.length > 0 ? v : null;
+      },
+      async (k, value) => {
+        await setLocalSecret(k, value);
+      },
+    );
+    deps.log("[hdc] vaultwarden: vault unlocked.");
+  }
+
+  /**
+   * @returns {Promise<{ local: string[]; vaultwarden: string[]; mode: "local" | "vaultwarden" }>}
+   */
+  async function listSecretKeys() {
+    const localData = await readLocalSecrets({ createIfMissing: false });
+    const local = localData ? Object.keys(localData).sort() : [];
+    const mode = backendMode();
+    if (mode === "local") {
+      return { local, vaultwarden: [], mode };
+    }
+    try {
+      const session = await ensureBwUnlocked(
+        vwCli,
+        async (k) => {
+          const data = await readLocalSecrets({ createIfMissing: false });
+          if (data === null) return null;
+          const v = data[k];
+          return typeof v === "string" && v.length > 0 ? v : null;
+        },
+        async (k, value) => {
+          await setLocalSecret(k, value);
+        },
+      );
+      const vaultwarden = bwListItemNames(vwCli, session);
+      return { local, vaultwarden, mode };
+    } catch {
+      return { local, vaultwarden: [], mode: "local" };
+    }
+  }
+
+  return {
+    unlock,
+    readSecrets,
+    writeSecrets,
+    getSecret,
+    setSecret,
+    deleteSecret,
+    unlockVaultwarden,
+    listSecretKeys,
+    canDecrypt,
+    vaultPath,
+  };
 }
 
 /**
  * Pick fields needed by {@link createVaultAccess} from a CLI-like deps object.
- * @param {Pick<VaultAccessDeps, "env" | "log" | "error" | "warn" | "defaultVaultPath" | "existsSync" | "readLineQuestion">} cliLike
+ * @param {Pick<VaultAccessDeps, "env" | "log" | "error" | "warn" | "defaultVaultPath" | "existsSync" | "readLineQuestion" | "spawnSync">} cliLike
  */
 export function vaultDepsFromCli(cliLike) {
   return {
@@ -211,5 +492,6 @@ export function vaultDepsFromCli(cliLike) {
     defaultVaultPath: cliLike.defaultVaultPath,
     existsSync: cliLike.existsSync,
     readLineQuestion: cliLike.readLineQuestion,
+    spawnSync: cliLike.spawnSync,
   };
 }

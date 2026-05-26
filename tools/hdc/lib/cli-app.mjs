@@ -4,13 +4,20 @@ import {
   inventoryDocs,
   formatManifestServiceInvoke,
   manifestById,
+  manifestByTierAndId,
   manifestId,
+  manifestPlatforms,
+  manifestRunTier,
   manifestServices,
   manifestTitle,
+  parseRunTier,
+  resolveRunInvocation,
+  runScriptDir,
+  RUN_TIERS,
   verbSpec,
   VERBS,
 } from "../manifests.mjs";
-import { writeVault } from "../vault.mjs";
+import { readVault, writeVault } from "../vault.mjs";
 import { CliExit } from "./cli-exit.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
 import { collectHdcEnvRows } from "./hdc-env-report.mjs";
@@ -20,6 +27,7 @@ import {
   vaultDepsFromCli,
 } from "./vault-access.mjs";
 import { runUsersBootstrapHdc } from "./users-bootstrap-hdc.mjs";
+import { resolveRepoFile } from "./private-repo.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -79,13 +87,15 @@ function usage(deps) {
 Usage:
   ${c} help [ <topic> ... ]
   ${c} list
-  ${c} run <package> <verb> [-- <extra args...>]
+  ${c} run <tier> <package> <verb> [-- <extra args...>]
+  ${c} run <tier> <package> <platform> <verb> [-- <extra args...>]   # when manifest lists "platforms"
   ${c} secrets path
   ${c} secrets init   # new vault: passphrase prompt, or HDC_VAULT_PASSPHRASE once
   ${c} secrets change-passphrase
   ${c} secrets set <ENV_NAME> [--stdin | --value <s>]
   ${c} secrets delete <ENV_NAME>
   ${c} secrets list
+  ${c} secrets unlock   # pre-unlock Vaultwarden when HDC_SECRET_BACKEND uses it
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
   ${c} env              # HDC_* variables (secrets redacted)
 
@@ -96,6 +106,50 @@ More detail: ${c} help [ <command> [ <subcommand> ... ] ]
 }
 
 const HELP_SCRIPT_PREVIEW_LINES = 28;
+
+/**
+ * @param {CliDeps} deps
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
+ * @param {string | null} platform
+ * @param {string} verb
+ */
+function formatRunInvokeLine(deps, m, platform, verb) {
+  const c = helpExe(deps);
+  const tier = manifestRunTier(m) ?? "infrastructure";
+  const pkg = manifestId(m);
+  if (platform) return `${c} run ${tier} ${pkg} ${platform} ${verb}`;
+  return `${c} run ${tier} ${pkg} ${verb}`;
+}
+
+/**
+ * Resolve manifest for `run` / `help run` after tier token.
+ * @param {CliDeps} deps
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }[]} manifests
+ * @param {string} tierToken
+ * @param {string} packageId
+ * @returns {{ path: string, dir: string, raw: Record<string, unknown> }}
+ */
+function resolveRunManifest(deps, manifests, tierToken, packageId) {
+  const tierDir = parseRunTier(tierToken);
+  if (!tierDir) {
+    die(
+      deps,
+      `run: unknown tier ${JSON.stringify(tierToken)} (expected: ${RUN_TIERS.join(", ")})`,
+    );
+  }
+  const m = manifestByTierAndId(manifests, tierToken, packageId);
+  if (m) return m;
+  const other = manifestById(manifests, packageId);
+  if (other) {
+    const actual = manifestRunTier(other);
+    die(
+      deps,
+      `run: package ${JSON.stringify(packageId)} is not under tier ${JSON.stringify(tierToken)}` +
+        (actual ? ` (expected: ${actual})` : ""),
+    );
+  }
+  die(deps, `run: unknown package ${JSON.stringify(packageId)} under tier ${JSON.stringify(tierToken)}`);
+}
 
 /**
  * @param {CliDeps} deps
@@ -121,7 +175,7 @@ function cmdHelp(deps, root, topics) {
     deps.log(`Topic tree (each prints more detail):
   ${c} help help
   ${c} help list
-  ${c} help run [ <package> [ <verb> ] ]
+  ${c} help run [ <tier> [ <package> [ <verb> ] ] ]
   ${c} help secrets [ path | init | change-passphrase | set | list | delete ]
   ${c} help users [ bootstrap-hdc ]
   ${c} help env`);
@@ -138,11 +192,11 @@ function cmdHelp(deps, root, topics) {
 Use:
   ${c} help
 for the command summary, or add topics to drill down, for example:
-  ${c} help run proxmox query
+  ${c} help run infrastructure proxmox query
   ${c} help secrets set
 
-Topics mirror real commands: "run" is followed by a package id (from manifest.json under packages/<folder>/),
-then a verb (${VERBS.join(", ")}). Package scripts live under packages/<package>/<verb>/.
+Topics mirror real commands: "run" is followed by tier (client | infrastructure | service), package id,
+then a verb (${VERBS.join(", ")}). Package scripts live under packages/<tier-dir>/<package>/<verb>/.
 `);
     return;
   }
@@ -171,10 +225,10 @@ Examples:
     deps.log(`list — show hdc packages (from packages/*/manifest.json)
 
 Each row is a package id, title, and which verbs exist (deploy / maintain / query). These are the
-hdc entrypoints (${c} run <package> <verb>).
+hdc entrypoints (${c} run <tier> <package> <verb>).
 
 Structured facts for automation live in optional per-package config.json files under
-packages/infrastructure/<id>/ and packages/services/<id>/ (see each package's config.example.json).
+packages/infrastructure/<id>/, packages/services/<id>/, and packages/clients/<id>/ (see each package's config.example.json).
 
 Examples:
   ${c} list
@@ -188,14 +242,16 @@ Examples:
       deps.log(`run — execute a package script
 
 Usage:
-  ${c} run <package> <verb> [-- <extra args...>]
+  ${c} run <tier> <package> <verb> [-- <extra args...>]
+  ${c} run <tier> <package> <platform> <verb> [-- <extra args...>]   # when manifest lists "platforms"
 
+- <tier> is one of: ${RUN_TIERS.join(", ")} (maps to packages/clients, packages/infrastructure, packages/services).
 - <package> is the manifest "id" (or the packages/ folder name if id is missing).
 - <verb> must be one of: ${VERBS.join(", ")}.
+- Platform-routed packages require <platform> before <verb>; see ${c} help run <tier> <package>.
 - Everything after "--" is forwarded to the package script (not parsed by hdc).
 
-The child process uses cwd packages/<folder>/<verb>/ and runs:
-  <node> <script path> <extra args...>
+The child process cwd is packages/<tier-dir>/<package>/<verb>/ (or .../<platform>/<verb>/ when platforms are set).
 
 When a query or deploy plugin exits 0 and prints JSON to stdout, hdc forwards that output to the
 terminal unchanged. Package scripts do not update repo inventory paths.
@@ -203,21 +259,93 @@ terminal unchanged. Package scripts do not update repo inventory paths.
 Discover packages:
   ${c} list
 Drill into one package or verb:
-  ${c} help run <package>
-  ${c} help run <package> <verb>
+  ${c} help run <tier> <package>
+  ${c} help run <tier> <package> <verb>
 `);
       return;
     }
-    if (topics.length > 3) die(deps, `help: too many arguments after "run ${a1} ${a2}"`);
+
+    const tierToken = a1;
+    const tierDir = parseRunTier(tierToken);
+    if (!tierDir) {
+      die(
+        deps,
+        `help run: unknown tier ${JSON.stringify(tierToken)} (expected: ${RUN_TIERS.join(", ")})`,
+      );
+    }
 
     const manifests = discoverManifests(deps.packagesDir(root));
-    const packageId = a1;
-    const m = manifestById(manifests, packageId);
-    if (!m) die(deps, `help run: unknown package ${JSON.stringify(packageId)}`);
+    const tierManifests = manifests.filter((m) => manifestRunTier(m) === tierToken);
 
     if (topics.length === 2) {
       const lines = [];
-      lines.push(`run — package ${manifestId(m)} (${manifestTitle(m)})`);
+      lines.push(`run — tier ${tierToken} (packages/${tierDir}/)`);
+      lines.push("");
+      if (!tierManifests.length) lines.push("(no packages discovered)");
+      else {
+        lines.push("Packages:");
+        for (const m of tierManifests) {
+          const verbs = VERBS.filter((v) => verbSpec(m, v)).join(", ") || "(none)";
+          lines.push(`  ${manifestId(m)}\t${manifestTitle(m)}\tverbs: ${verbs}`);
+        }
+      }
+      lines.push("");
+      lines.push(`Example: ${helpExe(deps)} help run ${tierToken} <package>`);
+      deps.log(lines.join("\n"));
+      return;
+    }
+
+    const packageId = a2;
+    const m = resolveRunManifest(deps, manifests, tierToken, packageId);
+    const platforms = manifestPlatforms(m);
+    const tier = manifestRunTier(m) ?? tierToken;
+    const maxTopics = platforms.length > 0 ? 5 : 4;
+    if (topics.length > maxTopics) {
+      die(deps, `help: too many arguments after "run"`);
+    }
+
+    if (topics.length === 3 && platforms.length > 0) {
+      const lines = [];
+      lines.push(`run — package ${manifestId(m)} (${manifestTitle(m)}), tier ${tier}`);
+      lines.push("");
+      lines.push(`Manifest: ${deps.relative(root, m.path).replace(/\\/g, "/")}`);
+      lines.push(`Platforms: ${platforms.join(", ")}`);
+      lines.push("");
+      lines.push("Verbs (each platform subfolder must implement configured verbs):");
+      for (const v of VERBS) {
+        const spec = verbSpec(m, v);
+        lines.push(spec ? `  ${v}\t${spec.script}` : `  ${v}\t(not configured)`);
+      }
+      lines.push("");
+      lines.push(`Example: ${formatRunInvokeLine(deps, m, "<platform>", "<verb>")} [-- ...]`);
+      deps.log(lines.join("\n"));
+      return;
+    }
+
+    if (topics.length === 4 && platforms.length > 0) {
+      const platform = a3;
+      if (!platforms.includes(platform)) {
+        die(deps, `help run: unknown platform ${JSON.stringify(platform)} (expected: ${platforms.join(", ")})`);
+      }
+      const lines = [];
+      lines.push(`run — package ${manifestId(m)}, platform ${platform}`);
+      lines.push("");
+      for (const v of VERBS) {
+        const spec = verbSpec(m, v);
+        const cwd = deps.join(m.dir, platform, v);
+        const scriptAbs = spec ? deps.join(cwd, spec.script) : "";
+        const rel = spec ? deps.relative(root, scriptAbs).replace(/\\/g, "/") : "(not configured)";
+        lines.push(spec ? `  ${v}\t${rel}` : `  ${v}\t(not configured)`);
+      }
+      lines.push("");
+      lines.push(`Example: ${formatRunInvokeLine(deps, m, platform, "maintain")} [-- ...]`);
+      deps.log(lines.join("\n"));
+      return;
+    }
+
+    if (topics.length === 3) {
+      const lines = [];
+      lines.push(`run — package ${manifestId(m)} (${manifestTitle(m)}), tier ${tier}`);
       lines.push("");
       lines.push(`Manifest: ${deps.relative(root, m.path).replace(/\\/g, "/")}`);
       const req = envRequired(m);
@@ -226,7 +354,7 @@ Drill into one package or verb:
       const invDocs = inventoryDocs(m);
       if (invDocs.length) lines.push(`inventory_docs: ${invDocs.join(", ")}`);
       lines.push("");
-      lines.push("Verbs (see help run <package> <verb> for script path and preview):");
+      lines.push("Verbs (see help run <tier> <package> <verb> for script path and preview):");
       for (const v of VERBS) {
         const spec = verbSpec(m, v);
         lines.push(spec ? `  ${v}\t${spec.script}` : `  ${v}\t(not configured)`);
@@ -235,10 +363,9 @@ Drill into one package or verb:
       if (services.length) {
         lines.push("");
         lines.push("Services (capabilities exposed by this package):");
-        const pkg = manifestId(m);
         const c = helpExe(deps);
         for (const svc of services) {
-          const inv = formatManifestServiceInvoke(svc, pkg);
+          const inv = formatManifestServiceInvoke(svc, m);
           const invokePart = svc.invoke ? ` → ${svc.invoke}` : "";
           lines.push(`  ${svc.id}\t${svc.verb}${invokePart}\t${svc.title}`);
           if (svc.summary) lines.push(`\t${svc.summary}`);
@@ -246,24 +373,31 @@ Drill into one package or verb:
         }
       }
       lines.push("");
-      lines.push(`Example: ${helpExe(deps)} run ${manifestId(m)} <verb> [-- ...]`);
+      const platNote = platforms.length
+        ? ` or ${formatRunInvokeLine(deps, m, "<platform>", "<verb>")}`
+        : "";
+      lines.push(`Example: ${formatRunInvokeLine(deps, m, null, "<verb>")} [-- ...]${platNote}`);
       deps.log(lines.join("\n"));
       return;
     }
 
-    const verb = a2;
+    const verb = platforms.length > 0 && topics.length === 5 ? topics[4] : topics[3];
+    const platform = platforms.length > 0 && topics.length === 5 ? a3 : null;
+    if (platform && !platforms.includes(platform)) {
+      die(deps, `help run: unknown platform ${JSON.stringify(platform)}`);
+    }
     if (!VERBS.includes(verb)) die(deps, `help run: verb must be one of: ${VERBS.join(", ")}`);
     const spec = verbSpec(m, verb);
     if (!spec) die(deps, `help run: package ${JSON.stringify(packageId)} has no ${verb} script in manifest`);
-    const cwd = deps.join(m.dir, verb);
+    const cwd = runScriptDir(m, platform, verb);
     const scriptAbs = deps.join(cwd, spec.script);
     const relScript = deps.relative(root, scriptAbs).replace(/\\/g, "/");
-    const c = helpExe(deps);
     const queryNote =
       verb === "query" || verb === "deploy"
         ? `On exit 0, stdout from the script is written to the terminal as received (no hdc post-processing).\n\n`
         : "";
-    deps.log(`run — package ${manifestId(m)} (${manifestTitle(m)}), verb ${verb}
+    const invokeLine = `${formatRunInvokeLine(deps, m, platform, verb)} [-- <args for ${spec.script}>]`;
+    deps.log(`run — package ${manifestId(m)} (${manifestTitle(m)})${platform ? `, platform ${platform}` : ""}, verb ${verb}
 
 Manifest: ${deps.relative(root, m.path).replace(/\\/g, "/")}
 Working directory (spawn cwd): ${deps.relative(root, cwd).replace(/\\/g, "/")}
@@ -271,7 +405,7 @@ Script (manifest): ${spec.script}
 Script (repo path): ${relScript}
 
 Invoke:
-  ${c} run ${manifestId(m)} ${verb} [-- <args for ${spec.script}>]
+  ${invokeLine}
 
 ${queryNote}If the script file is missing on disk, "run" exits with an error (same check as real execution).`);
     if (!deps.existsSync(scriptAbs)) {
@@ -297,8 +431,9 @@ Subcommands:
   init    Create an empty vault (passphrase prompt, or HDC_VAULT_PASSPHRASE once).
   change-passphrase  Re-encrypt vault with a new passphrase (current via env or prompt).
   set     Set or update a key (ENV-style name).
-  list    List keys.
+  list    List keys (Vaultwarden items and/or local bootstrap keys).
   delete  Remove a key.
+  unlock  Unlock Vaultwarden vault (bw session) when HDC_SECRET_BACKEND is vaultwarden or auto.
 
 Examples:
   ${c} secrets path
@@ -348,10 +483,24 @@ Example:
       const c = helpExe(deps);
       deps.log(`secrets list — print sorted key names
 
-Requires a readable vault and a working passphrase (typically HDC_VAULT_PASSPHRASE in .env).
+Lists keys from the active secret backend (Vaultwarden when HDC_VAULTWARDEN_URL and
+HDC_VAULTWARDEN_EMAIL are set with HDC_SECRET_BACKEND auto or vaultwarden; otherwise local
+~/.hdc/vault.enc). Local-only bootstrap keys are labeled when listed from Vaultwarden mode.
 
 Example:
   ${c} secrets list
+`);
+      return;
+    }
+    if (sub === "unlock") {
+      const c = helpExe(deps);
+      deps.log(`secrets unlock — unlock Vaultwarden for this command session
+
+Requires Bitwarden CLI (bw), HDC_VAULTWARDEN_URL, and HDC_VAULTWARDEN_EMAIL. Prompts for the
+Vaultwarden master password unless HDC_VAULTWARDEN_MASTER_PASSWORD is in the local hdc vault.
+
+Example:
+  ${c} secrets unlock
 `);
       return;
     }
@@ -387,7 +536,7 @@ Examples:
     }
     die(
       deps,
-      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, delete)`,
+      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, delete, unlock)`,
     );
   }
 
@@ -495,11 +644,11 @@ async function cmdSecrets(deps, argv) {
         `secrets change-passphrase: no vault at ${vaultPath} (run secrets init first)`,
       );
     }
-    const data = await access.readSecrets({ createIfMissing: false });
-    if (data === null) {
+    const currentPass = await access.unlock({ createIfMissing: false });
+    if (currentPass === null) {
       die(deps, `secrets change-passphrase: no vault at ${vaultPath}`);
     }
-    const currentPass = await access.unlock({ createIfMissing: false });
+    const data = readVault(vaultPath, currentPass);
     const p1 = await deps.readLineQuestion("New vault passphrase: ", { mask: true });
     if (!p1) die(deps, "secrets change-passphrase: empty passphrase");
     const p2 = await deps.readLineQuestion("Confirm new vault passphrase: ", { mask: true });
@@ -516,19 +665,22 @@ async function cmdSecrets(deps, argv) {
     return;
   }
   if (sub === "list") {
-    if (!deps.existsSync(vaultPath)) {
-      die(
-        deps,
-        `secrets list: no vault at ${vaultPath} (run secrets init or secrets set)`,
-      );
+    const listed = await access.listSecretKeys();
+    const { local, vaultwarden, mode } = listed;
+    if (mode === "vaultwarden") {
+      if (vaultwarden.length === 0 && local.length === 0) deps.log("(empty)");
+      for (const k of vaultwarden) deps.log(k);
+      for (const k of local) {
+        if (!vaultwarden.includes(k)) deps.log(`${k} (local bootstrap)`);
+      }
+      return;
     }
-    const data = await access.readSecrets({ createIfMissing: false });
-    if (data === null) {
-      die(deps, "secrets list: vault is missing (unexpected)");
-    }
-    const keys = Object.keys(data).sort();
-    if (keys.length === 0) deps.log("(empty)");
-    else for (const k of keys) deps.log(k);
+    if (local.length === 0) deps.log("(empty)");
+    else for (const k of local) deps.log(k);
+    return;
+  }
+  if (sub === "unlock") {
+    await access.unlockVaultwarden();
     return;
   }
   if (sub === "delete") {
@@ -539,12 +691,8 @@ async function cmdSecrets(deps, argv) {
         "secrets delete: need a valid ENV-style name (letters, digits, underscore)",
       );
     }
-    if (!deps.existsSync(vaultPath)) die(deps, `secrets delete: no vault at ${vaultPath}`);
-    const data = await access.readSecrets({ createIfMissing: false });
-    if (data === null) die(deps, `secrets delete: no vault at ${vaultPath}`);
-    if (!(key in data)) die(deps, `secrets delete: no entry ${JSON.stringify(key)}`);
-    delete data[key];
-    await access.writeSecrets(data);
+    const deleted = await access.deleteSecret(key);
+    if (!deleted) die(deps, `secrets delete: no entry ${JSON.stringify(key)}`);
     deps.log(`deleted ${key}`);
     return;
   }
@@ -569,7 +717,7 @@ async function cmdSecrets(deps, argv) {
     }
     if (value === null || value === "") die(deps, "secrets set: empty value");
     await access.setSecret(key, value);
-    deps.log(`saved ${key} -> ${vaultPath}`);
+    deps.log(`saved ${key}`);
     return;
   }
   die(deps, `secrets: unknown subcommand ${JSON.stringify(sub ?? "")}`);
@@ -615,20 +763,33 @@ function cmdEnv(deps, root) {
 function cmdList(deps, root) {
   const manifests = discoverManifests(deps.packagesDir(root));
   deps.log("Packages (manifest.json):");
-  for (const m of manifests) {
-    const verbs = VERBS.filter((v) => verbSpec(m, v)).join(", ") || "(none)";
-    const svc = manifestServices(m);
-    const svcBrief = svc.length
-      ? `\tservices: ${svc.map((s) => (s.invoke ? `${s.id}(${s.verb}/${s.invoke})` : `${s.id}(${s.verb})`)).join(", ")}`
-      : "";
-    deps.log(`  ${manifestId(m)}\t${manifestTitle(m)}\tverbs: ${verbs}${svcBrief}`);
+  for (const tier of RUN_TIERS) {
+    const tierManifests = manifests.filter((m) => manifestRunTier(m) === tier);
+    if (!tierManifests.length) continue;
+    deps.log(`  [${tier}]`);
+    for (const m of tierManifests) {
+      const verbs = VERBS.filter((v) => verbSpec(m, v)).join(", ") || "(none)";
+      const svc = manifestServices(m);
+      const svcBrief = svc.length
+        ? `\tservices: ${svc.map((s) => (s.invoke ? `${s.id}(${s.verb}/${s.invoke})` : `${s.id}(${s.verb})`)).join(", ")}`
+        : "";
+      const plat = manifestPlatforms(m);
+      const platBrief = plat.length ? `\tplatforms: ${plat.join(", ")}` : "";
+      deps.log(`    ${manifestId(m)}\t${manifestTitle(m)}\tverbs: ${verbs}${platBrief}${svcBrief}`);
+    }
   }
-  deps.log("\nOptional per-package config (packages/<tier>/<id>/config.json; see config.example.json):");
+  deps.log("\nOptional per-package config (packages/<tier-dir>/<id>/config.json; see config.example.json):");
   for (const m of manifests) {
-    const cfg = deps.join(m.dir, "config.json");
-    const rel = deps.relative(root, cfg).replace(/\\/g, "/");
-    const state = deps.existsSync(cfg) ? "exists" : "(optional)";
-    deps.log(`  ${manifestId(m)}\t${rel}\t${state}`);
+    const tier = manifestRunTier(m) ?? "?";
+    const rel =
+      tier === "client"
+        ? "packages/clients/config.json"
+        : deps.relative(root, deps.join(m.dir, "config.json")).replace(/\\/g, "/");
+    const resolved = resolveRepoFile(root, rel);
+    let state = "(optional)";
+    if (resolved.source === "public") state = "exists (hdc)";
+    else if (resolved.source === "private") state = "exists (hdc-private)";
+    deps.log(`  ${tier}\t${manifestId(m)}\t${rel}\t${state}`);
   }
 }
 
@@ -639,13 +800,15 @@ function cmdList(deps, root) {
  */
 function cmdRun(deps, root, argv) {
   const { forward, extra } = splitRunArgs(argv);
-  const packageId = forward[0];
-  const verb = forward[1];
-  if (!packageId || !verb) die(deps, "run: need <package> <verb>");
-  if (!VERBS.includes(verb)) die(deps, `run: verb must be one of: ${VERBS.join(", ")}`);
+  if (forward.length < 3) {
+    die(deps, `run: need <tier> <package> <verb> (tiers: ${RUN_TIERS.join(", ")})`);
+  }
   const manifests = discoverManifests(deps.packagesDir(root));
-  const m = manifestById(manifests, packageId);
-  if (!m) die(deps, `run: unknown package ${JSON.stringify(packageId)}`);
+  const tierToken = forward[0];
+  const m = resolveRunManifest(deps, manifests, tierToken, forward[1]);
+  const inv = resolveRunInvocation(forward.slice(1), m);
+  if ("error" in inv) die(deps, `run: ${inv.error}`);
+  const { packageId, platform, verb } = inv;
   for (const key of envRequired(m)) {
     if (!deps.env[key]) {
       deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
@@ -653,10 +816,10 @@ function cmdRun(deps, root, argv) {
   }
   const spec = verbSpec(m, verb);
   if (!spec) die(deps, `run: package ${packageId} has no ${verb} script in manifest`);
-  const cwd = deps.join(m.dir, verb);
+  const cwd = runScriptDir(m, platform, verb);
   const script = deps.join(cwd, spec.script);
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
-  const pipeStdoutJson = verb === "query" || verb === "deploy";
+  const pipeStdoutJson = verb === "query" || verb === "deploy" || verb === "teardown";
   const r = deps.spawnSync(deps.execPath, [script, ...extra], {
     cwd,
     stdio: pipeStdoutJson ? ["inherit", "pipe", "inherit"] : "inherit",
@@ -673,7 +836,7 @@ function cmdRun(deps, root, argv) {
         : String(r.stdout)
       : "";
   if (verb === "query" && stdoutStr) deps.stdoutWrite(stdoutStr);
-  else if (verb === "deploy" && stdoutStr) deps.stdoutWrite(stdoutStr);
+  else if ((verb === "deploy" || verb === "teardown") && stdoutStr) deps.stdoutWrite(stdoutStr);
   throw new CliExit(status);
 }
 

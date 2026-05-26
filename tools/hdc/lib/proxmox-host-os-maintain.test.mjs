@@ -11,8 +11,8 @@ describe("proxmox host OS maintain", () => {
       {
         id: "c1",
         hosts: [
-          { id: "pve-a", pve_node: "pve-a", ip: "10.0.0.1", web_ui: "https://10.0.0.1:8006", ssh: "ssh://root@10.0.0.1" },
-          { id: "pve-b", pve_node: "pve-b", ip: "10.0.0.2", web_ui: "https://10.0.0.2:8006", ssh: "ssh://root@10.0.0.2" },
+          { id: "hypervisor-a", pve_node: "hypervisor-a", ip: "192.0.2.1", web_ui: "https://192.0.2.1:8006", ssh: "ssh://root@192.0.2.1" },
+          { id: "hypervisor-b", pve_node: "hypervisor-b", ip: "192.0.2.2", web_ui: "https://192.0.2.2:8006", ssh: "ssh://root@192.0.2.2" },
         ],
       },
     ],
@@ -20,8 +20,8 @@ describe("proxmox host OS maintain", () => {
 
   it("listProxmoxHypervisorSshTargets dedupes and parses ssh URLs", () => {
     const t = listProxmoxHypervisorSshTargets(cfg, {});
-    expect(t.map((x) => x.id)).toEqual(["pve-a", "pve-b"]);
-    expect(t[0]).toEqual({ id: "pve-a", user: "root", host: "10.0.0.1", clusterId: "c1" });
+    expect(t.map((x) => x.id)).toEqual(["hypervisor-a", "hypervisor-b"]);
+    expect(t[0]).toEqual({ id: "hypervisor-a", user: "root", host: "192.0.2.1", clusterId: "c1" });
   });
 
   it("hostOsRebootWaitMsFromConfig reads reboot_wait_seconds", () => {

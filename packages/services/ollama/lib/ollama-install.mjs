@@ -1,8 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { stderr as errout, env } from "node:process";
 
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
+import { loadProxmoxPackageConfig } from "../../../infrastructure/proxmox/lib/proxmox-package-config.mjs";
 import { resolveProxmoxHost } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
 import { parseSshUrl } from "../../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
 
@@ -13,11 +12,8 @@ const GITHUB_RELEASES = "https://api.github.com/repos/ollama/ollama/releases/lat
  * @param {string} hostId
  */
 export function resolvePveSshForHost(proxmoxRoot, hostId) {
-  const pveCfgPath = join(proxmoxRoot, "config.json");
-  if (!existsSync(pveCfgPath)) {
-    throw new Error("Missing packages/infrastructure/proxmox/config.json for pct access");
-  }
-  const pveCfg = JSON.parse(readFileSync(pveCfgPath, "utf8"));
+  const loaded = loadProxmoxPackageConfig(proxmoxRoot);
+  const pveCfg = loaded.data;
   const hostRec = resolveProxmoxHost(pveCfg, hostId);
   if (!hostRec?.ssh) {
     throw new Error(`Proxmox host ${JSON.stringify(hostId)} has no ssh:// URL in proxmox config`);

@@ -34,23 +34,23 @@
   },
   "deployments": [
     {
-      "system_id": "ct-ollama-a",
+      "system_id": "ollama-a",
       "proxmox": {
-        "host_id": "pve-d",
+        "host_id": "hypervisor-d",
         "lxc": { "vmid": 470 }
       }
     },
     {
-      "system_id": "ct-ollama-b",
+      "system_id": "ollama-b",
       "proxmox": {
-        "host_id": "pve-c",
+        "host_id": "hypervisor-c",
         "lxc": { "vmid": 471 }
       }
     },
     {
-      "system_id": "ct-ollama-c",
+      "system_id": "ollama-c",
       "proxmox": {
-        "host_id": "pve-b",
+        "host_id": "hypervisor-b",
         "lxc": { "vmid": 472 }
       }
     }

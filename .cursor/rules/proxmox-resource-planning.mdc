@@ -10,3 +10,4 @@ alwaysApply: false
 - **Full workflow**: When planning or deploying a new VM or container on Proxmox, read and follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](../skills/proxmox-resource-planning/SKILL.md).
 - **After capacity or topology changes**: Update the relevant sidecar `hardware` / `notes` / `access` fields, then run `node tools/hdc/cli.mjs docs lint` (see project automation rule).
 - **Ops commands**: Use `node tools/hdc/cli.mjs` / `hdc.cmd` per the hdc-ops skill; never put secrets in sidecars or chat (env var names only).
+- **QEMU VMs**: Plan for `agent=1` in VM config and `qemu-guest-agent` in the guest OS (deploy installs when SSH is available; maintain reports health). LXC guests do not use the QEMU guest agent.

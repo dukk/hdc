@@ -41,7 +41,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable cluster or site id (e.g. proxmox-primary-cluster, proxmox-home-standalone)."
+          "description": "Stable cluster or site id (e.g. example-proxmox-cluster, example-proxmox-standalone)."
         },
         "role": {
           "type": "string",

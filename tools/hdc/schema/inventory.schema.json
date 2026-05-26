@@ -8,6 +8,7 @@
     { "$ref": "inventory.network.schema.json" },
     { "$ref": "inventory.target.schema.json" },
     { "$ref": "inventory.services.schema.json" },
-    { "$ref": "inventory.policy.schema.json" }
+    { "$ref": "inventory.policy.schema.json" },
+    { "$ref": "inventory.dns.schema.json" }
   ]
 }

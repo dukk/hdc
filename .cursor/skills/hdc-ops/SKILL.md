@@ -27,11 +27,11 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
    `node tools/hdc/cli.mjs list`
 
-2. **Run** a package verb (`deploy`, `maintain`, `query`). Extra args after `--` go to the package script:
+2. **Run** a package verb (`deploy`, `maintain`, `query`). Tier is `client`, `infrastructure`, or `service` (maps to `packages/clients`, `packages/infrastructure`, `packages/services`). Extra args after `--` go to the package script:
 
-   `node tools/hdc/cli.mjs run pi-hole query`
+   `node tools/hdc/cli.mjs run service pi-hole query`
 
-   `node tools/hdc/cli.mjs run pi-hole query -- --verbose`
+   `node tools/hdc/cli.mjs run service pi-hole query -- --verbose`
 
 3. **Lint** inventory JSON (`docs lint`). Optional **`docs sync`** runs the same validation; hdc does not read or write companion `.md` files.
 
@@ -59,7 +59,7 @@ Do not put secret values in sidecars, markdown, or chat. Only env var **names** 
 
 When creating or renaming `kind: "system"` inventory ids, follow **`.cursor/rules/hdc-inventory-naming.mdc`**:
 
-- Physical: no class prefix (`pve-h`, `nas-primary`)
+- Physical: no class prefix (`hypervisor-h`, `nas-primary`)
 - VMs: `vm-<role>-<letter>` (e.g. `vm-nginx-proxy-a`)
-- Containers: `ct-<role>-<letter>`
+- Containers: `<role>-<letter>` (e.g. `ollama-a`)
 - Use alphabet instance suffixes (`-a`, `-b`), not numbers (`-1`, `-2`)

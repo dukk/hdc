@@ -27,9 +27,9 @@ describe("ubuntu LTS catalog", () => {
 
   it("qemuTemplatesToPrune removes hdc templates outside catalog", () => {
     const resources = [
-      { vmid: 9022, node: "pve-a", name: "tpl-ubuntu-2204", template: 1, type: "qemu" },
-      { vmid: 9000, node: "pve-a", name: "tpl-ubuntu-2204", template: 1, type: "qemu" },
-      { vmid: 100, node: "pve-a", name: "user-template", template: 1, type: "qemu" },
+      { vmid: 9022, node: "hypervisor-a", name: "tpl-ubuntu-2204", template: 1, type: "qemu" },
+      { vmid: 9000, node: "hypervisor-a", name: "tpl-ubuntu-2204", template: 1, type: "qemu" },
+      { vmid: 100, node: "hypervisor-a", name: "user-template", template: 1, type: "qemu" },
     ];
     const pruned = qemuTemplatesToPrune(resources);
     expect(pruned.map((t) => t.vmid)).toEqual([9000]);

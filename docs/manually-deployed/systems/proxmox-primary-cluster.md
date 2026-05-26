@@ -1,6 +1,6 @@
 # Proxmox - Primary Cluster
 
-Structured inventory lives in [`proxmox-primary-cluster.json`](proxmox-primary-cluster.json). Regenerate the block below with:
+Structured inventory lives in [`example-proxmox-cluster.json`](example-proxmox-cluster.json). Regenerate the block below with:
 
 `node tools/hdc/cli.mjs docs sync`
 
@@ -9,27 +9,27 @@ Structured inventory lives in [`proxmox-primary-cluster.json`](proxmox-primary-c
 
 | Name | Description | CPU | Cores | Memory | Memory capacity | Storage | Storage capacity |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| pve-a |  | 12th Gen Intel(R) Core(TM) i5-12450H (1 Socket) | 12 | DDR4 | 64g |  |  |
-| pve-b |  | 12th Gen Intel(R) Core(TM) i5-12450H (1 Socket) | 12 | DDR4 | 64g |  |  |
-| pve-c |  | 13th Gen Intel(R) Core(TM) i7-13700H (1 Socket) | 20 | DDR5 | 64g |  |  |
+| hypervisor-a |  | 12th Gen Intel(R) Core(TM) i5-12450H (1 Socket) | 12 | DDR4 | 64g |  |  |
+| hypervisor-b |  | 12th Gen Intel(R) Core(TM) i5-12450H (1 Socket) | 12 | DDR4 | 64g |  |  |
+| hypervisor-c |  | 13th Gen Intel(R) Core(TM) i7-13700H (1 Socket) | 20 | DDR5 | 64g |  |  |
 
 ## Network (synced)
 
 | Node | Hostname(s) | IP(s) |
 | --- | --- | --- |
-| pve-a | pve-a.hdc.dukk.org, pve-a.hdc.local, pve-a.dukk.cloud | 10.0.0.11 |
-| pve-b | pve-b.hdc.dukk.org, pve-b.hdc.local, pve-b.dukk.cloud | 10.0.0.12 |
-| pve-c | pve-c.hdc.dukk.org, pve-c.hdc.local, pve-c.dukk.cloud | 10.0.0.13 |
+| hypervisor-a | hypervisor-a.hdc.example.invalid, hypervisor-a.hdc.example.invalid, hypervisor-a.example.invalid | 192.0.2.11 |
+| hypervisor-b | hypervisor-b.hdc.example.invalid, hypervisor-b.hdc.example.invalid, hypervisor-b.example.invalid | 192.0.2.12 |
+| hypervisor-c | hypervisor-c.hdc.example.invalid, hypervisor-c.hdc.example.invalid, hypervisor-c.example.invalid | 192.0.2.13 |
 
 ## Management (synced)
 
 | Node | Interfaces |
 | --- | --- |
-| pve-a | [Web UI](https://10.0.0.11:8006), [SSH](ssh://root@10.0.0.11) |
-| pve-b | [Web UI](https://10.0.0.12:8006), [SSH](ssh://root@10.0.0.12) |
-| pve-c | [Web UI](https://10.0.0.13:8006), [SSH](ssh://root@10.0.0.13) |
+| hypervisor-a | [Web UI](https://192.0.2.11:8006), [SSH](ssh://root@192.0.2.11) |
+| hypervisor-b | [Web UI](https://192.0.2.12:8006), [SSH](ssh://root@192.0.2.12) |
+| hypervisor-c | [Web UI](https://192.0.2.13:8006), [SSH](ssh://root@192.0.2.13) |
 <!-- /hdc:inventory -->
 
 ## Nagios (central + NRPE)
 
-Central Nagios and NRPE on each hypervisor are driven by [`proxmox-primary-cluster.json`](proxmox-primary-cluster.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node tools/hdc/cli.mjs run nagios deploy`.
+Central Nagios and NRPE on each hypervisor are driven by [`example-proxmox-cluster.json`](example-proxmox-cluster.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node tools/hdc/cli.mjs run service nagios deploy`.

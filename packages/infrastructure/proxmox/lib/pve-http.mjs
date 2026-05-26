@@ -11,7 +11,7 @@ function isObject(body) {
 /**
  * @param {string} method
  * @param {string} baseUrl
- * @param {string} path e.g. /nodes/pve-a/lxc (no /api2/json prefix)
+ * @param {string} path e.g. /nodes/hypervisor-a/lxc (no /api2/json prefix)
  * @param {string} authorization full Authorization header value
  * @param {boolean} rejectUnauthorized
  * @param {string | undefined} formBody application/x-www-form-urlencoded
@@ -97,14 +97,15 @@ export function pveDataArray(body) {
 }
 
 /**
+ * Proxmox form bodies must use encodeURIComponent (not URLSearchParams), so spaces
+ * are %20 and '+' in SSH keys/base64 stay %2B — '+' as space breaks sshkeys validation.
+ *
  * @param {Record<string, string | number | boolean>} fields
  */
 export function pveFormBody(fields) {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(fields)) {
-    params.set(k, String(v));
-  }
-  return params.toString();
+  return Object.entries(fields)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
 }
 
 /**
@@ -116,6 +117,17 @@ export function pveUpidNode(upid) {
   if (!s.startsWith("UPID:")) return null;
   const parts = s.split(":");
   return parts.length >= 2 && parts[1] ? parts[1] : null;
+}
+
+/**
+ * Whether a stopped Proxmox task exitstatus should fail the caller.
+ * @param {string} exit
+ */
+export function pveTaskExitIsError(exit) {
+  const t = String(exit ?? "").trim();
+  if (t === "OK") return false;
+  if (/^WARNINGS:\s+\d+$/i.test(t)) return false;
+  return true;
 }
 
 /**
@@ -159,7 +171,7 @@ export async function waitForPveTask(opts) {
     const status = typeof data.status === "string" ? data.status : "";
     if (status === "stopped") {
       const exit = typeof data.exitstatus === "string" ? data.exitstatus : "";
-      if (exit === "OK") return;
+      if (!pveTaskExitIsError(exit)) return;
       throw new Error(`Proxmox task ${upid} failed: ${exit || "unknown exit status"}`);
     }
     log?.(`task ${upid} still running …`);

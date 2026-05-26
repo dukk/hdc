@@ -7,7 +7,7 @@ import {
   renderSaslPasswd,
   relayhostForSaslMap,
 } from "./postfix-relay-render.mjs";
-import { pctExec, sshRemote } from "./remote.mjs";
+import { pctExec, qemuGuestExec, sshRemote } from "./remote.mjs";
 
 /**
  * @typedef {object} ConfigureExec
@@ -16,10 +16,24 @@ import { pctExec, sshRemote } from "./remote.mjs";
  */
 
 /**
- * @param {"pct" | "ssh"} via
+ * @param {"pct" | "ssh" | "qemu-guest"} via
  * @param {{ user: string; host: string; vmid?: number; pveHost?: string }} target
  */
 export function createConfigureExec(via, target) {
+  if (via === "qemu-guest") {
+    const vmid = target.vmid;
+    const pveHost = target.pveHost ?? target.host;
+    if (!Number.isFinite(vmid) || vmid <= 0) {
+      throw new Error("qemu-guest configure requires a positive numeric vmid");
+    }
+    if (!pveHost) {
+      throw new Error("qemu-guest configure requires pveHost (Proxmox node SSH target)");
+    }
+    return /** @type {ConfigureExec} */ ({
+      label: `qm guest exec ${vmid} on ${target.user}@${pveHost}`,
+      run: (inner, opts) => qemuGuestExec(target.user, pveHost, Number(vmid), inner, opts),
+    });
+  }
   if (via === "pct") {
     const vmid = target.vmid;
     const pveHost = target.pveHost ?? target.host;
@@ -137,6 +151,12 @@ export function configurePostfixRelay(opts) {
     );
     runChecked(exec, "postmap /etc/postfix/sasl_passwd", log);
     log.info("postmap wrote /etc/postfix/sasl_passwd.db");
+    runChecked(
+      exec,
+      "grep -q 'main.cf.d' /etc/postfix/main.cf 2>/dev/null || echo 'include /etc/postfix/main.cf.d/*.cf' >> /etc/postfix/main.cf",
+      log,
+    );
+    log.info("ensured main.cf includes /etc/postfix/main.cf.d/*.cf");
     runChecked(
       exec,
       "postfix check && systemctl enable postfix && systemctl reload postfix",

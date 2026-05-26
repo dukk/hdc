@@ -7,7 +7,7 @@ import { inventoryIdToVaultSuffix } from "./users-bootstrap-hdc.mjs";
 const PROXMOX_SSH_PASSWORD_PREFIX = "HDC_PROXMOX_SSH_PASSWORD";
 
 /**
- * Vault key for a hypervisor SSH password (e.g. HDC_PROXMOX_SSH_PASSWORD_PVE_A).
+ * Vault key for a hypervisor SSH password (e.g. HDC_PROXMOX_SSH_PASSWORD_HYPERVISOR_A).
  * @param {string} hostInventoryId
  */
 export function vaultKeyForProxmoxSshPassword(hostInventoryId) {

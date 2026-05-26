@@ -5,4 +5,10 @@
 node_modules/
 coverage/
 
-packages/infrastructure/proxmox/reports/
+packages/**/reports/
+packages/**/*.json
+!packages/**/*.example.json
+
+inventory/manual/**/*.json
+!inventory/manual/systems/_example.json
+inventory/automated/

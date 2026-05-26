@@ -12,7 +12,7 @@ You help operate the HDC repo using the **hdc** CLI and the files under `invento
 ## Workflow
 
 1. Discover packages: `node tools/hdc/cli.mjs list`.
-2. Run work: `node tools/hdc/cli.mjs run <package> <verb>` (add `--` before plugin-specific flags).
+2. Run work: `node tools/hdc/cli.mjs run <tier> <package> <verb>` (tier: `client`, `infrastructure`, or `service`; add `--` before plugin-specific flags).
 3. Validate docs: `node tools/hdc/cli.mjs docs lint`.
 4. Validate inventory JSON: `node tools/hdc/cli.mjs docs lint` (or `docs sync` — same validation; hdc does not read or write companion `.md` files).
 5. Merge reviewed query JSON into a sidecar: `node tools/hdc/cli.mjs inventory apply --sidecar <path> --from-json <path>`.

@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "primary_proxmox_cluster_id": "proxmox-primary-cluster",
-  "nrpe_node_ids": ["pve-a", "pve-b", "pve-c"],
+  "primary_proxmox_cluster_id": "example-proxmox-cluster",
+  "nrpe_node_ids": ["hypervisor-a", "hypervisor-b", "hypervisor-c"],
   "central_cluster_document": {
-    "id": "pve-a",
+    "id": "hypervisor-a",
     "kind": "system",
     "nagios": {
       "central": {
-        "address": "10.0.0.1",
-        "ssh": "ssh://root@10.0.0.1"
+        "address": "192.0.2.1",
+        "ssh": "ssh://root@192.0.2.1"
       },
       "auth": {
         "ssh_user_env": "HDC_NAGIOS_SSH_USER"
@@ -21,39 +21,39 @@
       "nodes": [
         {
           "name": "node",
-          "ip": "10.0.0.1",
-          "web_ui": "https://10.0.0.1:8006",
-          "ssh": "ssh://root@10.0.0.1"
+          "ip": "192.0.2.1",
+          "web_ui": "https://192.0.2.1:8006",
+          "ssh": "ssh://root@192.0.2.1"
         }
       ]
     },
     "proxmox_cluster": {
-      "id": "proxmox-primary-cluster",
+      "id": "example-proxmox-cluster",
       "role": "standalone"
     }
   },
   "monitored_systems": [
     {
-      "id": "pve-a",
+      "id": "hypervisor-a",
       "kind": "system",
       "access": {
         "nodes": [
           {
             "name": "node",
-            "ip": "10.0.0.1",
-            "web_ui": "https://10.0.0.1:8006",
-            "ssh": "ssh://root@10.0.0.1"
+            "ip": "192.0.2.1",
+            "web_ui": "https://192.0.2.1:8006",
+            "ssh": "ssh://root@192.0.2.1"
           }
         ]
       },
       "proxmox_cluster": {
-        "id": "proxmox-primary-cluster",
+        "id": "example-proxmox-cluster",
         "role": "standalone"
       },
       "nagios": {
         "central": {
-          "address": "10.0.0.1",
-          "ssh": "ssh://root@10.0.0.1"
+          "address": "192.0.2.1",
+          "ssh": "ssh://root@192.0.2.1"
         },
         "auth": {
           "ssh_user_env": "HDC_NAGIOS_SSH_USER"
@@ -64,20 +64,20 @@
       }
     },
     {
-      "id": "pve-b",
+      "id": "hypervisor-b",
       "kind": "system",
       "access": {
         "nodes": [
           {
             "name": "node",
-            "ip": "10.0.0.2",
-            "web_ui": "https://10.0.0.2:8006",
-            "ssh": "ssh://root@10.0.0.2"
+            "ip": "192.0.2.2",
+            "web_ui": "https://192.0.2.2:8006",
+            "ssh": "ssh://root@192.0.2.2"
           }
         ]
       },
       "proxmox_cluster": {
-        "id": "proxmox-primary-cluster",
+        "id": "example-proxmox-cluster",
         "role": "node"
       },
       "auth": {

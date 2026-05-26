@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/nginx.config.schema.json",
+  "title": "HDC nginx service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "server_names", "upstream"],
+        "properties": {
+          "id": { "type": "string" },
+          "server_names": { "type": "array", "items": { "type": "string" } },
+          "listen": { "type": "array", "items": { "type": "integer" } },
+          "upstream": { "type": "string" },
+          "tls": { "type": "object" },
+          "locations": { "type": "array" }
+        }
+      }
+    },
+    "letsencrypt": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "email_vault_key": { "type": "string" },
+        "staging": { "type": "boolean" },
+        "challenge": { "enum": ["http-01", "dns-01"] },
+        "webroot": { "type": "string" },
+        "dns": { "type": "object" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "nginx": {
+          "type": "object",
+          "properties": {
+            "client_max_body_size": { "type": "string" },
+            "proxy_read_timeout": { "type": "string" },
+            "proxy_connect_timeout": { "type": "string" }
+          }
+        }
+      }
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-nginx-[a-z]+$" },
+          "hostname": { "type": "string" },
+          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" }
+        }
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@
  * then emit a JSON snapshot on stdout (systems[] for hypervisors and guests). No repo inventory paths are read or written.
  *
  * Auth: Proxmox API token (see Datacenter → Permissions → API Tokens). Stored in the vault
- * as HDC_PROXMOX_API_TOKEN or per-host HDC_PROXMOX_API_TOKEN_<HOST_ID> (e.g. HDC_PROXMOX_API_TOKEN_PVE_A).
+ * as HDC_PROXMOX_API_TOKEN or per-host HDC_PROXMOX_API_TOKEN_<HOST_ID> (e.g. HDC_PROXMOX_API_TOKEN_HYPERVISOR_A).
  * Env override: HDC_PROXMOX_API_TOKEN. Self-signed TLS: HDC_PROXMOX_TLS_INSECURE=1 or HDC_TLS_INSECURE=1 (global default).
  */
 import { createInterface } from "node:readline/promises";

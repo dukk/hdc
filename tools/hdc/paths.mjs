@@ -8,7 +8,7 @@ export function repoRoot() {
   return join(__dirname, "..", "..");
 }
 
-/** HDC packages under `packages/infrastructure/` and `packages/services/`. */
+/** HDC packages under `packages/{infrastructure,services,clients}/`. */
 export function packagesDir(root = repoRoot()) {
   return join(root, "packages");
 }

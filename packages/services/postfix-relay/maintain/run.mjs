@@ -1,24 +1,33 @@
 #!/usr/bin/env node
 /**
  * Re-apply Postfix relay configuration from packages/services/postfix-relay/config.json.
+ *
+ * Usage: hdc run service postfix-relay maintain --
+ *        hdc run service postfix-relay maintain -- --apply-network [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout, env } from "node:process";
 
+import { buildNet0, gatewayFromProxmox, resolveLxcIpConfig } from "../../../lib/lxc-network.mjs";
+import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
-import { createPostfixRelayVaultAccess } from "../lib/vault-deps.mjs";
-import { configurePostfixRelay, createConfigureExec } from "../lib/postfix-relay-configure.mjs";
-import { parseSshUrl } from "../../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
-import { resolveProxmoxHost } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { applyLxcNet0 } from "../../../infrastructure/proxmox/lib/proxmox-lxc-network.mjs";
+import { createPostfixRelayVaultAccess } from "../lib/vault-deps.mjs";
+import { configurePostfixRelay } from "../lib/postfix-relay-configure.mjs";
+import { resolveConfigureTarget } from "../lib/configure-target.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
-const cfgPath = join(here, "..", "config.json");
-const proxmoxRoot = join(repoRoot(), "packages", "infrastructure", "proxmox");
+const packageRoot = join(here, "..");
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/postfix-relay/config.example.json";
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -27,43 +36,104 @@ function isObject(v) {
 
 /**
  * @param {Record<string, unknown>} cfg
+ * @param {Record<string, string>} flags
  */
-function resolveConfigureTarget(cfg) {
-  const configure = isObject(cfg.configure) ? cfg.configure : {};
-  const via = typeof configure.via === "string" ? configure.via.trim().toLowerCase() : "pct";
+async function applyNetworkFromConfig(cfg, flags) {
   const px = isObject(cfg.proxmox) ? cfg.proxmox : {};
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   const lxc = isObject(px.lxc) ? px.lxc : {};
   const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-
-  if (via === "ssh") {
-    const ssh = isObject(configure.ssh) ? configure.ssh : {};
-    const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
-    const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
-    if (!host) throw new Error("configure.ssh.host required");
-    return createConfigureExec("ssh", { user, host });
+  if (!hostId || !Number.isFinite(vmid) || vmid <= 0) {
+    return { ok: false, message: "missing proxmox.host_id or proxmox.lxc.vmid" };
   }
 
-  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-  const pveCfg = JSON.parse(readFileSync(join(proxmoxRoot, "config.json"), "utf8"));
-  const hostRec = resolveProxmoxHost(pveCfg, hostId);
-  const parsed = parseSshUrl(hostRec?.ssh ?? "");
-  const user =
-    parsed?.user ||
-    (typeof env.HDC_PROXMOX_SSH_USER === "string" ? env.HDC_PROXMOX_SSH_USER.trim() : "root");
-  if (!parsed?.host || !Number.isFinite(vmid) || vmid <= 0) {
-    throw new Error("pct maintain needs proxmox.host_id, host ssh URL, and proxmox.lxc.vmid");
+  const dryRun = flags["dry-run"] !== undefined;
+  const gateway = gatewayFromProxmox(px);
+  const ipConfig = resolveLxcIpConfig(lxc, { gateway });
+  if (!ipConfig) {
+    errout.write(
+      `[hdc] ${target} ${verb}: no static ip_config (set proxmox.lxc.ip_config) — skipping network apply.\n`,
+    );
+    return { ok: true, skipped: true, message: "no static ip_config in config" };
   }
-  return createConfigureExec("pct", { user, host: parsed.host, vmid, pveHost: parsed.host });
+
+  const bridge = typeof lxc.bridge === "string" && lxc.bridge.trim() ? lxc.bridge.trim() : "vmbr0";
+  const net0 = buildNet0(bridge, ipConfig);
+  errout.write(`[hdc] ${target} ${verb}: apply network ${ipConfig} (net0=${net0}) …\n`);
+
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+  const node = auth.host.pveNode;
+  const applied = await applyLxcNet0({
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node,
+    vmid,
+    net0,
+    dryRun,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  return {
+    ok: applied.ok,
+    host_id: hostId,
+    vmid,
+    ip_config: ipConfig,
+    applied: applied.net0,
+    previous_net0: applied.previous_net0,
+    ip: applied.ip,
+    dry_run: applied.dry_run ?? false,
+  };
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: re-apply Postfix relay config from config.json.\n`);
-  if (!existsSync(cfgPath)) {
-    errout.write(`[hdc] ${target} ${verb}: missing config.json — copy config.example.json\n`);
+  errout.write(`[hdc] ${target} ${verb}: re-apply Postfix relay config.\n`);
+  const flags = parseArgvFlags(process.argv.slice(2));
+  const applyNetwork = flags["apply-network"] !== undefined;
+
+  let cfg;
+  try {
+    const loaded = loadPackageConfigFromPackageRoot(packageRoot, {
+      exampleRel: PACKAGE_CONFIG_EXAMPLE,
+      log: (line) => errout.write(line),
+    });
+    cfg = loaded.data;
+  } catch (e) {
+    errout.write(`[hdc] ${target} ${verb}: ${/** @type {Error} */ (e).message || e}\n`);
     process.exitCode = 1;
     return;
   }
-  const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+
+  /** @type {Record<string, unknown> | null} */
+  let network = null;
+  if (applyNetwork) {
+    try {
+      network = await applyNetworkFromConfig(cfg, flags);
+      if (!network.ok) {
+        const payload = { ok: false, target, verb, network };
+        runOperationReportTail({
+          packageRoot,
+          repoRoot: root,
+          verb,
+          argv: process.argv.slice(2),
+          payload,
+          ok: false,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+        process.exitCode = 1;
+        return;
+      }
+      if (network.ip) {
+        errout.write(`[hdc] ${target} ${verb}: network applied — CT IP ${network.ip}\n`);
+      }
+    } catch (e) {
+      const msg = /** @type {Error} */ (e).message || String(e);
+      errout.write(`[hdc] ${target} ${verb}: network apply failed: ${msg}\n`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const vault = createPostfixRelayVaultAccess();
   await vault.unlock({});
 
@@ -75,18 +145,41 @@ async function main() {
   const passKey =
     (typeof smtp.auth_pass_vault_key === "string" && smtp.auth_pass_vault_key.trim()) ||
     "HDC_POSTFIX_RELAY_SMTP_PASSWORD";
-  const smtpUser = String(await vault.getSecret(userKey, { promptLabel: userKey })).trim();
-  const smtpPass = String(await vault.getSecret(passKey, { promptLabel: passKey })).trim();
+  const userEnv =
+    typeof smtp.auth_user_env === "string" && smtp.auth_user_env.trim() ? smtp.auth_user_env.trim() : userKey;
 
-  const exec = resolveConfigureTarget(cfg);
+  let smtpUser = String(env[userEnv] ?? "").trim();
+  if (!smtpUser) {
+    smtpUser = String(await vault.getSecret(userKey, { promptLabel: userKey })).trim();
+  }
+  let smtpPass = String(env[passKey] ?? "").trim();
+  if (!smtpPass) {
+    smtpPass = String(await vault.getSecret(passKey, { promptLabel: passKey })).trim();
+  }
+
+  const { via, exec } = resolveConfigureTarget(proxmoxRoot, cfg);
   const log = provisionLogFromConsole(console);
+  let payload;
   try {
-    configurePostfixRelay({ exec, log, postfix, smtp, smtpUser, smtpPass });
-    errout.write(`[hdc] ${target} ${verb}: ok.\n`);
+    const configure = configurePostfixRelay({ exec, log, postfix, smtp, smtpUser, smtpPass });
+    errout.write(`[hdc] ${target} ${verb}: ok (${via}).\n`);
+    payload = { ok: true, target, verb, configure_via: via, network, configure };
   } catch (e) {
-    errout.write(`[hdc] ${target} ${verb}: failed: ${/** @type {Error} */ (e).message || e}\n`);
+    const msg = /** @type {Error} */ (e).message || String(e);
+    errout.write(`[hdc] ${target} ${verb}: failed: ${msg}\n`);
+    payload = { ok: false, target, verb, network, message: msg };
     process.exitCode = 1;
   }
+
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok: payload.ok === true,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
 }
 
 main().catch((e) => {

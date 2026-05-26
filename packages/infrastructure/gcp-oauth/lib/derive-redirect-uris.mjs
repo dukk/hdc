@@ -1,0 +1,73 @@
+import { readFileSync } from "node:fs";
+
+import { resolveRepoFile } from "../../../../tools/hdc/lib/private-repo.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+
+/**
+ * @param {unknown} v
+ */
+function isObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * @param {string} relPath
+ */
+export function loadNginxWafConfig(relPath) {
+  const resolved = resolveRepoFile(repoRoot(), relPath);
+  if (!resolved.found) {
+    throw new Error(`nginx-waf config not found: ${relPath} (checked public and hdc-private)`);
+  }
+  const raw = JSON.parse(readFileSync(resolved.path, "utf8"));
+  if (!isObject(raw)) throw new Error(`nginx-waf config is not an object: ${relPath}`);
+  return raw;
+}
+
+/**
+ * @param {import('./gcp-oauth-config.mjs').ConfigApplication['derive_from']} deriveFrom
+ */
+export function deriveUrisFromNginxWaf(deriveFrom) {
+  if (!deriveFrom) {
+    return { redirect_uris: [], javascript_origins: [], hostname: null };
+  }
+  const cfg = loadNginxWafConfig(deriveFrom.nginx_waf_config_path);
+  const sites = Array.isArray(cfg.sites) ? cfg.sites : [];
+  /** @type {Record<string, unknown> | null} */
+  let site = null;
+  for (const s of sites) {
+    if (!isObject(s)) continue;
+    if (typeof s.id === "string" && s.id.trim() === deriveFrom.site_id) {
+      site = s;
+      break;
+    }
+  }
+  if (!site) {
+    throw new Error(
+      `nginx-waf site not found: ${deriveFrom.site_id} in ${deriveFrom.nginx_waf_config_path}`
+    );
+  }
+  const names = Array.isArray(site.server_names)
+    ? site.server_names.map((n) => String(n).trim()).filter(Boolean)
+    : [];
+  if (!names.length) {
+    throw new Error(
+      `nginx-waf site ${deriveFrom.site_id} has no server_names in ${deriveFrom.nginx_waf_config_path}`
+    );
+  }
+  return buildDerivedUris(names[0], deriveFrom.callback_path);
+}
+
+/**
+ * @param {string} hostname
+ * @param {string} callbackPath
+ */
+export function buildDerivedUris(hostname, callbackPath) {
+  const host = String(hostname).trim().replace(/\.$/, "");
+  const path = callbackPath.startsWith("/") ? callbackPath : `/${callbackPath}`;
+  const origin = `https://${host}`;
+  return {
+    redirect_uris: [`${origin}${path}`],
+    javascript_origins: [origin],
+    hostname: host,
+  };
+}

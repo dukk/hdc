@@ -1,4 +1,4 @@
-import { stdin, stderr } from "node:process";
+import { stdin, stderr, env } from "node:process";
 
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { readLineMasked } from "../../../../tools/hdc/lib/readline-masked.mjs";
@@ -27,11 +27,14 @@ export async function resolveLxcRootPassword(systemId, vmid, lxc, flags, opts = 
   const fromCfg = passwordFromLxcConfig(lxc);
   if (fromCfg) return fromCfg;
 
+  const fromEnv = String(env.HDC_PROXMOX_LXC_ROOT_PASSWORD ?? "").trim();
+  if (fromEnv) return fromEnv;
+
   if (opts.cached) return opts.cached;
 
   if (!stdin.isTTY) {
     throw new Error(
-      `${systemId}: cannot prompt for LXC root password (not a TTY). Set proxmox.lxc.password in config or pass --password after --`,
+      `${systemId}: cannot prompt for LXC root password (not a TTY). Set proxmox.lxc.password in config, HDC_PROXMOX_LXC_ROOT_PASSWORD in .env, or pass --password after --`,
     );
   }
 

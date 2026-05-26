@@ -56,7 +56,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Inventory hypervisor id (e.g. pve-a)."
+          "description": "Inventory hypervisor id (e.g. hypervisor-a)."
         },
         "pve_node": {
           "type": "string",
@@ -77,7 +77,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^ssh://",
-          "description": "SSH URL for bootstrap-hdc and remote ops (e.g. ssh://root@10.0.0.11)."
+          "description": "SSH URL for bootstrap-hdc and remote ops (e.g. ssh://root@192.0.2.11)."
         },
         "down": {
           "type": ["boolean", "integer"],
@@ -92,6 +92,10 @@
           "type": "object",
           "description": "Deprecated: cluster id is taken from clusters[].id.",
           "additionalProperties": true
+        },
+        "local_lvm": {
+          "$ref": "#/$defs/host_local_lvm",
+          "description": "Per-host local-LVM extend override and extra-disk RAID pools."
         }
       }
     },
@@ -101,11 +105,119 @@
       "properties": {
         "templates": { "$ref": "#/$defs/provision_templates" },
         "host_os": { "$ref": "#/$defs/provision_host_os" },
+        "oem_windows_license": { "$ref": "#/$defs/provision_oem_windows_license" },
         "storage": { "$ref": "#/$defs/provision_storage" },
         "api_token": { "$ref": "#/$defs/provision_api_token" },
         "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
+        "host_firewall": { "$ref": "#/$defs/provision_host_firewall" },
+        "apt_sources": { "$ref": "#/$defs/provision_apt_sources" },
         "lxc": { "$ref": "#/$defs/provision_lxc" },
-        "qemu": { "$ref": "#/$defs/provision_qemu" }
+        "qemu": { "$ref": "#/$defs/provision_qemu" },
+        "local_lvm": { "$ref": "#/$defs/provision_local_lvm" }
+      }
+    },
+    "provision_local_lvm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extend": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": ["boolean", "integer"],
+              "description": "When true (default), maintain grows local-lvm when the boot disk has unallocated space after the PVE partition."
+            },
+            "storage_id": {
+              "type": "string",
+              "description": "Proxmox storage id for the default thin pool (default local-lvm)."
+            },
+            "vg": {
+              "type": "string",
+              "description": "Volume group name (default pve)."
+            },
+            "thin_pool": {
+              "type": "string",
+              "description": "Thin pool LV name (default data)."
+            }
+          }
+        },
+        "extra_pools": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": ["boolean", "integer"],
+              "description": "When true (default), process clusters[].hosts[].local_lvm.pools on each node."
+            },
+            "content": {
+              "type": "string",
+              "description": "Default pvesm content for extra lvmthin pools (default images,rootdir)."
+            }
+          }
+        }
+      }
+    },
+    "host_local_lvm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extend": {
+          "type": ["boolean", "integer"],
+          "description": "Override provision.local_lvm.extend.enabled for this host."
+        },
+        "pools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/local_lvm_pool" }
+        }
+      }
+    },
+    "local_lvm_pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storage_id", "raid", "vg", "thin_pool"],
+      "properties": {
+        "storage_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox storage id (e.g. local-lvm-mirrored)."
+        },
+        "vg": {
+          "type": "string",
+          "minLength": 1,
+          "description": "LVM volume group on the RAID device."
+        },
+        "thin_pool": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Thin pool logical volume name (default data)."
+        },
+        "content": {
+          "type": "string",
+          "description": "pvesm content types (overrides provision.local_lvm.extra_pools.content)."
+        },
+        "md_name": {
+          "type": "string",
+          "description": "Optional mdadm array name under /dev/md/ (defaults to vg with non-alnum replaced)."
+        },
+        "raid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "devices"],
+          "properties": {
+            "level": {
+              "type": "integer",
+              "enum": [0],
+              "description": "Linux MD RAID level (0 only for now)."
+            },
+            "devices": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Block devices (prefer /dev/disk/by-id/...)."
+            }
+          }
+        }
       }
     },
     "provision_api_token": {
@@ -141,6 +253,59 @@
         }
       }
     },
+    "provision_apt_sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips no-subscription APT sources and subscription nag (default true)."
+        },
+        "disable_enterprise": {
+          "type": ["boolean", "integer"],
+          "description": "Disable pve-enterprise apt entries (default true)."
+        },
+        "enable_no_subscription": {
+          "type": ["boolean", "integer"],
+          "description": "Enable pve-no-subscription apt repo (default true)."
+        },
+        "disable_ceph_enterprise": {
+          "type": ["boolean", "integer"],
+          "description": "Disable Ceph enterprise apt entries; does not add Ceph no-subscription (default true)."
+        },
+        "remove_subscription_nag": {
+          "type": ["boolean", "integer"],
+          "description": "Install nag-removal script and apt Post-Invoke hook (default true)."
+        }
+      }
+    },
+    "provision_host_firewall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips restricting host SSH and web UI (port 8006) to allowed_source_cidrs (default true)."
+        },
+        "allowed_source_cidrs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Source networks allowed for SSH and Proxmox web UI (default example RFC5737 subnets; gateway-style x.x.x.1/24 normalized to .0/24 on apply)."
+        },
+        "ssh_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "SSH port to restrict (default 22)."
+        },
+        "web_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Proxmox web UI port to restrict (default 8006)."
+        }
+      }
+    },
     "provision_storage": {
       "type": "object",
       "additionalProperties": true,
@@ -152,11 +317,11 @@
         "ids": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
-          "description": "Storage ids to ensure (default nas-1, nas-2)."
+          "description": "Storage ids to ensure (default nas-a, nas-b)."
         },
         "discover_from_host": {
           "type": "string",
-          "description": "Inventory host id to prefer when discovering storage definitions (e.g. pve-a)."
+          "description": "Inventory host id to prefer when discovering storage definitions (e.g. hypervisor-a)."
         },
         "targets": {
           "type": "array",
@@ -176,6 +341,16 @@
         "reboot_wait_seconds": {
           "type": "number",
           "description": "Max seconds to wait for SSH after each sequential reboot (default 300)."
+        }
+      }
+    },
+    "provision_oem_windows_license": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips reporting ACPI SLIC/MSDM OEM Windows license tables and QEMU -acpitable passthrough (default true)."
         }
       }
     },

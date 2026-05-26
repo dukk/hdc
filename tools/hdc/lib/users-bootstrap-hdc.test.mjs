@@ -22,16 +22,16 @@ import {
 
 describe("users-bootstrap-hdc helpers", () => {
   it("vaultKeyForHdcLocalPassword uppercases id segments", () => {
-    expect(vaultKeyForHdcLocalPassword("proxmox-primary-cluster")).toBe(
-      "HDC_USER_HDC_PASSWORD_PROXMOX_PRIMARY_CLUSTER",
+    expect(vaultKeyForHdcLocalPassword("example-proxmox-cluster")).toBe(
+      "HDC_USER_HDC_PASSWORD_EXAMPLE_PROXMOX_CLUSTER",
     );
-    expect(vaultKeyForHdcLocalPassword("pve-a")).toBe("HDC_USER_HDC_PASSWORD_PVE_A");
+    expect(vaultKeyForHdcLocalPassword("hypervisor-a")).toBe("HDC_USER_HDC_PASSWORD_HYPERVISOR_A");
     expect(inventoryIdToVaultSuffix("  my-host  ")).toBe("MY_HOST");
   });
 
   it("parseSshUrl accepts ssh:// URLs", () => {
-    expect(parseSshUrl("ssh://root@10.0.0.11")).toEqual({ user: "root", host: "10.0.0.11" });
-    expect(parseSshUrl("ssh://10.0.0.11")).toEqual({ user: null, host: "10.0.0.11" });
+    expect(parseSshUrl("ssh://root@192.0.2.11")).toEqual({ user: "root", host: "192.0.2.11" });
+    expect(parseSshUrl("ssh://192.0.2.11")).toEqual({ user: null, host: "192.0.2.11" });
     expect(parseSshUrl("https://x")).toBe(null);
     expect(parseSshUrl("")).toBe(null);
   });
@@ -40,19 +40,19 @@ describe("users-bootstrap-hdc helpers", () => {
     const env = { HDC_PROXMOX_SSH_USER: "fromenv" };
     expect(
       resolveSshTargetForNode(
-        { ssh: "ssh://root@10.0.0.1" },
+        { ssh: "ssh://root@192.0.2.1" },
         { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
         env,
       ),
-    ).toEqual({ host: "10.0.0.1", user: "root" });
+    ).toEqual({ host: "192.0.2.1", user: "root" });
     expect(
       resolveSshTargetForNode(
-        { ssh: "ssh://10.0.0.2" },
+        { ssh: "ssh://192.0.2.2" },
         { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
         env,
       ),
-    ).toEqual({ host: "10.0.0.2", user: "fromenv" });
-    expect(resolveSshTargetForNode({ ssh: "ssh://10.0.0.2" }, {}, env)).toBe(null);
+    ).toEqual({ host: "192.0.2.2", user: "fromenv" });
+    expect(resolveSshTargetForNode({ ssh: "ssh://192.0.2.2" }, {}, env)).toBe(null);
   });
 
   it("sshUserFromAuthEnv reads env", () => {
@@ -63,18 +63,19 @@ describe("users-bootstrap-hdc helpers", () => {
   it("listSshTargetsFromSidecar collects nodes", () => {
     const sidecar = {
       access: {
-        nodes: [{ ssh: "ssh://root@10.0.0.1" }, { name: "x" }],
+        nodes: [{ ssh: "ssh://root@192.0.2.1" }, { name: "x" }],
       },
       auth: { ssh_user_env: "HDC_PROXMOX_SSH_USER" },
     };
     expect(listSshTargetsFromSidecar(sidecar, { HDC_PROXMOX_SSH_USER: "root" })).toEqual([
-      { host: "10.0.0.1", user: "root" },
+      { host: "192.0.2.1", user: "root" },
     ]);
   });
 
   it("tagsFromSidecar and sidecarMatchesBootstrapTags", () => {
     expect(sidecarMatchesBootstrapTags(["Proxmox", "other"])).toBe(true);
     expect(sidecarMatchesBootstrapTags(["ubuntu"])).toBe(true);
+    expect(sidecarMatchesBootstrapTags(["client"])).toBe(true);
     expect(sidecarMatchesBootstrapTags(["debian"])).toBe(false);
     expect(tagsFromSidecar({ tags: ["a"] })).toEqual(["a"]);
   });
@@ -160,7 +161,7 @@ describe("runUsersBootstrapHdc", () => {
           kind: "system",
           tags: ["ubuntu"],
           auth: { ssh_user_env: "HDC_X" },
-          access: { nodes: [{ ssh: "ssh://root@10.0.0.1" }] },
+          access: { nodes: [{ ssh: "ssh://root@192.0.2.1" }] },
         }),
         "utf8",
       );

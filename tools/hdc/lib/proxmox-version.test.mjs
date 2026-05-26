@@ -55,16 +55,16 @@ describe("pve version", () => {
     const profile = pveProfileForMajor(8);
     const fields = storageSpecToFormFields(
       {
-        storage: "nas-1",
+        storage: "nas-a",
         type: "nfs",
-        server: "10.0.0.9",
+        server: "192.0.2.9",
         export: "/vol",
-        path: "/mnt/pve/nas-1",
-        nodes: "pve-a",
+        path: "/mnt/pve/nas-a",
+        nodes: "hypervisor-a",
       },
       {},
       { forUpdate: true, profile },
     );
-    expect(fields).toEqual({ nodes: "pve-a" });
+    expect(fields).toEqual({ nodes: "hypervisor-a" });
   });
 });

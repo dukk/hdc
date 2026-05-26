@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "cloudflare": {
+    "api_base_url": "https://api.cloudflare.com/client/v4",
+    "account_id": null,
+    "zone_filter": {
+      "mode": "all",
+      "names": []
+    }
+  },
+  "defaults": {
+    "ttl": 300,
+    "proxied": false
+  },
+  "zones": [
+    {
+      "name": "example.com",
+      "records": [
+        {
+          "type": "A",
+          "name": "@",
+          "data": "203.0.113.10",
+          "ttl": 300,
+          "proxied": false
+        },
+        {
+          "type": "CNAME",
+          "name": "www",
+          "data": "example.com",
+          "proxied": false
+        }
+      ]
+    }
+  ]
+}

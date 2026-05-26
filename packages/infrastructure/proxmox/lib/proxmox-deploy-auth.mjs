@@ -10,6 +10,7 @@ import {
   hdcTlsInsecureSourceEnv,
   hdcTlsRejectUnauthorized,
 } from "../../../../tools/hdc/lib/tls-insecure-env.mjs";
+import { loadProxmoxPackageConfig } from "./proxmox-package-config.mjs";
 import { pveJsonRequest } from "./pve-http.mjs";
 import {
   apiBaseFromWebUi,
@@ -41,7 +42,7 @@ const VAULT_KEY_GLOBAL = "HDC_PROXMOX_API_TOKEN";
 const SPEC_TLS_INSECURE = "HDC_PROXMOX_TLS_INSECURE";
 
 /**
- * @param {string} hostInventoryId e.g. pve-a
+ * @param {string} hostInventoryId e.g. hypervisor-a
  */
 export function vaultTokenKeyForHost(hostInventoryId) {
   return `HDC_PROXMOX_API_TOKEN_${hostInventoryId.toUpperCase().replace(/-/g, "_")}`;
@@ -148,13 +149,8 @@ export async function authorizeProxmoxForHost(opts) {
   const rejectUnauthorized = hdcTlsRejectUnauthorized(env, SPEC_TLS_INSECURE);
   const tlsNote = hdcTlsInsecureSourceEnv(env, SPEC_TLS_INSECURE);
 
-  const configPath = join(packageRoot, "config.json");
-  if (!existsSync(configPath)) {
-    throw new Error(`Missing config: copy packages/infrastructure/proxmox/config.example.json to config.json`);
-  }
-  /** @type {unknown} */
-  let cfg;
-  cfg = JSON.parse(readFileSync(configPath, "utf8"));
+  const loaded = loadProxmoxPackageConfig(packageRoot);
+  const cfg = loaded.data;
   const host = resolveProxmoxHost(cfg, hostId);
   if (!host) {
     const raw = findProxmoxHostInConfig(cfg, hostId);

@@ -1,7 +1,13 @@
-import { ctSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import {
+  deploymentSystemIdPattern,
+  lxcSystemId,
+  vmSystemId,
+} from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const OLLAMA_ROLE = "ollama";
+const OLLAMA_LXC_SYSTEM_ID = deploymentSystemIdPattern(OLLAMA_ROLE);
+const OLLAMA_QEMU_SYSTEM_ID = /^vm-ollama-[a-z]+$/;
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -49,7 +55,7 @@ function normalizeV1(cfg) {
   const systemId =
     typeof deploy.system_id === "string" && deploy.system_id.trim()
       ? deploy.system_id.trim()
-      : ctSystemId(OLLAMA_ROLE, "a");
+      : lxcSystemId(OLLAMA_ROLE, "a");
   /** @type {Record<string, unknown>} */
   const defaults = { mode };
   if (isObject(cfg.proxmox)) defaults.proxmox = structuredClone(cfg.proxmox);
@@ -99,12 +105,19 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!/^ct-ollama-[a-z]+$/.test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match ct-ollama-<letter>`);
+    const mode = typeof d.mode === "string" ? d.mode.trim() : "";
+    if (mode === "proxmox-qemu") {
+      if (!OLLAMA_QEMU_SYSTEM_ID.test(sid)) {
+        throw new Error(`system_id ${JSON.stringify(sid)} must match vm-ollama-<letter> for proxmox-qemu`);
+      }
+    } else if (!OLLAMA_LXC_SYSTEM_ID.test(sid)) {
+      throw new Error(`system_id ${JSON.stringify(sid)} must match ollama-<letter> for LXC`);
+    }
+    if (/^ct-/.test(sid)) {
+      throw new Error(`system_id ${JSON.stringify(sid)} must not use legacy ct- prefix`);
     }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
-    const mode = typeof d.mode === "string" ? d.mode.trim() : "";
     if (mode === "proxmox-lxc" || mode === "proxmox-qemu") {
       const px = isObject(d.proxmox) ? d.proxmox : {};
       const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
@@ -147,14 +160,37 @@ export function listOllamaDeploymentSummaries(cfg) {
 }
 
 /**
- * Resolve instance flag to a system id (`a` → `ct-ollama-a`, or pass full `ct-ollama-a`).
+ * Resolve instance flag to a system id (`a` → `ollama-a`, or pass full `ollama-a` / `vm-ollama-a`).
  * @param {string | undefined} instance
+ * @param {Record<string, unknown>[] | undefined} [deployments]
  */
-export function instanceFlagToSystemId(instance) {
+export function instanceFlagToSystemId(instance, deployments) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (/^ct-ollama-[a-z]+$/.test(t)) return t;
-  return ctSystemId(OLLAMA_ROLE, t);
+  if (OLLAMA_LXC_SYSTEM_ID.test(t) || OLLAMA_QEMU_SYSTEM_ID.test(t)) return t;
+  if (Array.isArray(deployments) && deployments.length > 0) {
+    const letter = t.length === 1 || /^[a-z]+$/.test(t) ? t : null;
+    if (letter) {
+      const qemu = deployments.find(
+        (d) =>
+          typeof d.system_id === "string" &&
+          OLLAMA_QEMU_SYSTEM_ID.test(d.system_id) &&
+          d.system_id.endsWith(`-${letter}`),
+      );
+      if (qemu && typeof qemu.system_id === "string") return qemu.system_id;
+      const lxc = deployments.find(
+        (d) =>
+          typeof d.system_id === "string" &&
+          OLLAMA_LXC_SYSTEM_ID.test(d.system_id) &&
+          d.system_id.endsWith(`-${letter}`),
+      );
+      if (lxc && typeof lxc.system_id === "string") return lxc.system_id;
+    }
+  }
+  if (OLLAMA_QEMU_SYSTEM_ID.test(vmSystemId(OLLAMA_ROLE, t))) {
+    return vmSystemId(OLLAMA_ROLE, t);
+  }
+  return lxcSystemId(OLLAMA_ROLE, t);
 }
 
 /**
@@ -170,7 +206,7 @@ export function resolveOllamaDeployments(cfg, flags, opts = {}) {
   let selectedId = flagGet(flags, "system-id", "system_id");
   const instance = flagGet(flags, "instance");
   if (!selectedId && instance) {
-    selectedId = instanceFlagToSystemId(instance);
+    selectedId = instanceFlagToSystemId(instance, deployments);
   }
 
   if (deployments.length === 1) {

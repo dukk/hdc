@@ -2,46 +2,46 @@
   "schema_version": 1,
   "clusters": [
     {
-      "id": "proxmox-primary-cluster",
+      "id": "example-proxmox-cluster",
       "hosts": [
         {
-          "id": "pve-a",
-          "pve_node": "pve-a",
-          "ip": "10.0.0.11",
-          "web_ui": "https://10.0.0.11:8006",
-          "ssh": "ssh://root@10.0.0.11"
+          "id": "hypervisor-a",
+          "pve_node": "hypervisor-a",
+          "ip": "192.0.2.11",
+          "web_ui": "https://192.0.2.11:8006",
+          "ssh": "ssh://root@192.0.2.11"
         },
         {
-          "id": "pve-b",
-          "pve_node": "pve-b",
-          "ip": "10.0.0.12",
-          "web_ui": "https://10.0.0.12:8006",
-          "ssh": "ssh://root@10.0.0.12"
+          "id": "hypervisor-b",
+          "pve_node": "hypervisor-b",
+          "ip": "192.0.2.12",
+          "web_ui": "https://192.0.2.12:8006",
+          "ssh": "ssh://root@192.0.2.12"
         }
       ]
     },
     {
-      "id": "proxmox-primary-v9-cluster",
+      "id": "example-proxmox-v9-cluster",
       "pve_release": "9",
       "hosts": [
         {
-          "id": "pve-d",
-          "pve_node": "pve-d",
-          "ip": "10.1.0.218",
-          "web_ui": "https://10.1.0.218:8006",
-          "ssh": "ssh://root@10.1.0.218"
+          "id": "hypervisor-d",
+          "pve_node": "hypervisor-d",
+          "ip": "198.51.100.218",
+          "web_ui": "https://198.51.100.218:8006",
+          "ssh": "ssh://root@198.51.100.218"
         }
       ]
     },
     {
-      "id": "proxmox-home-standalone",
+      "id": "example-proxmox-standalone",
       "hosts": [
         {
-          "id": "pve-h",
-          "pve_node": "pve-h",
-          "ip": "10.0.0.14",
-          "web_ui": "https://10.0.0.14:8006",
-          "ssh": "ssh://root@10.0.0.14"
+          "id": "hypervisor-h",
+          "pve_node": "hypervisor-h",
+          "ip": "192.0.2.14",
+          "web_ui": "https://192.0.2.14:8006",
+          "ssh": "ssh://root@192.0.2.14"
         }
       ]
     }
@@ -56,8 +56,8 @@
     },
     "storage": {
       "enabled": true,
-      "ids": ["nas-1", "nas-2"],
-      "discover_from_host": "pve-a",
+      "ids": ["nas-a", "nas-b"],
+      "discover_from_host": "hypervisor-a",
       "targets": []
     },
     "api_token": {

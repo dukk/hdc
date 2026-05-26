@@ -1,9 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { CliExit } from "./cli-exit.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
+import { readResolvedRepoJson, resolveRepoFile, resolveRepoFilePath } from "./private-repo.mjs";
+
+import { remoteBootstrapHdcBash } from "../../../packages/lib/linux-local-admin-user.mjs";
+
+export { remoteBootstrapHdcBash };
 
 const TAG_PROXMOX = "proxmox";
 const TAG_UBUNTU = "ubuntu";
+const TAG_CLIENT = "client";
 
 /**
  * Vault entry for the local `hdc` user password, keyed by host `id` (from sidecar or package config).
@@ -43,7 +49,7 @@ export function tagsFromSidecar(v) {
  */
 export function sidecarMatchesBootstrapTags(tags) {
   const s = new Set(tags.map((x) => x.toLowerCase()));
-  return s.has(TAG_PROXMOX) || s.has(TAG_UBUNTU);
+  return s.has(TAG_PROXMOX) || s.has(TAG_UBUNTU) || s.has(TAG_CLIENT);
 }
 
 /**
@@ -127,13 +133,51 @@ export function listSshTargetsFromSidecar(sidecar, env) {
 export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
   /** @type {{ label: string, data: Record<string, unknown> }[]} */
   const out = [];
-  for (const pkg of ["ubuntu", "proxmox"]) {
-    const abs = deps.join(root, "packages", "infrastructure", pkg, "config.json");
-    if (!deps.existsSync(abs)) continue;
+  /** @type {{ tier: string, pkg: string }[]} */
+  const sources = [
+    { tier: "infrastructure", pkg: "ubuntu" },
+    { tier: "infrastructure", pkg: "proxmox" },
+  ];
+  const clientResolved = resolveRepoFile(root, "packages/clients/config.json");
+  if (clientResolved.found) {
     /** @type {unknown} */
     let j;
     try {
-      j = JSON.parse(deps.readFileSync(abs, "utf8"));
+      j = readResolvedRepoJson(clientResolved);
+    } catch {
+      j = null;
+    }
+    if (j && typeof j === "object" && !Array.isArray(j)) {
+      const hosts = /** @type {Record<string, unknown>} */ (j).bootstrap_hosts;
+      if (Array.isArray(hosts)) {
+        let idx = 0;
+        for (const h of hosts) {
+          idx += 1;
+          if (!h || typeof h !== "object" || Array.isArray(h)) continue;
+          const rec = /** @type {Record<string, unknown>} */ (h);
+          if (!sidecarMatchesBootstrapTags(tagsFromSidecar(rec))) continue;
+          const id = typeof rec.id === "string" ? rec.id.trim() : "";
+          const src =
+            clientResolved.source === "private"
+              ? `packages/clients/config.json (hdc-private)`
+              : "packages/clients/config.json";
+          out.push({
+            label: `${src}#${id || `bootstrap_hosts[${idx}]`}`,
+            data: rec,
+          });
+        }
+      }
+    }
+  }
+
+  for (const { tier, pkg } of sources) {
+    const rel = `packages/${tier}/${pkg}/config.json`;
+    const resolved = resolveRepoFile(root, rel);
+    if (!resolved.found) continue;
+    /** @type {unknown} */
+    let j;
+    try {
+      j = readResolvedRepoJson(resolved);
     } catch {
       continue;
     }
@@ -147,27 +191,17 @@ export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
       const rec = /** @type {Record<string, unknown>} */ (h);
       if (!sidecarMatchesBootstrapTags(tagsFromSidecar(rec))) continue;
       const id = typeof rec.id === "string" ? rec.id.trim() : "";
+      const src =
+        resolved.source === "private"
+          ? `packages/${tier}/${pkg}/config.json (hdc-private)`
+          : `packages/${tier}/${pkg}/config.json`;
       out.push({
-        label: `packages/infrastructure/${pkg}/config.json#${id || `bootstrap_hosts[${idx}]`}`,
+        label: `${src}#${id || `bootstrap_hosts[${idx}]`}`,
         data: rec,
       });
     }
   }
   return out;
-}
-
-/**
- * @param {string} passwordB64
- */
-export function remoteBootstrapHdcBash(passwordB64) {
-  return [
-    "set -euo pipefail",
-    `PW=$(printf '%s' '${passwordB64}' | base64 -d)`,
-    "if ! id -u hdc >/dev/null 2>&1; then useradd -m -s /bin/bash hdc; fi",
-    "if getent group sudo >/dev/null 2>&1; then usermod -aG sudo hdc 2>/dev/null || true; fi",
-    "if getent group wheel >/dev/null 2>&1; then usermod -aG wheel hdc 2>/dev/null || true; fi",
-    `printf '%s\\n' "hdc:$PW" | chpasswd`,
-  ].join("; ");
 }
 
 export function generateHdcPassword() {
@@ -196,7 +230,8 @@ export async function runUsersBootstrapHdc(argv, deps, options = {}) {
   const work = [];
   if (explicitSidecars.length) {
     for (const p of explicitSidecars) {
-      const path = deps.isAbsolute(p) ? p : deps.resolve(root, p);
+      const resolved = resolveRepoFilePath(root, p);
+      const path = resolved.found ? resolved.path : deps.isAbsolute(p) ? p : deps.resolve(root, p);
       work.push({ label: path, path });
     }
   } else {
@@ -207,7 +242,7 @@ export async function runUsersBootstrapHdc(argv, deps, options = {}) {
 
   if (work.length === 0) {
     deps.warn(
-      "users bootstrap-hdc: no bootstrap_hosts in packages/infrastructure/{ubuntu,proxmox}/config.json (or pass --sidecar).",
+      "users bootstrap-hdc: no bootstrap_hosts in packages/infrastructure/{ubuntu,proxmox} or packages/clients/config.json (or pass --sidecar).",
     );
     return;
   }

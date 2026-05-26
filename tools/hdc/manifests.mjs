@@ -2,9 +2,26 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { packagesDir } from "./paths.mjs";
 
-export const VERBS = ["deploy", "maintain", "query"];
+export const VERBS = ["deploy", "maintain", "query", "teardown"];
 
-const TIERS = ["infrastructure", "services"];
+/** CLI tier tokens for `hdc run <tier> <package> <verb>`. */
+export const RUN_TIERS = ["client", "infrastructure", "service"];
+
+/** @type {Record<string, string>} CLI tier → packages/ subdirectory. */
+export const RUN_TIER_TO_DIR = {
+  client: "clients",
+  infrastructure: "infrastructure",
+  service: "services",
+};
+
+/** @type {Record<string, string>} packages/ subdirectory → CLI tier. */
+export const DIR_TO_RUN_TIER = {
+  clients: "client",
+  infrastructure: "infrastructure",
+  services: "service",
+};
+
+const PACKAGE_DIRS = ["infrastructure", "services", "clients"];
 
 /**
  * @param {string} packagesDirAbs
@@ -13,7 +30,7 @@ export function discoverManifests(packagesDirAbs) {
   /** @type {{ path: string, dir: string, raw: Record<string, unknown> }[]} */
   const out = [];
   if (!existsSync(packagesDirAbs)) return out;
-  for (const tier of TIERS) {
+  for (const tier of PACKAGE_DIRS) {
     const tierDir = join(packagesDirAbs, tier);
     if (!existsSync(tierDir)) continue;
     for (const name of readdirSync(tierDir).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
@@ -52,6 +69,40 @@ export function packageManifestIds(root) {
  */
 export function manifestById(manifests, id) {
   return manifests.find((m) => manifestId(m) === id) ?? null;
+}
+
+/**
+ * @param {string} token CLI tier token (client | infrastructure | service).
+ * @returns {string | null} packages/ subdirectory name, or null if invalid.
+ */
+export function parseRunTier(token) {
+  const t = String(token ?? "").trim().toLowerCase();
+  return RUN_TIER_TO_DIR[t] ?? null;
+}
+
+/**
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
+ * @returns {string | null} CLI tier token derived from manifest directory path.
+ */
+export function manifestRunTier(m) {
+  const parts = m.dir.replace(/\\/g, "/").split("/");
+  const idx = parts.indexOf("packages");
+  if (idx < 0 || idx + 1 >= parts.length) return null;
+  return DIR_TO_RUN_TIER[parts[idx + 1]] ?? null;
+}
+
+/**
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }[]} manifests
+ * @param {string} tierToken
+ * @param {string} packageId
+ */
+export function manifestByTierAndId(manifests, tierToken, packageId) {
+  const m = manifestById(manifests, packageId);
+  if (!m) return null;
+  const expected = parseRunTier(tierToken);
+  if (!expected) return null;
+  const dir = m.dir.replace(/\\/g, "/");
+  return dir.includes(`/packages/${expected}/`) ? m : null;
 }
 
 /** @param {{ path: string, dir: string, raw: Record<string, unknown> }} m */
@@ -116,10 +167,12 @@ export function manifestServices(m) {
 
 /**
  * @param {ManifestService} svc
- * @param {string} packageId
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
  */
-export function formatManifestServiceInvoke(svc, packageId) {
-  const base = `run ${packageId} ${svc.verb}`;
+export function formatManifestServiceInvoke(svc, m) {
+  const tier = manifestRunTier(m) ?? "infrastructure";
+  const pkg = manifestId(m);
+  const base = `run ${tier} ${pkg} ${svc.verb}`;
   return svc.invoke ? `${base} -- ${svc.invoke}` : base;
 }
 
@@ -140,4 +193,76 @@ export function verbSpec(m, verb) {
 function basenameDir(dir) {
   const parts = dir.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || dir;
+}
+
+/**
+ * Platform ids for packages that use `run <tier> <package> <platform> <verb>`.
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
+ * @returns {string[]}
+ */
+export function manifestPlatforms(m) {
+  const v = m.raw.platforms;
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => String(x).trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * @typedef {object} RunInvocation
+ * @property {string} packageId
+ * @property {string | null} platform
+ * @property {string} verb
+ */
+
+/**
+ * Parse forward argv for `hdc run` (before `--`).
+ * @param {string[]} forward
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
+ * @returns {RunInvocation | { error: string }}
+ */
+export function resolveRunInvocation(forward, m) {
+  const packageId = forward[0] ?? "";
+  const platforms = manifestPlatforms(m);
+  if (platforms.length > 0) {
+    if (forward.length < 3) {
+      return {
+        error: `need <platform> <verb> (platforms: ${platforms.join(", ")})`,
+      };
+    }
+    if (forward.length > 3) {
+      return { error: "too many arguments before --" };
+    }
+    const platform = forward[1].trim().toLowerCase();
+    const verb = forward[2];
+    if (!platforms.includes(platform)) {
+      return {
+        error: `unknown platform ${JSON.stringify(forward[1])} (expected: ${platforms.join(", ")})`,
+      };
+    }
+    if (!VERBS.includes(verb)) {
+      return { error: `verb must be one of: ${VERBS.join(", ")}` };
+    }
+    return { packageId, platform, verb };
+  }
+  if (forward.length !== 2) {
+    return { error: "need <package> <verb>" };
+  }
+  const verb = forward[1];
+  if (!VERBS.includes(verb)) {
+    return { error: `verb must be one of: ${VERBS.join(", ")}` };
+  }
+  return { packageId, platform: null, verb };
+}
+
+/**
+ * @param {{ path: string, dir: string, raw: Record<string, unknown> }} m
+ * @param {string | null} platform
+ * @param {string} verb
+ */
+export function runScriptDir(m, platform, verb) {
+  if (platform) {
+    return join(m.dir, platform, verb);
+  }
+  return join(m.dir, verb);
 }

@@ -62,9 +62,9 @@ describe("proxmox API token maintain", () => {
   });
 
   it("proxmoxMaintainVerifyPaths includes vztmpl and storage", () => {
-    const paths = proxmoxMaintainVerifyPaths("pve-d", "local");
+    const paths = proxmoxMaintainVerifyPaths("hypervisor-d", "local");
     expect(paths).toContain("/cluster/resources?type=vm");
-    expect(paths).toContain("/nodes/pve-d/storage/local/content?content=vztmpl");
+    expect(paths).toContain("/nodes/hypervisor-d/storage/local/content?content=vztmpl");
     expect(paths).toContain("/storage");
   });
 
@@ -81,7 +81,7 @@ describe("proxmox API token maintain", () => {
 
   it("pveum script is one quoted bash -lc remote command for SSH", () => {
     const script = pveumEnsureRoleAndAclScript("HDCMaintain", ["VM.Audit", "Datastore.Audit"], "root@pam!hdc");
-    expect(script).toContain("fi; pveum acl modify");
+    expect(script).toContain("fi\npveum acl modify");
     const argv = sshBashLcRemoteArgv(script);
     expect(argv).toHaveLength(1);
     expect(argv[0].startsWith("bash -lc '")).toBe(true);

@@ -1,0 +1,209 @@
+import { join } from "node:path";
+
+import { loadManualSystemSidecar } from "../../lib/inventory-sidecar.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../tools/hdc/lib/package-config.mjs";
+import {
+  inventoryIdToVaultSuffix,
+  parseSshUrl,
+  sshUserFromAuthEnv,
+} from "../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
+
+/** Shared config for all client platform packages. */
+export const CLIENTS_CONFIG_REL = "packages/clients/config.json";
+
+/**
+ * @param {string} packageRoot e.g. packages/clients/windows
+ */
+export function clientsConfigPath(packageRoot) {
+  return join(packageRoot, "..", "config.json");
+}
+
+export const CLIENT_PLATFORMS = ["windows", "ubuntu", "raspberrypi"];
+
+const WINRM_PASSWORD_PREFIX = "HDC_WINRM_PASSWORD";
+
+/**
+ * @param {string} suffix
+ */
+export function vaultKeyForWinrmPassword(suffix) {
+  return `${WINRM_PASSWORD_PREFIX}_${inventoryIdToVaultSuffix(suffix)}`;
+}
+
+/**
+ * @param {unknown} v
+ */
+function isObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * @param {string} configPath Absolute path (legacy) or use loadClientConfigFromPackageRoot.
+ */
+export function loadClientConfig(configPath) {
+  const packageRoot = join(configPath, "..");
+  return loadClientConfigFromPackageRoot(packageRoot);
+}
+
+/**
+ * @param {string} packageRoot packages/clients/<platform>
+ */
+export function loadClientConfigFromPackageRoot(packageRoot) {
+  const { data } = loadPackageConfigFromPackageRoot(packageRoot, {
+    exampleRel: "packages/clients/config.example.json",
+  });
+  return data;
+}
+
+/**
+ * @param {Record<string, unknown>} cfg
+ */
+export function wolDefaultsFromConfig(cfg) {
+  const wol = isObject(cfg.wol) ? cfg.wol : {};
+  return {
+    enabled: wol.enabled !== false && wol.enabled !== 0,
+    broadcast: typeof wol.broadcast === "string" && wol.broadcast.trim() ? wol.broadcast.trim() : "255.255.255.255",
+    port: typeof wol.port === "number" && wol.port > 0 ? wol.port : 9,
+    packets: typeof wol.packets === "number" && wol.packets > 0 ? Math.round(wol.packets) : 3,
+    waitSeconds:
+      typeof wol.wait_seconds === "number" && wol.wait_seconds > 0 ? Math.round(wol.wait_seconds) : 180,
+    pollIntervalSeconds:
+      typeof wol.poll_interval_seconds === "number" && wol.poll_interval_seconds > 0
+        ? Math.round(wol.poll_interval_seconds)
+        : 10,
+  };
+}
+
+/**
+ * @param {unknown} mac
+ */
+export function normalizeMac(mac) {
+  if (typeof mac !== "string" || !mac.trim()) return null;
+  const hex = mac.trim().toLowerCase().replace(/[^0-9a-f]/g, "");
+  if (hex.length !== 12) return null;
+  return hex.match(/.{2}/g)?.join(":") ?? null;
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ * @param {string} root
+ */
+export function resolveHostMac(host, root) {
+  const wol = isObject(host.wol) ? host.wol : {};
+  const fromWol = normalizeMac(wol.mac);
+  if (fromWol) return fromWol;
+
+  const access = isObject(host.access) ? host.access : {};
+  const nodes = Array.isArray(access.nodes) ? access.nodes : [];
+  for (const n of nodes) {
+    if (!isObject(n)) continue;
+    const m = normalizeMac(n.mac);
+    if (m) return m;
+  }
+
+  const systemId = typeof host.system_id === "string" ? host.system_id.trim() : "";
+  if (systemId) {
+    const sidecar = loadManualSystemSidecar(root, systemId);
+    if (sidecar) {
+      const acc = isObject(sidecar.access) ? sidecar.access : {};
+      const sn = Array.isArray(acc.nodes) ? acc.nodes : [];
+      const first = sn[0];
+      if (isObject(first)) {
+        const m = normalizeMac(first.mac);
+        if (m) return m;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ * @param {NodeJS.ProcessEnv} env
+ */
+export function primaryNodeFromHost(host, env) {
+  const access = isObject(host.access) ? host.access : {};
+  const nodes = Array.isArray(access.nodes) ? access.nodes : [];
+  const first = nodes.find((n) => isObject(n));
+  if (!first || !isObject(first)) return null;
+  const row = /** @type {Record<string, unknown>} */ (first);
+  const ip = typeof row.ip === "string" && row.ip.trim() ? row.ip.trim() : null;
+  if (!ip) return null;
+
+  const sshUrl = typeof row.ssh === "string" ? row.ssh : "";
+  const parsed = parseSshUrl(sshUrl);
+  const auth = isObject(host.auth) ? host.auth : {};
+  const sshUser =
+    parsed?.user ??
+    sshUserFromAuthEnv(auth, env) ??
+    (typeof env.HDC_CLIENT_SSH_USER === "string" && env.HDC_CLIENT_SSH_USER.trim()
+      ? env.HDC_CLIENT_SSH_USER.trim()
+      : null);
+
+  const winrm = isObject(row.winrm) ? row.winrm : {};
+  const winrmPort = typeof winrm.port === "number" && winrm.port > 0 ? winrm.port : 5986;
+  const winrmUserEnv =
+    typeof auth.winrm_user_env === "string" && auth.winrm_user_env.trim()
+      ? auth.winrm_user_env.trim()
+      : "HDC_WINRM_USER";
+  const winrmUser =
+    typeof env[winrmUserEnv] === "string" && env[winrmUserEnv].trim() ? env[winrmUserEnv].trim() : null;
+  const vaultSuffix =
+    typeof auth.winrm_password_vault_suffix === "string" && auth.winrm_password_vault_suffix.trim()
+      ? auth.winrm_password_vault_suffix.trim()
+      : typeof host.id === "string"
+        ? host.id
+        : "";
+
+  return {
+    name: typeof row.name === "string" ? row.name : "primary",
+    ip,
+    sshUser,
+    winrm: {
+      port: winrmPort,
+      useSsl: winrm.use_ssl !== false && winrm.use_ssl !== 0,
+      skipCaCheck: winrm.skip_ca_check === true || winrm.skip_ca_check === 1,
+    },
+    winrmUser,
+    winrmVaultKey: vaultKeyForWinrmPassword(vaultSuffix),
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} cfg
+ * @param {string} platform
+ * @param {string | undefined} hostIdFilter
+ */
+export function hostsForPlatform(cfg, platform, hostIdFilter) {
+  const hosts = Array.isArray(cfg.hosts) ? cfg.hosts : [];
+  /** @type {Record<string, unknown>[]} */
+  const out = [];
+  for (const h of hosts) {
+    if (!isObject(h)) continue;
+    const rec = /** @type {Record<string, unknown>} */ (h);
+    if (rec.enabled === false || rec.enabled === 0) continue;
+    const os = typeof rec.os === "string" ? rec.os.trim().toLowerCase() : "";
+    if (os !== platform) continue;
+    const id = typeof rec.id === "string" ? rec.id.trim() : "";
+    if (hostIdFilter && id !== hostIdFilter) continue;
+    out.push(rec);
+  }
+  return out.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ */
+export function hostUpdatesEnabled(host) {
+  const updates = isObject(host.updates) ? host.updates : {};
+  return updates.enabled !== false && updates.enabled !== 0;
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ * @param {ReturnType<typeof wolDefaultsFromConfig>} defaults
+ */
+export function hostWolEnabled(host, defaults) {
+  const wol = isObject(host.wol) ? host.wol : {};
+  if (wol.enabled === false || wol.enabled === 0) return false;
+  return defaults.enabled;
+}

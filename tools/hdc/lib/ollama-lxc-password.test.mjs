@@ -3,17 +3,17 @@ import { resolveLxcRootPassword } from "../../../packages/services/ollama/lib/lx
 
 describe("resolveLxcRootPassword", () => {
   it("uses config password when set", async () => {
-    const pw = await resolveLxcRootPassword("ct-ollama-a", 470, { password: "from-config" }, {});
+    const pw = await resolveLxcRootPassword("ollama-a", 470, { password: "from-config" }, {});
     expect(pw).toBe("from-config");
   });
 
   it("uses --password flag", async () => {
-    const pw = await resolveLxcRootPassword("ct-ollama-a", 470, {}, { password: "from-flag" });
+    const pw = await resolveLxcRootPassword("ollama-a", 470, {}, { password: "from-flag" });
     expect(pw).toBe("from-flag");
   });
 
   it("uses cache without prompting", async () => {
-    const pw = await resolveLxcRootPassword("ct-ollama-b", 471, {}, {}, { cached: "cached-pw" });
+    const pw = await resolveLxcRootPassword("ollama-b", 471, {}, {}, { cached: "cached-pw" });
     expect(pw).toBe("cached-pw");
   });
 });

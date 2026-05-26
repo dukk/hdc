@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/bind.config.schema.json",
+  "title": "HDC bind service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "zones", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "zones": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "bind": {
+      "type": "object",
+      "properties": {
+        "primary_ip": { "type": "string" },
+        "secondary_ip": { "type": "string" },
+        "hostmaster": { "type": "string" },
+        "allow_query_cidrs": { "type": "array", "items": { "type": "string" } },
+        "recursion": { "type": "boolean" },
+        "dnssec_validation": { "type": "boolean" },
+        "forwarders": {
+          "type": "array",
+          "items": { "type": "string", "format": "ipv4" },
+          "description": "Upstream resolvers for recursive queries (default 1.1.1.1 and 1.0.0.1)."
+        },
+        "tsig_vault_key": { "type": "string" },
+        "tsig_secret": {
+          "type": "string",
+          "description": "HMAC-SHA256 TSIG secret (base64). Auto-generated on deploy when missing; gitignored via packages/**/config.json."
+        }
+      }
+    },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id", "role"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-dns-[a-z]+$" },
+          "role": { "enum": ["primary", "secondary"] },
+          "hostname": { "type": "string" },
+          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dnsRecord": {
+      "type": "object",
+      "required": ["type", "name"],
+      "properties": {
+        "type": { "enum": ["A", "AAAA", "CNAME", "PTR", "TXT", "NS", "MX"] },
+        "name": { "type": "string" },
+        "data": { "type": "string" },
+        "ttl": { "type": "integer", "minimum": 60 },
+        "priority": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "zone": {
+      "type": "object",
+      "required": ["id", "zone_type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "zone_type": { "enum": ["forward", "reverse"] },
+        "subnet": {
+          "type": "string",
+          "description": "CIDR for reverse zones; used for PTR auto-generation from forward A records."
+        },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dnsRecord" }
+        }
+      }
+    }
+  }
+}

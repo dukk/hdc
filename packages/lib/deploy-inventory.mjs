@@ -1,29 +1,32 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   slugifyInventoryRole,
   systemIdForClass,
 } from "../../tools/hdc/lib/inventory-naming.mjs";
+import { resolveRepoFile } from "../../tools/hdc/lib/private-repo.mjs";
 
 /**
  * Canonical deploy target → logical system id (see `.cursor/rules/hdc-inventory-naming.mdc`).
- * @type {Record<string, { workloadClass: "physical" | "vm" | "ct"; role: string; instance?: string }>}
+ * @type {Record<string, { workloadClass: "physical" | "vm" | "lxc"; role: string; instance?: string }>}
  */
 export const DEPLOY_TARGET_WORKLOAD = {
   bind: { workloadClass: "vm", role: "bind", instance: "a" },
-  "pi-hole": { workloadClass: "vm", role: "pi-hole", instance: "a" },
+  "pi-hole": { workloadClass: "lxc", role: "pi-hole", instance: "a" },
   minecraft: { workloadClass: "vm", role: "minecraft", instance: "a" },
   jenkins: { workloadClass: "vm", role: "jenkins", instance: "a" },
   homeassistant: { workloadClass: "vm", role: "homeassistant", instance: "a" },
   audiobookshelf: { workloadClass: "vm", role: "audiobookshelf", instance: "a" },
-  ollama: { workloadClass: "ct", role: "ollama", instance: "a" },
-  "postfix-relay": { workloadClass: "ct", role: "postfix-relay", instance: "a" },
+  ollama: { workloadClass: "lxc", role: "ollama", instance: "a" },
+  "postfix-relay": { workloadClass: "lxc", role: "postfix-relay", instance: "a" },
+  vaultwarden: { workloadClass: "lxc", role: "vaultwarden", instance: "a" },
+  "nginx-waf": { workloadClass: "vm", role: "nginx-waf", instance: "a" },
 };
 
 /** Defaults for Nagios NRPE layout (override in `packages/services/nagios/config.json`). */
-export const NAGIOS_CLUSTER_NODE_IDS = ["pve-a", "pve-b", "pve-c"];
+export const NAGIOS_CLUSTER_NODE_IDS = ["hypervisor-a", "hypervisor-b", "hypervisor-c"];
 
-export const NAGIOS_CENTRAL_SYSTEM_ID = "pve-a";
+export const NAGIOS_CENTRAL_SYSTEM_ID = "hypervisor-a";
 
 /**
  * @param {string} targetId package manifest id
@@ -75,9 +78,10 @@ export function legacyAutomatedClientSystemId(role, instance = "a") {
  * @param {{ systemIdOverride?: string }} [opts]
  */
 export function deployTargetInventory(root, targetId, opts = {}) {
-  const systemId = deployTargetSystemId(targetId);
-  const configPath = servicePackageConfigPath(root, targetId);
-  const cfg = existsSync(configPath) ? readJsonObject(configPath) : null;
+  const rel = `packages/services/${targetId}/config.json`;
+  const resolved = resolveRepoFile(root, rel);
+  const configPath = resolved.found ? resolved.path : resolved.publicPath;
+  const cfg = resolved.found ? readJsonObject(resolved.path) : null;
   const override =
     cfg && typeof cfg.deploy === "object" && cfg.deploy !== null && !Array.isArray(cfg.deploy)
       ? /** @type {Record<string, unknown>} */ (cfg.deploy)
@@ -90,14 +94,14 @@ export function deployTargetInventory(root, targetId, opts = {}) {
     explicitOverride ??
     (override && typeof override.system_id === "string" && override.system_id.trim()
       ? override.system_id.trim()
-      : systemId);
+      : deployTargetSystemId(targetId));
   return {
     targetId,
     systemId: sid,
     configPath,
     config: cfg,
     deploy: override,
-    ready: cfg !== null,
+    ready: resolved.found,
   };
 }
 

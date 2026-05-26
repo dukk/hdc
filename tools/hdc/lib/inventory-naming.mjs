@@ -35,7 +35,7 @@ function normalizeInstanceLetter(letter) {
 }
 
 /**
- * Physical system id (no class prefix): `pve-a`, `nas-primary`.
+ * Physical system id (no class prefix): `hypervisor-a`, `nas-primary`.
  * @param {string} roleSlug
  * @param {string} [instanceLetter]
  */
@@ -43,6 +43,15 @@ export function physicalSystemId(roleSlug, instanceLetter) {
   const slug = slugifyInventoryRole(roleSlug);
   const letter = normalizeInstanceLetter(instanceLetter);
   return `${slug}-${letter}`;
+}
+
+/**
+ * LXC / Proxmox container id (unprefixed): `ollama-a`, `pi-hole-b`.
+ * @param {string} roleSlug
+ * @param {string} [instanceLetter]
+ */
+export function lxcSystemId(roleSlug, instanceLetter) {
+  return physicalSystemId(roleSlug, instanceLetter);
 }
 
 /**
@@ -54,15 +63,54 @@ export function vmSystemId(roleSlug, instanceLetter) {
 }
 
 /**
+ * @deprecated Use {@link lxcSystemId} — returns unprefixed ids (no `ct-` prefix).
  * @param {string} roleSlug
  * @param {string} [instanceLetter]
  */
 export function ctSystemId(roleSlug, instanceLetter) {
-  return `ct-${slugifyInventoryRole(roleSlug)}-${normalizeInstanceLetter(instanceLetter)}`;
+  return lxcSystemId(roleSlug, instanceLetter);
 }
 
 /**
- * @param {"physical" | "vm" | "ct" | "virt"} workloadClass
+ * Regex for unprefixed LXC deployment system_id for a role slug.
+ * @param {string} roleSlug
+ */
+export function deploymentSystemIdPattern(roleSlug) {
+  const slug = slugifyInventoryRole(roleSlug);
+  return new RegExp(`^${slug}-[a-z]+$`);
+}
+
+/**
+ * @param {string} systemId
+ * @param {string} roleSlug
+ */
+export function assertUnprefixedLxcSystemId(systemId, roleSlug) {
+  const sid = String(systemId ?? "").trim();
+  if (/^(ct|vm)-/.test(sid)) {
+    throw new Error(
+      `system_id ${JSON.stringify(sid)} must be unprefixed ${slugifyInventoryRole(roleSlug)}-<letter> (no ct- or vm-)`,
+    );
+  }
+  if (!deploymentSystemIdPattern(roleSlug).test(sid)) {
+    throw new Error(
+      `system_id ${JSON.stringify(sid)} must match ${slugifyInventoryRole(roleSlug)}-<letter>`,
+    );
+  }
+}
+
+/**
+ * Proxmox LXC hostname from system id (strips legacy `ct-` prefix if present).
+ * @param {string} systemId
+ */
+export function lxcHostnameFromSystemId(systemId) {
+  return String(systemId ?? "")
+    .trim()
+    .replace(/^ct-/, "")
+    .slice(0, 63);
+}
+
+/**
+ * @param {"physical" | "vm" | "ct" | "lxc" | "virt"} workloadClass
  * @param {string} roleSlug
  * @param {string} [instanceLetter]
  */
@@ -71,7 +119,8 @@ export function systemIdForClass(workloadClass, roleSlug, instanceLetter) {
     case "vm":
       return vmSystemId(roleSlug, instanceLetter);
     case "ct":
-      return ctSystemId(roleSlug, instanceLetter);
+    case "lxc":
+      return lxcSystemId(roleSlug, instanceLetter);
     case "virt":
       return `virt-${slugifyInventoryRole(roleSlug)}-${normalizeInstanceLetter(instanceLetter)}`;
     case "physical":

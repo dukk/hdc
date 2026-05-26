@@ -6,7 +6,9 @@ alwaysApply: false
 
 # Nagios monitoring for manual inventory
 
-- Keep structured facts in the matching `*.json` sidecar next to the `.md` file. For hosts that should appear in Nagios, define `access.nodes` entries with `ip`, optional `name`, `web_ui` (for HTTPS/HTTP checks), and `ssh` (e.g. `ssh://root@10.0.0.1`) so SSH-based deploy can resolve users without guessing.
-- Add `"nagios"` to `automation_targets` when this resource is monitored or touched by the Nagios package so `node tools/hdc/cli.mjs docs lint` stays consistent with manifests under `packages/nagios/`.
-- After inventory edits, run `node tools/hdc/cli.mjs docs lint` (optional `docs sync` runs the same JSON validation; hdc does not modify companion `.md` files).
-- When checks or hosts change, redeploy: `node tools/hdc/cli.mjs run nagios deploy` (requires `nagios.central` on [`inventory/manual/systems/pve-a.json`](inventory/manual/systems/pve-a.json) and NRPE **TCP 5666** allowed from the central Nagios host to each Proxmox node).
+- Monitored **hosts** are generated from **BIND forward A records** in `packages/services/bind/config.json` at `nagios deploy` / `maintain` time — you do not need per-host Nagios entries in inventory for DNS-named systems.
+- Nagios runs on LXC guests `nagios-a` / `nagios-b` / `nagios-c` (`192.0.2.120`–`122` on `hypervisor-b` / `hypervisor-c` / `hypervisor-d`). Add `"nagios"` to `automation_targets` on those system sidecars (and `"proxmox"` for Proxmox provision).
+- For **new forward A records**, update BIND config and run `node tools/hdc/cli.mjs run service nagios maintain --` (or `deploy`) — not hypervisor `nagios.central` / NRPE.
+- Optional: add matching A records in BIND (`nagios-a.hdc.example.invalid`, etc.) for human-friendly DNS; not required for checks.
+- After inventory edits, validate JSON against schemas under `tools/hdc/schema/` (planned `docs lint` is not wired in the CLI yet).
+- Redeploy: `node tools/hdc/cli.mjs run service nagios deploy --` or per instance `--instance a`.

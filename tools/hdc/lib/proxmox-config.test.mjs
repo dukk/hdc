@@ -26,15 +26,15 @@ describe("proxmox-config", () => {
   const cfg = JSON.parse(readFileSync(examplePath, "utf8"));
 
   it("apiBaseFromWebUi normalizes web UI URL", () => {
-    expect(apiBaseFromWebUi("https://10.0.0.11:8006")).toBe("https://10.0.0.11:8006");
+    expect(apiBaseFromWebUi("https://192.0.2.11:8006")).toBe("https://192.0.2.11:8006");
   });
 
   it("resolveProxmoxHost finds host by web_ui", () => {
-    const h = resolveProxmoxHost(cfg, "pve-a");
+    const h = resolveProxmoxHost(cfg, "hypervisor-a");
     expect(h).not.toBeNull();
-    expect(h?.apiBase).toBe("https://10.0.0.11:8006");
-    expect(h?.clusterId).toBe("proxmox-primary-cluster");
-    expect(h?.ssh).toBe("ssh://root@10.0.0.11");
+    expect(h?.apiBase).toBe("https://192.0.2.11:8006");
+    expect(h?.clusterId).toBe("example-proxmox-cluster");
+    expect(h?.ssh).toBe("ssh://root@192.0.2.11");
   });
 
   it("loadProxmoxHostsByCluster groups by cluster id", () => {
@@ -42,9 +42,9 @@ describe("proxmox-config", () => {
       configPath: "/x/config.json",
       configRel: "packages/infrastructure/proxmox/config.json",
     });
-    expect(map.has("proxmox-primary-cluster")).toBe(true);
-    expect(map.has("proxmox-home-standalone")).toBe(true);
-    expect(map.get("proxmox-primary-cluster")?.length).toBe(2);
+    expect(map.has("example-proxmox-cluster")).toBe(true);
+    expect(map.has("example-proxmox-standalone")).toBe(true);
+    expect(map.get("example-proxmox-cluster")?.length).toBe(2);
   });
 
   it("isProxmoxHostDown is true for down true or 1", () => {
@@ -63,22 +63,22 @@ describe("proxmox-config", () => {
       configRel: "packages/infrastructure/proxmox/config.json",
       onSkip: (id, reason) => skipped.push({ id, reason }),
     });
-    expect(map.get("proxmox-primary-cluster")?.map((m) => m.id)).toEqual(["pve-b"]);
-    expect(skipped).toContainEqual({ id: "pve-a", reason: "marked down in config" });
+    expect(map.get("example-proxmox-cluster")?.map((m) => m.id)).toEqual(["hypervisor-b"]);
+    expect(skipped).toContainEqual({ id: "hypervisor-a", reason: "marked down in config" });
   });
 
   it("resolveProxmoxHost returns null for down host; findProxmoxHostInConfig still resolves", () => {
     const withDown = structuredClone(cfg);
     withDown.clusters[0].hosts[0].down = true;
-    expect(resolveProxmoxHost(withDown, "pve-a")).toBeNull();
-    expect(findProxmoxHostInConfig(withDown, "pve-a")?.id).toBe("pve-a");
-    expect(resolveProxmoxHost(withDown, "pve-b")?.id).toBe("pve-b");
+    expect(resolveProxmoxHost(withDown, "hypervisor-a")).toBeNull();
+    expect(findProxmoxHostInConfig(withDown, "hypervisor-a")?.id).toBe("hypervisor-a");
+    expect(resolveProxmoxHost(withDown, "hypervisor-b")?.id).toBe("hypervisor-b");
   });
 
   it("proxmoxClusterRefFromHost uses cluster id when host has no override", () => {
     const host = cfg.clusters[0].hosts[0];
-    expect(proxmoxClusterRefFromHost(host, "proxmox-primary-cluster")).toEqual({
-      id: "proxmox-primary-cluster",
+    expect(proxmoxClusterRefFromHost(host, "example-proxmox-cluster")).toEqual({
+      id: "example-proxmox-cluster",
       role: "node",
     });
   });
@@ -93,11 +93,11 @@ describe("proxmox-config", () => {
 
   it("locateVmidInCluster finds template node", () => {
     const resources = [
-      { vmid: 100, node: "pve-b", name: "tpl-ubuntu", template: 1, type: "qemu" },
-      { vmid: 200, node: "pve-a", name: "vm1", template: 0, type: "qemu" },
+      { vmid: 100, node: "hypervisor-b", name: "tpl-ubuntu", template: 1, type: "qemu" },
+      { vmid: 200, node: "hypervisor-a", name: "vm1", template: 0, type: "qemu" },
     ];
     expect(locateVmidInCluster(resources, 100)).toEqual({
-      node: "pve-b",
+      node: "hypervisor-b",
       name: "tpl-ubuntu",
       template: true,
     });
@@ -107,10 +107,10 @@ describe("proxmox-config", () => {
   });
 
   it("formatTemplateNotFoundMessage lists guests and list-templates hint when empty", () => {
-    const resources = [{ vmid: 200, node: "pve-a", name: "vm1", template: 0, type: "qemu" }];
-    const msg = formatTemplateNotFoundMessage(resources, 9000, "pve-a");
+    const resources = [{ vmid: 200, node: "hypervisor-a", name: "vm1", template: 0, type: "qemu" }];
+    const msg = formatTemplateNotFoundMessage(resources, 9000, "hypervisor-a");
     expect(msg).toContain("no QEMU templates were found");
     expect(msg).toContain("vmid 200");
-    expect(msg).toContain("list-templates --host pve-a");
+    expect(msg).toContain("list-templates --host hypervisor-a");
   });
 });

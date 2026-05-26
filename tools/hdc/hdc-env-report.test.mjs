@@ -10,7 +10,7 @@ describe("hdc-env-report", () => {
     expect(hdcEnvKeyLooksSensitive("HDC_VAULT_PASSPHRASE")).toBe(true);
     expect(hdcEnvKeyLooksSensitive("HDC_PROXMOX_API_TOKEN")).toBe(true);
     expect(hdcEnvKeyLooksSensitive("HDC_UNIFI_NETWORK_API_KEY")).toBe(true);
-    expect(hdcEnvKeyLooksSensitive("HDC_USER_HDC_PASSWORD_PVE_A")).toBe(true);
+    expect(hdcEnvKeyLooksSensitive("HDC_USER_HDC_PASSWORD_HYPERVISOR_A")).toBe(true);
     expect(hdcEnvKeyLooksSensitive("HDC_CLI_INVOCATION")).toBe(false);
     expect(hdcEnvKeyLooksSensitive("HDC_SKIP_LOCAL_SYSTEM_INVENTORY")).toBe(false);
     expect(hdcEnvKeyLooksSensitive("HDC_PROXMOX_TLS_INSECURE")).toBe(false);

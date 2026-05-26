@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+/**
+ * Maintain llama-cpp: upgrade binary from GitHub release and restart llama-server.
+ *
+ * Usage: hdc run service llama-cpp maintain -- [--instance a | --system-id llama-cpp-a]
+ *        hdc run service llama-cpp maintain -- [--skip-restart] [--skip-clamav]
+ */
+import { basename, dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { stderr as errout } from "node:process";
+
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
+import { pctExec } from "../../../lib/pve-pct-remote.mjs";
+import { resolveLlamaCppDeployments } from "../lib/deployments.mjs";
+import { installLlamaCppInCt, resolvePveSshForHost } from "../lib/llama-cpp-install.mjs";
+
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+
+
+const here = dirname(fileURLToPath(import.meta.url));
+const target = basename(dirname(here));
+const verb = basename(here);
+const packageRoot = join(here, "..");
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/llama-cpp/config.example.json";
+/** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
+let _pkgConfig = null;
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+
+/** @param {unknown} v */
+function isObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function readCfg() {
+  return ensurePackageConfig().data;
+}
+
+/**
+ * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ */
+async function maintainOne(deployment, flags, vaultAccess) {
+  const { systemId, proxmox: px, install, server } = deployment;
+  const skipRestart = flagGet(flags, "skip-restart", "skip_restart") !== undefined;
+
+  if (!isObject(px)) {
+    return { ok: false, system_id: systemId, message: "bad proxmox config" };
+  }
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  if (!hostId) {
+    return { ok: false, system_id: systemId, message: "missing host_id" };
+  }
+  const lxc = isObject(px.lxc) ? px.lxc : {};
+  const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+  if (!Number.isFinite(vmid) || vmid <= 0) {
+    return { ok: false, system_id: systemId, message: "invalid vmid" };
+  }
+
+  errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} …\n`);
+  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+  const serverCfg = isObject(server) ? server : {};
+  const installResult = await installLlamaCppInCt(
+    pveSsh.user,
+    pveSsh.host,
+    vmid,
+    install,
+    serverCfg,
+  );
+  if (!installResult.ok) {
+    return { ok: false, system_id: systemId, host_id: hostId, install: installResult };
+  }
+
+  if (!skipRestart) {
+    errout.write(`[hdc] ${target} ${verb}: restarting llama-server on ${systemId} …\n`);
+    const r = pctExec(
+      pveSsh.user,
+      pveSsh.host,
+      vmid,
+      "systemctl restart llama-server 2>/dev/null || systemctl start llama-server 2>/dev/null || true",
+    );
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        message: `restart failed (exit ${r.status})`,
+        install: installResult,
+      };
+    }
+  }
+
+  const log = provisionLogFromConsole(console);
+  const exec = createConfigureExec("pct", {
+    user: pveSsh.user,
+    host: pveSsh.host,
+    vmid,
+    pveHost: pveSsh.host,
+  });
+  const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+
+  return {
+    ok: baseline.ok,
+    system_id: systemId,
+    host_id: hostId,
+    install: installResult,
+    restarted: !skipRestart,
+    admin_user: baseline.admin_user,
+    clamav: baseline.clamav,
+  };
+}
+
+async function main() {
+  errout.write(`[hdc] ${target} ${verb}: upgrade llama-server binaries (stderr log; JSON on stdout).\n`);
+
+  if (!existsSync(ensurePackageConfig().path)) {
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, target, verb, message: "package config missing — see stderr" }, null, 2)}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const cfg = readCfg();
+  const flags = parseArgvFlags(process.argv.slice(2));
+  const vaultAccess = createPackageVaultAccess();
+  await vaultAccess.unlock({});
+  let deployments;
+  try {
+    deployments = resolveLlamaCppDeployments(cfg, flags);
+  } catch (e) {
+    errout.write(`[hdc] ${target} ${verb}: ${/** @type {Error} */ (e).message}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, target, verb, message: String(/** @type {Error} */ (e).message || e) }, null, 2)}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (deployments.length > 1) {
+    errout.write(`[hdc] ${target} ${verb}: maintaining ${deployments.length} instance(s) …\n`);
+  }
+
+  const results = [];
+  for (const deployment of deployments) {
+    try {
+      results.push(await maintainOne(deployment, flags, vaultAccess));
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
+      results.push({ ok: false, system_id: deployment.systemId, message: msg });
+    }
+  }
+
+  const ok = results.every((r) => r.ok);
+  const payload = { ok, target, verb, count: results.length, results };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  process.exitCode = ok ? 0 : 1;
+}
+
+main().catch((e) => {
+  errout.write(`[hdc] ${target} ${verb}: fatal: ${/** @type {Error} */ (e).stack || e}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ ok: false, target, verb, message: String(/** @type {Error} */ (e).message || e) }, null, 2)}\n`,
+  );
+  process.exitCode = 1;
+});

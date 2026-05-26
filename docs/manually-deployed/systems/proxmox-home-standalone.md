@@ -1,6 +1,6 @@
 # Proxmox - Standalone Home
 
-Structured inventory lives in [`proxmox-home-standalone.json`](proxmox-home-standalone.json). Regenerate the block below with:
+Structured inventory lives in [`example-proxmox-standalone.json`](example-proxmox-standalone.json). Regenerate the block below with:
 
 `node tools/hdc/cli.mjs docs sync`
 
@@ -9,5 +9,5 @@ Structured inventory lives in [`proxmox-home-standalone.json`](proxmox-home-stan
 
 | Name | Description | CPU | Cores | Memory | Memory capacity | Storage | Storage capacity |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| pve-h |  |  |  | DDR4 | 16g |  |  |
+| hypervisor-h |  |  |  | DDR4 | 16g |  |  |
 <!-- /hdc:inventory -->

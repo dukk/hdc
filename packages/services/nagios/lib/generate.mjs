@@ -62,7 +62,7 @@ export function resolveCentral(cluster) {
   }
   if (!sshUser) {
     throw new Error(
-      "Central Nagios SSH user: set user in nagios.central.ssh (e.g. ssh://root@10.0.0.x) and/or set HDC_NAGIOS_SSH_USER / HDC_PROXMOX_SSH_USER per inventory env refs.",
+      "Central Nagios SSH user: set user in nagios.central.ssh (e.g. ssh://root@192.0.2.x) and/or set HDC_NAGIOS_SSH_USER / HDC_PROXMOX_SSH_USER per inventory env refs.",
     );
   }
   return { address, sshHost, sshUser, nrpeAllowedHost: address };
@@ -228,7 +228,7 @@ export function hypervisorSshTargets(cluster) {
     const user = (p?.user && p.user.trim()) || defaultUser;
     if (!user) {
       throw new Error(
-        "Each cluster node needs an SSH user in access.nodes[].ssh (e.g. ssh://root@10.0.0.11) or set auth.ssh_user_env in .env.",
+        "Each cluster node needs an SSH user in access.nodes[].ssh (e.g. ssh://root@192.0.2.11) or set auth.ssh_user_env in .env.",
       );
     }
     out.push({ user, host });

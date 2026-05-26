@@ -4,7 +4,7 @@
  * 1. Install local SSH public keys on each hypervisor (password from vault if needed).
  * 2. Ensure hdc API token role/ACL (VM.Audit, Datastore.Audit, …) via pveum over SSH.
  * 3. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
- * 4. Ensure NAS storage connections (nas-1, nas-2 by default) on each cluster/standalone group.
+ * 4. Ensure NAS storage connections (nas-a, nas-b by default) on each cluster/standalone group.
  * 5. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
  * 6. Ensure local `hdc` user on bootstrap hosts (see `users bootstrap-hdc`).
  * 7. Report configured CPU/RAM/disk load per hypervisor (% of node capacity from API).
@@ -15,7 +15,7 @@
  *   --no-download          Do not auto-download missing LXC ostemplates
  *   --no-build-qemu        Do not build missing QEMU templates from cloud images
  *   --no-prune             Do not remove unsupported Ubuntu LXC/QEMU templates
- *   --skip-storage           Skip NAS storage ensure (nas-1, nas-2)
+ *   --skip-storage           Skip NAS storage ensure (nas-a, nas-b)
  *   --skip-api-token         Skip hdc API token role/ACL ensure (pveum over SSH)
  *   --skip-ssh-keys          Skip installing local SSH keys on hypervisors
  *   --skip-os-updates      Skip apt update/upgrade and reboots on hypervisors

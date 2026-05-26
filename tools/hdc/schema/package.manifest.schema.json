@@ -48,12 +48,12 @@
         "title": { "type": "string", "minLength": 1 },
         "verb": {
           "type": "string",
-          "enum": ["deploy", "maintain", "query"]
+          "enum": ["deploy", "maintain", "query", "teardown"]
         },
         "invoke": {
           "type": "string",
           "minLength": 1,
-          "description": "Subcommand after `hdc run <package> <verb> --` (omit when the verb script has no subcommands)."
+          "description": "Subcommand after `hdc run <tier> <package> <verb> --` (omit when the verb script has no subcommands)."
         },
         "summary": {
           "type": "string",

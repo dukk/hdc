@@ -3,7 +3,7 @@
  * Deploy Ollama on Proxmox (LXC or QEMU clone) or as Docker on an Ubuntu SSH host.
  * Multi-instance: deployments[] in config.json. With no selector, deploys all entries.
  *
- * Usage: hdc run ollama deploy -- [--instance a | --system-id ct-ollama-a] [--skip-install]
+ * Usage: hdc run ollama deploy -- [--instance a | --system-id ollama-a] [--skip-install]
  *        hdc run ollama deploy -- [--skip-existing | --redeploy-existing]
  *        LXC root password: prompted on create (masked), or proxmox.lxc.password / --password
  */

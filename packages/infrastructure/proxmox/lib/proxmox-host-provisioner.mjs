@@ -100,7 +100,7 @@ export function listQemuGuests(resources) {
  * @param {number} templateVmid
  * @param {string} [hostId] inventory host id for list-templates hint
  */
-export function formatTemplateNotFoundMessage(resources, templateVmid, hostId = "pve-a") {
+export function formatTemplateNotFoundMessage(resources, templateVmid, hostId = "hypervisor-a") {
   const templates = listQemuTemplates(resources);
   const guests = listQemuGuests(resources);
   const listCmd = `hdc run proxmox deploy -- list-templates --host ${hostId}`;
@@ -214,6 +214,7 @@ export function createProxmoxHostProvisioner(ctx) {
         }
         if (typeof p.nameserver === "string" && p.nameserver.trim()) body.nameserver = p.nameserver.trim();
         if (typeof p.searchdomain === "string" && p.searchdomain.trim()) body.searchdomain = p.searchdomain.trim();
+        if (typeof p.features === "string" && p.features.trim()) body.features = p.features.trim();
 
         const path = `/nodes/${encodeURIComponent(pveNode)}/lxc`;
         log.info(`POST ${path} (vmid ${vmid}, template ${ostemplate})`);
@@ -257,7 +258,7 @@ export function createProxmoxHostProvisioner(ctx) {
         const resources = await fetchClusterVmResources(apiBase, authorization, rejectUnauthorized);
         const located = locateVmidInCluster(resources, templateVmid);
         if (!located) {
-          const msg = formatTemplateNotFoundMessage(resources, templateVmid, pveNode || "pve-a");
+          const msg = formatTemplateNotFoundMessage(resources, templateVmid, pveNode || "hypervisor-a");
           log.error(msg);
           return { ok: false, message: msg };
         }

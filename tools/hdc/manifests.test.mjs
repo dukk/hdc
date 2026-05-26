@@ -8,9 +8,15 @@ import {
   formatManifestServiceInvoke,
   inventoryDocs,
   manifestById,
+  manifestByTierAndId,
   manifestId,
+  manifestPlatforms,
+  manifestRunTier,
   manifestServices,
   manifestTitle,
+  parseRunTier,
+  resolveRunInvocation,
+  runScriptDir,
   verbSpec,
 } from "./manifests.mjs";
 
@@ -106,7 +112,61 @@ describe("manifests", () => {
     const svc = manifestServices(m);
     expect(svc).toHaveLength(1);
     expect(svc[0].id).toBe("ok");
-    expect(formatManifestServiceInvoke(svc[0], "p")).toBe("run p deploy -- create-x");
+    expect(formatManifestServiceInvoke(svc[0], m)).toBe("run infrastructure p deploy -- create-x");
+  });
+
+  it("discovers clients tier platform packages", () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
+    writeTree(root, {
+      "clients/windows/manifest.json": JSON.stringify({
+        id: "windows",
+        verbs: { maintain: { script: "run.mjs" } },
+      }),
+      "clients/ubuntu/manifest.json": JSON.stringify({
+        id: "client-ubuntu",
+        verbs: { query: { script: "run.mjs" } },
+      }),
+    });
+    const m = discoverManifests(root);
+    expect(manifestById(m, "windows")).toBeTruthy();
+    expect(manifestById(m, "client-ubuntu")).toBeTruthy();
+    expect(runScriptDir(manifestById(m, "windows"), null, "maintain").replace(/\\/g, "/")).toMatch(
+      /clients\/windows\/maintain$/,
+    );
+  });
+
+  it("parseRunTier and manifestRunTier map CLI tier to directory", () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
+    writeTree(root, {
+      "packages/services/svc/manifest.json": JSON.stringify({ id: "svc", verbs: {} }),
+      "packages/clients/win/manifest.json": JSON.stringify({ id: "win", verbs: {} }),
+    });
+    const m = discoverManifests(join(root, "packages"));
+    expect(parseRunTier("service")).toBe("services");
+    expect(parseRunTier("client")).toBe("clients");
+    expect(parseRunTier("nope")).toBeNull();
+    expect(manifestRunTier(manifestById(m, "svc"))).toBe("service");
+    expect(manifestRunTier(manifestById(m, "win"))).toBe("client");
+    expect(manifestByTierAndId(m, "service", "svc")).toBeTruthy();
+    expect(manifestByTierAndId(m, "client", "svc")).toBeNull();
+    expect(manifestByTierAndId(m, "service", "win")).toBeNull();
+  });
+
+  it("resolveRunInvocation routes legacy platform manifest", () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
+    writeTree(root, {
+      "clients/legacy/manifest.json": JSON.stringify({
+        id: "legacy",
+        platforms: ["windows"],
+        verbs: { maintain: { script: "run.mjs" } },
+      }),
+    });
+    const m = manifestById(discoverManifests(root), "legacy");
+    expect(resolveRunInvocation(["legacy", "windows", "maintain"], m)).toEqual({
+      packageId: "legacy",
+      platform: "windows",
+      verb: "maintain",
+    });
   });
 
   it("verbSpec rejects invalid specs", () => {

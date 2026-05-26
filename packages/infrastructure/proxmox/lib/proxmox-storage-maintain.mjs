@@ -10,7 +10,7 @@ import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
 import { pveFormBody, pveJsonRequest, pveDataArray } from "./pve-http.mjs";
 import { STORAGE_UPDATE_KEYS } from "./pve-version.mjs";
 
-const DEFAULT_STORAGE_IDS = ["nas-1", "nas-2"];
+const DEFAULT_STORAGE_IDS = ["nas-a", "nas-b"];
 
 /** API response fields that are not part of storage.cfg create/update. */
 const STORAGE_READONLY_KEYS = new Set([

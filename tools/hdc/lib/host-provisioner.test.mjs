@@ -5,8 +5,8 @@ import { flagGet, flagNumber, parseArgvFlags } from "../../../packages/lib/parse
 
 describe("parseArgvFlags", () => {
   it("parses boolean flags and pairs", () => {
-    expect(parseArgvFlags(["create-container", "--host", "pve-a", "--dry"])).toEqual({
-      host: "pve-a",
+    expect(parseArgvFlags(["create-container", "--host", "hypervisor-a", "--dry"])).toEqual({
+      host: "hypervisor-a",
       dry: "1",
     });
   });

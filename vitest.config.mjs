@@ -3,7 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tools/hdc/**/*.test.mjs"],
+    include: [
+      "tools/hdc/**/*.test.mjs",
+      "packages/lib/**/*.test.mjs",
+      "packages/infrastructure/**/*.test.mjs",
+    ],
     coverage: {
       provider: "v8",
       reportsDirectory: "./coverage",

@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../hdc-private"
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"dnssec",
+			"dukk",
+			"homeassistant",
+			"letsencrypt",
+			"modsecurity",
+			"tsig",
+			"vmbr",
+			"vmid",
+			"webroot"
+		]
+	}
+}
