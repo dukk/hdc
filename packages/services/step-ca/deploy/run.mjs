@@ -35,7 +35,8 @@ import {
   stopAndDestroyQemu,
   waitForSsh,
 } from "../lib/proxmox-qemu-redeploy.mjs";
-import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -231,7 +232,10 @@ async function deployOne(deployment, flags, global, caPassword, log) {
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await ,
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   );
 

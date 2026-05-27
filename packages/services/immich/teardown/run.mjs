@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Teardown Immich Proxmox QEMU deployments.
+ * Teardown Immich (Synology compose down or destroy Proxmox QEMU).
  *
- * Usage: hdc run service immich teardown -- [--instance a | --system-id vm-immich-a]
+ * Usage: hdc run service immich teardown -- [--instance a | --system-id immich-a]
  *        [--dry-run] [--yes] [--skip-compose-down]
  */
 import { basename, dirname, join } from "node:path";
@@ -17,12 +17,14 @@ import { stopAndDestroyQemu } from "../../../infrastructure/proxmox/lib/proxmox-
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveImmichDeployments } from "../lib/deployments.mjs";
 import { composeDownOnHost } from "../lib/immich-install.mjs";
+import { teardownImmichOnSynology } from "../lib/immich-synology.mjs";
 import { locateGuest } from "../lib/proxmox-qemu-redeploy.mjs";
 import {
   confirmTeardown,
   teardownDryRun,
 } from "../../ollama/lib/teardown-confirm.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -59,6 +61,47 @@ async function teardownOne(deployment, flags) {
   const { mode, systemId, proxmox: px, configure, install } = deployment;
   const dryRun = teardownDryRun(flags);
   const skipComposeDown = flagGet(flags, "skip-compose-down", "skip_compose_down") !== undefined;
+
+  if (mode === "synology-docker") {
+    if (dryRun) {
+      errout.write(`[hdc] ${target} ${verb}: [dry-run] would compose down ${systemId} on Synology.\n`);
+      return {
+        ok: true,
+        system_id: systemId,
+        mode,
+        dry_run: true,
+        message: "dry-run",
+      };
+    }
+
+    let proceed;
+    try {
+      proceed = await confirmTeardown(systemId, "Docker Compose stack on Synology NAS", flags);
+    } catch (e) {
+      return {
+        ok: false,
+        system_id: systemId,
+        mode,
+        message: String(/** @type {Error} */ (e).message || e),
+      };
+    }
+    if (!proceed) {
+      return { ok: true, system_id: systemId, mode, skipped: true, message: "cancelled" };
+    }
+
+    if (!skipComposeDown) {
+      const down = await teardownImmichOnSynology(deployment);
+      if (!down.ok) {
+        return { ok: false, system_id: systemId, mode, message: down.message ?? "compose down failed" };
+      }
+    }
+    return {
+      ok: true,
+      system_id: systemId,
+      mode,
+      message: skipComposeDown ? "cancelled without compose down" : "compose stack removed",
+    };
+  }
 
   if (mode !== "proxmox-qemu") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };

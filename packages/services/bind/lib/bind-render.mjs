@@ -10,13 +10,19 @@ function zoneFileName(name) {
 }
 
 /**
- * @param {string} name Relative owner (@ or host).
+ * Zone-file owner column: relative to apex (@ or label), never FQDN under the zone.
+ * BIND appends the zone origin to dotted owners without a trailing dot, so
+ * `pve-b.hdc.dukk.org` in zone hdc.dukk.org becomes pve-b.hdc.dukk.org.hdc.dukk.org.
+ * @param {string} name
  * @param {string} zone Apex zone name.
  */
-function fqdnLabel(name, zone) {
-  if (name === "@" || name === "") return zone;
-  if (name.includes(".")) return name.endsWith(".") ? name.slice(0, -1) : name;
-  return `${name}.${zone}`;
+function zoneOwnerLabel(name, zone) {
+  if (name === "@" || name === "") return "@";
+  let n = name.endsWith(".") ? name.slice(0, -1) : name;
+  if (n === zone) return "@";
+  const suffix = `.${zone}`;
+  if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+  return n;
 }
 
 /**
@@ -43,7 +49,7 @@ export function renderSoaLine(opts) {
 export function renderZoneRecords(records, zone) {
   const lines = [];
   for (const rec of records) {
-    const owner = fqdnLabel(rec.name, zone);
+    const owner = zoneOwnerLabel(rec.name, zone);
     const data = rec.data.endsWith(".") || rec.type === "A" ? rec.data : `${rec.data}.`;
     const rdata = rec.type === "A" || rec.type === "AAAA" ? rec.data : data;
     lines.push(`${owner}\t${rec.ttl}\tIN\t${rec.type}\t${rdata}`);
@@ -97,7 +103,8 @@ export function renderNamedOptions(opts) {
     "options {",
     '  directory "/var/cache/bind";',
     "  listen-on-v6 { any; };",
-    `  allow-query { ${acl.length ? acl.join("; ") : "localhost"}; };`,
+    "  allow-query { any; };",
+    `  allow-recursion { ${acl.length ? acl.join("; ") : "localhost"}; };`,
   ];
   if (forwarders.length) {
     lines.push(`  forwarders { ${forwarders.join("; ")}; };`);
@@ -140,6 +147,7 @@ export function renderNamedLocal(opts) {
       lines.push("  type master;");
       lines.push(`  file "/var/lib/bind/zones/${file}.zone";`);
       lines.push(`  allow-transfer { key ${TSIG_KEY_NAME}; };`);
+      lines.push(`  allow-update { key ${TSIG_KEY_NAME}; };`);
       lines.push(`  also-notify { ${opts.secondaryIp}; };`);
       lines.push("};");
       lines.push("");

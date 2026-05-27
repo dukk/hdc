@@ -1,7 +1,9 @@
-import { readResolvedRepoJson, resolveRepoFilePath } from "../../../../tools/hdc/lib/private-repo.mjs";
+import { readResolvedPackageConfigJson } from "../../../../tools/hdc/lib/json-config-preprocess.mjs";
+import { resolveRepoFilePath } from "../../../../tools/hdc/lib/private-repo.mjs";
 
 import { collectForwardARecords } from "../../bind/lib/bind-zones.mjs";
 import { normalizeBindConfig } from "../../bind/lib/deployments.mjs";
+import { buildNagiosBundleFromBind } from "./generate.mjs";
 
 /**
  * @param {import("../../bind/lib/deployments.mjs").BindZoneDefinition[]} zones
@@ -43,8 +45,9 @@ export function resolveBindConfigPath(repoRoot, bindConfigPath) {
  * @returns {{ bindPath: string; records: ReturnType<typeof collectForwardARecords> }}
  */
 export function loadBindForwardARecords(repoRoot, bindConfigPath) {
+  const resolved = resolveRepoFilePath(repoRoot, bindConfigPath);
   const bindPath = resolveBindConfigPath(repoRoot, bindConfigPath);
-  const raw = readResolvedRepoJson(resolveRepoFilePath(repoRoot, bindConfigPath));
+  const raw = readResolvedPackageConfigJson(resolved, { publicRoot: repoRoot });
   const { zones } = normalizeBindConfig(raw);
   const zoneMap = zonesToMap(zones);
   const records = collectForwardARecords(zoneMap);
@@ -66,4 +69,16 @@ export function dedupeBindRecordsByFqdn(records) {
     out.push(r);
   }
   return out;
+}
+
+/**
+ * Load BIND forward A records and render Nagios object config.
+ * @param {string} repoRoot
+ * @param {string} bindConfigPath
+ */
+export function loadNagiosBindBundle(repoRoot, bindConfigPath) {
+  const { bindPath, records } = loadBindForwardARecords(repoRoot, bindConfigPath);
+  const deduped = dedupeBindRecordsByFqdn(records);
+  const bundle = buildNagiosBundleFromBind(deduped);
+  return { bindPath, bindRecordCount: deduped.length, ...bundle };
 }

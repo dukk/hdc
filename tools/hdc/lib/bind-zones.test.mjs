@@ -6,6 +6,7 @@ import {
   parseIpv4Cidr,
   ptrOwnerForIp,
   soaSerialFromTimestamp,
+  validateZoneRecords,
 } from "../../../packages/services/bind/lib/bind-zones.mjs";
 
 describe("bind-zones", () => {
@@ -42,6 +43,18 @@ describe("bind-zones", () => {
     expect(serial).toBe("2026052570");
     expect(serial).toMatch(/^\d{10}$/);
     expect(Number(serial)).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  it("validateZoneRecords rejects CNAME coexisting with other types at same owner", () => {
+    expect(() =>
+      validateZoneRecords(
+        [
+          { type: "A", name: "ca", data: "10.0.0.8", ttl: 3600 },
+          { type: "CNAME", name: "ca", data: "step-ca-a.example.", ttl: 3600 },
+        ],
+        "hdc.example.invalid",
+      ),
+    ).toThrow(/CNAME cannot coexist/);
   });
 
   it("buildZoneBundle uses provided serial for all zones", () => {

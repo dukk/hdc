@@ -8,7 +8,8 @@ Disk usage and Windows Update maintenance for PCs listed in [`packages/clients/c
 - **Inventory:** `inventory/manual/systems/*.json` with `automation_targets: ["client"]` and `access.nodes[].winrm`.
 - **Vault:** `HDC_WINRM_PASSWORD_<SUFFIX>` per host (`winrm_password_vault_suffix` in config).
 - **Env:** `HDC_WINRM_USER` (optional override).
-- **WinRM:** enable on the PC — see [client-winrm.md](../../../docs/manually-deployed/client-winrm.md).
+- **WinRM:** auto-enabled via PsExec when port 5986 is closed (see [client-winrm.md](../../../docs/manually-deployed/client-winrm.md)); or configure manually.
+- **PsExec:** Sysinternals [PsExec](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec) on the operator PC (`PATH`, `HDC_PSEXEC_PATH`, or `winrm_bootstrap.psexec_path`).
 
 ## Commands
 
@@ -25,7 +26,7 @@ node tools/hdc/cli.mjs help run client windows
 
 ## Common flags
 
-`--host-id <id>`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-report`, `--report <path>`.
+`--host-id <id>`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-winrm-bootstrap`, `--no-report`, `--report <path>`.
 
 WoL settings: `wol` in shared client config ([`client-wol.md`](../../../docs/manually-deployed/client-wol.md)).
 
@@ -33,7 +34,7 @@ WoL settings: `wol` in shared client config ([`client-wol.md`](../../../docs/man
 
 No hdc deploy step. Use the PC normally; run `maintain` on a schedule or after patches.
 
-1. Target must be reachable on WinRM (typical `https://<ip>:5986`).
+1. Target must be reachable on WinRM (typical `https://<ip>:5986`). If not, hdc bootstraps WinRM via PsExec when enabled (operator admin on the PC).
 2. `query` returns JSON on stdout for scripting.
 3. `--reboot` only on `maintain` when you accept a restart.
 

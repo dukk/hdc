@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/valkey.config.schema.json",
+  "title": "HDC valkey service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "valkey": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "integer", "minimum": 1 },
+        "password_vault_key": { "type": "string" },
+        "cluster_replicas": { "type": "integer", "minimum": 0 },
+        "min_masters": { "type": "integer", "minimum": 3 },
+        "maxmemory": { "type": "string" },
+        "maxmemory_policy": { "type": "string" }
+      }
+    },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-valkey-[a-z]+$" },
+          "hostname": { "type": "string" },
+          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" }
+        }
+      }
+    }
+  }
+}

@@ -21,6 +21,28 @@
       "upstream": "http://192.0.2.50:8080",
       "tls": { "enabled": true, "cert_name": "app.hdc.example.invalid" },
       "waf": { "enabled": true },
+      "locations": [
+        {
+          "path": "/api/",
+          "proxy_headers": true,
+          "access": { "policy": "internal_only", "deny_status": 404 }
+        },
+        {
+          "path": "~ ^/admin",
+          "proxy_headers": true,
+          "access": { "policy": "internal_only", "deny_status": 401 }
+        },
+        { "path": "/", "proxy_headers": true }
+      ]
+    },
+    {
+      "id": "example-proxied",
+      "server_names": ["proxied.hdc.example.invalid"],
+      "listen": [80, 443],
+      "upstream": "http://192.0.2.51:8080",
+      "client_ip": "cloudflare",
+      "tls": { "enabled": true, "cert_name": "proxied.hdc.example.invalid" },
+      "waf": { "enabled": true },
       "locations": [{ "path": "/", "proxy_headers": true }]
     }
   ],
@@ -47,6 +69,8 @@
         "crs_rules_glob": "/usr/share/modsecurity-crs/rules/*.conf",
         "audit_log": "/var/log/nginx/modsec_audit.log"
       },
+      "trusted_cidrs": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
+      "cloudflare_ipv4": true,
       "client_max_body_size": "64m",
       "proxy_read_timeout": "300s",
       "proxy_connect_timeout": "60s"

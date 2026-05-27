@@ -3,6 +3,7 @@ import {
   LINUX_USERNAME_RE,
   remoteBootstrapHdcBash,
   remoteEnsureLocalAdminUserBash,
+  remoteInstallAuthorizedKeysForUserBash,
   validateLinuxUsername,
 } from "./linux-local-admin-user.mjs";
 
@@ -33,5 +34,21 @@ describe("linux-local-admin-user", () => {
   it("remoteBootstrapHdcBash uses hdc", () => {
     const s = remoteBootstrapHdcBash("YWJj");
     expect(s).toContain("useradd -m -s /bin/bash hdc");
+  });
+
+  it("remoteInstallAuthorizedKeysForUserBash targets user home and is idempotent", () => {
+    const keyB64 = Buffer.from("ssh-ed25519 AAAA test", "utf8").toString("base64");
+    const s = remoteInstallAuthorizedKeysForUserBash("testadmin", [keyB64]);
+    expect(s).toContain("getent passwd");
+    expect(s).toContain("HOME_DIR/.ssh/authorized_keys");
+    expect(s).toContain("chown");
+    expect(s).toContain("grep -qxF");
+    expect(s).toContain(keyB64);
+  });
+
+  it("remoteInstallAuthorizedKeysForUserBash rejects empty key list", () => {
+    expect(() => remoteInstallAuthorizedKeysForUserBash("testadmin", [])).toThrow(
+      /non-empty array/,
+    );
   });
 });

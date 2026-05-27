@@ -10,9 +10,11 @@ import {
   manifestRunTier,
   manifestServices,
   manifestTitle,
+  canonicalRunTier,
   parseRunTier,
   resolveRunInvocation,
   runScriptDir,
+  runTiersUsage,
   RUN_TIERS,
   verbSpec,
   VERBS,
@@ -28,6 +30,11 @@ import {
 } from "./vault-access.mjs";
 import { runUsersBootstrapHdc } from "./users-bootstrap-hdc.mjs";
 import { resolveRepoFile } from "./private-repo.mjs";
+import {
+  filterSecretsForExport,
+  parseSecretsExportArgv,
+  writeSecretExport,
+} from "./secrets-export.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -95,6 +102,8 @@ Usage:
   ${c} secrets set <ENV_NAME> [--stdin | --value <s>]
   ${c} secrets delete <ENV_NAME>
   ${c} secrets list
+  ${c} secrets get <ENV_NAME> --out <path>
+  ${c} secrets dump --out-dir <dir> [--format files|env|json]
   ${c} secrets unlock   # pre-unlock Vaultwarden when HDC_SECRET_BACKEND uses it
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
   ${c} env              # HDC_* variables (secrets redacted)
@@ -134,7 +143,7 @@ function resolveRunManifest(deps, manifests, tierToken, packageId) {
   if (!tierDir) {
     die(
       deps,
-      `run: unknown tier ${JSON.stringify(tierToken)} (expected: ${RUN_TIERS.join(", ")})`,
+      `run: unknown tier ${JSON.stringify(tierToken)} (expected: ${runTiersUsage()})`,
     );
   }
   const m = manifestByTierAndId(manifests, tierToken, packageId);
@@ -176,7 +185,7 @@ function cmdHelp(deps, root, topics) {
   ${c} help help
   ${c} help list
   ${c} help run [ <tier> [ <package> [ <verb> ] ] ]
-  ${c} help secrets [ path | init | change-passphrase | set | list | delete ]
+  ${c} help secrets [ path | init | change-passphrase | set | list | get | dump | delete ]
   ${c} help users [ bootstrap-hdc ]
   ${c} help env`);
     return;
@@ -195,7 +204,7 @@ for the command summary, or add topics to drill down, for example:
   ${c} help run infrastructure proxmox query
   ${c} help secrets set
 
-Topics mirror real commands: "run" is followed by tier (client | infrastructure | service), package id,
+Topics mirror real commands: "run" is followed by tier (client | infrastructure (infra) | service), package id,
 then a verb (${VERBS.join(", ")}). Package scripts live under packages/<tier-dir>/<package>/<verb>/.
 `);
     return;
@@ -245,7 +254,7 @@ Usage:
   ${c} run <tier> <package> <verb> [-- <extra args...>]
   ${c} run <tier> <package> <platform> <verb> [-- <extra args...>]   # when manifest lists "platforms"
 
-- <tier> is one of: ${RUN_TIERS.join(", ")} (maps to packages/clients, packages/infrastructure, packages/services).
+- <tier> is one of: ${runTiersUsage()} (maps to packages/clients, packages/infrastructure, packages/services).
 - <package> is the manifest "id" (or the packages/ folder name if id is missing).
 - <verb> must be one of: ${VERBS.join(", ")}.
 - Platform-routed packages require <platform> before <verb>; see ${c} help run <tier> <package>.
@@ -270,12 +279,13 @@ Drill into one package or verb:
     if (!tierDir) {
       die(
         deps,
-        `help run: unknown tier ${JSON.stringify(tierToken)} (expected: ${RUN_TIERS.join(", ")})`,
+        `help run: unknown tier ${JSON.stringify(tierToken)} (expected: ${runTiersUsage()})`,
       );
     }
 
     const manifests = discoverManifests(deps.packagesDir(root));
-    const tierManifests = manifests.filter((m) => manifestRunTier(m) === tierToken);
+    const canonical = canonicalRunTier(tierToken);
+    const tierManifests = manifests.filter((m) => manifestRunTier(m) === canonical);
 
     if (topics.length === 2) {
       const lines = [];
@@ -432,11 +442,14 @@ Subcommands:
   change-passphrase  Re-encrypt vault with a new passphrase (current via env or prompt).
   set     Set or update a key (ENV-style name).
   list    List keys (Vaultwarden items and/or local bootstrap keys).
+  get     Write one secret value to a file (--out required).
+  dump    Export secrets to a directory (per-key files, or --format env|json).
   delete  Remove a key.
   unlock  Unlock Vaultwarden vault (bw session) when HDC_SECRET_BACKEND is vaultwarden or auto.
 
 Examples:
   ${c} secrets path
+  ${c} help secrets dump
   ${c} help secrets set
 `);
       return;
@@ -534,9 +547,47 @@ Examples:
 `);
       return;
     }
+    if (sub === "get") {
+      const c = helpExe(deps);
+      deps.log(`secrets get — write one secret to a file
+
+Requires an unlocked vault (local passphrase or Vaultwarden). Values are written as plaintext
+with mode 0600. Prefer a directory outside the hdc repo; never commit exported files.
+
+Usage:
+  ${c} secrets get <ENV_NAME> --out <path> [--force] [--dry-run]
+
+Example:
+  ${c} secrets get HDC_PROXMOX_API_TOKEN --out %USERPROFILE%\\.hdc\\export\\HDC_PROXMOX_API_TOKEN
+`);
+      return;
+    }
+    if (sub === "dump") {
+      const c = helpExe(deps);
+      deps.log(`secrets dump — export secrets to the filesystem
+
+Requires an unlocked vault. By default excludes local bootstrap keys (HDC_VAULTWARDEN_*);
+use --include-bootstrap to export those too.
+
+Usage:
+  ${c} secrets dump --out-dir <dir> [--format files|env|json] [--key <ENV_NAME> ...]
+      [--include-bootstrap] [--force] [--dry-run]
+
+Formats:
+  files (default)  One file per key named <ENV_NAME> (value only).
+  env              Single secrets.env with KEY=value lines.
+  json             Single secrets.json object.
+
+Examples:
+  ${c} secrets dump --out-dir %USERPROFILE%\\.hdc\\export
+  ${c} secrets dump --out-dir %USERPROFILE%\\.hdc\\export --format env
+  ${c} secrets dump --out-dir %USERPROFILE%\\.hdc\\export --key HDC_BIND_TSIG_KEY
+`);
+      return;
+    }
     die(
       deps,
-      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, delete, unlock)`,
+      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, get, dump, delete, unlock)`,
     );
   }
 
@@ -604,6 +655,71 @@ function bootstrapEnv(deps) {
   const root = deps.repoRoot();
   deps.loadDotenv(deps.join(root, ".env"), false);
   return root;
+}
+
+/**
+ * @param {CliDeps} deps
+ * @param {string} sub
+ * @param {string[]} rest
+ */
+async function cmdSecretsExport(deps, sub, rest) {
+  const vaultPath = deps.defaultVaultPath();
+  const access = createVaultAccess(vaultDepsFromCli(deps));
+
+  /** @type {import("./secrets-export.mjs").ParsedSecretsExportArgv} */
+  let parsed;
+  try {
+    parsed = parseSecretsExportArgv([sub, ...rest]);
+  } catch (e) {
+    die(deps, /** @type {Error} */ (e).message);
+  }
+
+  if (parsed.mode === "get") {
+    if (!parsed.key || !ENV_NAME_RE.test(parsed.key)) {
+      die(
+        deps,
+        "secrets get: need a valid ENV-style name (letters, digits, underscore)",
+      );
+    }
+  }
+  for (const k of parsed.keys) {
+    if (!ENV_NAME_RE.test(k)) {
+      die(
+        deps,
+        `secrets dump: invalid --key ${JSON.stringify(k)} (letters, digits, underscore)`,
+      );
+    }
+  }
+
+  const all = await access.readSecrets({ createIfMissing: false });
+  if (all === null) {
+    die(deps, `secrets ${sub}: no vault at ${vaultPath} (run secrets init first)`);
+  }
+
+  const filterKeys =
+    parsed.mode === "get" && parsed.key ? [parsed.key] : parsed.keys;
+  const { secrets, missing } = filterSecretsForExport(all, {
+    keys: filterKeys,
+    includeBootstrap: parsed.includeBootstrap,
+  });
+  if (missing.length > 0) {
+    die(deps, `secrets ${sub}: unknown key(s): ${missing.join(", ")}`);
+  }
+  if (Object.keys(secrets).length === 0) {
+    deps.warn(`secrets ${sub}: no secrets to export`);
+    return;
+  }
+
+  try {
+    const { written, destination } = writeSecretExport(deps, secrets, parsed);
+    if (parsed.dryRun) {
+      deps.log(`[dry-run] would export ${written} secret(s)`);
+    } else {
+      deps.log(`wrote ${written} secret(s) to ${destination}`);
+    }
+  } catch (e) {
+    die(deps, /** @type {Error} */ (e).message);
+  }
 }
 
 /**
@@ -681,6 +797,10 @@ async function cmdSecrets(deps, argv) {
   }
   if (sub === "unlock") {
     await access.unlockVaultwarden();
+    return;
+  }
+  if (sub === "get" || sub === "dump") {
+    await cmdSecretsExport(deps, sub, argv.slice(1));
     return;
   }
   if (sub === "delete") {
@@ -801,7 +921,7 @@ function cmdList(deps, root) {
 function cmdRun(deps, root, argv) {
   const { forward, extra } = splitRunArgs(argv);
   if (forward.length < 3) {
-    die(deps, `run: need <tier> <package> <verb> (tiers: ${RUN_TIERS.join(", ")})`);
+    die(deps, `run: need <tier> <package> <verb> (tiers: ${runTiersUsage()})`);
   }
   const manifests = discoverManifests(deps.packagesDir(root));
   const tierToken = forward[0];
@@ -871,7 +991,10 @@ export async function runCli(argv, deps) {
       cmdRun(deps, root, rest);
     } else if (cmd === "secrets") {
       if (rest.length === 0) {
-        die(deps, "secrets: need a subcommand (path, init, change-passphrase, set, list, delete)");
+        die(
+          deps,
+          "secrets: need a subcommand (path, init, change-passphrase, set, list, get, dump, delete)",
+        );
       }
       await cmdSecrets(deps, rest);
       return 0;

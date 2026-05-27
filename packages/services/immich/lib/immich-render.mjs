@@ -88,6 +88,14 @@ export function renderImmichEnv(immich, install, dbPassword) {
     vars.MACHINE_LEARNING_ENABLED = "false";
   }
 
+  const publicUrl =
+    typeof immich.public_url === "string" && immich.public_url.trim()
+      ? immich.public_url.trim()
+      : "";
+  if (publicUrl) {
+    vars.IMMICH_SERVER_URL = publicUrl;
+  }
+
   const lines = Object.entries(vars).map(([k, v]) => `${k}=${v}`);
   return `${lines.join("\n")}\n`;
 }

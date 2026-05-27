@@ -6,6 +6,27 @@ import { resolveReleaseTarget } from "./uptime-kuma-release.mjs";
 
 export { resolvePveSshForHost, waitForCt };
 
+/** Ubuntu 22.04 LXC templates often lack universe; browser package is optional for HTTP-only monitors. */
+export const CHROMIUM_APT_SHELL = [
+  "(",
+  "  grep -qs ' universe' /etc/apt/sources.list || sed -i 's/ main$/ main universe/' /etc/apt/sources.list",
+  "  apt-get update -qq",
+  "  for CHROMIUM_PKG in chromium-browser chromium; do",
+  '    if apt-cache show "${CHROMIUM_PKG}" >/dev/null 2>&1; then',
+  '      apt-get install -y -qq "${CHROMIUM_PKG}" && break',
+  "    fi",
+  "  done",
+  ") || true",
+];
+
+export const CHROMIUM_SYMLINK_SHELL = [
+  'CHROMIUM_BIN=""',
+  "for c in /usr/bin/chromium /usr/bin/chromium-browser /snap/bin/chromium; do",
+  '  if [ -x "$c" ]; then CHROMIUM_BIN="$c"; break; fi',
+  "done",
+  'if [ -n "$CHROMIUM_BIN" ]; then ln -sf "$CHROMIUM_BIN" /opt/uptime-kuma/chromium; fi',
+];
+
 /**
  * @param {Record<string, unknown>} uptimeKuma
  */
@@ -30,7 +51,8 @@ export function buildInstallScript(tag, tarballUrl, nodeVer) {
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update -qq",
-    "apt-get install -y -qq curl ca-certificates chromium",
+    "apt-get install -y -qq curl ca-certificates",
+    ...CHROMIUM_APT_SHELL,
     `curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -`,
     "apt-get install -y -qq nodejs",
     "command -v node >/dev/null && command -v npm >/dev/null",
@@ -42,7 +64,7 @@ export function buildInstallScript(tag, tarballUrl, nodeVer) {
     "cd /opt/uptime-kuma",
     "npm ci --omit=dev",
     "npm run download-dist",
-    "ln -sf /usr/bin/chromium /opt/uptime-kuma/chromium",
+    ...CHROMIUM_SYMLINK_SHELL,
     `echo '${escapedTag}' > /opt/uptime-kuma/.hdc-release-tag`,
     "cat > /etc/systemd/system/uptime-kuma.service <<'UNIT'",
     "[Unit]",

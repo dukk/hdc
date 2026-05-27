@@ -17,9 +17,29 @@
           "server_names": { "type": "array", "items": { "type": "string" } },
           "listen": { "type": "array", "items": { "type": "integer" } },
           "upstream": { "type": "string" },
+          "client_ip": { "enum": ["remote_addr", "cloudflare"] },
+          "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
           "tls": { "type": "object" },
           "waf": { "type": "object" },
-          "locations": { "type": "array" }
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string" },
+                "proxy_headers": { "type": "boolean" },
+                "websocket": { "type": "boolean" },
+                "access": {
+                  "type": "object",
+                  "properties": {
+                    "policy": { "enum": ["internal_only"] },
+                    "deny_status": { "enum": [401, 404] }
+                  },
+                  "required": ["policy", "deny_status"]
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -51,7 +71,9 @@
                 "unicode_map": { "type": "string" },
                 "audit_log": { "type": "string" }
               }
-            }
+            },
+            "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
+            "cloudflare_ipv4": { "type": "boolean" }
           }
         }
       }

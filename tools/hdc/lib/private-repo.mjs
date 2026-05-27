@@ -3,6 +3,128 @@ import { dirname, join, relative, resolve } from "node:path";
 
 const DEFAULT_PRIVATE_DIR = "hdc-private";
 
+const DEFAULT_COMPACT_ARRAY_KEYS = ["records", "port_forwards", "page_rules", "email_routing_rules"];
+
+/**
+ * @param {unknown} v
+ */
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * @param {unknown} arr
+ */
+function isArrayOfPlainObjects(arr) {
+  return Array.isArray(arr) && arr.every(isPlainObject);
+}
+
+/**
+ * @param {number} level
+ * @param {number} indent
+ */
+function pad(level, indent) {
+  return " ".repeat(level * indent);
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} level
+ * @param {number} indent
+ * @param {Set<string>} compactArrayKeys
+ */
+function formatValue(value, level, indent, compactArrayKeys) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return formatArray(value, level, indent, compactArrayKeys);
+  }
+  return formatObject(/** @type {Record<string, unknown>} */ (value), level, indent, compactArrayKeys);
+}
+
+/**
+ * Single-line object with spaces after `{`, `,`, and before `}`.
+ * @param {Record<string, unknown>} obj
+ */
+function stringifyCompactLineObject(obj) {
+  const parts = Object.entries(obj).map(
+    ([key, val]) => `${JSON.stringify(key)}: ${JSON.stringify(val)}`,
+  );
+  return `{ ${parts.join(", ")} }`;
+}
+
+/**
+ * @param {unknown[]} arr
+ * @param {number} level
+ * @param {number} indent
+ * @param {Set<string>} compactArrayKeys
+ */
+function formatCompactObjectArray(arr, level, indent) {
+  if (arr.length === 0) return "[]";
+  const inner = pad(level + 1, indent);
+  const lines = arr.map(
+    (item) => `${inner}${stringifyCompactLineObject(/** @type {Record<string, unknown>} */ (item))}`,
+  );
+  return `[\n${lines.join(",\n")}\n${pad(level, indent)}]`;
+}
+
+/**
+ * @param {unknown[]} arr
+ * @param {number} level
+ * @param {number} indent
+ * @param {Set<string>} compactArrayKeys
+ */
+function formatArray(arr, level, indent, compactArrayKeys) {
+  if (arr.length === 0) return "[]";
+  const itemPad = pad(level + 1, indent);
+  const lines = arr.map((item) => {
+    const formatted = formatValue(item, level + 1, indent, compactArrayKeys);
+    if (!formatted.includes("\n")) {
+      return `${itemPad}${formatted}`;
+    }
+    return formatted;
+  });
+  return `[\n${lines.join(",\n")}\n${pad(level, indent)}]`;
+}
+
+/**
+ * @param {Record<string, unknown>} obj
+ * @param {number} level
+ * @param {number} indent
+ * @param {Set<string>} compactArrayKeys
+ */
+function formatObject(obj, level, indent, compactArrayKeys) {
+  const entries = Object.entries(obj);
+  if (entries.length === 0) return "{}";
+  const inner = pad(level + 1, indent);
+  const lines = entries.map(([key, val]) => {
+    let formatted;
+    if (Array.isArray(val) && compactArrayKeys.has(key) && isArrayOfPlainObjects(val)) {
+      formatted = formatCompactObjectArray(val, level + 1, indent);
+    } else if (isPlainObject(val)) {
+      formatted = formatObject(/** @type {Record<string, unknown>} */ (val), level + 1, indent, compactArrayKeys);
+    } else {
+      formatted = formatValue(val, level + 1, indent, compactArrayKeys);
+    }
+    return `${inner}${JSON.stringify(key)}: ${formatted}`;
+  });
+  return `${pad(level, indent)}{\n${lines.join(",\n")}\n${pad(level, indent)}}`;
+}
+
+/**
+ * Pretty-print JSON with selected object arrays compact (one object per line).
+ * @param {unknown} data
+ * @param {{ indent?: number; compactArrayKeys?: string[] }} [opts]
+ * @returns {string}
+ */
+export function formatRepoJson(data, opts = {}) {
+  const indent = opts.indent ?? 2;
+  const keys = opts.compactArrayKeys ?? DEFAULT_COMPACT_ARRAY_KEYS;
+  const compactArrayKeys = new Set(keys);
+  return `${formatValue(data, 0, indent, compactArrayKeys)}\n`;
+}
+
 /**
  * @param {unknown} v
  */
@@ -122,6 +244,19 @@ export function preferredNewFilePath(publicRoot, relPath, env = process.env) {
 }
 
 /**
+ * Default path for a new package operation report (prefer hdc-private when present).
+ * @param {string} publicRoot hdc repo root
+ * @param {string} packageRoot absolute package directory under the public repo layout
+ * @param {string} basename report filename (e.g. maintain-2026-05-26T12-00-00.md)
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string} Absolute path
+ */
+export function preferredPackageReportPath(publicRoot, packageRoot, basename, env = process.env) {
+  const rel = relative(publicRoot, join(packageRoot, "reports", basename)).replace(/\\/g, "/");
+  return preferredNewFilePath(publicRoot, rel, env);
+}
+
+/**
  * Human-readable label for stderr (repo-relative + source).
  * @param {ResolvedRepoFile} resolved
  * @param {string} publicRoot
@@ -166,13 +301,12 @@ export function readResolvedRepoJson(resolved) {
 /**
  * @param {ResolvedRepoFile} resolved
  * @param {unknown} data
- * @param {{ indent?: number }} [opts]
+ * @param {{ indent?: number; compactArrayKeys?: string[] }} [opts]
  */
 export function writeResolvedRepoJson(resolved, data, opts = {}) {
-  const indent = opts.indent ?? 2;
   const dir = dirname(resolved.path);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(resolved.path, `${JSON.stringify(data, null, indent)}\n`, "utf8");
+  writeFileSync(resolved.path, formatRepoJson(data, opts), "utf8");
 }
 
 /**

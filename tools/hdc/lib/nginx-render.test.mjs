@@ -31,4 +31,23 @@ describe("nginx render", () => {
   it("extracts TLS domains from sites", () => {
     expect(tlsDomainsFromSites([sampleSite])).toEqual(["app.hdc.example.invalid"]);
   });
+
+  it("renders static HTTP site without TLS redirect", () => {
+    const vhost = renderSiteVhost({
+      site: {
+        id: "drippylit",
+        server_names: ["drippylit.com"],
+        listen: [80],
+        static: { root: "/var/www/drippylit" },
+        tls: { enabled: false },
+      },
+      http01Acme: true,
+      webroot: "/var/www/letsencrypt",
+    });
+    expect(vhost).toContain('root /var/www/drippylit');
+    expect(vhost).toContain("try_files $uri $uri/ =404");
+    expect(vhost).not.toContain("return 301 https://");
+    expect(vhost).not.toContain("proxy_pass");
+    expect(tlsDomainsFromSites([{ id: "drippylit", server_names: ["drippylit.com"], tls: { enabled: false } }])).toEqual([]);
+  });
 });

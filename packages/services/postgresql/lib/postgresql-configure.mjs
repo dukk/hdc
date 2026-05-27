@@ -98,12 +98,8 @@ export async function configurePostgresqlServer(opts) {
     listenAddresses,
     replicationEnabled,
   }), log);
-  uploadFile(
-    exec,
-    `${confDir}/conf.d/hdc-pg_hba.conf`,
-    renderHdcPgHbaConf(listenCidrs, replicationLines),
-    log,
-  );
+  const hbaRulesPath = `${confDir}/hdc-pg_hba.rules`;
+  uploadFile(exec, hbaRulesPath, renderHdcPgHbaConf(listenCidrs, replicationLines), log);
 
   runChecked(
     exec,
@@ -113,8 +109,13 @@ export async function configurePostgresqlServer(opts) {
   );
   runChecked(
     exec,
-    `grep -q 'hdc-pg_hba.conf' ${confDir}/pg_hba.conf || ` +
-      `echo "include '${confDir}/conf.d/hdc-pg_hba.conf'" >> ${confDir}/pg_hba.conf`,
+    `grep -q 'hdc-pg_hba.rules' ${confDir}/pg_hba.conf || ` +
+      `echo "include ${hbaRulesPath}" >> ${confDir}/pg_hba.conf`,
+    log,
+  );
+  runChecked(
+    exec,
+    `rm -f ${confDir}/conf.d/hdc-pg_hba.conf`,
     log,
   );
 

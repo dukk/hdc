@@ -14,6 +14,87 @@ export function nagiosHostName(sidecarId, nodeName) {
 }
 
 /**
+ * Nagios-safe host_name from a BIND FQDN (e.g. pi-hole-a.hdc.dukk.org. → pi-hole-a_hdc_dukk_org).
+ * @param {string} fqdn
+ */
+export function nagiosHostNameFromFqdn(fqdn) {
+  const t = String(fqdn).trim().replace(/\.$/, "");
+  const raw = t.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/\./g, "_");
+  return raw.slice(0, 200) || "host";
+}
+
+/**
+ * @typedef {{ zone: string; name: string; fqdn: string; ip: string; ttl: number }} BindForwardARecord
+ */
+
+/**
+ * Build Nagios object config from BIND forward A records (PING checks only).
+ * @param {BindForwardARecord[]} records
+ * @returns {{ hosts: { nagiosHostName: string; address: string; alias: string }[]; nagiosCfg: string; stats: { hostCount: number; serviceCount: number } }}
+ */
+export function buildNagiosBundleFromBind(records) {
+  /** @type {{ nagiosHostName: string; address: string; alias: string }[]} */
+  const hosts = [];
+  for (const r of records) {
+    const ip = typeof r.ip === "string" ? r.ip.trim() : "";
+    if (!ip) continue;
+    const fqdn = typeof r.fqdn === "string" ? r.fqdn.trim() : "";
+    const name = typeof r.name === "string" ? r.name.trim() : "";
+    const zone = typeof r.zone === "string" ? r.zone.trim() : "";
+    hosts.push({
+      nagiosHostName: nagiosHostNameFromFqdn(fqdn || `${name}.${zone}`),
+      address: ip,
+      alias: fqdn.replace(/\.$/, "") || `${name}.${zone}`,
+    });
+  }
+
+  const lines = [];
+  lines.push("###############################################################################");
+  lines.push("# HDC Nagios — generated from BIND — do not edit on server");
+  lines.push("###############################################################################");
+  lines.push("");
+  lines.push("define host {");
+  lines.push("  name hdc-bind-host");
+  lines.push("  register 0");
+  lines.push("  max_check_attempts 3");
+  lines.push("  check_interval 5");
+  lines.push("  retry_interval 1");
+  lines.push("}");
+  lines.push("");
+  lines.push("define service {");
+  lines.push("  name hdc-bind-service");
+  lines.push("  register 0");
+  lines.push("  max_check_attempts 3");
+  lines.push("  check_interval 5");
+  lines.push("  retry_interval 1");
+  lines.push("}");
+  lines.push("");
+  let serviceCount = 0;
+  for (const h of hosts) {
+    lines.push("define host {");
+    lines.push(`  host_name ${h.nagiosHostName}`);
+    lines.push(`  alias ${escapeNagiosString(h.alias)}`);
+    lines.push(`  address ${h.address}`);
+    lines.push("  use hdc-bind-host");
+    lines.push("}");
+    lines.push("");
+    lines.push("define service {");
+    lines.push(`  host_name ${h.nagiosHostName}`);
+    lines.push("  service_description PING");
+    lines.push("  check_command check_ping!100.0,20%!500.0,60%");
+    lines.push("  use hdc-bind-service");
+    lines.push("}");
+    lines.push("");
+    serviceCount++;
+  }
+  return {
+    hosts,
+    nagiosCfg: lines.join("\n"),
+    stats: { hostCount: hosts.length, serviceCount },
+  };
+}
+
+/**
  * @param {unknown} data
  * @returns {Record<string, unknown>}
  */

@@ -3,9 +3,9 @@
   "title": "Nagios monitoring",
   "env_required": [],
   "inventory_docs": [
-    "inventory/manual/systems/hypervisor-a.json",
-    "inventory/manual/systems/hypervisor-b.json",
-    "inventory/manual/systems/hypervisor-c.json"
+    "inventory/manual/systems/nagios-a.json",
+    "inventory/manual/systems/nagios-b.json",
+    "inventory/manual/systems/nagios-c.json"
   ],
   "verbs": {
     "deploy": { "script": "run.mjs" },

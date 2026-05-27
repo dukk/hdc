@@ -46,7 +46,8 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { createPostgresqlVaultAccess } from "../lib/vault-deps.mjs";
 import { postgresqlReportExtraSections } from "../lib/postgresql-report.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -325,7 +326,10 @@ async function deployOne(deployment, allDeployments, flags, global, superuserPas
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await ,
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   );
 
@@ -356,6 +360,10 @@ async function deployOne(deployment, allDeployments, flags, global, superuserPas
   const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
+  errout.write(
+    `[hdc] ${target} ${verb}: waiting 45s for cloud-init on first boot before SSH probe …\n`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 45_000));
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
   await waitForSsh({ user: sshUser, host: sshHost });
 

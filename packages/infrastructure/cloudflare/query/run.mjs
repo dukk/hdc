@@ -1,22 +1,32 @@
 #!/usr/bin/env node
 /**
- * Cloudflare DNS query: list account zones and diff vs config (JSON on stdout).
+ * Cloudflare query: zones, DNS, page rules, email routing (JSON on stdout).
  *
- * Usage: hdc run infrastructure cloudflare query -- [--zone <name>]
+ * Usage: hdc run infrastructure cloudflare query --
+ *   [--zone <name>] [--import-zones] [--import-page-rules] [--import-email-routing] [--yes]
  */
+import { createInterface } from "node:readline/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stderr as errout } from "node:process";
+import { stdin as input, stderr as errout } from "node:process";
 
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createCloudflareClient } from "../lib/cloudflare-api.mjs";
 import { normalizeCloudflareConfig } from "../lib/cloudflare-config.mjs";
-import { collectCloudflareDnsState } from "../lib/cloudflare-collect.mjs";
+import {
+  buildDiscoveredZones,
+  collectCloudflareDnsState,
+  fetchLiveZonesWithRecords,
+} from "../lib/cloudflare-collect.mjs";
+import {
+  importEmailRoutingToConfig,
+  importPageRulesToConfig,
+  importZonesToConfig,
+} from "../lib/cloudflare-import.mjs";
 import { createCloudflareVaultAccess, resolveCloudflareToken } from "../lib/vault-deps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const target = basename(dirname(here));
 const verb = basename(here);
 const packageRoot = join(here, "..");
 const PACKAGE_CONFIG_EXAMPLE = "packages/infrastructure/cloudflare/config.example.json";
@@ -28,10 +38,37 @@ function log(line) {
   errout.write(`[cloudflare] ${line}\n`);
 }
 
+/**
+ * @param {string} question
+ */
+async function confirm(question) {
+  const rl = createInterface({ input, output: errout });
+  try {
+    const answer = await rl.question(question);
+    return /^y(es)?$/i.test(String(answer).trim());
+  } finally {
+    rl.close();
+  }
+}
+
 async function main() {
   log(`${verb}: starting`);
   const flags = parseArgvFlags(process.argv.slice(2));
   const zoneName = flagGet(flags, "zone");
+  const importZones = flags["import-zones"] === "1";
+  const importPageRules = flags["import-page-rules"] === "1";
+  const importEmailRouting = flags["import-email-routing"] === "1";
+  const yes = flags.yes === "1";
+
+  if (importZones) {
+    log("import-zones: will replace zones[] in config.json with live DNS snapshot from Cloudflare.");
+  }
+  if (importPageRules) {
+    log("import-page-rules: will merge page_rules[] on matching config zones from live API.");
+  }
+  if (importEmailRouting) {
+    log("import-email-routing: will merge email_routing_rules[] and catch_all on matching config zones.");
+  }
 
   const { data: cfgRaw, source } = loadPackageConfigFromPackageRoot(packageRoot, {
     exampleRel: PACKAGE_CONFIG_EXAMPLE,
@@ -39,10 +76,10 @@ async function main() {
   });
   log(`config loaded (${source})`);
 
-  const config = normalizeCloudflareConfig(cfgRaw);
+  let config = normalizeCloudflareConfig(cfgRaw);
   const vault = createCloudflareVaultAccess();
   const token = await resolveCloudflareToken(vault);
-  log(`vault: ${"HDC_CLOUDFLARE_API_TOKEN"} loaded`);
+  log("API token loaded");
 
   const api = createCloudflareClient({
     token,
@@ -50,7 +87,92 @@ async function main() {
     accountId: config.accountId,
   });
 
-  log("fetching zones and DNS records from Cloudflare API");
+  log("fetching zones, DNS, page rules, and email routing from Cloudflare API");
+  const liveFetch = await fetchLiveZonesWithRecords({
+    config,
+    api,
+    zoneFilterName: zoneName,
+  });
+  const discoveredZones = buildDiscoveredZones(liveFetch.liveZones);
+
+  /** @type {{ zone_count: number; record_count: number; config_rel: string } | null} */
+  let importZonesResult = null;
+  /** @type {{ zones_updated: number; config_rel: string } | null} */
+  let importPageRulesResult = null;
+  /** @type {{ zones_updated: number; config_rel: string } | null} */
+  let importEmailRoutingResult = null;
+
+  if (importZones) {
+    const zoneCount = liveFetch.liveZones.length;
+    const recordCount = liveFetch.liveZones.reduce((n, z) => n + z.records.length, 0);
+    if (!yes) {
+      const ok = await confirm(
+        `Replace zones[] with ${zoneCount} zone(s) (${recordCount} DNS record(s))? [y/N] `
+      );
+      if (!ok) {
+        errout.write("[cloudflare] Aborted: import not confirmed (use --yes to skip prompt).\n");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    const written = importZonesToConfig({
+      packageRoot,
+      liveZones: liveFetch.liveZones,
+      log,
+    });
+    importZonesResult = {
+      zone_count: written.zones.length,
+      record_count: written.recordCount,
+      config_rel: written.configRel,
+    };
+    config = normalizeCloudflareConfig({ ...cfgRaw, zones: written.zones });
+    log(`import-zones complete: ${written.configRel}`);
+  }
+
+  if (importPageRules) {
+    const configured = liveFetch.liveZones.filter((z) => config.zonesByName.has(z.name));
+    if (!yes) {
+      const ok = await confirm(
+        `Merge page_rules on ${configured.length} configured zone(s)? [y/N] `
+      );
+      if (!ok) {
+        errout.write("[cloudflare] Aborted: import-page-rules not confirmed (use --yes).\n");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    importPageRulesResult = importPageRulesToConfig({
+      packageRoot,
+      liveByZone: configured.map((z) => ({ name: z.name, page_rules: z.page_rules })),
+      log,
+    });
+    log(`import-page-rules complete: ${importPageRulesResult.config_rel}`);
+  }
+
+  if (importEmailRouting) {
+    const configured = liveFetch.liveZones.filter((z) => config.zonesByName.has(z.name));
+    if (!yes) {
+      const ok = await confirm(
+        `Merge email routing on ${configured.length} configured zone(s)? [y/N] `
+      );
+      if (!ok) {
+        errout.write("[cloudflare] Aborted: import-email-routing not confirmed (use --yes).\n");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    importEmailRoutingResult = importEmailRoutingToConfig({
+      packageRoot,
+      liveByZone: configured.map((z) => ({
+        name: z.name,
+        email_routing_rules: z.email_routing_rules,
+        catch_all: z.catch_all,
+      })),
+      log,
+    });
+    log(`import-email-routing complete: ${importEmailRoutingResult.config_rel}`);
+  }
+
   const state = await collectCloudflareDnsState({
     config,
     api,
@@ -64,11 +186,17 @@ async function main() {
     config_source: source,
     zone_filter: config.zoneFilter,
     managed_zone_names: config.zones.map((z) => z.name),
+    discovered_zones: discoveredZones,
     account_zones: state.account_zones,
     unmanaged_zones: state.unmanaged_zones,
     missing_configured_zones: state.missing_configured_zones,
     zones_scanned: state.zones_scanned,
+    import_zones: importZonesResult,
+    import_page_rules: importPageRulesResult,
+    import_email_routing: importEmailRoutingResult,
     collected_at: new Date().toISOString(),
+    summary:
+      "Cloudflare snapshot (DNS, page rules, email routing). Use --import-zones, --import-page-rules, or --import-email-routing to bootstrap config; maintain applies managed resources.",
   };
 
   if (state.missing_configured_zones.length) {
@@ -77,7 +205,7 @@ async function main() {
     );
   }
   log(
-    `done: ${state.account_zones.length} managed, ${state.unmanaged_zones.length} unmanaged in scan`
+    `done: ${discoveredZones.length} zone(s) discovered, ${state.account_zones.length} managed, ${state.unmanaged_zones.length} unmanaged in scan`
   );
 
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

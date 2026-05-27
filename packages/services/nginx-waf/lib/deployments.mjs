@@ -3,6 +3,14 @@ import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const NGINX_WAF_ROLE = "nginx-waf";
 
+/** Default trusted networks for internal_only location access. */
+export const DEFAULT_TRUSTED_CIDRS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "127.0.0.0/8",
+];
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -261,6 +269,35 @@ export function nginxWafGlobalSettings(normalized) {
       typeof nw.proxy_connect_timeout === "string" && nw.proxy_connect_timeout.trim()
         ? nw.proxy_connect_timeout.trim()
         : "60s",
+    trustedCidrs: parseTrustedCidrs(nw.trusted_cidrs, DEFAULT_TRUSTED_CIDRS),
+    cloudflareIpv4: nw.cloudflare_ipv4 !== false,
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @param {string[]} fallback
+ */
+function parseTrustedCidrs(raw, fallback) {
+  if (!Array.isArray(raw) || raw.length === 0) return [...fallback];
+  return raw.map((c) => String(c).trim()).filter(Boolean);
+}
+
+/**
+ * Per-site trusted CIDRs and client IP mode for geo / real_ip rendering.
+ * @param {Record<string, unknown>} site
+ * @param {ReturnType<typeof nginxWafGlobalSettings>} global
+ */
+export function resolveSiteAccessSettings(site, global) {
+  const siteCidrs = parseTrustedCidrs(site.trusted_cidrs, []);
+  const trustedCidrs = siteCidrs.length > 0 ? siteCidrs : global.trustedCidrs;
+  const clientIpRaw =
+    typeof site.client_ip === "string" ? site.client_ip.trim().toLowerCase() : "remote_addr";
+  const clientIp = clientIpRaw === "cloudflare" ? "cloudflare" : "remote_addr";
+  return {
+    trustedCidrs,
+    clientIp,
+    cloudflareIpv4: global.cloudflareIpv4,
   };
 }
 

@@ -40,7 +40,10 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { createSplunkVaultAccess } from "../lib/vault-deps.mjs";
 import { splunkReportExtraSections } from "../lib/splunk-report.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -238,9 +241,25 @@ async function deployOne(deployment, global, adminPassword, flags, log) {
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await ,
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   );
+
+  const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+  if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    errout.write(`[hdc] ${target} ${verb}: resizing scsi0 to ${rootfsGb}G on vmid ${guestVmid} …\n`);
+    const resize = sshRemote(pveSsh.user, pveSsh.host, `qm resize ${guestVmid} scsi0 ${rootfsGb}G`, {
+      capture: true,
+    });
+    if (resize.status !== 0) {
+      const detail = `${resize.stderr}${resize.stdout}`.trim() || `exit ${resize.status}`;
+      throw new Error(`qm resize failed: ${detail}`);
+    }
+  }
 
   if (dataDiskGb > 0) {
     await attachQemuDataDisk({

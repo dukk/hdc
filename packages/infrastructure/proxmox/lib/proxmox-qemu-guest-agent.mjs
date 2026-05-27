@@ -8,8 +8,9 @@ import {
 import { fetchClusterVmResources } from "./proxmox-host-provisioner.mjs";
 
 /** @typedef {import("./proxmox-host-load-report.mjs").GuestConfig} GuestConfig */
-import { loadProxmoxPackageConfig } from "./proxmox-package-config.mjs";
-import { loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
+import { loadProxmoxMaintainConfig } from "./proxmox-package-config.mjs";
+import { loadProxmoxHostsByCluster, isProxmoxConfigObject } from "./proxmox-config.mjs";
+import { guestConfigFromResource } from "./proxmox-host-load-report.mjs";
 import { pveData, pveJsonRequest } from "./pve-http.mjs";
 
 /**
@@ -262,25 +263,163 @@ export function summarizeGuestAgentCounts(guests) {
  * @param {string} opts.packageRoot
  * @param {(line: string) => void} [opts.warn]
  * @param {import("../../../../tools/hdc/lib/vault-access.mjs").ReturnType<import("../../../../tools/hdc/lib/vault-access.mjs").createVaultAccess>} [opts.vault]
- * @param {(q: string, o?: { mask?: boolean }) => Promise<string>} [opts.readLineQuestion]
  * @returns {Promise<QemuGuestAgentReportData>}
  */
 export async function collectProxmoxQemuGuestAgentReport(opts) {
-  const { packageRoot, warn = () => {}, vault, readLineQuestion } = opts;
+  const { packageRoot, warn = () => {}, vault } = opts;
   const loaded = loadProxmoxMaintainConfig(packageRoot, warn, "QEMU guest agent");
   if (!loaded) {
-    return { ok: true };
+    return { ok: true, warnings: [], clusters: [] };
   }
   const cfg = loaded.data;
-  const configPath = loaded.path;
+
+  /** @type {string[]} */
+  const warnings = [];
+  const warnPush = (line) => {
+    warnings.push(line);
+    warn(line);
+  };
+
+  const byCluster = loadProxmoxHostsByCluster(cfg, {
+    configPath: loaded.path,
+    configRel: "packages/infrastructure/proxmox/config.json",
+    onSkip: (id, reason) => warnPush(`Guest agent: skip host ${JSON.stringify(id)} (${reason})`),
+  });
+
+  /** @type {QemuGuestAgentClusterReport[]} */
+  const clusters = [];
+  let ok = true;
+
+  for (const [clusterKey, members] of byCluster) {
+    if (!members?.length) continue;
+
+    const auth = await authorizeProxmoxForClusterMembers({
+      packageRoot,
+      members,
+      vault,
+      warn: warnPush,
+      verifyPaths: PROXMOX_MAINTAIN_VERIFY_PATHS,
+    });
+    if (!auth) {
+      ok = false;
+      warnPush(`Guest agent: skipping cluster ${JSON.stringify(clusterKey)} — no API auth.`);
+      continue;
+    }
+
+    /** @type {Record<string, unknown>[]} */
+    let resourceRows = [];
+    try {
+      resourceRows = await fetchClusterVmResources(
+        auth.host.apiBase,
+        auth.authorization,
+        auth.rejectUnauthorized,
+      );
+    } catch (e) {
+      ok = false;
+      warnPush(
+        `Guest agent: cluster ${JSON.stringify(clusterKey)} VM list failed: ${/** @type {Error} */ (e).message || e}`,
+      );
+      continue;
+    }
+
+    /** @type {QemuGuestAgentHostReport[]} */
+    const hosts = [];
+
+    for (const m of members) {
+      /** @type {QemuGuestAgentRow[]} */
+      const guestRows = [];
+
+      for (const row of resourceRows) {
+        if (!isProxmoxConfigObject(row)) continue;
+        const typ = typeof row.type === "string" ? row.type.trim() : "";
+        if (typ !== "qemu") continue;
+        if (row.template === 1 || row.template === true) continue;
+        const node = typeof row.node === "string" ? row.node.trim() : "";
+        if (node !== m.pveNode) continue;
+
+        const guest = guestConfigFromResource(row);
+        if (!guest) continue;
+        const status = typeof row.status === "string" ? row.status.trim() : "unknown";
+
+        let configEnabled = false;
+        try {
+          const st = await fetchQemuConfigAgentState(
+            auth.host.apiBase,
+            node,
+            guest.vmid,
+            auth.authorization,
+            auth.rejectUnauthorized,
+          );
+          configEnabled = st.enabled;
+        } catch (e) {
+          warnPush(
+            `Guest agent: vmid ${guest.vmid} config read failed: ${/** @type {Error} */ (e).message || e}`,
+          );
+        }
+
+        /** @type {QemuGuestAgentProbe | null} */
+        let probe = null;
+        if (status === "running" && configEnabled) {
+          probe = await pingQemuGuestAgent(
+            auth.host.apiBase,
+            node,
+            guest.vmid,
+            auth.authorization,
+            auth.rejectUnauthorized,
+          );
+        }
+
+        const classified = classifyQemuGuestAgentRow({
+          guest: { ...guest, status },
+          configEnabled,
+          probe,
+        });
+
+        guestRows.push({
+          vmid: guest.vmid,
+          name: guest.name,
+          node,
+          status,
+          configEnabled,
+          agentStatus: classified.agentStatus,
+          summary: classified.summary,
+          notes: classified.notes,
+        });
+      }
+
+      guestRows.sort((a, b) => a.vmid - b.vmid);
+      hosts.push({ hostId: m.id, pveNode: m.pveNode, guests: guestRows });
+    }
+
+    clusters.push({ id: clusterKey, hosts });
+  }
+
+  const data = { ok, warnings, clusters };
+  for (const w of guestAgentWarningsFromReport(data)) {
+    warnPush(w);
+  }
+  if (warnings.length) ok = false;
+
+  return data;
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.packageRoot
+ * @param {(line: string) => void} opts.log
+ * @param {(line: string) => void} [opts.warn]
+ * @param {import("../../../../tools/hdc/lib/vault-access.mjs").ReturnType<import("../../../../tools/hdc/lib/vault-access.mjs").createVaultAccess>} [opts.vault]
+ * @returns {Promise<{ ok: boolean; data: QemuGuestAgentReportData }>}
+ */
+export async function runProxmoxQemuGuestAgentReport(opts) {
+  const { packageRoot, log, warn = () => {} } = opts;
 
   log("QEMU guest agent report (config + ping for running VMs) …");
 
   const data = await collectProxmoxQemuGuestAgentReport({
     packageRoot,
     warn,
-    vault,
-    readLineQuestion,
+    vault: opts.vault,
   });
 
   for (const cluster of data.clusters) {
@@ -289,9 +428,9 @@ export async function collectProxmoxQemuGuestAgentReport(opts) {
         `Host ${JSON.stringify(host.hostId)} (${JSON.stringify(cluster.id)}) — ${summarizeGuestAgentCounts(host.guests)}`,
       );
       for (const row of host.guests) {
-        const cfg = row.configEnabled ? "enabled" : "disabled";
+        const cfgLabel = row.configEnabled ? "enabled" : "disabled";
         log(
-          `  vmid ${row.vmid} ${row.name} [${row.status}]: config ${cfg}, agent ${row.agentStatus}`,
+          `  vmid ${row.vmid} ${row.name} [${row.status}]: config ${cfgLabel}, agent ${row.agentStatus}`,
         );
       }
     }

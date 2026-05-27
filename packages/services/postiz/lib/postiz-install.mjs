@@ -60,7 +60,7 @@ export function buildInstallScript(appDirPath, envContent, tag, tarballUrl) {
     "apt-get update -qq",
     "apt-get install -y -qq build-essential python3 redis-server nginx curl ca-certificates gnupg lsb-release",
     "",
-    "curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg",
+    "curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --batch --yes --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg",
     'echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list',
     "apt-get update -qq",
     "apt-get install -y -qq postgresql-17",
@@ -72,7 +72,7 @@ export function buildInstallScript(appDirPath, envContent, tag, tarballUrl) {
     "sudo -u postgres psql -c \"ALTER USER postiz WITH PASSWORD '$HDC_POSTIZ_DB_PASS'\"",
     "sudo -u postgres psql -tc \"SELECT 1 FROM pg_database WHERE datname = 'postiz'\" | grep -q 1 || sudo -u postgres psql -c \"CREATE DATABASE postiz OWNER postiz\"",
     "",
-    "curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
+    "command -v node >/dev/null 2>&1 || curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
     "apt-get install -y -qq nodejs",
     "",
     "mkdir -p /opt/temporal",
@@ -80,6 +80,9 @@ export function buildInstallScript(appDirPath, envContent, tag, tarballUrl) {
     'test -n "$TEMPORAL_ASSET"',
     'curl -fsSL "$TEMPORAL_ASSET" -o /tmp/temporal_cli.tar.gz',
     "tar -xzf /tmp/temporal_cli.tar.gz -C /opt/temporal",
+    'TEMPORAL_BIN=$(find /opt/temporal -maxdepth 3 -type f -name temporal -perm -111 2>/dev/null | head -1)',
+    'test -n "$TEMPORAL_BIN"',
+    'if [ "$TEMPORAL_BIN" != /opt/temporal/temporal ]; then ln -sf "$TEMPORAL_BIN" /opt/temporal/temporal; fi',
     "chmod +x /opt/temporal/temporal",
     "rm -f /tmp/temporal_cli.tar.gz",
     "",
@@ -87,7 +90,7 @@ export function buildInstallScript(appDirPath, envContent, tag, tarballUrl) {
     `mkdir -p '${dir}'`,
     `curl -fsSL ${qTarball} -o /tmp/postiz-src.tar.gz`,
     "tar -xzf /tmp/postiz-src.tar.gz -C /tmp",
-    "SRC_DIR=$(find /tmp -maxdepth 1 -type d -name 'postiz-app-*' -o -name 'postiz-*' | head -1)",
+    "SRC_DIR=$(find /tmp -maxdepth 1 -type d \\( -name 'postiz-app-*' -o -name 'postiz-*' \\) | head -1)",
     'test -n "$SRC_DIR" && test -d "$SRC_DIR"',
     `cp -a "$SRC_DIR"/. '${dir}/'`,
     "rm -rf /tmp/postiz-src.tar.gz /tmp/postiz-app-* /tmp/postiz-*",
@@ -145,66 +148,70 @@ function _systemdUnitsBlock() {
     "WantedBy=multi-user.target",
     "EOF",
     "",
-    "cat <<'EOF' >/etc/systemd/system/postiz-backend.service",
-    "[Unit]",
-    "Description=Postiz Backend",
-    "After=network.target postgresql.service redis-server.service postiz-temporal.service",
-    "Requires=postgresql.service redis-server.service",
+    'test -n "$PNPM_BIN" && test -x "$PNPM_BIN"',
+    _systemdPnpmUnitBlock("backend", {
+      after: "network.target postgresql.service redis-server.service postiz-temporal.service",
+      requires: "postgresql.service redis-server.service",
+      execStart: "run start:prod:backend",
+      nodeHeap: "512",
+    }),
     "",
-    "[Service]",
-    "Type=simple",
-    "User=root",
-    "WorkingDirectory=/opt/postiz",
-    "EnvironmentFile=/opt/postiz/.env",
-    "ExecStart=${PNPM_BIN} run start:prod:backend",
-    "Environment=NODE_OPTIONS=--max-old-space-size=512",
-    "Restart=on-failure",
-    "RestartSec=5",
+    _systemdPnpmUnitBlock("frontend", {
+      after: "network.target postiz-backend.service",
+      execStart: "run start:prod:frontend",
+      nodeHeap: "512",
+      extraService: ["Environment=PORT=4200"],
+    }),
     "",
-    "[Install]",
-    "WantedBy=multi-user.target",
-    "EOF",
-    "",
-    "cat <<'EOF' >/etc/systemd/system/postiz-frontend.service",
-    "[Unit]",
-    "Description=Postiz Frontend",
-    "After=network.target postiz-backend.service",
-    "",
-    "[Service]",
-    "Type=simple",
-    "User=root",
-    "WorkingDirectory=/opt/postiz",
-    "EnvironmentFile=/opt/postiz/.env",
-    "Environment=PORT=4200",
-    "ExecStart=${PNPM_BIN} run start:prod:frontend",
-    "Environment=NODE_OPTIONS=--max-old-space-size=512",
-    "Restart=on-failure",
-    "RestartSec=5",
-    "",
-    "[Install]",
-    "WantedBy=multi-user.target",
-    "EOF",
-    "",
-    "cat <<'EOF' >/etc/systemd/system/postiz-orchestrator.service",
-    "[Unit]",
-    "Description=Postiz Orchestrator",
-    "After=network.target postiz-temporal.service postiz-backend.service",
-    "Requires=postiz-temporal.service",
-    "",
-    "[Service]",
-    "Type=simple",
-    "User=root",
-    "WorkingDirectory=/opt/postiz",
-    "EnvironmentFile=/opt/postiz/.env",
-    "ExecStart=${PNPM_BIN} run start:prod:orchestrator",
-    "Environment=NODE_OPTIONS=--max-old-space-size=384",
-    "Restart=on-failure",
-    "RestartSec=5",
-    "",
-    "[Install]",
-    "WantedBy=multi-user.target",
-    "EOF",
+    _systemdPnpmUnitBlock("orchestrator", {
+      after: "network.target postiz-temporal.service postiz-backend.service",
+      requires: "postiz-temporal.service",
+      execStart: "run start:prod:orchestrator",
+      nodeHeap: "384",
+    }),
     "systemctl daemon-reload",
+  ].join("\n");
+}
+
+/**
+ * Systemd unit with ExecStart expanded from $PNPM_BIN (unquoted heredoc).
+ * @param {string} name
+ * @param {{ after: string; requires?: string; execStart: string; nodeHeap: string; extraService?: string[] }} spec
+ */
+function _systemdPnpmUnitBlock(name, spec) {
+  const title = name.charAt(0).toUpperCase() + name.slice(1);
+  const lines = [
+    "[Unit]",
+    `Description=Postiz ${title}`,
+    `After=${spec.after}`,
+  ];
+  if (spec.requires) {
+    lines.push(`Requires=${spec.requires}`);
+  }
+  lines.push(
+    "",
+    "[Service]",
+    "Type=simple",
+    "User=root",
+    "WorkingDirectory=/opt/postiz",
+    "EnvironmentFile=/opt/postiz/.env",
+  );
+  if (spec.extraService) {
+    lines.push(...spec.extraService);
+  }
+  lines.push(
+    `ExecStart=$PNPM_BIN ${spec.execStart}`,
+    `Environment=NODE_OPTIONS=--max-old-space-size=${spec.nodeHeap}`,
+    "Restart=on-failure",
+    "RestartSec=5",
+    "",
+    "[Install]",
+    "WantedBy=multi-user.target",
+  );
+  return [
+    `cat <<EOF >/etc/systemd/system/postiz-${name}.service`,
+    ...lines,
+    "EOF",
   ].join("\n");
 }
 
@@ -363,8 +370,17 @@ export async function installPostizInCt(user, pveHost, vmid, postiz, install, db
   let inner = buildInstallScript(dir, envContent, tag, release.tarballUrl);
   inner = injectDbPassword(inner, dbPassword);
 
-  const r = pctExec(user, pveHost, vmid, inner);
+  const r = pctExec(user, pveHost, vmid, inner, { capture: true });
   if (r.status !== 0) {
+    const tail = [r.stdout, r.stderr]
+      .join("\n")
+      .trim()
+      .split("\n")
+      .slice(-30)
+      .join("\n");
+    if (tail) {
+      errout.write(`[hdc] postiz install: last output from CT ${vmid}:\n${tail}\n`);
+    }
     return {
       ok: false,
       method: "native",

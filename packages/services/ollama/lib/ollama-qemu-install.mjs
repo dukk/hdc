@@ -35,7 +35,7 @@ function nvidiaDriverInstallBlock(gpu, gpuBackend) {
   if (!gpu || gpuBackend !== "nvidia") return [];
   return [
     "apt-get install -y -qq ubuntu-drivers-common",
-    "ubuntu-drivers install -g nvidia || ubuntu-drivers autoinstall",
+    "DEBIAN_FRONTEND=noninteractive ubuntu-drivers install nvidia || ubuntu-drivers autoinstall",
   ];
 }
 
@@ -48,6 +48,12 @@ function githubReleaseInstallScript(gpu, gpuBackend) {
   return [
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
+    "ROOT_PART=$(findmnt -n -o SOURCE / | sed 's/[0-9]*$//')",
+    "ROOT_NUM=$(findmnt -n -o SOURCE / | grep -oE '[0-9]+$')",
+    "if [ -n \"$ROOT_PART\" ] && [ -n \"$ROOT_NUM\" ]; then",
+    "  growpart \"$ROOT_PART\" \"$ROOT_NUM\" 2>/dev/null || true",
+    "  resize2fs \"$(findmnt -n -o SOURCE /)\" 2>/dev/null || true",
+    "fi",
     "apt-get update -qq",
     ...nvidiaDriverInstallBlock(gpu, gpuBackend),
     "apt-get install -y -qq curl zstd ca-certificates",

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_TRUSTED_CIDRS,
   findCertPrimaryDeployment,
   findPeerDeployment,
   instanceFlagToSystemId,
   nginxWafGlobalSettings,
   normalizeNginxWafConfig,
   resolveNginxWafDeployments,
+  resolveSiteAccessSettings,
 } from "../../../packages/services/nginx-waf/lib/deployments.mjs";
 
 const sampleCfg = {
@@ -134,5 +136,30 @@ describe("nginx-waf deployments", () => {
       }),
     );
     expect(global.modsecurityRuleEngine).toBe("On");
+  });
+
+  it("defaults trusted_cidrs to RFC1918-style ranges", () => {
+    const global = nginxWafGlobalSettings(normalizeNginxWafConfig(sampleCfg));
+    expect(global.trustedCidrs).toEqual(DEFAULT_TRUSTED_CIDRS);
+    expect(global.cloudflareIpv4).toBe(true);
+  });
+
+  it("resolveSiteAccessSettings uses site trusted_cidrs override", () => {
+    const normalized = normalizeNginxWafConfig({
+      ...sampleCfg,
+      defaults: {
+        ...sampleCfg.defaults,
+        nginx_waf: { trusted_cidrs: ["10.0.0.0/8"] },
+      },
+    });
+    const global = nginxWafGlobalSettings(normalized);
+    const site = {
+      id: "example-app",
+      trusted_cidrs: ["192.168.1.0/24"],
+      client_ip: "cloudflare",
+    };
+    const access = resolveSiteAccessSettings(site, global);
+    expect(access.trustedCidrs).toEqual(["192.168.1.0/24"]);
+    expect(access.clientIp).toBe("cloudflare");
   });
 });

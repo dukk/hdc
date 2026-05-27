@@ -47,6 +47,55 @@ export function pctExec(user, pveHost, vmid, innerCommand, opts = {}) {
 }
 
 /**
+ * Set LXC options via Proxmox `pct set` on the node (SSH). Use for privileged CT feature flags
+ * when the API token cannot pass `features` on create (root@pam only).
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {string} features e.g. `nesting=1,keyctl=1`
+ * @param {{ capture?: boolean }} [opts]
+ */
+export function pctSetFeatures(user, pveHost, vmid, features, opts = {}) {
+  const f = String(features ?? "").trim();
+  if (!f) return { status: 0, stdout: "", stderr: "" };
+  const remote = `pct set ${vmid} -features ${f}`;
+  return sshRemote(user, pveHost, remote, opts);
+}
+
+/**
+ * AppArmor workaround for Docker in Ubuntu LXC (CVE-2025-52881 / runc#4968).
+ * Appends lines to /etc/pve/lxc/<vmid>.conf when missing; returns whether config changed.
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {{ capture?: boolean }} [opts]
+ */
+export function ensureLxcDockerApparmorWorkaround(user, pveHost, vmid, opts = {}) {
+  const conf = `/etc/pve/lxc/${vmid}.conf`;
+  const remote = [
+    "set -euo pipefail",
+    `CONF='${conf}'`,
+    'test -f "$CONF"',
+    'changed=0',
+    `grep -q 'lxc.apparmor.profile: unconfined' "$CONF" || { echo 'lxc.apparmor.profile: unconfined' >> "$CONF"; changed=1; }`,
+    `grep -q 'lxc.mount.entry: /dev/null sys/module/apparmor/parameters/enabled' "$CONF" || { echo 'lxc.mount.entry: /dev/null sys/module/apparmor/parameters/enabled none bind 0 0' >> "$CONF"; changed=1; }`,
+    'echo "changed=$changed"',
+  ].join("\n");
+  return sshRemote(user, pveHost, remote, opts);
+}
+
+/**
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {{ capture?: boolean }} [opts]
+ */
+export function pctRestart(user, pveHost, vmid, opts = {}) {
+  const remote = `pct stop ${vmid} 2>/dev/null || true; pct start ${vmid}`;
+  return sshRemote(user, pveHost, remote, opts);
+}
+
+/**
  * Parse `qm guest exec` JSON stdout (Proxmox returns exitcode + out-data).
  * @param {string} raw
  */

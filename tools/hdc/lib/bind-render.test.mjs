@@ -20,6 +20,15 @@ describe("bind-render", () => {
     expect(text).toContain("dnssec-validation no");
   });
 
+  it("renders forwarders with port syntax for local dnscrypt-proxy", () => {
+    const text = renderNamedOptions({
+      allowQueryCidrs: ["127.0.0.0/8"],
+      recursion: true,
+      forwarders: ["127.0.0.1 port 5300"],
+    });
+    expect(text).toContain("forwarders { 127.0.0.1 port 5300; }");
+  });
+
   it("renders primary zone local stanzas with transfer key", () => {
     const text = renderNamedLocal({
       role: "primary",
@@ -57,8 +66,28 @@ describe("bind-render", () => {
     });
     expect(text).toContain("IN\tSOA");
     expect(text).toContain("2026052501");
-    expect(text).toContain("hypervisor-a.hdc.example.invalid");
-    expect(text).toContain("192.0.2.11");
+    expect(text).toMatch(/hypervisor-a\t3600\tIN\tA\t192\.0\.2\.11/);
+    expect(text).not.toContain("hypervisor-a.hdc.example.invalid.hdc.example.invalid");
+    expect(text).not.toMatch(/hypervisor-a\.hdc\.example\.invalid\t3600\tIN\tA/);
+  });
+
+  it("does not double the zone apex in hdc.dukk.org owners", () => {
+    const text = renderMasterZoneFile({
+      zone: "hdc.dukk.org",
+      serial: "2026052501",
+      primaryNs: "bind-a.hdc.dukk.org.",
+      secondaryNs: "bind-b.hdc.dukk.org.",
+      primaryIp: "10.0.0.2",
+      secondaryIp: "10.0.0.3",
+      hostmaster: "hostmaster.hdc.dukk.org",
+      records: [
+        { type: "A", name: "pve-b", data: "10.0.0.12", ttl: 3600 },
+        { type: "CNAME", name: "ca", data: "step-ca-a.hdc.dukk.org.", ttl: 3600 },
+      ],
+    });
+    expect(text).toMatch(/pve-b\t3600\tIN\tA\t10\.0\.0\.12/);
+    expect(text).not.toContain("hdc.dukk.org.hdc.dukk.org");
+    expect(text).not.toMatch(/pve-b\.hdc\.dukk\.org\t3600\tIN\tA/);
   });
 
   it("renders TSIG key block", () => {

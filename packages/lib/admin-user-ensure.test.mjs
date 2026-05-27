@@ -3,6 +3,7 @@ import {
   ADMIN_USER_ENV,
   ADMIN_USER_PASSWORD_VAULT_KEY,
   adminUserSkippedByFlags,
+  adminUserSshKeysSkippedByFlags,
   ensureAdminUser,
   resetAdminPasswordCache,
   resolveAdminPassword,
@@ -28,6 +29,11 @@ describe("admin-user-ensure", () => {
     expect(adminUserSkippedByFlags({ "skip-admin-user": "1" })).toBe(true);
     expect(adminUserSkippedByFlags({ skip_admin_user: "1" })).toBe(true);
     expect(adminUserSkippedByFlags({})).toBe(false);
+  });
+
+  it("adminUserSshKeysSkippedByFlags", () => {
+    expect(adminUserSshKeysSkippedByFlags({ "skip-admin-ssh-keys": "1" })).toBe(true);
+    expect(adminUserSshKeysSkippedByFlags({})).toBe(false);
   });
 
   it("resolveAdminPassword caches vault getSecret", async () => {
@@ -56,9 +62,11 @@ describe("admin-user-ensure", () => {
       log,
       vaultAccess: vault,
       env: { HDC_ADMIN_USER: "testadmin" },
+      flags: { "skip-admin-ssh-keys": "1" },
     });
     expect(result.ok).toBe(true);
     expect(result.username).toBe("testadmin");
+    expect(result.ssh_keys?.skipped).toBe(true);
     expect(run).toHaveBeenCalledOnce();
     const cmd = run.mock.calls[0][0];
     expect(cmd).toContain("testadmin");

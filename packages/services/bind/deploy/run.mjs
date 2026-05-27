@@ -35,7 +35,7 @@ import {
   waitForSsh,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
-import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { ensureQemuGuestAgentForDeployment } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -116,6 +116,7 @@ function runConfigure(deployment, global, tsigSecret, log) {
     recursion: global.recursion,
     dnssecValidation: global.dnssecValidation,
     forwarders: global.forwarders,
+    forwardUpstream: global.forwardUpstream,
     serial: deployment.role === "primary" ? soaSerialFromTimestamp() : undefined,
   });
 }
@@ -123,6 +124,28 @@ function runConfigure(deployment, global, tsigSecret, log) {
 /**
  * @typedef {ReturnType<typeof resolveBindDeployments>[number]} BindDeployment
  */
+
+/**
+ * @param {BindDeployment} deployment
+ * @param {ReturnType<typeof bindGlobalSettings>} global
+ */
+function defaultSshHostForBind(deployment, global) {
+  return deployment.role === "primary" ? global.primaryIp : global.secondaryIp;
+}
+
+/**
+ * @param {BindDeployment} deployment
+ * @param {ReturnType<typeof bindGlobalSettings>} global
+ * @param {(line: string) => void} logLine
+ */
+async function ensureBindGuestAgent(deployment, global, logLine) {
+  return ensureQemuGuestAgentForDeployment({
+    proxmoxPackageRoot: proxmoxRoot,
+    deployment,
+    defaultSshHost: defaultSshHostForBind(deployment, global),
+    log: logLine,
+  });
+}
 
 /**
  * @param {BindDeployment} deployment
@@ -137,8 +160,16 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
 
   if (skipProvision(flags) || deployment.mode === "configure-only") {
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} configure-only …\n`);
+    const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+    const guestAgent = await ensureBindGuestAgent(deployment, global, logLine);
     const configure = runConfigure(deployment, global, tsigSecret, log);
-    return { ok: true, system_id: deployment.systemId, mode: "configure-only", configure };
+    return {
+      ok: true,
+      system_id: deployment.systemId,
+      mode: "configure-only",
+      guest_agent: guestAgent,
+      configure,
+    };
   }
 
   const px = deployment.proxmox;
@@ -209,6 +240,8 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
       errout.write(
         `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
       );
+      const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+      const guestAgent = await ensureBindGuestAgent(deployment, global, logLine);
       const configure = runConfigure(deployment, global, tsigSecret, log);
       return {
         ok: true,
@@ -216,6 +249,7 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
         role: deployment.role,
         skipped_provision: true,
         vmid: existingVmid,
+        guest_agent: guestAgent,
         configure,
       };
     }
@@ -292,16 +326,15 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
   await waitForSsh({ user: sshUser, host: sshHost });
 
-  await ensureQemuGuestAgentOnDeploy({
-    apiBase: auth.host.apiBase,
-    node: cloneNode,
-    vmid: guestVmid,
-    authorization: auth.authorization,
-    rejectUnauthorized: auth.rejectUnauthorized,
-    sshUser,
-    sshHost,
-    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
-  });
+  const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  const guestAgent = await ensureBindGuestAgent(
+    {
+      ...deployment,
+      configure: { ssh: { user: sshUser, host: sshHost } },
+    },
+    global,
+    logLine,
+  );
 
   const configure = runConfigure(
     {
@@ -320,6 +353,7 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
     vmid: guestVmid,
     ip,
     provision: provisionResult,
+    guest_agent: guestAgent,
     configure,
   };
 }

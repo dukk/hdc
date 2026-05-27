@@ -5,9 +5,10 @@ Authoritative DNS on Proxmox QEMU VMs: primary/secondary pair, zone files from `
 ## Prerequisites
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json` (`zones[]` with records; `deployments[].proxmox.qemu.ip` for static cloud-init CIDR; no per-deployment `vmid`)
-- **Inventory:** [`inventory/manual/systems/vm-dns-a.json`](../../../inventory/manual/systems/vm-dns-a.json), [`vm-dns-b.json`](../../../inventory/manual/systems/vm-dns-b.json)
+- **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](../../../inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](../../../inventory/manual/systems/vm-bind-b.json)
 - **TSIG:** Deploy auto-generates `bind.tsig_secret` in `config.json` (and syncs `HDC_BIND_TSIG_KEY` in the vault) when missing. Rotate with `--regenerate-tsig`. Manual: `dnssec-keygen -a HMAC-SHA256 -b 256 -n HOST .`
-- **Forwarders:** `bind.forwarders` defaults to `1.1.1.1` and `1.0.0.1` for recursive queries (rendered into `named.conf.options`).
+- **Forwarders (plain):** `bind.forwarders` defaults to `1.1.1.1` and `1.0.0.1` when `forward_upstream` is absent or `mode` is `plain`.
+- **Forwarders (ODoH):** Set `bind.forward_upstream.mode` to `odoh` to install **dnscrypt-proxy** on each BIND VM and forward recursive queries to Cloudflare via Oblivious DoH (RFC 9230, experimental). BIND uses `127.0.0.1:5300` locally; configure `server` (default `odoh-cloudflare`), `relay` (default `odohrelay-crypto-sx`), and `listen` in config.
 
 ## Provisioning
 
@@ -19,7 +20,7 @@ Authoritative DNS on Proxmox QEMU VMs: primary/secondary pair, zone files from `
 | Verb | Purpose |
 |------|---------|
 | `deploy` | Clone Ubuntu VMs, auto-allocate VMID, cloud-init static IP, install BIND (primary before secondary) |
-| `maintain` | Re-push `named.conf.options` (forwarders) on all nodes; re-render zones on primary; verify SOA serial |
+| `maintain` | Re-push dnscrypt-proxy (when ODoH) and `named.conf.options` on all nodes; re-render zones on primary; verify SOA serial |
 | `query` | `named` status; per-zone `dig SOA` |
 
 ```bash
@@ -35,7 +36,7 @@ node tools/hdc/cli.mjs run service bind maintain --
 
 1. **DNS service:** UDP/TCP port **53** on each VM IP (from `deployments[].proxmox.qemu.ip` or query).
 2. **No web UI.** Test: `dig @<primary-ip> SOA <your-zone>`.
-3. Point resolvers or downstream DNS at the primary/secondary IPs. Recursive queries use `bind.forwarders` (default Cloudflare `1.1.1.1` / `1.0.0.1`).
+3. Point resolvers or downstream DNS at the primary/secondary IPs. Recursive queries use plain forwarders or ODoH per `bind.forward_upstream` / `bind.forwarders`.
 4. For Let's Encrypt DNS-01 elsewhere, reuse `HDC_BIND_TSIG_KEY` in nginx/nginx-waf packages.
 
 ## Related

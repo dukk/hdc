@@ -1,3 +1,9 @@
+import {
+  normalizeSourceCidr,
+  parseIpv4Cidr,
+} from "../../../infrastructure/proxmox/lib/proxmox-host-firewall-maintain.mjs";
+import { CLOUDFLARE_IPV4_CIDRS } from "./cloudflare-ip-ranges.mjs";
+
 /** HDC-managed ModSecurity main config (includes OWASP CRS). */
 export const MODSECURITY_RULES_FILE = "/etc/modsecurity/hdc-waf.conf";
 
@@ -7,9 +13,91 @@ export const DEFAULT_CRS_RULES_GLOB = "/usr/share/modsecurity-crs/rules/*.conf";
 export const DEFAULT_UNICODE_MAP = "";
 export const DEFAULT_MODSEC_AUDIT_LOG = "/var/log/nginx/modsec_audit.log";
 
+export const TRUSTED_GEO_VARIABLE = "$hdc_trusted_internal";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * @param {string[]} cidrs
+ * @param {string} context
+ */
+export function validateTrustedCidrs(cidrs, context) {
+  if (!cidrs.length) {
+    throw new Error(`${context}: trusted_cidrs must include at least one CIDR`);
+  }
+  for (const cidr of cidrs) {
+    const normalized = normalizeSourceCidr(cidr);
+    if (!parseIpv4Cidr(normalized)) {
+      throw new Error(`${context}: invalid trusted CIDR ${JSON.stringify(cidr)}`);
+    }
+  }
+}
+
+/**
+ * @param {Record<string, unknown>[]} locations
+ */
+export function siteHasInternalOnlyAccess(locations) {
+  return locations.some((loc) => {
+    const access = isObject(loc.access) ? loc.access : null;
+    return access?.policy === "internal_only";
+  });
+}
+
+/**
+ * @param {Record<string, unknown>} loc
+ * @param {string} context
+ * @returns {{ denyStatus: 401 | 404 } | null}
+ */
+export function parseLocationAccess(loc, context) {
+  const access = isObject(loc.access) ? loc.access : null;
+  if (!access) return null;
+  const policy = typeof access.policy === "string" ? access.policy.trim() : "";
+  if (policy !== "internal_only") {
+    throw new Error(`${context}: location access.policy must be internal_only`);
+  }
+  const denyRaw = access.deny_status;
+  const denyStatus = denyRaw === 401 || denyRaw === 404 ? denyRaw : null;
+  if (!denyStatus) {
+    throw new Error(`${context}: location access.deny_status must be 401 or 404`);
+  }
+  return { denyStatus };
+}
+
+/**
+ * @param {object} opts
+ * @param {string[]} opts.cidrs
+ * @param {"remote_addr" | "cloudflare"} opts.clientIp
+ */
+export function renderTrustedGeo(opts) {
+  const { cidrs, clientIp } = opts;
+  const geoSource = clientIp === "cloudflare" ? "$realip_remote_addr" : "$remote_addr";
+  const lines = [`geo ${geoSource} $hdc_trusted_internal {`, "    default 0;"];
+  for (const cidr of cidrs) {
+    lines.push(`    ${normalizeSourceCidr(cidr)} 1;`);
+  }
+  lines.push("}", "");
+  return lines.join("\n");
+}
+
+/**
+ * @param {boolean} cloudflareIpv4
+ */
+export function renderCloudflareRealIp(cloudflareIpv4) {
+  if (!cloudflareIpv4) {
+    throw new Error("client_ip cloudflare requires defaults.nginx_waf.cloudflare_ipv4 (not false)");
+  }
+  const lines = ["    # Cloudflare client IP (hdc nginx-waf)"];
+  for (const cidr of CLOUDFLARE_IPV4_CIDRS) {
+    lines.push(`    set_real_ip_from ${cidr};`);
+  }
+  lines.push(
+    "    real_ip_header CF-Connecting-IP;",
+    "    real_ip_recursive on;",
+  );
+  return `${lines.join("\n")}\n`;
 }
 
 /**
@@ -102,9 +190,21 @@ export function renderHdcNginxInclude(opts) {
  * @param {boolean} opts.http01Acme
  * @param {string} opts.webroot
  * @param {boolean} [opts.deferTlsUntilCertExists] HTTP-only until LE cert exists (http-01 bootstrap).
+ * @param {string[]} [opts.trustedCidrs]
+ * @param {"remote_addr" | "cloudflare"} [opts.clientIp]
+ * @param {boolean} [opts.cloudflareIpv4]
  */
 export function renderSiteVhost(opts) {
-  const { site, modsecurityEnabled, http01Acme, webroot, deferTlsUntilCertExists = false } = opts;
+  const {
+    site,
+    modsecurityEnabled,
+    http01Acme,
+    webroot,
+    deferTlsUntilCertExists = false,
+    trustedCidrs = [],
+    clientIp = "remote_addr",
+    cloudflareIpv4 = true,
+  } = opts;
   const id = siteId(site);
   const names = serverNames(site);
   const listen = Array.isArray(site.listen)
@@ -124,11 +224,25 @@ export function renderSiteVhost(opts) {
   const wafOn = waf.enabled !== false && modsecurityEnabled;
 
   const locations = Array.isArray(site.locations) ? site.locations.filter(isObject) : [];
+  const needsTrustedGeo = siteHasInternalOnlyAccess(locations);
+  if (needsTrustedGeo) {
+    validateTrustedCidrs(trustedCidrs, id);
+  }
+
+  const renderLoc = (/** @type {Record<string, unknown>} */ loc) =>
+    renderLocationBlock(loc, upstream, wafOn, id, needsTrustedGeo);
+
   const locBlocks =
     locations.length > 0
-      ? locations.map((loc) => renderLocationBlock(loc, upstream, wafOn))
-      : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn)];
+      ? locations.map(renderLoc)
+      : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false)];
   const needsWebsocketMap = locations.some((loc) => loc.websocket === true);
+
+  const trustedGeoBlock = needsTrustedGeo
+    ? `${renderTrustedGeo({ cidrs: trustedCidrs, clientIp })}\n`
+    : "";
+  const cloudflareRealIp =
+    clientIp === "cloudflare" ? renderCloudflareRealIp(cloudflareIpv4) : "";
 
   /** @type {string[]} */
   const blocks = [];
@@ -143,7 +257,7 @@ export function renderSiteVhost(opts) {
 
   if (listen.includes(80)) {
     const acme =
-      http01Acme && tlsEnabled
+      http01Acme
         ? `
     location ^~ /.well-known/acme-challenge/ {
         root ${webroot};
@@ -152,8 +266,8 @@ export function renderSiteVhost(opts) {
         : "";
     const locBlocksHttp =
       locations.length > 0
-        ? locations.map((loc) => renderLocationBlock(loc, upstream, wafOn))
-        : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn)];
+        ? locations.map(renderLoc)
+        : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false)];
     const httpServe = deferTlsUntilCertExists
       ? locBlocksHttp.join("\n")
       : `
@@ -184,7 +298,7 @@ ${httpServe}
     ssl_certificate_key /etc/letsencrypt/live/${certName}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;${secRules}
-${locBlocks.join("\n")}
+${cloudflareRealIp}${locBlocks.join("\n")}
 }
 `);
   } else if (!listen.includes(80)) {
@@ -196,16 +310,24 @@ ${locBlocks.join("\n")}
 `);
   }
 
-  return `# hdc site ${id}\n${websocketMap}${blocks.join("\n")}`;
+  return `# hdc site ${id}\n${trustedGeoBlock}${websocketMap}${blocks.join("\n")}`;
 }
 
 /**
  * @param {Record<string, unknown>} loc
  * @param {string} upstream
  * @param {boolean} wafOn
+ * @param {string} siteContext
+ * @param {boolean} trustedGeoEnabled
  */
-function renderLocationBlock(loc, upstream, _wafOn) {
+function renderLocationBlock(loc, upstream, _wafOn, siteContext, trustedGeoEnabled) {
   const path = typeof loc.path === "string" && loc.path.trim() ? loc.path.trim() : "/";
+  const access = parseLocationAccess(loc, siteContext);
+  const accessGuard =
+    access && trustedGeoEnabled
+      ? `
+        if ($hdc_trusted_internal = 0) { return ${access.denyStatus}; }`
+      : "";
   const headers = loc.proxy_headers !== false;
   const headerLines = headers
     ? `
@@ -221,7 +343,7 @@ function renderLocationBlock(loc, upstream, _wafOn) {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;`
     : "";
-  return `    location ${path} {
+  return `    location ${path} {${accessGuard}
         proxy_pass ${upstream};${headerLines}${websocketLines}
     }`;
 }

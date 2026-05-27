@@ -70,6 +70,16 @@ List keys:
 node tools/hdc/cli.mjs secrets list
 ```
 
+Export values to files (requires unlock; plaintext on disk — use a directory outside the repo):
+
+```powershell
+node tools/hdc/cli.mjs secrets get HDC_PROXMOX_API_TOKEN --out $env:USERPROFILE\.hdc\export\HDC_PROXMOX_API_TOKEN
+node tools/hdc/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export
+node tools/hdc/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export --format env
+```
+
+`dump` omits local bootstrap keys unless you pass `--include-bootstrap`. See `node tools/hdc/cli.mjs help secrets dump`.
+
 ## Bootstrap keys (local hdc vault only)
 
 These never sync to Vaultwarden:

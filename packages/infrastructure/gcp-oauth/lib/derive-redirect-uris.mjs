@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-
+import { readResolvedPackageConfigJson } from "../../../../tools/hdc/lib/json-config-preprocess.mjs";
 import { resolveRepoFile } from "../../../../tools/hdc/lib/private-repo.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 
@@ -18,7 +17,7 @@ export function loadNginxWafConfig(relPath) {
   if (!resolved.found) {
     throw new Error(`nginx-waf config not found: ${relPath} (checked public and hdc-private)`);
   }
-  const raw = JSON.parse(readFileSync(resolved.path, "utf8"));
+  const raw = readResolvedPackageConfigJson(resolved);
   if (!isObject(raw)) throw new Error(`nginx-waf config is not an object: ${relPath}`);
   return raw;
 }

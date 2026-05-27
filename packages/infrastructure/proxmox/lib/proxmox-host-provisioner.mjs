@@ -214,7 +214,16 @@ export function createProxmoxHostProvisioner(ctx) {
         }
         if (typeof p.nameserver === "string" && p.nameserver.trim()) body.nameserver = p.nameserver.trim();
         if (typeof p.searchdomain === "string" && p.searchdomain.trim()) body.searchdomain = p.searchdomain.trim();
-        if (typeof p.features === "string" && p.features.trim()) body.features = p.features.trim();
+        // API tokens cannot set feature flags on privileged CTs (root@pam only); apply via pct after create.
+        const deferredFeatures =
+          typeof p.features === "string" && p.features.trim() ? p.features.trim() : "";
+        if (deferredFeatures && unprivileged !== 0) {
+          body.features = deferredFeatures;
+        } else if (deferredFeatures && unprivileged === 0) {
+          log.info(
+            `LXC ${vmid}: deferring features ${JSON.stringify(deferredFeatures)} (privileged CT — set via pct after create)`,
+          );
+        }
 
         const path = `/nodes/${encodeURIComponent(pveNode)}/lxc`;
         log.info(`POST ${path} (vmid ${vmid}, template ${ostemplate})`);

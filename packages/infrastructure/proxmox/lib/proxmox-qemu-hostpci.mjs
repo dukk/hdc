@@ -1,4 +1,5 @@
 import { pveData, pveFormBody, pveJsonRequest } from "./pve-http.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 
 /** PCI BDF: 0000:bb:dd.f */
 const PCI_BDF_RE = /^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]$/i;
@@ -110,4 +111,31 @@ export async function applyQemuHostpci(opts) {
     rejectUnauthorized,
     pveFormBody(fields),
   );
+}
+
+/**
+ * Apply hostpci via `qm set` over SSH (root on the PVE node).
+ * Use when the API token cannot set raw PCI BDFs (non-mapped devices).
+ * @param {object} opts
+ * @param {string} opts.sshUser
+ * @param {string} opts.sshHost PVE node where the VM is registered
+ * @param {number} opts.vmid
+ * @param {ReturnType<typeof normalizeHostpciList>} opts.hostpci
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function applyQemuHostpciViaSsh(opts) {
+  const { sshUser, sshHost, vmid, hostpci } = opts;
+  const log = opts.log ?? (() => {});
+  if (!hostpci.length) return;
+
+  const args = hostpci
+    .map((entry, idx) => `-hostpci${idx} ${formatHostpciEntry(entry)}`)
+    .join(" ");
+  const cmd = `qm set ${vmid} ${args}`;
+  log(`SSH ${sshUser}@${sshHost}: ${cmd}`);
+  const r = sshRemote(sshUser, sshHost, cmd, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    throw new Error(`qm set hostpci failed on ${sshHost}: ${detail}`);
+  }
 }

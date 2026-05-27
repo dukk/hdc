@@ -17,7 +17,7 @@ import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/pro
 import { applyLxcNet0 } from "../../../infrastructure/proxmox/lib/proxmox-lxc-network.mjs";
 import { resolvePiHoleDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/pi-hole-install.mjs";
-import { maintainPiHoleInCt } from "../lib/pi-hole-configure.mjs";
+import { configurePiHoleInCt, maintainPiHoleInCt } from "../lib/pi-hole-configure.mjs";
 import { piHoleReportExtraSections } from "../lib/pi-hole-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -133,13 +133,17 @@ async function maintainOne(deployment, flags) {
   }
 
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+  const piholeCfg = isObject(deployment.pihole) ? deployment.pihole : {};
+  const configure = configurePiHoleInCt(pveSsh.user, pveSsh.host, vmid, piholeCfg);
   const skipCoreUpdate = flags["skip-core-update"] !== undefined;
   const result = maintainPiHoleInCt(pveSsh.user, pveSsh.host, vmid, { skipCoreUpdate });
-  const ok = result.ok && (network === null || network.ok !== false);
+  const ok =
+    configure.ok && result.ok && (network === null || network.ok !== false);
   return {
     system_id: systemId,
     host_id: hostId,
     vmid,
+    configure,
     ...result,
     ok,
     network,

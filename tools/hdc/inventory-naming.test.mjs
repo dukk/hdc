@@ -37,6 +37,7 @@ describe("deploy-inventory", () => {
     expect(deployTargetSystemId("minecraft")).toBe("vm-minecraft-a");
     expect(deployTargetSystemId("ollama")).toBe("ollama-a");
     expect(deployTargetSystemId("postfix-relay")).toBe("postfix-relay-a");
+    expect(deployTargetSystemId("scanopy")).toBe("scanopy-a");
   });
 
   it("lists nagios LXC host ids", () => {

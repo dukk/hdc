@@ -18,6 +18,29 @@ Automation and documentation for a manually deployed home data center. Agents op
 - **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored). API keys and passwords live in the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
 - **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Package `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed package configs from examples: `node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). Shared loaders: [`tools/hdc/lib/private-repo.mjs`](tools/hdc/lib/private-repo.mjs), [`tools/hdc/lib/package-config.mjs`](tools/hdc/lib/package-config.mjs).
 
+### Package config JSONC (comments + includes)
+
+Package `config.json` files (not inventory sidecars) support **JSONC** when loaded via [`loadPackageConfigFromPackageRoot`](tools/hdc/lib/package-config.mjs):
+
+- **Comments:** `//` line comments and `/* block */` comments; trailing commas allowed.
+- **Includes:** `{ "$hdc.include": "relative/path.json" }` or `{ "$hdc.include": { "file": "relative/path.json" } }`.
+  - Paths resolve relative to the **including file’s directory** (public hdc first, then hdc-private).
+  - In an **array**, an included JSON **object** inserts one element; an included **array** splices/flattens into the parent array.
+  - An object with `$hdc.include` must not contain other keys (no merge in v1).
+  - Circular includes are rejected.
+
+Preprocessor: [`tools/hdc/lib/json-config-preprocess.mjs`](tools/hdc/lib/json-config-preprocess.mjs). Writes via `writeResolvedRepoJson` remain strict JSON (comments are not preserved). Opt out when loading: `loadPackageConfigFromPackageRoot(root, { preprocess: false })`.
+
+Example (split Cloudflare zones):
+
+```jsonc
+{
+  "zones": [
+    { "$hdc.include": "zones/dukk.org.json" }
+  ]
+}
+```
+
 ## Repository map
 
 | Path | Role |
@@ -40,7 +63,7 @@ Commands from [`tools/hdc/lib/cli-app.mjs`](tools/hdc/lib/cli-app.mjs):
 | `list` | Packages and manifest metadata |
 | `run <tier> <package> <verb> [-- <args>]` | Run a package script (`deploy`, `maintain`, `query`); tier: `client`, `infrastructure`, or `service` |
 | `run <tier> <package> <platform> <verb> [-- <args>]` | When manifest lists `platforms` (legacy platform-routed layout) |
-| `secrets path \| init \| change-passphrase \| set \| list \| delete` | Encrypted vault for `HDC_*` secrets |
+| `secrets path \| init \| change-passphrase \| set \| list \| get \| dump \| delete` | Encrypted vault for `HDC_*` secrets; `get`/`dump` write plaintext to files (unlock required) |
 | `users bootstrap-hdc [--dry-run] [--sidecar <path> …]` | Ensure local `hdc` Linux user on bootstrap hosts |
 | `env` | Print `HDC_*` variables (sensitive values redacted) |
 
@@ -81,7 +104,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
 - **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `gatus`, `open-webui`, `vaultwarden`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — shared [`packages/clients/config.json`](packages/clients/config.json). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -96,7 +119,7 @@ See [`.cursor/rules/hdc-automation-logging.mdc`](.cursor/rules/hdc-automation-lo
 
 ### Operation reports (deploy / maintain / teardown)
 
-After `deploy`, `maintain`, or `teardown`, packages write a markdown report under `packages/<package>/reports/<verb>-<timestamp>.md` (gitignored). Shared helpers: [`packages/lib/operation-report.mjs`](packages/lib/operation-report.mjs). Skip with `--no-report`; override path with `--report <path>`. `query` does not write reports.
+After `deploy`, `maintain`, or `teardown`, packages write a markdown report under `packages/<package>/reports/<verb>-<timestamp>.md` in **hdc-private when that repo is available** (sibling `../hdc-private` or `HDC_PRIVATE_ROOT`), otherwise under the public hdc tree (gitignored in both repos). Shared helpers: [`packages/lib/operation-report.mjs`](packages/lib/operation-report.mjs). Skip with `--no-report`; override path with `--report <path>`. `query` does not write reports.
 
 ### Guest baseline (local admin + ClamAV)
 
@@ -108,7 +131,7 @@ Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`package
 Coexists with the per-host `hdc` automation user from `node tools/hdc/cli.mjs users bootstrap-hdc` (`HDC_USER_HDC_PASSWORD_*`).
 
 - **Out of scope:** Proxmox hypervisors (`proxmox maintain`), Synology NAS (`synology-nas`), home clients (`packages/clients/*`), and `ubuntu maintain` (bootstrap `hdc` only). **Nagios** LXC guests get the local admin user only (no ClamAV).
-- **Stub services** (`minecraft`, `jenkins`, `homeassistant`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
+- **Stub services** (`minecraft`, `jenkins`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
 
 Example: set `HDC_ADMIN_USER` in `.env`, then `node tools/hdc/cli.mjs run service postgresql maintain --`
 
@@ -161,14 +184,14 @@ Example: `node tools/hdc/cli.mjs run service solidtime deploy --`
 
 ## BIND DNS in this repo
 
-- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones[]` objects (`id`, `zone_type`, `records`, optional `subnet` for reverse). Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Upstream forwarders: `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`).
-- **Inventory:** [`inventory/manual/systems/vm-dns-a.json`](inventory/manual/systems/vm-dns-a.json), [`vm-dns-b.json`](inventory/manual/systems/vm-dns-b.json).
+- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones[]` objects (`id`, `zone_type`, `records`, optional `subnet` for reverse). Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
+- **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](inventory/manual/systems/vm-bind-b.json).
 - **Schema:** [`tools/hdc/schema/bind.config.schema.json`](tools/hdc/schema/bind.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Rebuild QEMU guests from Ubuntu template (optional `--destroy-existing`), cloud-init static IP from config, auto VMID, BIND primary then secondary (`deployments[]`; `--instance a\|b`) |
-| `maintain` | Re-push named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary |
+| `maintain` | Re-push dnscrypt-proxy (ODoH) and named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary |
 | `query` | `named` service status and per-zone `dig SOA` on each node |
 
 TSIG: deploy auto-generates `bind.tsig_secret` in `config.json` and syncs vault `HDC_BIND_TSIG_KEY` when missing; `--regenerate-tsig` to rotate.
@@ -238,6 +261,22 @@ Vault: `HDC_REDIS_PASSWORD` (required for deploy/maintain/query).
 
 Example: `node tools/hdc/cli.mjs run service redis deploy --`
 
+## Valkey Cluster in this repo
+
+- **Config:** [`packages/services/valkey/config.json`](packages/services/valkey/config.json) (copy from [`config.example.json`](packages/services/valkey/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-valkey-a.json`](inventory/manual/systems/vm-valkey-a.json), [`vm-valkey-b.json`](inventory/manual/systems/vm-valkey-b.json), [`vm-valkey-c.json`](inventory/manual/systems/vm-valkey-c.json); service sidecar [`inventory/manual/services/valkey.json`](inventory/manual/services/valkey.json).
+- **Schema:** [`tools/hdc/schema/valkey.config.schema.json`](tools/hdc/schema/valkey.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU clone from Ubuntu template, cloud-init static IP, apt Valkey install over SSH; 3-master cluster bootstrap via `valkey-cli --cluster create` when all nodes deploy (`--instance a\|b\|c`, `--destroy-existing`, `--skip-provision`, `--skip-cluster-bootstrap`) |
+| `maintain` | Re-apply `valkey.conf` on each node; optional apt upgrade (`--skip-apt`); `valkey-cli --cluster check` when all 3 nodes selected |
+| `query` | Per-node `PING` and `CLUSTER INFO`; cluster check when all 3 nodes configured |
+
+Vault: `HDC_VALKEY_PASSWORD` (required for deploy/maintain/query). Guests need Ubuntu 24.04+ (or another release with `valkey` in default apt).
+
+Example: `node tools/hdc/cli.mjs run service valkey deploy --`
+
 ## Nginx WAF in this repo
 
 - **Config:** [`packages/services/nginx-waf/config.json`](packages/services/nginx-waf/config.json) (copy from [`config.example.json`](packages/services/nginx-waf/config.example.json); keep local config out of git).
@@ -247,8 +286,10 @@ Example: `node tools/hdc/cli.mjs run service redis deploy --`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Optional Proxmox QEMU provision or configure-only; install nginx, libmodsecurity3, ModSecurity-nginx, OWASP CRS (`/etc/modsecurity/hdc-waf.conf`); push `sites[]`; LE certs on cert-primary + peer sync |
-| `maintain` | Re-apply OWASP CRS config + push `sites[]` to all nodes (default); `--renew-certs`; `--sync-certs`; `--site <id>` |
+| `maintain` | Re-apply OWASP CRS config + push `sites[]` to all nodes (default); `--renew-certs`; `--sync-certs`; `--site <id>` updates only that site (other vhosts unchanged); full maintain prunes sites removed from config |
 | `query` | `nginx` status, config test, ModSecurity module + CRS rule count + `SecRuleEngine`, cert expiry, upstream probes |
+
+**Per-location network access:** `defaults.nginx_waf.trusted_cidrs[]` (RFC1918 defaults); per-site `client_ip` (`remote_addr` or `cloudflare`); `locations[].access` with `policy: internal_only` and `deny_status` `401` or `404` for URL-pattern restrictions (nginx `location` path syntax).
 
 Vault: `HDC_NGINX_WAF_LE_EMAIL` (required for deploy); `HDC_BIND_TSIG_KEY` when `letsencrypt.challenge` is `dns-01`.
 
@@ -263,7 +304,7 @@ Example: `node tools/hdc/cli.mjs run service nginx-waf maintain --`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Optional Proxmox QEMU provision or configure-only; install nginx + certbot; push `sites[]` (reverse proxy, same shape as nginx-waf without WAF); LE certs per node |
-| `maintain` | Re-push `sites[]` to all nodes (default); `--renew-certs`; `--site <id>` |
+| `maintain` | Re-push `sites[]` to all nodes (default); `--renew-certs`; `--site <id>` updates only that site (other vhosts unchanged); full maintain prunes sites removed from config |
 | `query` | `nginx` status, config test, enabled sites, upstream probes, cert expiry |
 
 Vault: `HDC_NGINX_LE_EMAIL` (required for deploy); `HDC_BIND_TSIG_KEY` when `letsencrypt.challenge` is `dns-01`.
@@ -341,21 +382,24 @@ Example: `node tools/hdc/cli.mjs run service scanopy deploy --`
 ## Immich in this repo
 
 - **Config:** [`packages/services/immich/config.json`](packages/services/immich/config.json) (copy from [`config.example.json`](packages/services/immich/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-immich-a.json`](inventory/manual/systems/vm-immich-a.json); service sidecar [`inventory/manual/services/immich.json`](inventory/manual/services/immich.json).
+- **Modes:** `synology-docker` (official compose on Synology via [`synology-nas`](packages/infrastructure/synology-nas/) lib; `system_id` `immich-a`, `synology.instance` `a`) or `proxmox-qemu` / `configure-only` (Ubuntu VM + SSH; `vm-immich-a`).
+- **Inventory:** [`inventory/manual/systems/immich-a.json`](inventory/manual/systems/immich-a.json) (NAS Docker), optional [`vm-immich-a.json`](inventory/manual/systems/vm-immich-a.json); [`nas-a.json`](inventory/manual/systems/nas-a.json); service sidecar [`inventory/manual/services/immich.json`](inventory/manual/services/immich.json).
 - **Schema:** [`tools/hdc/schema/immich.config.schema.json`](tools/hdc/schema/immich.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox QEMU clone from Ubuntu template (8 GiB RAM, 4 vCPU, optional `data_disk_gb`), cloud-init static IP, official Immich Docker Compose over SSH (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Re-push `.env` from config, `docker compose pull` + `up -d` (omit `--skip-upgrade`); ClamAV on guest unless `--skip-clamav` |
-| `query` | Config summary; `--live` for Docker/compose health + `/api/server/ping` on port 2283 |
-| `teardown` | Optional `docker compose down` then destroy QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
+| `deploy` | **Synology:** fetch release compose, push `.env` + stack to `/volume1/docker/immich` (`synology-docker`). **Proxmox:** QEMU clone + SSH install (`proxmox-qemu`; `--destroy-existing`, `--skip-provision`, …) |
+| `maintain` | Re-push `.env`, `docker compose pull` + `up -d` (omit `--skip-upgrade`). ClamAV baseline on Proxmox guests only (`--skip-clamav`) |
+| `query` | Config summary; `--live` for compose health + `/api/server/ping` on port 2283 |
+| `teardown` | Synology: `docker compose down`. Proxmox: optional compose down then destroy QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Set `immich.release` (`latest` or pinned tag), `upload_location`, and `db_data_location` in config (defaults under `/data/immich/` when `data_disk_gb` is set). Pin `proxmox.qemu.vmid`, `ip`, and `configure.ssh.host` to your network plan before deploy.
+Set `immich.public_url` (e.g. `https://immich.dukk.org`) for `IMMICH_SERVER_URL` in `.env` behind nginx-waf. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
+
+**HTTPS:** nginx-waf `sites[]` upstream `http://<nas-ip>:2283`; Cloudflare A `immich` → WAF WAN IP. Prerequisite: `node tools/hdc/cli.mjs run infrastructure synology-nas maintain -- --instance a`.
 
 Vault: `HDC_IMMICH_DB_PASSWORD` (required for deploy/maintain).
 
-Example: `node tools/hdc/cli.mjs run service immich deploy -- --destroy-existing`
+Example: `node tools/hdc/cli.mjs run service immich deploy -- --instance a`
 
 ## Gatus in this repo
 
@@ -427,6 +471,57 @@ Vault: `HDC_VAULTWARDEN_ADMIN_TOKEN` (required for deploy/maintain; stays in **l
 
 Example: `node tools/hdc/cli.mjs run service vaultwarden deploy -- --instance a`
 
+## n8n in this repo
+
+- **Config:** [`packages/services/n8n/config.json`](packages/services/n8n/config.json) (copy from [`config.example.json`](packages/services/n8n/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/n8n-a.json`](inventory/manual/systems/n8n-a.json); service sidecar [`inventory/manual/services/n8n.json`](inventory/manual/services/n8n.json).
+- **Schema:** [`tools/hdc/schema/n8n.config.schema.json`](tools/hdc/schema/n8n.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 20 GiB rootfs) + Docker n8n with SQLite (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `.env` from config, `docker compose pull` + `up -d`, ClamAV baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/healthz` on port 5678 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `n8n.public_url` (`https://…`) when using nginx-waf for webhooks and UI; omit for HTTP on the CT IP only. Vault: `HDC_N8N_ENCRYPTION_KEY` (required for credential encryption; auto-generated on first deploy if missing). After deploy, add BIND A record and nginx-waf `sites[]` upstream to `http://<ct-ip>:5678` when using a public hostname.
+
+Example: `node tools/hdc/cli.mjs run service n8n deploy -- --instance a`
+
+## Home Assistant in this repo
+
+- **Config:** [`packages/services/homeassistant/config.json`](packages/services/homeassistant/config.json) (copy from [`config.example.json`](packages/services/homeassistant/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-homeassistant-a.json`](inventory/manual/systems/vm-homeassistant-a.json); service sidecar [`inventory/manual/services/homeassistant.json`](inventory/manual/services/homeassistant.json).
+- **Schema:** [`tools/hdc/schema/homeassistant.config.schema.json`](tools/hdc/schema/homeassistant.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU on configured host (e.g. `pve-h`): import HAOS OVA qcow2, USB passthrough for Zigbee/Z-Wave (`deployments[]`; `--instance a`, `--destroy-existing`, `--usb-id`, `--no-wait-http`) |
+| `maintain` | HTTP probe on port 8123; `--reapply-usb` to refresh USB mapping |
+| `query` | Config summary; `--live` for Proxmox guest + HTTP probe |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. nginx-waf may already point `ha.dukk.org` at `http://10.0.0.30:8123`. No vault secrets for v1.
+
+Example: `node tools/hdc/cli.mjs run service homeassistant deploy -- --instance a --destroy-existing`
+
+## Windows desktop in this repo
+
+- **Config:** [`packages/services/windows-desktop/config.json`](packages/services/windows-desktop/config.json) (copy from [`config.example.json`](packages/services/windows-desktop/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-win11-a.json`](inventory/manual/systems/vm-win11-a.json); service sidecar [`inventory/manual/services/windows-desktop.json`](inventory/manual/services/windows-desktop.json).
+- **Schema:** [`tools/hdc/schema/windows-desktop.config.schema.json`](tools/hdc/schema/windows-desktop.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU on `pve-b` (or configured host): Win11 from ISO + generated `autounattend.xml`, OVMF/TPM/VirtIO, OEM MSDM/SLIC passthrough (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-oem`, `--skip-install`, `--wait-install`) |
+| `maintain` | Re-dump and re-apply OEM ACPI tables + SMBIOS on the guest |
+| `query` | Config summary; `--live` for VM power state and OEM probe on hypervisor |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Vault: `HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD` (required). Place Windows 11 and virtio-win ISOs on the node (`proxmox.iso.windows_volid`, `virtio_volid`). **One** OEM-licensed Windows VM per hypervisor.
+
+Example: `node tools/hdc/cli.mjs run service windows-desktop deploy -- --instance a --wait-install`
+
 ## Nextcloud in this repo
 
 - **Config:** [`packages/services/nextcloud/config.json`](packages/services/nextcloud/config.json) (copy from [`config.example.json`](packages/services/nextcloud/config.example.json); keep local config out of git).
@@ -488,14 +583,16 @@ Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a`
 
 | Command | Summary |
 | --- | --- |
-| `run client windows maintain` | WinRM disk + Windows Update (PSWindowsUpdate on target); WoL if offline |
-| `run client windows query` | WinRM disk + pending update count |
+| `run client windows maintain` | WinRM disk + Windows Update (PSWindowsUpdate on target); WoL if offline; auto WinRM bootstrap via PsExec when HTTPS port closed |
+| `run client windows query` | WinRM disk + pending update count; same PsExec WinRM bootstrap when needed |
 | `run client client-ubuntu maintain` | SSH `df`, apt dist-upgrade; reboot only with `--reboot` |
 | `run client client-ubuntu query` | SSH disk + upgradable package count |
 | `run client raspberrypi maintain` | Same as ubuntu (Debian/apt) |
 | `run client raspberrypi query` | Same as ubuntu |
 
-Flags (after `--`): `--host-id`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-report`, `--report`.
+Flags (after `--`): `--host-id`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-winrm-bootstrap`, `--no-report`, `--report`.
+
+**WinRM bootstrap:** When port 5986 is not open, `maintain`/`query` can run Sysinternals **PsExec** on the operator Windows host (current logon must be remote admin) to enable WinRM + HTTPS listener. Config: `winrm_bootstrap` in [`packages/clients/config.json`](packages/clients/config.json); env `HDC_PSEXEC_PATH`. See [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md).
 
 Vault: `HDC_WINRM_PASSWORD_<SUFFIX>` per Windows host (`winrm_password_vault_suffix` in config). Env: `HDC_WINRM_USER`, `HDC_CLIENT_SSH_USER`.
 
@@ -518,8 +615,9 @@ node tools/hdc/cli.mjs run client client-ubuntu maintain -- --reboot --host-id w
 | `qemu-clone` | deploy | Clone QEMU VM from template (`create-vm`); enables `agent=1` after clone (in-guest install via service deploy or SSH) |
 | `qemu-list-templates` | deploy | List QEMU templates |
 | `verify-templates` | maintain | SSH keys, no-subscription APT sources and subscription nag removal, host firewall (SSH/8006 to allowed LANs), API token ACL, templates, NAS storage, host OS updates, OEM Windows SLIC/MSDM license reporting, configured load report, QEMU guest agent (config + ping), markdown report under `packages/infrastructure/proxmox/reports/` |
-| `bootstrap-hdc-user` | maintain | Local `hdc` user on bootstrap hosts |
 | `cluster-snapshot` | query | Cluster/guest inventory JSON on stdout |
+
+Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructure ubuntu maintain` or `users bootstrap-hdc` — not from `proxmox maintain`.
 
 **QEMU guest agent:** Deploy scripts enable `agent=1` on new QEMU VMs and install `qemu-guest-agent` in Linux guests when deploy has SSH (e.g. BIND). LXC deploys are unchanged. See [`.cursor/rules/proxmox-qemu-guest-agent.mdc`](.cursor/rules/proxmox-qemu-guest-agent.mdc). Maintain `verify-templates` reports agent config + ping.
 
@@ -568,7 +666,7 @@ node tools/hdc/cli.mjs run infrastructure gcp-oauth maintain -- --import ./clien
 node tools/hdc/cli.mjs run infrastructure gcp-oauth query -- --import ./client_secret.json --require-vault
 ```
 
-## Cloudflare DNS in this repo
+## Cloudflare in this repo
 
 - **Config:** [`packages/infrastructure/cloudflare/config.json`](packages/infrastructure/cloudflare/config.json) (copy from [`config.example.json`](packages/infrastructure/cloudflare/config.example.json); keep local config out of git).
 - **Schema:** [`tools/hdc/schema/cloudflare.config.schema.json`](tools/hdc/schema/cloudflare.config.schema.json).
@@ -576,17 +674,20 @@ node tools/hdc/cli.mjs run infrastructure gcp-oauth query -- --import ./client_s
 
 | Verb | Summary |
 | --- | --- |
-| `query` | List account zones (after `zone_filter`), unmanaged zones, and diff vs config for managed zones (JSON on stdout) |
-| `maintain` | Apply `zones[]` records to matching Cloudflare zones; optional `--prune` to delete extra live records |
+| `query` | List account zones (after `zone_filter`), diff DNS/page rules/email routing vs config; `--import-zones` (DNS only), `--import-page-rules`, `--import-email-routing` merge into hdc-private config |
+| `maintain` | Apply `zones[]` records, optional `page_rules[]`, `email_routing_rules[]`, and `email_routing.catch_all`; `--prune`; `--skip-page-rules` / `--skip-email-routing` |
 
-Vault: `HDC_CLOUDFLARE_API_TOKEN` (required). Optional: `HDC_CLOUDFLARE_ACCOUNT_ID` in `.env` or `cloudflare.account_id` in config when zone listing needs an account filter.
+Token: `HDC_CLOUDFLARE_API_TOKEN` in repo `.env` or vault. Permissions: Zone Read, DNS Edit, Page Rules Edit, Email Routing Rules Edit. Optional: `HDC_CLOUDFLARE_ACCOUNT_ID`.
 
-Discovery is account-wide; **only zones listed in config `zones[]` are mutated**. Zones in the account without a config entry are reported as unmanaged.
+Per-zone opt-in: include `page_rules`, `email_routing_rules`, or `email_routing.catch_all` keys to manage those resources (omit key to leave live rules untouched).
+
+**Bootstrap:** `query -- --import-zones --yes` replaces `zones[]` DNS; `--import-page-rules --yes` and `--import-email-routing --yes` merge rules on configured zones.
 
 Examples:
 
 ```bash
 node tools/hdc/cli.mjs run infrastructure cloudflare query --
+node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-page-rules --yes
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --dry-run
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone dukk.org --prune
 ```

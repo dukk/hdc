@@ -2,11 +2,11 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { repoRoot } from "../paths.mjs";
+import { readResolvedPackageConfigJson } from "./json-config-preprocess.mjs";
 import {
   assertJsonObject,
   formatResolvedRepoFileLabel,
   missingRepoFileError,
-  readResolvedRepoJson,
   resolveRepoFile,
 } from "./private-repo.mjs";
 
@@ -35,7 +35,7 @@ export function resolvePackageConfig(publicRoot, packageRoot, filename = "config
 
 /**
  * @param {string} packageRoot
- * @param {{ filename?: string; publicRoot?: string; exampleRel?: string; log?: (line: string) => void; env?: NodeJS.ProcessEnv }} [opts]
+ * @param {{ filename?: string; publicRoot?: string; exampleRel?: string; log?: (line: string) => void; env?: NodeJS.ProcessEnv; preprocess?: boolean }} [opts]
  */
 export function loadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
   const publicRoot = opts.publicRoot ?? repoRoot();
@@ -48,7 +48,13 @@ export function loadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
       rel.replace(/\/config\.json$/, "/config.example.json").replace(/^config\.json$/, "config.example.json");
     throw missingRepoFileError(resolved, { exampleRel });
   }
-  const data = assertJsonObject(readResolvedRepoJson(resolved));
+  const data = assertJsonObject(
+    readResolvedPackageConfigJson(resolved, {
+      publicRoot,
+      env: opts.env,
+      preprocess: opts.preprocess,
+    }),
+  );
   if (opts.log) {
     opts.log(
       `[hdc] config ${formatResolvedRepoFileLabel(resolved, publicRoot)} loaded (${resolved.source}).\n`,
@@ -59,7 +65,7 @@ export function loadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
 
 /**
  * @param {string} packageRoot
- * @param {{ filename?: string; publicRoot?: string; env?: NodeJS.ProcessEnv }} [opts]
+ * @param {{ filename?: string; publicRoot?: string; env?: NodeJS.ProcessEnv; preprocess?: boolean }} [opts]
  */
 export function tryLoadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
   const publicRoot = opts.publicRoot ?? repoRoot();
@@ -76,7 +82,13 @@ export function tryLoadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
     };
   }
   try {
-    const data = assertJsonObject(readResolvedRepoJson(resolved));
+    const data = assertJsonObject(
+      readResolvedPackageConfigJson(resolved, {
+        publicRoot,
+        env: opts.env,
+        preprocess: opts.preprocess,
+      }),
+    );
     return {
       ok: true,
       missing: false,

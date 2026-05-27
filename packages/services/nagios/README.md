@@ -31,7 +31,7 @@ Example IPs in `config.example.json`: `192.0.2.120`–`122` on `hypervisor-b` / 
 
 ## After deploy
 
-1. **Web UI:** `http://<guest-ip>/nagios4` (deploy JSON includes `ui_url` when configure SSH host is set).
+1. **Web UI:** `http://<guest-ip>/nagios4` (deploy JSON includes `ui_url` when configure SSH host is set). The UI is served by **Apache** with `mod_cgi` enabled (`a2enmod cgi`, `nagios4-cgi` conf) — deploy and maintain run this automatically; without it, `.cgi` links download instead of executing.
 2. **New hosts to monitor:** add forward A records in BIND config, then `run nagios maintain --` (no per-host Nagios inventory entries for DNS-named systems).
 3. Optional DNS names: `nagios-a.hdc.example.invalid`, etc. in BIND for operators — not required for checks.
 

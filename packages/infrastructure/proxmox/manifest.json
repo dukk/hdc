@@ -33,13 +33,7 @@
       "id": "verify-templates",
       "title": "Verify provision templates",
       "verb": "maintain",
-      "summary": "SSH keys, version-aware hdc API token ACL (PVE 8/9), Ubuntu LTS templates, NAS storage, host OS upgrades, optional bootstrap-hdc."
-    },
-    {
-      "id": "bootstrap-hdc-user",
-      "title": "Bootstrap hdc user",
-      "verb": "maintain",
-      "summary": "Create/update the hdc Linux user on bootstrap_hosts (SSH); passwords stored in vault."
+      "summary": "SSH keys, version-aware hdc API token ACL (PVE 8/9), Ubuntu LTS templates, NAS storage, host OS upgrades, QEMU guest agent report."
     },
     {
       "id": "cluster-snapshot",

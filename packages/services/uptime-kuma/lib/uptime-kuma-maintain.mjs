@@ -7,7 +7,7 @@ import {
   normalizeReleaseTag,
   resolveReleaseTarget,
 } from "./uptime-kuma-release.mjs";
-import { readInstalledReleaseTag } from "./uptime-kuma-install.mjs";
+import { CHROMIUM_SYMLINK_SHELL, readInstalledReleaseTag } from "./uptime-kuma-install.mjs";
 
 /**
  * @param {string} tag
@@ -30,7 +30,7 @@ export function buildUpgradeScript(tag, tarballUrl) {
     "cd /opt/uptime-kuma",
     "npm install --omit=dev",
     "npm run download-dist",
-    "ln -sf /usr/bin/chromium /opt/uptime-kuma/chromium",
+    ...CHROMIUM_SYMLINK_SHELL,
     `echo '${escapedTag}' > /opt/uptime-kuma/.hdc-release-tag`,
     "systemctl start uptime-kuma",
     "systemctl is-active --quiet uptime-kuma",

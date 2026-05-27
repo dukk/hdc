@@ -1,6 +1,28 @@
+import {
+  configEntryToPageRule,
+} from "./cloudflare-page-rules-config.mjs";
+import {
+  configEntryToCatchAll,
+  configEntryToEmailRoutingRule,
+} from "./cloudflare-email-routing-config.mjs";
+
 /** @typedef {{ type: string; name: string; data: string; ttl: number; proxied: boolean; priority?: number }} NormalizedRecord */
 
-/** @typedef {{ name: string; records: NormalizedRecord[] }} ConfigZone */
+/** @typedef {import('./cloudflare-page-rules-config.mjs').ConfigPageRule} ConfigPageRule */
+/** @typedef {import('./cloudflare-email-routing-config.mjs').ConfigEmailRoutingRule} ConfigEmailRoutingRule */
+/** @typedef {import('./cloudflare-email-routing-config.mjs').ConfigEmailRoutingCatchAll} ConfigEmailRoutingCatchAll */
+
+/**
+ * @typedef {object} ConfigZone
+ * @property {string} name
+ * @property {NormalizedRecord[]} records
+ * @property {ConfigPageRule[] | undefined} page_rules
+ * @property {boolean} manages_page_rules
+ * @property {ConfigEmailRoutingRule[] | undefined} email_routing_rules
+ * @property {boolean} manages_email_routing_rules
+ * @property {{ catch_all?: ConfigEmailRoutingCatchAll } | undefined} email_routing
+ * @property {boolean} manages_email_routing_catch_all
+ */
 
 /**
  * @param {unknown} v
@@ -128,7 +150,53 @@ export function normalizeCloudflareConfig(cfg) {
       if (type === "MX" && typeof r.priority === "number") rec.priority = r.priority;
       records.push(rec);
     }
-    zones.push({ name, records });
+
+    /** @type {ConfigPageRule[] | undefined} */
+    let page_rules;
+    const manages_page_rules = Object.prototype.hasOwnProperty.call(z, "page_rules");
+    if (manages_page_rules) {
+      page_rules = [];
+      const prs = Array.isArray(z.page_rules) ? z.page_rules : [];
+      for (const pr of prs) {
+        const parsed = configEntryToPageRule(pr);
+        if (parsed) page_rules.push(parsed);
+      }
+    }
+
+    /** @type {ConfigEmailRoutingRule[] | undefined} */
+    let email_routing_rules;
+    const manages_email_routing_rules = Object.prototype.hasOwnProperty.call(z, "email_routing_rules");
+    if (manages_email_routing_rules) {
+      email_routing_rules = [];
+      const errs = Array.isArray(z.email_routing_rules) ? z.email_routing_rules : [];
+      for (const er of errs) {
+        const parsed = configEntryToEmailRoutingRule(er);
+        if (parsed) email_routing_rules.push(parsed);
+      }
+    }
+
+    /** @type {{ catch_all?: ConfigEmailRoutingCatchAll } | undefined} */
+    let email_routing;
+    let manages_email_routing_catch_all = false;
+    if (isObject(z.email_routing) && Object.prototype.hasOwnProperty.call(z.email_routing, "catch_all")) {
+      manages_email_routing_catch_all = true;
+      email_routing = {};
+      const catchAll = configEntryToCatchAll(
+        /** @type {Record<string, unknown>} */ (z.email_routing).catch_all
+      );
+      if (catchAll) email_routing.catch_all = catchAll;
+    }
+
+    zones.push({
+      name,
+      records,
+      page_rules,
+      manages_page_rules,
+      email_routing_rules,
+      manages_email_routing_rules,
+      email_routing,
+      manages_email_routing_catch_all,
+    });
   }
 
   return {

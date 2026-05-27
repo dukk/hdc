@@ -1,24 +1,36 @@
-import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
+import { env } from "node:process";
+
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 
 export const CLOUDFLARE_TOKEN_VAULT_KEY = "HDC_CLOUDFLARE_API_TOKEN";
 
 /**
- * @returns {ReturnType<typeof createVaultAccess>}
+ * @returns {ReturnType<typeof createPackageVaultAccess>}
  */
 export function createCloudflareVaultAccess() {
-  return createVaultAccess(vaultDepsFromCli());
+  return createPackageVaultAccess();
 }
 
 /**
- * @param {ReturnType<typeof createVaultAccess>} vault
+ * Resolve API token: repo `.env` when set, else hdc vault.
+ * @param {ReturnType<typeof createPackageVaultAccess>} vault
  */
 export async function resolveCloudflareToken(vault) {
-  await vault.unlock({});
-  const token = await vault.getSecret(CLOUDFLARE_TOKEN_VAULT_KEY);
-  if (!token || !String(token).trim()) {
-    throw new Error(
-      `${CLOUDFLARE_TOKEN_VAULT_KEY} is not set. Run: node tools/hdc/cli.mjs secrets set ${CLOUDFLARE_TOKEN_VAULT_KEY}`
-    );
+  const fromEnv =
+    typeof env.HDC_CLOUDFLARE_API_TOKEN === "string" ? env.HDC_CLOUDFLARE_API_TOKEN.trim() : "";
+  if (fromEnv) return fromEnv;
+
+  try {
+    const secrets = await vault.readSecrets({ createIfMissing: false });
+    const fromVault = secrets?.[CLOUDFLARE_TOKEN_VAULT_KEY];
+    if (typeof fromVault === "string" && fromVault.trim()) {
+      return fromVault.trim();
+    }
+  } catch {
+    // Vault missing, locked, or unavailable
   }
-  return String(token).trim();
+
+  throw new Error(
+    `${CLOUDFLARE_TOKEN_VAULT_KEY} is not set. Run: node tools/hdc/cli.mjs secrets set ${CLOUDFLARE_TOKEN_VAULT_KEY} — or set it in repo .env`
+  );
 }

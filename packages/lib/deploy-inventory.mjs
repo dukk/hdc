@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { readResolvedPackageConfigJson } from "../../tools/hdc/lib/json-config-preprocess.mjs";
 import {
   slugifyInventoryRole,
   systemIdForClass,
@@ -20,7 +21,10 @@ export const DEPLOY_TARGET_WORKLOAD = {
   ollama: { workloadClass: "lxc", role: "ollama", instance: "a" },
   "postfix-relay": { workloadClass: "lxc", role: "postfix-relay", instance: "a" },
   vaultwarden: { workloadClass: "lxc", role: "vaultwarden", instance: "a" },
+  scanopy: { workloadClass: "lxc", role: "scanopy", instance: "a" },
+  postiz: { workloadClass: "lxc", role: "postiz", instance: "a" },
   "nginx-waf": { workloadClass: "vm", role: "nginx-waf", instance: "a" },
+  nginx: { workloadClass: "vm", role: "nginx", instance: "a" },
 };
 
 /** Defaults for Nagios NRPE layout (override in `packages/services/nagios/config.json`). */
@@ -49,11 +53,15 @@ export function servicePackageConfigPath(root, serviceId) {
 }
 
 /**
- * @param {string} path
+ * @param {import("../../tools/hdc/lib/private-repo.mjs").ResolvedRepoFile} resolved
+ * @param {string} publicRoot
  */
-function readJsonObject(path) {
+function readConfigObject(resolved, publicRoot) {
+  if (!resolved.found) {
+    return null;
+  }
   try {
-    const v = JSON.parse(readFileSync(path, "utf8"));
+    const v = readResolvedPackageConfigJson(resolved, { publicRoot });
     if (v !== null && typeof v === "object" && !Array.isArray(v)) {
       return /** @type {Record<string, unknown>} */ (v);
     }
@@ -81,7 +89,7 @@ export function deployTargetInventory(root, targetId, opts = {}) {
   const rel = `packages/services/${targetId}/config.json`;
   const resolved = resolveRepoFile(root, rel);
   const configPath = resolved.found ? resolved.path : resolved.publicPath;
-  const cfg = resolved.found ? readJsonObject(resolved.path) : null;
+  const cfg = resolved.found ? readConfigObject(resolved, root) : null;
   const override =
     cfg && typeof cfg.deploy === "object" && cfg.deploy !== null && !Array.isArray(cfg.deploy)
       ? /** @type {Record<string, unknown>} */ (cfg.deploy)

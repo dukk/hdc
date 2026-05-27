@@ -22,7 +22,8 @@ export function renderHdcPostgresqlConf(opts) {
  * @param {string[]} replicationLines host replication user standby_ip/cidr
  */
 export function renderHdcPgHbaConf(listenCidrs, replicationLines = []) {
-  const lines = ["# Managed by hdc postgresql package", "local all all peer"];
+  // Host rules only — local socket auth stays in the distro main pg_hba.conf.
+  const lines = ["# Managed by hdc postgresql package"];
   for (const cidr of listenCidrs) {
     lines.push(`host all all ${cidr} scram-sha-256`);
   }

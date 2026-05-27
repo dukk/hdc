@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { CliExit } from "./cli-exit.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
-import { readResolvedRepoJson, resolveRepoFile, resolveRepoFilePath } from "./private-repo.mjs";
+import { readResolvedPackageConfigJson } from "./json-config-preprocess.mjs";
+import { resolveRepoFile, resolveRepoFilePath } from "./private-repo.mjs";
 
 import { remoteBootstrapHdcBash } from "../../../packages/lib/linux-local-admin-user.mjs";
 
@@ -143,7 +144,7 @@ export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
     /** @type {unknown} */
     let j;
     try {
-      j = readResolvedRepoJson(clientResolved);
+      j = readResolvedPackageConfigJson(clientResolved, { publicRoot: root });
     } catch {
       j = null;
     }
@@ -177,7 +178,7 @@ export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
     /** @type {unknown} */
     let j;
     try {
-      j = readResolvedRepoJson(resolved);
+      j = readResolvedPackageConfigJson(resolved, { publicRoot: root });
     } catch {
       continue;
     }

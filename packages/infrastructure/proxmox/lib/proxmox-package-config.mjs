@@ -1,8 +1,8 @@
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { readResolvedPackageConfigJson } from "../../../../tools/hdc/lib/json-config-preprocess.mjs";
 import {
   assertJsonObject,
   missingRepoFileError,
-  readResolvedRepoJson,
   resolveRepoFile,
 } from "../../../../tools/hdc/lib/private-repo.mjs";
 import {
@@ -80,7 +80,7 @@ export function loadProxmoxConfigFromRepo(publicRoot = repoRoot(), env = process
     });
   }
   return {
-    data: assertJsonObject(readResolvedRepoJson(resolved)),
+    data: assertJsonObject(readResolvedPackageConfigJson(resolved, { publicRoot, env })),
     path: resolved.path,
     resolved,
   };

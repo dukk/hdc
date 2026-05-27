@@ -127,6 +127,35 @@ export function mergeReverseRecords(reverseZone, forwardAs) {
 }
 
 /**
+ * Reject invalid owner combinations (e.g. CNAME plus A at the same name).
+ * @param {{ type: string; name: string; data: string; ttl: number }[]} records
+ * @param {string} zoneId
+ */
+export function validateZoneRecords(records, zoneId) {
+  /** @type {Map<string, Set<string>>} */
+  const byOwner = new Map();
+  for (const rec of records) {
+    const owner = rec.name === "@" || rec.name === "" ? "@" : rec.name;
+    const type = rec.type.toUpperCase();
+    if (!byOwner.has(owner)) byOwner.set(owner, new Set());
+    byOwner.get(owner).add(type);
+  }
+  /** @type {string[]} */
+  const errors = [];
+  for (const [owner, types] of byOwner) {
+    if (!types.has("CNAME")) continue;
+    if (types.size === 1) continue;
+    const label = owner === "@" ? zoneId : `${owner}.${zoneId}`;
+    errors.push(
+      `${label}: CNAME cannot coexist with ${[...types].filter((t) => t !== "CNAME").join(", ")}`,
+    );
+  }
+  if (errors.length) {
+    throw new Error(`zone ${JSON.stringify(zoneId)}: ${errors.join("; ")}`);
+  }
+}
+
+/**
  * @param {string[]} zoneIds
  * @param {Record<string, Record<string, unknown>>} zoneMap
  * @param {{ primaryNs: string; secondaryNs: string; primaryIp: string; secondaryIp: string; hostmaster: string }} ns
@@ -157,6 +186,7 @@ export function buildZoneBundle(zoneIds, zoneMap, ns, opts) {
         }))
         .filter((r) => r.type && r.name && r.data);
     }
+    validateZoneRecords(records, id);
     bundles.push({ id, zoneType, records, serial: opts.serial });
   }
 

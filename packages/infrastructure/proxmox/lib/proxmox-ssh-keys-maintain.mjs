@@ -1,8 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { isProxmoxConfigObject } from "./proxmox-config.mjs";
 import { listProxmoxHypervisorSshTargets } from "./proxmox-host-os-maintain.mjs";
+import { loadProxmoxMaintainConfig } from "./proxmox-package-config.mjs";
 import {
   discoverLocalSshMaterial,
   ensureSshAuthorizedKeys,
@@ -33,21 +31,11 @@ export function sshKeysMaintainEnabledFromConfig(cfg) {
  */
 export async function runProxmoxSshKeysMaintain(opts) {
   const { packageRoot, log, warn, vault, env, spawnSync, readLineQuestion, dryRun = false } = opts;
-  const configPath = join(packageRoot, "config.json");
-
-  if (!existsSync(configPath)) {
-    warn("SSH keys maintain: missing config.json — skip.");
+  const loaded = loadProxmoxMaintainConfig(packageRoot, warn, "SSH keys maintain");
+  if (!loaded) {
     return { ok: true };
   }
-
-  /** @type {unknown} */
-  let cfg;
-  try {
-    cfg = JSON.parse(readFileSync(configPath, "utf8"));
-  } catch (e) {
-    warn(`SSH keys maintain: invalid config.json: ${/** @type {Error} */ (e).message}`);
-    return { ok: false };
-  }
+  const cfg = loaded.data;
 
   if (!sshKeysMaintainEnabledFromConfig(cfg)) {
     log("SSH keys maintain: disabled in provision.ssh_keys.enabled — skip.");

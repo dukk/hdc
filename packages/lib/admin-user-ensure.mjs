@@ -3,9 +3,11 @@ import { env as processEnv } from "node:process";
 import { flagGet } from "./parse-argv-flags.mjs";
 import {
   remoteEnsureLocalAdminUserBash,
+  remoteInstallAuthorizedKeysForUserBash,
   validateLinuxUsername,
 } from "./linux-local-admin-user.mjs";
 import { createPackageVaultAccess } from "./package-vault-access.mjs";
+import { discoverLocalSshMaterial } from "../../tools/hdc/lib/ssh-host-access.mjs";
 
 export const ADMIN_USER_ENV = "HDC_ADMIN_USER";
 export const ADMIN_USER_PASSWORD_VAULT_KEY = "HDC_ADMIN_USER_PASSWORD";
@@ -44,6 +46,14 @@ export function adminUserSkippedByFlags(flags) {
 }
 
 /**
+ * @param {Record<string, string>} [flags]
+ * @returns {boolean}
+ */
+export function adminUserSshKeysSkippedByFlags(flags) {
+  return flagGet(flags ?? {}, "skip-admin-ssh-keys", "skip_admin_ssh_keys") !== undefined;
+}
+
+/**
  * @param {ReturnType<typeof createPackageVaultAccess>} [vaultAccess]
  * @returns {Promise<string>}
  */
@@ -66,11 +76,20 @@ export async function resolveAdminPassword(vaultAccess) {
 }
 
 /**
+ * @typedef {object} AdminUserSshKeysResult
+ * @property {boolean} ok
+ * @property {boolean} skipped
+ * @property {number} [installed]
+ * @property {string} message
+ */
+
+/**
  * @typedef {object} AdminUserEnsureResult
  * @property {boolean} ok
  * @property {boolean} skipped
  * @property {string} [username]
  * @property {string} message
+ * @property {AdminUserSshKeysResult} [ssh_keys]
  */
 
 /**
@@ -120,10 +139,74 @@ export async function ensureAdminUser({ exec, log, flags, vaultAccess, env }) {
       const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
       throw new Error(detail);
     }
-    return { ok: true, skipped: false, username, message: "ensured" };
+
+    const sshKeys = ensureAdminUserSshKeys({ exec, log, flags, username });
+    const ok = sshKeys.ok;
+    return {
+      ok,
+      skipped: false,
+      username,
+      message: ok ? "ensured" : "user ensured but SSH keys failed",
+      ssh_keys: sshKeys,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (log.warn) log.warn(`${exec.label}: local admin user ensure failed: ${msg}`);
     return { ok: false, skipped: false, username, message: msg };
+  }
+}
+
+/**
+ * Install operator ~/.ssh public keys into the admin user's authorized_keys.
+ *
+ * @param {object} opts
+ * @param {import("./clamav-ensure.mjs").ConfigureExec} opts.exec
+ * @param {{ info: (msg: string) => void; warn?: (msg: string) => void }} opts.log
+ * @param {Record<string, string>} [opts.flags]
+ * @param {string} opts.username
+ * @returns {AdminUserSshKeysResult}
+ */
+export function ensureAdminUserSshKeys({ exec, log, flags, username }) {
+  if (adminUserSshKeysSkippedByFlags(flags)) {
+    log.info(`${exec.label}: admin user SSH keys skipped (--skip-admin-ssh-keys)`);
+    return { ok: true, skipped: true, message: "skipped by flag" };
+  }
+
+  const { publicKeyLines } = discoverLocalSshMaterial();
+  if (!publicKeyLines.length) {
+    const msg = "no local ~/.ssh public keys found";
+    if (log.warn) log.warn(`${exec.label}: ${msg}`);
+    return { ok: false, skipped: false, installed: 0, message: msg };
+  }
+
+  const keyLinesB64 = publicKeyLines.map((line) => Buffer.from(line, "utf8").toString("base64"));
+  let remote;
+  try {
+    remote = remoteInstallAuthorizedKeysForUserBash(username, keyLinesB64);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (log.warn) log.warn(`${exec.label}: ${msg}`);
+    return { ok: false, skipped: false, installed: 0, message: msg };
+  }
+
+  try {
+    log.info(
+      `${exec.label}: installing ${publicKeyLines.length} SSH public key line(s) for ${username}`,
+    );
+    const r = exec.run(remote, { capture: true });
+    if (r.status !== 0) {
+      const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+      throw new Error(detail);
+    }
+    return {
+      ok: true,
+      skipped: false,
+      installed: publicKeyLines.length,
+      message: "installed",
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (log.warn) log.warn(`${exec.label}: admin user SSH keys failed: ${msg}`);
+    return { ok: false, skipped: false, installed: 0, message: msg };
   }
 }

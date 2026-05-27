@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Deploy Immich on Proxmox QEMU (Docker Compose over SSH).
+ * Deploy Immich (Proxmox QEMU or Synology Docker Compose).
  *
- * Usage: hdc run service immich deploy -- [--instance a | --system-id vm-immich-a]
+ * Usage: hdc run service immich deploy -- [--instance a | --system-id immich-a]
  *        [--destroy-existing] [--skip-provision] [--skip-install]
  *        [--skip-existing | --redeploy-existing]
  */
@@ -38,7 +38,9 @@ import {
   waitForSsh,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { createImmichVaultAccess } from "../lib/vault-deps.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { deployImmichOnSynology } from "../lib/immich-synology.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -124,6 +126,21 @@ async function runConfigure(ctx) {
 async function deployOne(deployment, dbPassword, flags, log) {
   const inv = deployTargetInventory(root, target, { systemIdOverride: deployment.systemId });
   logDeployInventoryStatus(target, verb, inv);
+
+  if (deployment.mode === "synology-docker") {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${deployment.systemId} synology-docker (instance ${JSON.stringify(deployment.synology?.instance ?? "a")}) …\n`,
+    );
+    const configure = await deployImmichOnSynology(deployment, dbPassword);
+    return {
+      ok: configure.ok !== false,
+      system_id: deployment.systemId,
+      mode: "synology-docker",
+      configure,
+      web_url: configure.web_url ?? null,
+      compose_dir: configure.compose_dir ?? null,
+    };
+  }
 
   if (skipProvision(flags) || deployment.mode === "configure-only") {
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} configure-only …\n`);
@@ -226,7 +243,10 @@ async function deployOne(deployment, dbPassword, flags, log) {
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await ,
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   );
 

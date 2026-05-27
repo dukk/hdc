@@ -6,11 +6,12 @@
  * 3. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
  * 4. Ensure NAS storage connections (nas-a, nas-b by default) on each cluster/standalone group.
  * 5. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
- * 6. Ensure local `hdc` user on bootstrap hosts (see `users bootstrap-hdc`).
- * 7. Report configured CPU/RAM/disk load per hypervisor (% of node capacity from API).
- * 8. Write markdown report under packages/infrastructure/proxmox/reports/ (unless --no-report).
+ * 6. Report configured CPU/RAM/disk load per hypervisor (% of node capacity from API).
+ * 7. Write markdown report under packages/infrastructure/proxmox/reports/ in hdc-private when present (unless --no-report).
  *
- * Flags (forwarded to bootstrap-hdc where applicable):
+ * Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts via `ubuntu maintain` or `users bootstrap-hdc` — not from this script.
+ *
+ * Flags:
  *   --dry-run              Report only; no SSH password changes or template downloads
  *   --no-download          Do not auto-download missing LXC ostemplates
  *   --no-build-qemu        Do not build missing QEMU templates from cloud images
@@ -20,11 +21,11 @@
  *   --skip-ssh-keys          Skip installing local SSH keys on hypervisors
  *   --skip-os-updates      Skip apt update/upgrade and reboots on hypervisors
  *   --skip-load-report     Skip configured CPU/RAM/disk load report (stderr); markdown may still collect capacity
+ *   --skip-oem-license     Skip OEM Windows SLIC/MSDM probe on hypervisors
+ *   --skip-guest-agent     Skip QEMU guest agent config + ping report
  *   --no-report            Do not write markdown report file
  *   --report <path>        Override markdown report output path
- *   --skip-bootstrap         Only check templates
- *   --skip-templates         Only run bootstrap-hdc
- *   --sidecar <path>         Limit bootstrap to JSON sidecar(s)
+ *   --skip-templates       Skip Ubuntu LTS template verify/build
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -33,10 +34,7 @@ import { fileURLToPath } from "node:url";
 
 import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
 import { CliExit } from "../../../../tools/hdc/lib/cli-exit.mjs";
-import {
-  bootstrapHostDocsFromInfrastructureConfigs,
-  runUsersBootstrapHdc,
-} from "../../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
 import {
   hostOsRebootWaitMsFromConfig,
@@ -50,6 +48,8 @@ import {
   collectProxmoxCapacityReport,
   runProxmoxHostLoadReport,
 } from "../lib/proxmox-host-load-report.mjs";
+import { runProxmoxOemWindowsLicenseReport } from "../lib/proxmox-oem-windows-license.mjs";
+import { runProxmoxQemuGuestAgentReport } from "../lib/proxmox-qemu-guest-agent.mjs";
 import { isProxmoxConfigObject, isProxmoxHostDown } from "../lib/proxmox-config.mjs";
 import {
   createMaintainReportContext,
@@ -73,13 +73,6 @@ function log(line) {
  */
 function warn(line) {
   errout.write(`[proxmox] maintain: WARN ${line}\n`);
-}
-
-/**
- * @param {string[]} argv
- */
-function bootstrapArgv(argv) {
-  return argv.filter((a) => a !== "--skip-bootstrap" && a !== "--skip-templates");
 }
 
 /**
@@ -120,13 +113,14 @@ function reportPathFromArgv(argv) {
 
 async function main() {
   const argv = process.argv.slice(2);
-  const skipBootstrap = argv.includes("--skip-bootstrap");
   const skipTemplates = argv.includes("--skip-templates");
   const skipStorage = argv.includes("--skip-storage");
   const skipApiToken = argv.includes("--skip-api-token");
   const skipSshKeys = argv.includes("--skip-ssh-keys");
   const skipOsUpdates = argv.includes("--skip-os-updates");
   const skipLoadReport = argv.includes("--skip-load-report");
+  const skipOemLicense = argv.includes("--skip-oem-license");
+  const skipGuestAgent = argv.includes("--skip-guest-agent");
   const noReport = argv.includes("--no-report");
   const dryRun = argv.includes("--dry-run");
   const noDownload = argv.includes("--no-download");
@@ -387,6 +381,83 @@ async function main() {
       });
     }
 
+    if (!skipOemLicense) {
+      try {
+        const oemResult = await runProxmoxOemWindowsLicenseReport({
+          packageRoot,
+          log,
+          warn,
+          dryRun,
+          env: deps.env,
+          spawnSync: deps.spawnSync,
+        });
+        reportCtx.oemWindowsLicense = oemResult.hosts ?? [];
+        if (!oemResult.ok) exitCode = 1;
+        recordStep(reportCtx, {
+          id: "oem-license",
+          title: "OEM Windows license (SLIC/MSDM)",
+          ran: true,
+          ok: oemResult.ok,
+        });
+      } catch (e) {
+        log(`OEM license report fatal: ${/** @type {Error} */ (e).stack || e}`);
+        exitCode = 1;
+        recordStep(reportCtx, {
+          id: "oem-license",
+          title: "OEM Windows license (SLIC/MSDM)",
+          ran: true,
+          ok: false,
+          notes: [String(/** @type {Error} */ (e).message || e)],
+        });
+      }
+    } else {
+      recordStep(reportCtx, {
+        id: "oem-license",
+        title: "OEM Windows license (SLIC/MSDM)",
+        ran: false,
+        skipReason: "--skip-oem-license",
+      });
+    }
+
+    if (!skipGuestAgent) {
+      try {
+        const gaResult = await runProxmoxQemuGuestAgentReport({
+          packageRoot,
+          log,
+          warn,
+          vault,
+        });
+        reportCtx.qemuGuestAgent = gaResult.data;
+        if (!gaResult.ok) exitCode = 1;
+        for (const w of gaResult.data?.warnings ?? []) {
+          pushWarning(reportCtx, w);
+        }
+        recordStep(reportCtx, {
+          id: "guest-agent",
+          title: "QEMU guest agent",
+          ran: true,
+          ok: gaResult.ok,
+        });
+      } catch (e) {
+        log(`QEMU guest agent report fatal: ${/** @type {Error} */ (e).stack || e}`);
+        exitCode = 1;
+        recordStep(reportCtx, {
+          id: "guest-agent",
+          title: "QEMU guest agent",
+          ran: true,
+          ok: false,
+          notes: [String(/** @type {Error} */ (e).message || e)],
+        });
+      }
+    } else {
+      recordStep(reportCtx, {
+        id: "guest-agent",
+        title: "QEMU guest agent",
+        ran: false,
+        skipReason: "--skip-guest-agent",
+      });
+    }
+
     if (!skipLoadReport) {
       try {
         const loadResult = await runProxmoxHostLoadReport({
@@ -426,57 +497,6 @@ async function main() {
         skipReason: "--skip-load-report",
       });
     }
-
-    if (!skipBootstrap) {
-      const bootstrapHosts = bootstrapHostDocsFromInfrastructureConfigs(deps.repoRoot(), deps);
-      if (!bootstrapHosts.length) {
-        log("skip bootstrap-hdc (bootstrap_hosts is empty).");
-        recordStep(reportCtx, {
-          id: "bootstrap",
-          title: "Bootstrap hdc user",
-          ran: false,
-          skipReason: "bootstrap_hosts empty",
-        });
-      } else {
-        try {
-          await runUsersBootstrapHdc(bootstrapArgv(argv), deps, { vault });
-          recordStep(reportCtx, {
-            id: "bootstrap",
-            title: "Bootstrap hdc user",
-            ran: true,
-            ok: true,
-          });
-        } catch (e) {
-          if (e instanceof CliExit) {
-            exitCode = exitCode || e.code;
-            recordStep(reportCtx, {
-              id: "bootstrap",
-              title: "Bootstrap hdc user",
-              ran: true,
-              ok: false,
-              notes: [`exit ${e.code}`],
-            });
-          } else {
-            console.error(e);
-            exitCode = 1;
-            recordStep(reportCtx, {
-              id: "bootstrap",
-              title: "Bootstrap hdc user",
-              ran: true,
-              ok: false,
-              notes: [String(/** @type {Error} */ (e).message || e)],
-            });
-          }
-        }
-      }
-    } else {
-      recordStep(reportCtx, {
-        id: "bootstrap",
-        title: "Bootstrap hdc user",
-        ran: false,
-        skipReason: "--skip-bootstrap",
-      });
-    }
   } finally {
     reportCtx.exitCode = exitCode;
 
@@ -501,6 +521,7 @@ async function main() {
           packageRoot,
           ctx: reportCtx,
           reportPathArg,
+          publicRoot: repoRoot(),
         });
         if (written) log(`Wrote maintain report to ${written}`);
       } catch (e) {

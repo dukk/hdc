@@ -6,6 +6,7 @@
   "verbs": {
     "deploy": { "script": "run.mjs" },
     "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "query": { "script": "run.mjs" },
+    "teardown": { "script": "run.mjs" }
   }
 }

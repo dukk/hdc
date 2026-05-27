@@ -28,6 +28,8 @@ node tools/hdc/cli.mjs run service pi-hole query --
 
 Static IP in config: use `deployments[].proxmox.lxc.ip_config` as `10.0.0.4/24,gw=10.0.0.1` (or `ip: 10.0.0.4/24` with `defaults.proxmox.network.gateway`). Not the QEMU-style `ip` field alone on deploy without gateway.
 
+**Multi-VLAN DNS:** Set `defaults.pihole.listening_mode` to `ALL` (default in `config.example.json`) so clients outside the Pi-hole subnet (e.g. `10.1.0.0/24`) can query Pi-hole. `LOCAL` only answers for the same subnet as the CT.
+
 ## After deploy
 
 1. Get IP: `node tools/hdc/cli.mjs run service pi-hole query --` or set `access.nodes[].ip` in inventory sidecars.

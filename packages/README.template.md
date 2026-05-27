@@ -27,7 +27,7 @@ Pass flags after `--`:
 
 {flags_list}
 
-Shared: `--dry-run`, `--no-report`, `--report <path>` (deploy/maintain/teardown write markdown under `packages/{id}/reports/`).
+Shared: `--dry-run`, `--no-report`, `--report <path>` (deploy/maintain/teardown write markdown under `packages/{id}/reports/` in hdc-private when present, else public hdc).
 
 ## After deploy
 

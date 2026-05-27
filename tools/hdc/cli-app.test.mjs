@@ -60,6 +60,10 @@ describe("runCli", () => {
     expect(capture.logLines.join("\n")).toContain("tgt");
 
     capture.logLines.length = 0;
+    expect(await runCli(["help", "run", "infra"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toContain("tgt");
+
+    capture.logLines.length = 0;
     expect(await runCli(["help", "run", "infrastructure", "tgt"], deps)).toBe(0);
     const tDetail = capture.logLines.join("\n");
     expect(tDetail).toContain("Target T");
@@ -140,6 +144,8 @@ describe("runCli", () => {
     expect(await runCli(["help", "secrets", "list"], deps)).toBe(0);
     expect(await runCli(["help", "secrets", "delete"], deps)).toBe(0);
     expect(await runCli(["help", "secrets", "set"], deps)).toBe(0);
+    expect(await runCli(["help", "secrets", "get"], deps)).toBe(0);
+    expect(await runCli(["help", "secrets", "dump"], deps)).toBe(0);
     expect(await runCli(["help", "secrets", "nope"], deps)).toBe(1);
     expect(await runCli(["help", "secrets", "set", "extra"], deps)).toBe(1);
 
@@ -215,6 +221,7 @@ describe("runCli", () => {
       spawnSync: spawnMock,
     });
     expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(0);
+    expect(await runCli(["run", "infra", "tgt", "query"], deps)).toBe(0);
     expect(capture.warnLines.join("\n")).toContain("HDC_MISSING_FOR_TEST");
     expect((capture.stdoutChunks ?? []).join("")).toContain('"from":"query"');
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
@@ -481,6 +488,155 @@ describe("runCli", () => {
       envVars: { HDC_VAULT_PASSPHRASE: "pw" },
     });
     expect(await runCli(["secrets", "nope"], deps)).toBe(1);
+  });
+
+  it("secrets get and dump export to filesystem", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    const exportDir = join(root, "export");
+    const outFile = join(exportDir, "HDC_A");
+    writeVault(vaultPath, "pw", {
+      HDC_A: "alpha",
+      HDC_B: "beta",
+      HDC_VAULTWARDEN_MASTER_PASSWORD: "bootstrap",
+    });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: { HDC_VAULT_PASSPHRASE: "pw" },
+    });
+
+    expect(await runCli(["secrets", "get", "HDC_A", "--out", outFile], deps)).toBe(0);
+    expect(readFileSync(outFile, "utf8")).toBe("alpha");
+    expect(capture.logLines.join("\n")).toMatch(/wrote 1 secret/);
+
+    capture.logLines.length = 0;
+    expect(
+      await runCli(["secrets", "dump", "--out-dir", join(exportDir, "files")], deps),
+    ).toBe(0);
+    expect(readFileSync(join(exportDir, "files", "HDC_A"), "utf8")).toBe("alpha");
+    expect(readFileSync(join(exportDir, "files", "HDC_B"), "utf8")).toBe("beta");
+    expect(existsSync(join(exportDir, "files", "HDC_VAULTWARDEN_MASTER_PASSWORD"))).toBe(
+      false,
+    );
+
+    capture.logLines.length = 0;
+    expect(
+      await runCli(
+        ["secrets", "dump", "--out-dir", join(exportDir, "env"), "--format", "env"],
+        deps,
+      ),
+    ).toBe(0);
+    const envText = readFileSync(join(exportDir, "env", "secrets.env"), "utf8");
+    expect(envText).toContain("HDC_A=alpha");
+    expect(envText).toContain("HDC_B=beta");
+
+    capture.logLines.length = 0;
+    expect(
+      await runCli(
+        ["secrets", "dump", "--out-dir", join(exportDir, "json"), "--format", "json"],
+        deps,
+      ),
+    ).toBe(0);
+    const json = JSON.parse(readFileSync(join(exportDir, "json", "secrets.json"), "utf8"));
+    expect(json.HDC_A).toBe("alpha");
+
+    expect(
+      await runCli(
+        [
+          "secrets",
+          "dump",
+          "--out-dir",
+          join(exportDir, "one"),
+          "--key",
+          "HDC_A",
+          "--key",
+          "HDC_MISSING",
+        ],
+        deps,
+      ),
+    ).toBe(1);
+    expect(capture.errorLines.join("\n")).toMatch(/HDC_MISSING/);
+
+    capture.logLines.length = 0;
+    expect(
+      await runCli(
+        [
+          "secrets",
+          "dump",
+          "--out-dir",
+          join(exportDir, "boot"),
+          "--include-bootstrap",
+        ],
+        deps,
+      ),
+    ).toBe(0);
+    expect(
+      readFileSync(
+        join(exportDir, "boot", "HDC_VAULTWARDEN_MASTER_PASSWORD"),
+        "utf8",
+      ),
+    ).toBe("bootstrap");
+
+    expect(await runCli(["secrets", "get", "HDC_A", "--out", outFile], deps)).toBe(1);
+    expect(
+      await runCli(["secrets", "get", "HDC_A", "--out", outFile, "--force"], deps),
+    ).toBe(0);
+
+    const dryDir = join(exportDir, "dry");
+    capture.logLines.length = 0;
+    expect(
+      await runCli(["secrets", "dump", "--out-dir", dryDir, "--dry-run"], deps),
+    ).toBe(0);
+    expect(existsSync(dryDir)).toBe(false);
+    expect(capture.logLines.join("\n")).toMatch(/dry-run/);
+  });
+
+  it("secrets get/dump require vault unlock", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+
+    const depsNoVault = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: {},
+    });
+    expect(
+      await runCli(["secrets", "get", "HDC_A", "--out", join(root, "out")], depsNoVault),
+    ).toBe(1);
+
+    writeVault(vaultPath, "right", { HDC_A: "1" });
+    const depsWrong = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: { HDC_VAULT_PASSPHRASE: "wrong" },
+    });
+    expect(
+      await runCli(
+        ["secrets", "dump", "--out-dir", join(root, "out2")],
+        depsWrong,
+      ),
+    ).toBe(1);
+  });
+
+  it("secrets get requires --out", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "pw", { HDC_A: "1" });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      envVars: { HDC_VAULT_PASSPHRASE: "pw" },
+    });
+    expect(await runCli(["secrets", "get", "HDC_A"], deps)).toBe(1);
+    expect(capture.errorLines.join("\n")).toMatch(/--out/);
   });
 
   it("users bootstrap-hdc dry-run, live ssh, and subcommand errors", async () => {

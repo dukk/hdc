@@ -2,28 +2,30 @@
 /**
  * Re-sync BIND zone files on primary, named options on all nodes, verify SOA on secondary.
  *
- * Usage: hdc run service bind maintain -- [--skip-clamav]
+ * Usage: hdc run service bind maintain -- [--skip-clamav] [--skip-guest-agent]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
-import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import {
   bindGlobalSettings,
   normalizeBindConfig,
   resolveBindDeployments,
 } from "../lib/deployments.mjs";
 import { createConfigureExec, syncNamedOptions, syncPrimaryZoneFiles } from "../lib/bind-configure.mjs";
+import { syncDnscryptProxyOdoh } from "../lib/bind-dnscrypt-configure.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
-import { querySoa } from "../lib/bind-query-remote.mjs";
+import { waitForSoaSerialMatch } from "../lib/bind-query-remote.mjs";
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { soaSerialFromTimestamp } from "../lib/bind-zones.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { ensureQemuGuestAgentForDeploymentMaintain } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -40,6 +42,7 @@ function ensurePackageConfig() {
 }
 
 const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -76,15 +79,52 @@ async function main() {
   const serial = soaSerialFromTimestamp();
   errout.write(`[hdc] ${target} ${verb}: SOA serial ${serial} (UTC timestamp)\n`);
 
+  const skipGuestAgent = flagGet(flags, "skip-guest-agent") !== undefined;
+
   /** @type {Record<string, unknown>[]} */
   const results = [];
+
+  if (!skipGuestAgent) {
+    for (const deployment of deployments) {
+      if (deployment.mode !== "proxmox-qemu") continue;
+      const defaultHost =
+        deployment.role === "primary" ? global.primaryIp : global.secondaryIp;
+      errout.write(`[hdc] ${target} ${verb}: qemu-guest-agent on ${deployment.systemId} …\n`);
+      const guestAgent = await ensureQemuGuestAgentForDeploymentMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        defaultSshHost: defaultHost,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.guest_agent = guestAgent;
+        if (!guestAgent.ok) existing.ok = false;
+      } else {
+        results.push({
+          ok: guestAgent.ok !== false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          guest_agent: guestAgent,
+        });
+      }
+    }
+  }
 
   for (const deployment of deployments) {
     const defaultHost = deployment.role === "primary" ? global.primaryIp : global.secondaryIp;
     const { user, host } = sshTarget(deployment, defaultHost);
-    errout.write(`[hdc] ${target} ${verb}: syncing named options on ${user}@${host} …\n`);
+    errout.write(`[hdc] ${target} ${verb}: syncing upstream and named options on ${user}@${host} …\n`);
     try {
       const exec = createConfigureExec("ssh", { user, host });
+      let dnscrypt = null;
+      if (global.forwardUpstream.mode === "odoh") {
+        dnscrypt = syncDnscryptProxyOdoh({
+          exec,
+          log,
+          forwardUpstream: global.forwardUpstream,
+        });
+      }
       const options = syncNamedOptions({
         exec,
         log,
@@ -97,6 +137,7 @@ async function main() {
         ok: true,
         system_id: deployment.systemId,
         role: deployment.role,
+        ...(dnscrypt ? { dnscrypt_proxy: dnscrypt } : {}),
         options,
       });
     } catch (e) {
@@ -144,21 +185,18 @@ async function main() {
     const { user: pUser, host: pHost } = sshTarget(primary, global.primaryIp);
     const { user: sUser, host: sHost } = sshTarget(secondary, global.secondaryIp);
     errout.write(`[hdc] ${target} ${verb}: verifying SOA serial for ${zone} …\n`);
-    const primarySoa = querySoa(pUser, pHost, zone);
-    const secondarySoa = querySoa(sUser, sHost, zone);
-    const serialMatch =
-      primarySoa.ok &&
-      secondarySoa.ok &&
-      primarySoa.serial &&
-      primarySoa.serial === secondarySoa.serial;
+    const soaCheck = await waitForSoaSerialMatch({
+      zone,
+      primaryUser: pUser,
+      primaryHost: pHost,
+      secondaryUser: sUser,
+      secondaryHost: sHost,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
     results.push({
-      ok: serialMatch,
+      ...soaCheck,
       system_id: secondary.systemId,
       role: "secondary",
-      zone,
-      primary_serial: primarySoa.serial,
-      secondary_serial: secondarySoa.serial,
-      serial_match: serialMatch,
     });
   }
 

@@ -20,6 +20,7 @@
     },
     "pihole": {
       "upstream_dns": ["1.1.1.1", "1.0.0.1"],
+      "listening_mode": "ALL",
       "webpassword": "change-me-admin",
       "interface": "eth0"
     },

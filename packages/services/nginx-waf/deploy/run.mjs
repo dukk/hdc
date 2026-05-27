@@ -21,7 +21,7 @@ import {
   fetchClusterVmResources,
 } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { pveJsonRequest } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
-import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { ensureQemuGuestAgentForDeployment } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { createNginxWafVaultAccess } from "../lib/vault-deps.mjs";
 import {
@@ -293,6 +293,36 @@ async function bootstrapGuestNetworkAndSsh(auth, node, vmid, hostname, ipCidr, g
 
 /**
  * @param {ReturnType<typeof resolveNginxWafDeployments>[number]} deployment
+ */
+function defaultSshHostForNginxWaf(deployment) {
+  const px = deployment.proxmox;
+  if (isObject(px)) {
+    const q = isObject(px.qemu) ? px.qemu : {};
+    const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+    if (ip) return ip.split("/")[0];
+  }
+  try {
+    return sshTargetFromDeployment(deployment).host;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * @param {ReturnType<typeof resolveNginxWafDeployments>[number]} deployment
+ * @param {(line: string) => void} logLine
+ */
+async function ensureNginxWafGuestAgent(deployment, logLine) {
+  return ensureQemuGuestAgentForDeployment({
+    proxmoxPackageRoot: proxmoxRoot,
+    deployment,
+    defaultSshHost: defaultSshHostForNginxWaf(deployment),
+    log: logLine,
+  });
+}
+
+/**
+ * @param {ReturnType<typeof resolveNginxWafDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {ReturnType<typeof nginxWafGlobalSettings>} global
  * @param {Record<string, unknown>[]} sites
@@ -306,8 +336,16 @@ async function deployOne(deployment, flags, global, sites, log) {
 
   if (skipProvision(flags) || deployment.mode === "configure-only") {
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} configure-only …\n`);
+    const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+    const guestAgent = await ensureNginxWafGuestAgent(deployment, logLine);
     const configure = runConfigure(deployment, global, sites, log, skipBase);
-    return { ok: true, system_id: deployment.systemId, mode: "configure-only", configure };
+    return {
+      ok: true,
+      system_id: deployment.systemId,
+      mode: "configure-only",
+      guest_agent: guestAgent,
+      configure,
+    };
   }
 
   const px = deployment.proxmox;
@@ -376,12 +414,14 @@ async function deployOne(deployment, flags, global, sites, log) {
         deployment,
         logLine,
       );
+      const guestAgent = await ensureNginxWafGuestAgent(deployment, logLine);
       const configure = runConfigure(deployment, global, sites, log, skipBase);
       return {
         ok: true,
         system_id: deployment.systemId,
         role: deployment.role,
         skipped_provision: true,
+        guest_agent: guestAgent,
         configure,
       };
     }
@@ -442,16 +482,13 @@ async function deployOne(deployment, flags, global, sites, log) {
   const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
-  await ensureQemuGuestAgentOnDeploy({
-    apiBase: auth.host.apiBase,
-    node: cloneNode,
-    vmid: guestVmid,
-    authorization: auth.authorization,
-    rejectUnauthorized: auth.rejectUnauthorized,
-    sshUser,
-    sshHost,
-    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
-  });
+  const guestAgent = await ensureNginxWafGuestAgent(
+    {
+      ...deployment,
+      configure: { ssh: { user: sshUser, host: sshHost } },
+    },
+    logLine,
+  );
 
   const configure = runConfigure(
     {
@@ -469,6 +506,7 @@ async function deployOne(deployment, flags, global, sites, log) {
     system_id: deployment.systemId,
     role: deployment.role,
     provision: provisionResult,
+    guest_agent: guestAgent,
     configure,
   };
 }

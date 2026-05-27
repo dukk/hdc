@@ -1,7 +1,7 @@
 import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
-const DNS_ROLE = "dns";
+const BIND_ROLE = "bind";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -145,8 +145,8 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!/^vm-dns-[a-z]+$/.test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match vm-dns-<letter>`);
+    if (!/^vm-bind-[a-z]+$/.test(sid)) {
+      throw new Error(`system_id ${JSON.stringify(sid)} must match vm-bind-<letter>`);
     }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
@@ -180,8 +180,8 @@ function validateDeployments(deployments) {
 export function instanceFlagToSystemId(instance) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (/^vm-dns-[a-z]+$/.test(t)) return t;
-  return vmSystemId(DNS_ROLE, t);
+  if (/^vm-bind-[a-z]+$/.test(t)) return t;
+  return vmSystemId(BIND_ROLE, t);
 }
 
 /**
@@ -236,6 +236,71 @@ function finalizeDeployment(d) {
   };
 }
 
+const DEFAULT_FORWARD_UPSTREAM = {
+  mode: "plain",
+  server: "odoh-cloudflare",
+  relay: "odohrelay-crypto-sx",
+  listen: "127.0.0.1:5300",
+};
+
+/**
+ * @param {string} listen e.g. 127.0.0.1:5300
+ */
+export function bindForwarderFromListen(listen) {
+  const trimmed = listen.trim();
+  const lastColon = trimmed.lastIndexOf(":");
+  if (lastColon <= 0) {
+    throw new Error(`bind.forward_upstream.listen must be host:port (got ${JSON.stringify(listen)})`);
+  }
+  const host = trimmed.slice(0, lastColon);
+  const port = trimmed.slice(lastColon + 1);
+  if (!/^\d+$/.test(port)) {
+    throw new Error(`bind.forward_upstream.listen port must be numeric (got ${JSON.stringify(listen)})`);
+  }
+  return `${host} port ${port}`;
+}
+
+/**
+ * @param {Record<string, unknown>} bindBlock
+ */
+export function resolveForwardUpstream(bindBlock) {
+  const fu = isObject(bindBlock.forward_upstream) ? bindBlock.forward_upstream : {};
+  const modeRaw = typeof fu.mode === "string" ? fu.mode.trim().toLowerCase() : "plain";
+  const mode = modeRaw === "odoh" ? "odoh" : "plain";
+  const server =
+    typeof fu.server === "string" && fu.server.trim()
+      ? fu.server.trim()
+      : DEFAULT_FORWARD_UPSTREAM.server;
+  const relay =
+    typeof fu.relay === "string" && fu.relay.trim() ? fu.relay.trim() : DEFAULT_FORWARD_UPSTREAM.relay;
+  const listen =
+    typeof fu.listen === "string" && fu.listen.trim()
+      ? fu.listen.trim()
+      : DEFAULT_FORWARD_UPSTREAM.listen;
+  return { mode, server, relay, listen };
+}
+
+/**
+ * @param {Record<string, unknown>} bindBlock
+ * @param {boolean} recursion
+ */
+export function resolveBindForwarders(bindBlock, recursion) {
+  const forwardUpstream = resolveForwardUpstream(bindBlock);
+  if (forwardUpstream.mode === "odoh") {
+    if (!recursion) {
+      throw new Error("bind.forward_upstream.mode odoh requires bind.recursion true");
+    }
+    return {
+      forwardUpstream,
+      forwarders: [bindForwarderFromListen(forwardUpstream.listen)],
+    };
+  }
+  const forwarders = Array.isArray(bindBlock.forwarders)
+    ? bindBlock.forwarders.map((f) => String(f).trim()).filter(Boolean)
+    : ["1.1.1.1", "1.0.0.1"];
+  return { forwardUpstream, forwarders };
+}
+
 /**
  * Global bind + zone settings from normalized config.
  * @param {ReturnType<typeof normalizeBindConfig>} normalized
@@ -243,13 +308,15 @@ function finalizeDeployment(d) {
 export function bindGlobalSettings(normalized) {
   const b = isObject(normalized.bind) ? normalized.bind : {};
   const zoneDefinitions = zoneDefinitionsToMap(normalized.zones);
+  const recursion = b.recursion !== false;
+  const { forwardUpstream, forwarders } = resolveBindForwarders(b, recursion);
   return {
     zoneIds: normalized.zones.map((z) => z.id),
     zoneDefinitions,
     allowQueryCidrs: Array.isArray(b.allow_query_cidrs)
       ? b.allow_query_cidrs.map((c) => String(c).trim()).filter(Boolean)
       : ["192.0.2.0/24", "198.51.100.0/24", "127.0.0.0/8"],
-    recursion: b.recursion !== false,
+    recursion,
     dnssecValidation: b.dnssec_validation !== false,
     tsigVaultKey:
       typeof b.tsig_vault_key === "string" && b.tsig_vault_key.trim()
@@ -261,8 +328,7 @@ export function bindGlobalSettings(normalized) {
         : "hostmaster.hdc.example.invalid",
     primaryIp: typeof b.primary_ip === "string" ? b.primary_ip.trim() : "192.0.2.2",
     secondaryIp: typeof b.secondary_ip === "string" ? b.secondary_ip.trim() : "192.0.2.3",
-    forwarders: Array.isArray(b.forwarders)
-      ? b.forwarders.map((f) => String(f).trim()).filter(Boolean)
-      : ["1.1.1.1", "1.0.0.1"],
+    forwardUpstream,
+    forwarders,
   };
 }

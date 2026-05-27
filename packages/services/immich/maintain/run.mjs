@@ -2,7 +2,7 @@
 /**
  * Maintain Immich: re-push .env, refresh Docker images, optional ClamAV.
  *
- * Usage: hdc run service immich maintain -- [--instance a | --system-id vm-immich-a]
+ * Usage: hdc run service immich maintain -- [--instance a | --system-id immich-a]
  *        [--skip-upgrade] [--skip-clamav]
  */
 import { basename, dirname, join } from "node:path";
@@ -20,11 +20,13 @@ import {
   resolveImmichDeployments,
 } from "../lib/deployments.mjs";
 import { maintainImmichOnHost } from "../lib/immich-install.mjs";
+import { maintainImmichOnSynology } from "../lib/immich-synology.mjs";
 import { createImmichVaultAccess } from "../lib/vault-deps.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
-import { repoRoot } from "../../../../tools/hdc/paths.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -82,16 +84,6 @@ async function main() {
   const results = [];
 
   for (const deployment of toMaintain) {
-    const cfgSsh = deployment.configure;
-    const ssh = isObject(cfgSsh) && isObject(cfgSsh.ssh) ? cfgSsh.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
-    const host = typeof ssh.host === "string" ? ssh.host : "";
-    if (!host) {
-      results.push({ ok: false, system_id: deployment.systemId, message: "missing ssh host" });
-      continue;
-    }
-
-    errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
     const dbKey = dbPasswordVaultKey(deployment.immich);
     const dbPassword = String(
       await vault.getSecret(dbKey, { promptLabel: `vault secret ${dbKey}` }),
@@ -101,17 +93,41 @@ async function main() {
       continue;
     }
 
-    const exec = createConfigureExec("ssh", { user, host });
-    const dataDiskGb = dataDiskGbFromDeployment(deployment);
-
     try {
+      if (deployment.mode === "synology-docker") {
+        errout.write(
+          `[hdc] ${target} ${verb}: ${deployment.systemId} synology-docker (instance ${JSON.stringify(deployment.synology?.instance ?? "a")}) …\n`,
+        );
+        const maintain = await maintainImmichOnSynology(deployment, dbPassword, { skipUpgrade });
+        results.push({
+          ok: maintain.ok !== false,
+          system_id: deployment.systemId,
+          mode: deployment.mode,
+          maintain,
+        });
+        continue;
+      }
+
+      const cfgSsh = deployment.configure;
+      const ssh = isObject(cfgSsh) && isObject(cfgSsh.ssh) ? cfgSsh.ssh : {};
+      const user = typeof ssh.user === "string" ? ssh.user : "root";
+      const host = typeof ssh.host === "string" ? ssh.host : "";
+      if (!host) {
+        results.push({ ok: false, system_id: deployment.systemId, message: "missing ssh host" });
+        continue;
+      }
+
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
+      const exec = createConfigureExec("ssh", { user, host });
+      const dataDiskGb = dataDiskGbFromDeployment(deployment);
+
       const maintain = await maintainImmichOnHost(exec, deployment.immich, deployment.install, dbPassword, {
         skipUpgrade,
         dataDiskGb,
       });
       const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
       results.push({
-        ok: maintain.ok && clamav.ok,
+        ok: maintain.ok && baseline.clamav.ok,
         system_id: deployment.systemId,
         maintain,
         admin_user: baseline.admin_user,

@@ -33,14 +33,15 @@ node tools/hdc/cli.mjs help run infrastructure proxmox
 | `qemu-clone` | deploy | `create-vm` | Full clone from QEMU template (`agent=1` after clone) |
 | `qemu-list-templates` | deploy | `list-templates` | List template VMIDs |
 | `verify-templates` | maintain | — | SSH keys, APT sources, firewall, templates, NAS storage, host upgrades, QEMU guest agent report |
-| `bootstrap-hdc-user` | maintain | — | Local `hdc` user on bootstrap hosts |
 | `cluster-snapshot` | query | — | Hypervisors and guests JSON |
+
+Bootstrap the local `hdc` user on Ubuntu hosts with `run infrastructure ubuntu maintain` or `users bootstrap-hdc` — not from `proxmox maintain`.
 
 ## Common flags
 
 Pass after `--` (varies by subcommand). Shared: `--dry-run`, `--no-report`, `--report <path>`.
 
-Maintain `verify-templates` writes a report under `packages/infrastructure/proxmox/reports/`.
+Maintain `verify-templates` writes a report under `packages/infrastructure/proxmox/reports/` in hdc-private when that repo is available, otherwise under public hdc.
 
 ## After deploy / Using the service
 

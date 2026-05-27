@@ -1,7 +1,13 @@
-import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import {
+  deploymentSystemIdPattern,
+  lxcSystemId,
+  vmSystemId,
+} from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const IMMICH_ROLE = "immich";
+const IMMICH_LXC_SYSTEM_ID = deploymentSystemIdPattern(IMMICH_ROLE);
+const IMMICH_QEMU_SYSTEM_ID = /^vm-immich-[a-z]+$/;
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -66,14 +72,27 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!/^vm-immich-[a-z]+$/.test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match vm-immich-<letter>`);
-    }
-    if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
-    ids.add(sid);
-
     const mode = typeof d.mode === "string" ? d.mode.trim() : "proxmox-qemu";
-    if (mode === "proxmox-qemu" || mode === "configure-only") {
+
+    if (mode === "synology-docker") {
+      if (!IMMICH_LXC_SYSTEM_ID.test(sid)) {
+        throw new Error(`system_id ${JSON.stringify(sid)} must match immich-<letter> for synology-docker`);
+      }
+      const syn = isObject(d.synology) ? d.synology : {};
+      const instance = typeof syn.instance === "string" ? syn.instance.trim() : "";
+      if (!instance) {
+        throw new Error(`${sid}: synology.instance required for synology-docker (e.g. "a")`);
+      }
+    } else if (mode === "proxmox-qemu" || mode === "configure-only") {
+      if (!IMMICH_QEMU_SYSTEM_ID.test(sid)) {
+        throw new Error(`system_id ${JSON.stringify(sid)} must match vm-immich-<letter> for ${mode}`);
+      }
+      const configure = isObject(d.configure) ? d.configure : {};
+      const ssh = isObject(configure.ssh) ? configure.ssh : {};
+      const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
+      if (!host) {
+        throw new Error(`${sid}: configure.ssh.host required`);
+      }
       const px = isObject(d.proxmox) ? d.proxmox : {};
       if (mode === "proxmox-qemu") {
         const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
@@ -84,13 +103,12 @@ function validateDeployments(deployments) {
           throw new Error(`${sid}: proxmox.qemu.vmid must be a positive number`);
         }
       }
-      const configure = isObject(d.configure) ? d.configure : {};
-      const ssh = isObject(configure.ssh) ? configure.ssh : {};
-      const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
-      if (!host) {
-        throw new Error(`${sid}: configure.ssh.host required`);
-      }
+    } else {
+      throw new Error(`${sid}: unsupported mode ${JSON.stringify(mode)}`);
     }
+
+    if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
+    ids.add(sid);
   }
 }
 
@@ -100,7 +118,8 @@ function validateDeployments(deployments) {
 export function instanceFlagToSystemId(instance) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (/^vm-immich-[a-z]+$/.test(t)) return t;
+  if (IMMICH_LXC_SYSTEM_ID.test(t) || IMMICH_QEMU_SYSTEM_ID.test(t)) return t;
+  if (/^[a-z]+$/.test(t)) return lxcSystemId(IMMICH_ROLE, t);
   return vmSystemId(IMMICH_ROLE, t);
 }
 
@@ -131,15 +150,21 @@ export function listImmichDeploymentSummaries(cfg) {
     const port = typeof immich.port === "number" ? immich.port : Number(immich.port);
     const configure = isObject(d.configure) ? d.configure : {};
     const ssh = isObject(configure.ssh) ? configure.ssh : {};
+    const syn = isObject(d.synology) ? d.synology : {};
     return {
       system_id: d.system_id,
       mode,
       host_id: hostId,
       vmid: Number.isFinite(vmid) ? vmid : null,
       ssh_host: typeof ssh.host === "string" ? ssh.host : null,
+      synology_instance: typeof syn.instance === "string" ? syn.instance : null,
       install_enabled: install.enabled !== false,
       release: typeof immich.release === "string" ? immich.release : "latest",
       port: Number.isFinite(port) ? port : 2283,
+      public_url:
+        typeof immich.public_url === "string" && immich.public_url.trim()
+          ? immich.public_url.trim()
+          : null,
     };
   });
 }
@@ -158,7 +183,7 @@ export function dataDiskGbFromDeployment(deployment) {
  * @param {Record<string, unknown>} d
  * @param {boolean} skipInstallCli
  */
-function finalizeDeployment(d, skipInstallCli) {
+export function finalizeDeployment(d, skipInstallCli) {
   const install = isObject(d.install) ? { ...d.install } : { enabled: true };
   if (skipInstallCli) install.enabled = false;
   const mode = typeof d.mode === "string" && d.mode.trim() ? d.mode.trim() : "proxmox-qemu";
@@ -168,6 +193,7 @@ function finalizeDeployment(d, skipInstallCli) {
     hostname: typeof d.hostname === "string" ? d.hostname.trim() : "",
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
     configure: isObject(d.configure) ? d.configure : null,
+    synology: isObject(d.synology) ? d.synology : {},
     immich: isObject(d.immich) ? d.immich : {},
     install,
   };

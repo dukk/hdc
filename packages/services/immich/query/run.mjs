@@ -18,7 +18,9 @@ import {
   normalizeImmichConfig,
   resolveImmichDeployments,
 } from "../lib/deployments.mjs";
-import { queryImmichOnHost } from "../lib/query-status.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { queryImmichOnHost } from "../lib/query-status.mjs";
+import { queryImmichOnSynology } from "../lib/immich-synology.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -81,20 +83,34 @@ async function main() {
     }
     if (selected) {
       for (const d of selected) {
-        const configure = isObject(d.configure) ? d.configure : {};
-        const ssh = isObject(configure.ssh) ? configure.ssh : {};
-        const user = typeof ssh.user === "string" ? ssh.user.trim() : "root";
-        const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
-        if (!host) {
-          liveResults.push({
-            system_id: d.systemId,
-            ok: false,
-            message: "missing configure.ssh.host",
-          });
-          continue;
-        }
-        errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} at ${user}@${host} …\n`);
         try {
+          if (d.mode === "synology-docker") {
+            errout.write(
+              `[hdc] ${target} ${verb}: live query ${d.systemId} synology-docker …\n`,
+            );
+            const status = await queryImmichOnSynology(d);
+            liveResults.push({
+              system_id: d.systemId,
+              mode: d.mode,
+              ok: status.http_ok !== false && status.docker_active === "active",
+              ...status,
+            });
+            continue;
+          }
+
+          const configure = isObject(d.configure) ? d.configure : {};
+          const ssh = isObject(configure.ssh) ? configure.ssh : {};
+          const user = typeof ssh.user === "string" ? ssh.user.trim() : "root";
+          const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
+          if (!host) {
+            liveResults.push({
+              system_id: d.systemId,
+              ok: false,
+              message: "missing configure.ssh.host",
+            });
+            continue;
+          }
+          errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} at ${user}@${host} …\n`);
           const exec = createConfigureExec("ssh", { user, host });
           const status = await queryImmichOnHost(exec, d.immich, d.install);
           liveResults.push({

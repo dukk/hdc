@@ -1,4 +1,5 @@
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
+import { resolveSiteAccessSettings } from "./deployments.mjs";
 import {
   MODSECURITY_RULES_FILE,
   renderHdcNginxInclude,
@@ -164,9 +165,10 @@ export function installNginxWafBase(opts) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {Record<string, unknown>[]} opts.sites
+ * @param {boolean} [opts.pruneStaleSites] Remove hdc-* vhosts on host not in sites[] (default true)
  */
 export function configureNginxWafSites(opts) {
-  const { exec, log, global, sites } = opts;
+  const { exec, log, global, sites, pruneStaleSites = true } = opts;
   runChecked(exec, "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled", log);
 
   const http01 = global.challenge === "http-01";
@@ -182,12 +184,16 @@ export function configureNginxWafSites(opts) {
         : serverNames(site)[0];
     const deferTls =
       tls.enabled !== false && http01 && !certExistsOnHost(exec, certName);
+    const access = resolveSiteAccessSettings(site, global);
     const vhost = renderSiteVhost({
       site,
       modsecurityEnabled: global.modsecurityEnabled,
       http01Acme: http01,
       webroot: global.webroot,
       deferTlsUntilCertExists: deferTls,
+      trustedCidrs: access.trustedCidrs,
+      clientIp: access.clientIp,
+      cloudflareIpv4: access.cloudflareIpv4,
     });
     const avail = `/etc/nginx/sites-available/hdc-${id}.conf`;
     uploadFile(exec, avail, vhost, log);
@@ -195,29 +201,31 @@ export function configureNginxWafSites(opts) {
     enabledIds.push(id);
   }
 
-  const list = runChecked(
-    exec,
-    "ls -1 /etc/nginx/sites-enabled/hdc-*.conf 2>/dev/null || true",
-    log,
-  );
-  const existing = list.stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((p) => {
-      const m = p.match(/hdc-([^.]+)\.conf$/);
-      return m ? m[1] : null;
-    })
-    .filter(Boolean);
+  if (pruneStaleSites) {
+    const list = runChecked(
+      exec,
+      "ls -1 /etc/nginx/sites-enabled/hdc-*.conf 2>/dev/null || true",
+      log,
+    );
+    const existing = list.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((p) => {
+        const m = p.match(/hdc-([^.]+)\.conf$/);
+        return m ? m[1] : null;
+      })
+      .filter(Boolean);
 
-  for (const oldId of existing) {
-    if (!enabledIds.includes(/** @type {string} */ (oldId))) {
-      runChecked(
-        exec,
-        `rm -f /etc/nginx/sites-enabled/hdc-${oldId}.conf /etc/nginx/sites-available/hdc-${oldId}.conf`,
-        log,
-      );
-      log.info(`removed stale site ${oldId}`);
+    for (const oldId of existing) {
+      if (!enabledIds.includes(/** @type {string} */ (oldId))) {
+        runChecked(
+          exec,
+          `rm -f /etc/nginx/sites-enabled/hdc-${oldId}.conf /etc/nginx/sites-available/hdc-${oldId}.conf`,
+          log,
+        );
+        log.info(`removed stale site ${oldId}`);
+      }
     }
   }
 
@@ -227,7 +235,7 @@ export function configureNginxWafSites(opts) {
     "systemctl enable nginx && (systemctl is-active --quiet nginx && systemctl reload nginx || systemctl start nginx)",
     log,
   );
-  return { enabled_site_ids: enabledIds };
+  return { enabled_site_ids: enabledIds, prune_stale_sites: pruneStaleSites };
 }
 
 /**

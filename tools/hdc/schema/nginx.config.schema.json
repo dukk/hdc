@@ -11,12 +11,19 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "server_names", "upstream"],
+        "required": ["id", "server_names"],
         "properties": {
           "id": { "type": "string" },
           "server_names": { "type": "array", "items": { "type": "string" } },
           "listen": { "type": "array", "items": { "type": "integer" } },
           "upstream": { "type": "string" },
+          "static": {
+            "type": "object",
+            "properties": {
+              "root": { "type": "string" },
+              "index": { "type": "string" }
+            }
+          },
           "tls": { "type": "object" },
           "locations": { "type": "array" }
         }

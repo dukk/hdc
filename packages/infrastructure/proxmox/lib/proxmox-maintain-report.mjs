@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import { preferredPackageReportPath } from "../../../../tools/hdc/lib/private-repo.mjs";
 import {
   CRIT_PCT,
   WARN_PCT,
@@ -29,6 +30,8 @@ import {
  * @property {import("./proxmox-host-load-report.mjs").CapacityReportData | null} capacity
  * @property {Record<string, unknown>[]} templateChecks
  * @property {string[]} downHosts
+ * @property {import("./proxmox-oem-windows-license.mjs").OemLicenseHostResult[]} [oemWindowsLicense]
+ * @property {import("./proxmox-qemu-guest-agent.mjs").QemuGuestAgentReportData | null} [qemuGuestAgent]
  * @property {number | null} exitCode
  * @property {string | null} reportPath
  */
@@ -48,7 +51,8 @@ export function createMaintainReportContext(argv) {
     skipStorage: argv.includes("--skip-storage"),
     skipOsUpdates: argv.includes("--skip-os-updates"),
     skipLoadReport: argv.includes("--skip-load-report"),
-    skipBootstrap: argv.includes("--skip-bootstrap"),
+    skipOemLicense: argv.includes("--skip-oem-license"),
+    skipGuestAgent: argv.includes("--skip-guest-agent"),
     noDownload: argv.includes("--no-download"),
     noBuildQemu: argv.includes("--no-build-qemu"),
     noPrune: argv.includes("--no-prune"),
@@ -68,8 +72,215 @@ export function createMaintainReportContext(argv) {
     capacity: null,
     templateChecks: [],
     downHosts: [],
+    oemWindowsLicense: [],
+    qemuGuestAgent: null,
     exitCode: null,
     reportPath: null,
+  };
+}
+
+/** Configured vCPU % thresholds (allocated vCPU vs physical cores). */
+export const CONFIGURED_CPU_WARN_PCT = 100;
+export const CONFIGURED_CPU_CRIT_PCT = 200;
+
+/**
+ * @param {number | null} pct
+ * @returns {boolean}
+ */
+export function isConfiguredCpuWarnPct(pct) {
+  return pct !== null && pct >= CONFIGURED_CPU_WARN_PCT;
+}
+
+/**
+ * @param {number | null} pct
+ * @returns {boolean}
+ */
+export function isConfiguredCpuCritPct(pct) {
+  return pct !== null && pct >= CONFIGURED_CPU_CRIT_PCT;
+}
+
+/**
+ * @param {Record<string, boolean | string>} flags
+ * @returns {{ set: string[]; notSet: string[] }}
+ */
+export function splitMaintainSummaryFlags(flags) {
+  /** @type {[string, string, boolean | string | undefined][]} */
+  const entries = [
+    ["--dry-run", "dryRun", flags.dryRun],
+    ["--skip-ssh-keys", "skipSshKeys", flags.skipSshKeys],
+    ["--skip-api-token", "skipApiToken", flags.skipApiToken],
+    ["--skip-templates", "skipTemplates", flags.skipTemplates],
+    ["--skip-storage", "skipStorage", flags.skipStorage],
+    ["--skip-local-lvm", "skipLocalLvm", flags.skipLocalLvm],
+    ["--skip-os-updates", "skipOsUpdates", flags.skipOsUpdates],
+    ["--skip-oem-license", "skipOemLicense", flags.skipOemLicense],
+    ["--skip-load-report", "skipLoadReport", flags.skipLoadReport],
+    ["--skip-guest-agent", "skipGuestAgent", flags.skipGuestAgent],
+    ["--no-download", "noDownload", flags.noDownload],
+    ["--no-build-qemu", "noBuildQemu", flags.noBuildQemu],
+    ["--no-prune", "noPrune", flags.noPrune],
+    ["--no-report", "noReport", flags.noReport],
+  ];
+  /** @type {string[]} */
+  const set = [];
+  /** @type {string[]} */
+  const notSet = [];
+  for (const [flag, , val] of entries) {
+    if (val) set.push(flag);
+    else notSet.push(flag);
+  }
+  const reportPath = flags.reportPath;
+  if (typeof reportPath === "string" && reportPath.trim()) {
+    set.push(`--report (${reportPath})`);
+  } else {
+    notSet.push("--report");
+  }
+  return { set, notSet };
+}
+
+/**
+ * @param {import("./proxmox-oem-windows-license.mjs").OemLicenseHostResult[]} hosts
+ * @returns {string[]}
+ */
+export function renderOemWindowsLicenseMarkdown(hosts) {
+  /** @type {string[]} */
+  const lines = ["## OEM Windows license (SLIC/MSDM)", ""];
+  if (!hosts?.length) {
+    lines.push("_No hypervisors probed._", "");
+    return lines;
+  }
+  lines.push("| Host | Node | Firmware | Status | Summary |", "| --- | --- | --- | --- | --- |");
+  for (const h of hosts) {
+    const fw = [
+      h.firmware.msdm ? "MSDM" : "",
+      h.firmware.slic ? "SLIC" : "",
+    ]
+      .filter(Boolean)
+      .join("+") || "—";
+    lines.push(
+      `| ${h.hostId} | ${h.pveNode} | ${fw} | ${h.status} | ${h.summary.replace(/\|/g, "\\|")} |`,
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
+/**
+ * @param {import("./proxmox-qemu-guest-agent.mjs").QemuGuestAgentReportData} report
+ * @returns {string[]}
+ */
+export function renderQemuGuestAgentMarkdown(report) {
+  /** @type {string[]} */
+  const lines = [
+    "## QEMU guest agent",
+    "",
+    "LXC containers are omitted; only QEMU workload VMs are listed.",
+    "",
+  ];
+  if (!report?.clusters?.length) {
+    lines.push("_No clusters reported._", "");
+    return lines;
+  }
+
+  let okCount = 0;
+  let notOk = 0;
+  for (const cluster of report.clusters) {
+    lines.push(`### Cluster ${cluster.id}`, "");
+    for (const host of cluster.hosts) {
+      lines.push(`#### Host ${host.hostId} (\`${host.pveNode}\`)`, "");
+      if (!host.guests.length) {
+        lines.push("_No QEMU workload VMs._", "");
+        continue;
+      }
+      lines.push("| vmid | name | status | agent | config |", "| ---: | --- | --- | --- | --- |");
+      for (const g of host.guests) {
+        if (g.agentStatus === "ok") okCount += 1;
+        else if (g.status === "running") notOk += 1;
+        lines.push(
+          `| ${g.vmid} | ${g.name} | ${g.status} | ${g.agentStatus} | ${g.configEnabled ? "enabled" : "disabled"} |`,
+        );
+      }
+      lines.push("");
+    }
+  }
+  lines.push(`**Summary:** ${okCount} ok${notOk ? `, ${notOk} not_responding` : ""}`, "");
+  return lines;
+}
+
+/**
+ * @param {Record<string, unknown>[]} checks
+ * @param {object | null} policy
+ * @param {boolean} dryRun
+ * @returns {string[]}
+ */
+export function renderTemplateChecksMarkdown(checks, policy, dryRun) {
+  /** @type {string[]} */
+  const lines = ["## Template checks", ""];
+  if (dryRun) lines.push("_Dry run — template mutations were skipped._", "");
+  if (policy && typeof policy === "object" && Array.isArray(policy.entries)) {
+    lines.push("### Expected templates (policy)", "");
+    lines.push("| Release | Expected |", "| --- | --- |");
+    for (const entry of policy.entries) {
+      const rel = typeof entry.release === "string" ? entry.release : "—";
+      const appliance =
+        typeof entry.lxcAppliance === "string"
+          ? entry.lxcAppliance
+          : typeof entry.cloudImageFilename === "string"
+            ? entry.cloudImageFilename
+            : "—";
+      lines.push(`| ${rel} | \`${appliance}\` |`);
+    }
+    lines.push("");
+  }
+  lines.push("| Release | Expected | Node | Result |", "| --- | --- | --- | --- |");
+  for (const c of checks) {
+    const rel = typeof c.release === "string" ? c.release : "—";
+    const kind = typeof c.kind === "string" ? c.kind : "";
+    const node = typeof c.node === "string" ? c.node : "—";
+    const ok = c.ok === true ? "OK" : c.ok === false ? "FAIL" : "—";
+    if (kind === "qemu") {
+      const vmid =
+        typeof c.template_vmid === "number" ? String(c.template_vmid) : "—";
+      const name =
+        typeof c.template_name === "string" ? `\`${c.template_name}\`` : "—";
+      lines.push(`| ${rel} | ${vmid} | ${name} | ${node} | ${ok} |`);
+    } else {
+      const volid =
+        typeof c.expected_volid === "string" ? `\`${c.expected_volid}\`` : "—";
+      lines.push(`| ${rel} | ${volid} | ${node} | ${ok} |`);
+    }
+  }
+  lines.push("");
+  return lines;
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ */
+function hostGuestSections(host) {
+  if (Array.isArray(host.guestsRunning) || Array.isArray(host.guestsNotRunning)) {
+    return {
+      running: /** @type {Record<string, unknown>[]} */ (host.guestsRunning ?? []),
+      notRunning: /** @type {Record<string, unknown>[]} */ (host.guestsNotRunning ?? []),
+      excluded: /** @type {Record<string, unknown>[]} */ (host.guestsExcluded ?? []),
+      totalsRunning: host.totalsRunning ?? host.totals,
+    };
+  }
+  const all = Array.isArray(host.guests) ? host.guests : [];
+  /** @type {Record<string, unknown>[]} */
+  const running = [];
+  /** @type {Record<string, unknown>[]} */
+  const notRunning = [];
+  for (const g of all) {
+    const status = typeof g.status === "string" ? g.status : "";
+    if (status === "running") running.push(g);
+    else notRunning.push(g);
+  }
+  return {
+    running,
+    notRunning,
+    excluded: /** @type {Record<string, unknown>[]} */ (host.guestsExcluded ?? []),
+    totalsRunning: host.totalsRunning ?? host.totals,
   };
 }
 
@@ -151,12 +362,10 @@ export function renderMaintainReportMarkdown(ctx) {
     "",
   );
 
+  const { set, notSet } = splitMaintainSummaryFlags(ctx.flags);
   lines.push("## Summary flags", "");
-  lines.push("| Flag | Value |");
-  lines.push("| --- | --- |");
-  for (const [k, v] of Object.entries(ctx.flags)) {
-    lines.push(`| \`${k}\` | ${String(v)} |`);
-  }
+  lines.push(`- **Set:** ${set.length ? set.join(", ") : "—"}`);
+  lines.push(`- **Not set:** ${notSet.join(", ")}`);
   lines.push("");
 
   lines.push("## Steps executed", "");
@@ -194,34 +403,58 @@ export function renderMaintainReportMarkdown(ctx) {
       lines.push(`### Cluster ${cluster.id}`, "");
       for (const host of cluster.hosts) {
         lines.push(`#### Host ${host.id} (\`${host.pveNode}\`)`, "");
-        lines.push(`Guests: ${host.guests.length}`, "");
-        if (host.guests.length) {
-          lines.push("");
+        const { running, notRunning, excluded, totalsRunning } = hostGuestSections(host);
+        const counts = host.counts;
+        if (counts && typeof counts === "object") {
+          lines.push(
+            `**Running:** ${counts.running ?? running.length} · **Not running:** ${counts.notRunning ?? notRunning.length} · **Excluded templates:** ${counts.excluded ?? excluded.length}`,
+            "",
+          );
+        }
+        const renderGuestTable = (title, guests) => {
+          lines.push(`##### ${title}`, "");
+          if (!guests.length) {
+            lines.push("_None._", "");
+            return;
+          }
           lines.push("| vmid | name | type | vCPU | RAM | disk |");
           lines.push("| ---: | --- | --- | ---: | --- | --- |");
-          for (const g of host.guests) {
+          for (const g of guests) {
             lines.push(
               `| ${g.vmid} | ${g.name} | ${g.type} | ${g.maxcpu} | ${formatBytes(g.maxmem)} | ${formatBytes(g.maxdisk)} |`,
             );
           }
           lines.push("");
+        };
+        renderGuestTable("Running", running);
+        renderGuestTable("Not running", notRunning);
+        if (excluded.length) {
+          lines.push("##### Excluded templates", "");
+          for (const g of excluded) {
+            lines.push(`- vmid ${g.vmid} ${g.name} (${g.type})`);
+          }
+          lines.push("");
         }
+        const tr = totalsRunning ?? host.totals;
         const cpuPct = host.loadPercent.cpu;
         const memPct = host.loadPercent.mem;
         const diskPct = host.loadPercent.disk;
         const cpuStr =
           cpuPct === null
-            ? `${host.totals.maxcpu} vCPU allocated (host CPUs unknown)`
-            : `${host.totals.maxcpu}/${host.capacity.cpuCount} vCPU (${cpuPct}%)`;
+            ? `${tr.maxcpu} vCPU allocated (host CPUs unknown)`
+            : `${tr.maxcpu}/${host.capacity.cpuCount} vCPU (${cpuPct}%)`;
         const memStr =
           memPct === null
-            ? `${formatBytes(host.totals.maxmem)} allocated`
-            : `${formatBytes(host.totals.maxmem)} / ${formatBytes(host.capacity.memoryBytes)} (${memPct}%)`;
+            ? `${formatBytes(tr.maxmem)} allocated`
+            : `${formatBytes(tr.maxmem)} / ${formatBytes(host.capacity.memoryBytes)} (${memPct}%)`;
         const diskStr =
           diskPct === null
-            ? `${formatBytes(host.totals.maxdisk)} guest maxdisk sum`
-            : `${formatBytes(host.totals.maxdisk)} / ${formatBytes(host.storageCapacityBytes)} configured (${diskPct}%)`;
-        lines.push(`**Configured load:** CPU ${cpuStr}; RAM ${memStr}; disk ${diskStr}`, "");
+            ? `${formatBytes(tr.maxdisk)} guest maxdisk sum`
+            : `${formatBytes(tr.maxdisk)} / ${formatBytes(host.storageCapacityBytes)} configured (${diskPct}%)`;
+        lines.push(
+          `**Configured load (running guests only):** CPU ${cpuStr}; RAM ${memStr}; disk ${diskStr}`,
+          "",
+        );
       }
     }
   } else if (!ctx.flags.skipLoadReport && !ctx.flags.noReport) {
@@ -281,9 +514,13 @@ export function renderMaintainReportMarkdown(ctx) {
           );
           if (a) alerts.push(a);
         }
-        if (isWarnPct(host.loadPercent.cpu)) {
+        if (isConfiguredCpuCritPct(host.loadPercent.cpu)) {
           alerts.push(
-            `- **${isCritPct(host.loadPercent.cpu) ? "CRITICAL" : "WARNING"}** Configured vCPU on ${host.id}: ${host.loadPercent.cpu}% of host CPUs`,
+            `- **CRITICAL** Configured vCPU on ${host.id}: ${host.loadPercent.cpu}% of host CPUs`,
+          );
+        } else if (isConfiguredCpuWarnPct(host.loadPercent.cpu)) {
+          alerts.push(
+            `- **WARNING** Configured vCPU on ${host.id}: ${host.loadPercent.cpu}% of host CPUs`,
           );
         }
         if (isWarnPct(host.loadPercent.mem)) {
@@ -302,25 +539,18 @@ export function renderMaintainReportMarkdown(ctx) {
     lines.push("_No pools or root filesystems at or above 85% used._", "");
   }
 
+  if (ctx.oemWindowsLicense?.length) {
+    lines.push(...renderOemWindowsLicenseMarkdown(ctx.oemWindowsLicense));
+  }
+
+  if (ctx.qemuGuestAgent) {
+    lines.push(...renderQemuGuestAgentMarkdown(ctx.qemuGuestAgent));
+  }
+
   if (ctx.templateChecks.length) {
-    lines.push("## Template checks", "");
-    lines.push("| cluster | kind | ok | detail |");
-    lines.push("| --- | --- | --- | --- |");
-    for (const c of ctx.templateChecks) {
-      const cluster = typeof c.cluster === "string" ? c.cluster : "—";
-      const kind = typeof c.kind === "string" ? c.kind : "—";
-      const ok = c.ok === true ? "yes" : c.ok === false ? "no" : "—";
-      const detail =
-        typeof c.volid === "string"
-          ? c.volid
-          : typeof c.node === "string"
-            ? c.node
-            : typeof c.vmid === "number"
-              ? String(c.vmid)
-              : "—";
-      lines.push(`| ${cluster} | ${kind} | ${ok} | ${detail} |`);
-    }
-    lines.push("");
+    lines.push(
+      ...renderTemplateChecksMarkdown(ctx.templateChecks, ctx.templatePolicy ?? null, ctx.dryRun),
+    );
   }
 
   return `${lines.join("\n")}\n`;
@@ -329,15 +559,20 @@ export function renderMaintainReportMarkdown(ctx) {
 /**
  * @param {string} packageRoot
  * @param {string} [reportPathArg]
+ * @param {string} [publicRoot] hdc repo root; when set, prefer hdc-private for default path
  * @returns {string}
  */
-export function defaultMaintainReportPath(packageRoot, reportPathArg) {
+export function defaultMaintainReportPath(packageRoot, reportPathArg, publicRoot) {
   if (reportPathArg?.trim()) {
     const p = reportPathArg.trim();
     return isAbsolute(p) ? p : resolve(process.cwd(), p);
   }
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  return join(packageRoot, "reports", `maintain-${ts}.md`);
+  const basename = `maintain-${ts}.md`;
+  if (publicRoot?.trim()) {
+    return preferredPackageReportPath(publicRoot.trim(), packageRoot, basename);
+  }
+  return join(packageRoot, "reports", basename);
 }
 
 /**
@@ -345,13 +580,14 @@ export function defaultMaintainReportPath(packageRoot, reportPathArg) {
  * @param {string} opts.packageRoot
  * @param {MaintainReportContext} opts.ctx
  * @param {string} [opts.reportPathArg]
+ * @param {string} [opts.publicRoot] hdc repo root
  * @returns {string | null} written path, or null if skipped
  */
 export function writeMaintainReportFile(opts) {
-  const { packageRoot, ctx, reportPathArg } = opts;
+  const { packageRoot, ctx, reportPathArg, publicRoot } = opts;
   if (ctx.flags.noReport) return null;
 
-  const outPath = defaultMaintainReportPath(packageRoot, reportPathArg);
+  const outPath = defaultMaintainReportPath(packageRoot, reportPathArg, publicRoot);
   ctx.reportPath = outPath;
   const markdown = renderMaintainReportMarkdown(ctx);
   const dir = dirname(outPath);

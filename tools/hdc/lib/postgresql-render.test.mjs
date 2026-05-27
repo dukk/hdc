@@ -17,6 +17,7 @@ describe("postgresql-render", () => {
       ["192.0.2.0/24"],
       [replicationHbaLine("replicator", "192.0.2.21")],
     );
+    expect(body).not.toContain("local all all peer");
     expect(body).toContain("host all all 192.0.2.0/24");
     expect(body).toContain("host replication replicator 192.0.2.21/32");
   });

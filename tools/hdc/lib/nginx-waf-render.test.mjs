@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  MODSECURITY_RULES_FILE,
   renderCertSyncScript,
+  renderCloudflareRealIp,
   renderModsecurityMainConf,
   renderSiteVhost,
+  renderTrustedGeo,
   tlsDomainsFromSites,
+  validateTrustedCidrs,
 } from "../../../packages/services/nginx-waf/lib/nginx-waf-render.mjs";
+import { DEFAULT_TRUSTED_CIDRS } from "../../../packages/services/nginx-waf/lib/deployments.mjs";
 
 const sampleSite = {
   id: "example-app",
@@ -17,6 +20,23 @@ const sampleSite = {
   locations: [{ path: "/", proxy_headers: true }],
 };
 
+const restrictedSite = {
+  ...sampleSite,
+  locations: [
+    {
+      path: "/api/",
+      proxy_headers: true,
+      access: { policy: "internal_only", deny_status: 404 },
+    },
+    {
+      path: "~ ^/admin",
+      proxy_headers: true,
+      access: { policy: "internal_only", deny_status: 401 },
+    },
+    { path: "/", proxy_headers: true },
+  ],
+};
+
 describe("nginx-waf render", () => {
   it("renders proxy_pass and ModSecurity for HTTPS", () => {
     const vhost = renderSiteVhost({
@@ -26,11 +46,65 @@ describe("nginx-waf render", () => {
       webroot: "/var/www/letsencrypt",
     });
     expect(vhost).toContain("proxy_pass http://192.0.2.50:8080");
-    expect(vhost).toContain("modsecurity on");
-    expect(vhost).toContain(MODSECURITY_RULES_FILE);
     expect(vhost).toContain("ssl_certificate /etc/letsencrypt/live/app.hdc.example.invalid/fullchain.pem");
     expect(vhost).toContain("/.well-known/acme-challenge/");
     expect(vhost).toContain("return 301 https://");
+    expect(vhost).not.toContain("geo $remote_addr $hdc_trusted_internal");
+  });
+
+  it("renders geo and deny_status for internal_only locations", () => {
+    const vhost = renderSiteVhost({
+      site: restrictedSite,
+      modsecurityEnabled: true,
+      http01Acme: true,
+      webroot: "/var/www/letsencrypt",
+      trustedCidrs: ["10.0.0.0/8"],
+    });
+    expect(vhost).toContain("geo $remote_addr $hdc_trusted_internal {");
+    expect(vhost).toContain("10.0.0.0/8 1;");
+    expect(vhost).toContain("location /api/ {");
+    expect(vhost).toContain("if ($hdc_trusted_internal = 0) { return 404; }");
+    expect(vhost).toContain("location ~ ^/admin {");
+    expect(vhost).toContain("if ($hdc_trusted_internal = 0) { return 401; }");
+    expect(vhost).toContain("location / {\n        proxy_pass");
+    expect(vhost).not.toContain("location / {\n        if ($hdc_trusted_internal = 0)");
+  });
+
+  it("renders Cloudflare real_ip and geo on realip_remote_addr", () => {
+    const vhost = renderSiteVhost({
+      site: {
+        ...restrictedSite,
+        client_ip: "cloudflare",
+      },
+      modsecurityEnabled: true,
+      http01Acme: true,
+      webroot: "/var/www/letsencrypt",
+      trustedCidrs: DEFAULT_TRUSTED_CIDRS,
+      clientIp: "cloudflare",
+      cloudflareIpv4: true,
+    });
+    expect(vhost).toContain("geo $realip_remote_addr $hdc_trusted_internal {");
+    expect(vhost).toContain("real_ip_header CF-Connecting-IP;");
+    expect(vhost).toContain("set_real_ip_from 173.245.48.0/20;");
+  });
+
+  it("renderTrustedGeo uses remote_addr by default", () => {
+    const geo = renderTrustedGeo({
+      cidrs: ["192.168.0.0/16"],
+      clientIp: "remote_addr",
+    });
+    expect(geo).toContain("geo $remote_addr $hdc_trusted_internal {");
+    expect(geo).toContain("192.168.0.0/16 1;");
+  });
+
+  it("renderCloudflareRealIp includes CF ranges", () => {
+    const snippet = renderCloudflareRealIp(true);
+    expect(snippet).toContain("set_real_ip_from 104.16.0.0/13;");
+    expect(snippet).toContain("real_ip_recursive on;");
+  });
+
+  it("validateTrustedCidrs rejects invalid CIDR", () => {
+    expect(() => validateTrustedCidrs(["not-a-cidr"], "test")).toThrow(/invalid trusted CIDR/);
   });
 
   it("extracts TLS domains from sites", () => {

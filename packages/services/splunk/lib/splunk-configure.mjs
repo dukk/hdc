@@ -59,7 +59,16 @@ export async function configureSplunkStandalone(opts) {
   }
 
   if (!skipPackageUpgrade) {
-    runChecked(exec, buildSplunkInstallScript(global), log);
+    runChecked(
+      exec,
+      buildSplunkInstallScript({
+        version: global.version,
+        build: global.build,
+        splunkHome: global.splunkHome,
+        downloadDir: global.varMount,
+      }),
+      log,
+    );
   }
 
   runChecked(exec, `mkdir -p ${shellQuote(etcLocal)}`, log);

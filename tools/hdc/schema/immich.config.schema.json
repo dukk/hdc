@@ -15,11 +15,19 @@
         "type": "object",
         "required": ["system_id"],
         "properties": {
-          "system_id": { "type": "string", "pattern": "^vm-immich-[a-z]+$" },
-          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "system_id": { "type": "string", "minLength": 1 },
+          "mode": { "enum": ["proxmox-qemu", "configure-only", "synology-docker"] },
           "hostname": { "type": "string" },
           "proxmox": { "type": "object" },
           "configure": { "type": "object" },
+          "synology": {
+            "type": "object",
+            "properties": {
+              "instance": { "type": "string", "pattern": "^[a-z]+$" },
+              "stack_id": { "type": "string" },
+              "compose_base_dir": { "type": "string" }
+            }
+          },
           "immich": {
             "type": "object",
             "properties": {

@@ -14,6 +14,24 @@ function upstreamDnsList(pihole) {
   return list.length ? list : ["1.1.1.1", "1.0.0.1"];
 }
 
+const PIHOLE_LISTENING_MODES = new Set(["LOCAL", "SINGLE", "ALL", "BIND"]);
+
+/**
+ * @param {Record<string, unknown>} pihole
+ */
+function resolveListeningMode(pihole) {
+  const raw =
+    typeof pihole.listening_mode === "string" && pihole.listening_mode.trim()
+      ? pihole.listening_mode.trim().toUpperCase()
+      : "ALL";
+  if (!PIHOLE_LISTENING_MODES.has(raw)) {
+    throw new Error(
+      `pihole.listening_mode must be one of ${[...PIHOLE_LISTENING_MODES].join(", ")} (got ${JSON.stringify(raw)})`,
+    );
+  }
+  return raw;
+}
+
 /**
  * @param {Record<string, unknown>} pihole
  */
@@ -34,11 +52,14 @@ export function configurePiHoleInCt(user, pveHost, vmid, pihole, webPassword) {
   errout.write(`[hdc] pi-hole configure: tuning CT ${vmid} …\n`);
 
   const upstream = upstreamDnsList(pihole);
+  const listeningMode = resolveListeningMode(pihole);
   const dnsArgs = upstream.map((d) => `'${d.replace(/'/g, `'\\''`)}'`).join(" ");
   const lines = [
     "set -euo pipefail",
     SHELL_PATH_EXPORT,
     "command -v pihole >/dev/null",
+    "command -v pihole-FTL >/dev/null",
+    `pihole-FTL --config dns.listeningMode ${listeningMode}`,
     `pihole -a upstream dns ${dnsArgs} 2>/dev/null || true`,
   ];
 
@@ -60,7 +81,7 @@ export function configurePiHoleInCt(user, pveHost, vmid, pihole, webPassword) {
   }
 
   lines.push(
-    "pihole restartdns reload 2>/dev/null || pihole reloaddns 2>/dev/null || systemctl restart pihole-FTL 2>/dev/null || true",
+    "pihole reloaddns 2>/dev/null || systemctl restart pihole-FTL 2>/dev/null || true",
   );
   lines.push("systemctl is-active --quiet pihole-FTL");
 
@@ -73,7 +94,7 @@ export function configurePiHoleInCt(user, pveHost, vmid, pihole, webPassword) {
     };
   }
   errout.write(`[hdc] pi-hole configure: completed on CT ${vmid}.\n`);
-  return { ok: true, message: "configured", upstream_dns: upstream };
+  return { ok: true, message: "configured", upstream_dns: upstream, listening_mode: listeningMode };
 }
 
 /**

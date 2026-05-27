@@ -1,8 +1,7 @@
 import { stderr as errout } from "node:process";
 
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
-import { NAGIOS_GENERATED_CFG } from "./nagios-install.mjs";
-import { upgradeNagiosInCt } from "./nagios-install.mjs";
+import { ensureNagiosApacheInCt, NAGIOS_GENERATED_CFG, upgradeNagiosInCt } from "./nagios-install.mjs";
 
 const CFG_DELIM = "HDCNAGIOSCFG";
 
@@ -54,6 +53,12 @@ export async function maintainNagiosInCt(user, pveHost, vmid, nagiosCfg, opts = 
   /** @type {Record<string, unknown>} */
   const out = { ok: true };
 
+  const apache = await ensureNagiosApacheInCt(user, pveHost, vmid);
+  out.apache = apache;
+  if (!apache.ok) {
+    return { ok: false, message: apache.message, ...out };
+  }
+
   if (!opts.skipUpgrade) {
     const upgrade = await upgradeNagiosInCt(user, pveHost, vmid);
     out.upgrade = upgrade;
@@ -80,6 +85,8 @@ export function queryNagiosStatusInCt(user, pveHost, vmid) {
     `/usr/sbin/nagios4 -V 2>/dev/null | head -n 1 || echo version_unknown`,
     `[ -f ${NAGIOS_GENERATED_CFG} ] && echo config_ok || echo config_missing`,
     `grep -c '^define host' ${NAGIOS_GENERATED_CFG} 2>/dev/null || echo 0`,
+    "systemctl is-active apache2 2>/dev/null || echo inactive",
+    "apache2ctl -M 2>/dev/null | grep -q cgi_module && echo cgi_ok || echo cgi_missing",
   ].join("; ");
 
   const r = pctExec(user, pveHost, vmid, script, { capture: true });
@@ -94,14 +101,18 @@ export function queryNagiosStatusInCt(user, pveHost, vmid) {
   const lines = r.stdout.trim().split(/\n/).map((l) => l.trim());
   const serviceActive = lines[0] === "active";
   const hostCount = Number(lines[4]) || 0;
+  const apacheActive = lines[5] === "active";
+  const cgiModule = lines[6] === "cgi_ok";
 
   return {
-    ok: serviceActive && lines[3] === "config_ok",
+    ok: serviceActive && lines[3] === "config_ok" && apacheActive && cgiModule,
     service_active: serviceActive,
     service_enabled: lines[1] === "enabled",
     version_line: lines[2] || null,
     config: lines[3],
     host_count_in_cfg: hostCount,
+    apache_active: apacheActive,
+    cgi_module: cgiModule,
     raw: lines,
   };
 }

@@ -20,7 +20,11 @@ import {
   resolveHostMac,
   wolDefaultsFromConfig,
 } from "./client-config.mjs";
-import { isHostOnline } from "./client-reachability.mjs";
+import {
+  ensureWinRmViaPsExec,
+  winrmBootstrapDefaultsFromConfig,
+} from "./client-winrm-bootstrap.mjs";
+import { isHostOnline, tcpReachability } from "./client-reachability.mjs";
 import { sendWakeOnLan, waitForReachable } from "./client-wol.mjs";
 
 const SERVICE_PORT = { windows: 5986, ubuntu: 22, raspberrypi: 22 };
@@ -42,6 +46,7 @@ export async function runClientVerb(opts) {
   const skipUpdates = flags["skip-updates"] !== undefined;
   const reboot = flags["reboot"] !== undefined;
   const noWol = flags["no-wol"] !== undefined;
+  const noWinrmBootstrap = flags["no-winrm-bootstrap"] !== undefined;
   const noReport = flags["no-report"] !== undefined;
   const reportPath = flags.report;
 
@@ -54,6 +59,7 @@ export async function runClientVerb(opts) {
   try {
     const cfg = loadClientConfig(cfgPath);
     const wolDefaults = wolDefaultsFromConfig(cfg);
+    const winrmBootstrapDefaults = winrmBootstrapDefaultsFromConfig(cfg);
     const hosts = hostsForPlatform(cfg, platform, hostIdFilter);
     if (!hosts.length) {
       throw new Error(
@@ -130,6 +136,42 @@ export async function runClientVerb(opts) {
       }
 
       if (platform === "windows") {
+        const winrmPort = node.winrm.port;
+        let winrmReachable = (await tcpReachability(node.ip, winrmPort)) === "open";
+        if (!winrmReachable && !noWinrmBootstrap) {
+          const boot = await ensureWinRmViaPsExec({
+            host: node.ip,
+            port: winrmPort,
+            bootstrap: winrmBootstrapDefaults,
+            env: process.env,
+            dryRun,
+            log: (m) => errout.write(`[hdc] ${m}\n`),
+          });
+          row.winrm_bootstrap = {
+            attempted: boot.attempted ?? false,
+            ok: boot.ok,
+            message: boot.message,
+            dry_run: boot.dry_run === true,
+          };
+          if (!boot.ok) {
+            row.ok = false;
+            row.message = boot.message ?? "WinRM bootstrap failed";
+            hostResults.push(row);
+            ok = false;
+            continue;
+          }
+          winrmReachable = boot.dry_run === true || (await tcpReachability(node.ip, winrmPort)) === "open";
+        }
+        if (!winrmReachable) {
+          row.ok = false;
+          row.message = noWinrmBootstrap
+            ? `WinRM port ${winrmPort} not open (--no-winrm-bootstrap)`
+            : `WinRM port ${winrmPort} not reachable`;
+          hostResults.push(row);
+          ok = false;
+          continue;
+        }
+
         if (!node.winrmUser) {
           row.ok = false;
           row.message = "WinRM user env not set";

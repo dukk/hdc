@@ -14,7 +14,11 @@ import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { isProxmoxHostDown } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
+import { loadProxmoxPackageConfig } from "../../../infrastructure/proxmox/lib/proxmox-package-config.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { fetchClusterVmResources } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { pveJsonRequest } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { createNginxVaultAccess } from "../lib/vault-deps.mjs";
@@ -31,6 +35,7 @@ import {
   installNginxBase,
 } from "../lib/nginx-configure.mjs";
 import { obtainMissingCertificates } from "../lib/letsencrypt.mjs";
+import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
 import {
   applyQemuCloudInit,
   cloneQemuGuest,
@@ -39,7 +44,8 @@ import {
   stopAndDestroyQemu,
   waitForSsh,
 } from "../lib/proxmox-qemu-redeploy.mjs";
-import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -73,6 +79,124 @@ function readCfg() {
  */
 function destroyPolicy(flags) {
   return flagGet(flags, "destroy-existing") !== undefined;
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof authorizeProxmoxForHost>>} auth
+ * @param {string} node
+ * @param {number} vmid
+ * @param {(line: string) => void} logLine
+ */
+async function destroyOrphanQemuConfig(auth, node, vmid, logLine) {
+  try {
+    await pveJsonRequest(
+      "GET",
+      auth.host.apiBase,
+      `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`,
+      auth.authorization,
+      auth.rejectUnauthorized,
+      undefined,
+    );
+    errout.write(
+      `[hdc] ${target} ${verb}: orphan config for vmid ${vmid} on ${node} — destroying …\n`,
+    );
+    await stopAndDestroyQemu({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node,
+      vmid,
+      log: logLine,
+    });
+  } catch {
+    /* no config on this node */
+  }
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof authorizeProxmoxForHost>>} auth
+ * @param {number} vmid
+ * @param {number} [timeoutMs]
+ */
+async function waitUntilGuestAbsent(auth, vmid, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await locateGuest(
+      auth.host.apiBase,
+      auth.authorization,
+      auth.rejectUnauthorized,
+      vmid,
+    );
+    if (!found) return;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error(`vmid ${vmid} still present in cluster after destroy (waited ${timeoutMs}ms)`);
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof authorizeProxmoxForHost>>} auth
+ * @param {number} vmid
+ * @param {string} hostId
+ * @param {(line: string) => void} logLine
+ */
+async function destroyQemuVmidInCluster(auth, vmid, hostId, logLine) {
+  const nodes = new Set();
+  if (auth.host.pveNode) nodes.add(auth.host.pveNode);
+  if (hostId === "pve-c") nodes.add("pve-b");
+  try {
+    const resources = await fetchClusterVmResources(
+      auth.host.apiBase,
+      auth.authorization,
+      auth.rejectUnauthorized,
+    );
+    for (const r of resources) {
+      if (typeof r.vmid === "number" && r.vmid === vmid && typeof r.node === "string" && r.node.trim()) {
+        nodes.add(r.node.trim());
+      }
+    }
+  } catch (e) {
+    errout.write(
+      `[hdc] ${target} ${verb}: cluster resource scan for vmid ${vmid}: ${String(/** @type {Error} */ (e).message || e)}\n`,
+    );
+  }
+  try {
+    const { data } = loadProxmoxPackageConfig(proxmoxRoot);
+    const clusters = Array.isArray(data.clusters) ? data.clusters : [];
+    for (const cl of clusters) {
+      if (!cl || typeof cl !== "object" || Array.isArray(cl)) continue;
+      const hosts = Array.isArray(/** @type {Record<string, unknown>} */ (cl).hosts)
+        ? /** @type {Record<string, unknown>[]} */ (/** @type {Record<string, unknown>} */ (cl).hosts)
+        : [];
+      for (const h of hosts) {
+        if (isProxmoxHostDown(h)) continue;
+        const pveNode =
+          typeof h.pve_node === "string" && h.pve_node.trim()
+            ? h.pve_node.trim()
+            : typeof h.id === "string"
+              ? h.id.trim()
+              : "";
+        if (pveNode) nodes.add(pveNode);
+      }
+    }
+  } catch {
+    /* optional */
+  }
+  for (const node of nodes) {
+    try {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node,
+        vmid,
+        log: logLine,
+      });
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: destroy vmid ${vmid} on ${node}: ${msg} (continuing)\n`);
+    }
+    await destroyOrphanQemuConfig(auth, node, vmid, logLine);
+  }
 }
 
 /**
@@ -115,7 +239,7 @@ function runDeployConfigure(deployment, global, sites, log, skipBaseInstall, ema
   if (!skipBaseInstall) {
     installNginxBase({ exec, log, global, dns01: global.challenge === "dns-01" });
   }
-  if (global.challenge === "http-01") {
+  if (global.challenge === "http-01" && tlsDomainsFromSites(sites).length > 0) {
     ensureAcmeBootstrapVhost({ exec, log, webroot: global.webroot });
   }
   const certificates = obtainMissingCertificates({
@@ -202,14 +326,9 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
     if (action === "skip") {
       errout.write(`[hdc] ${target} ${verb}: skipping provision for ${deployment.systemId}.\n`);
     } else if (action === "destroy" || policy === "destroy") {
-      await stopAndDestroyQemu({
-        apiBase: auth.host.apiBase,
-        authorization: auth.authorization,
-        rejectUnauthorized: auth.rejectUnauthorized,
-        node: located.node,
-        vmid,
-        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
-      });
+      const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+      await destroyQemuVmidInCluster(auth, vmid, hostId, logLine);
+      await waitUntilGuestAbsent(auth, vmid);
     } else {
       errout.write(
         `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
@@ -227,6 +346,10 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
         return { ok: false, system_id: deployment.systemId, skipped_provision: true, message: msg };
       }
     }
+  } else if (policy === "destroy") {
+    const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+    await destroyQemuVmidInCluster(auth, vmid, hostId, logLine);
+    await waitUntilGuestAbsent(auth, vmid);
   }
 
   const prov = createProxmoxHostProvisioner({
@@ -253,7 +376,10 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await ,
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   );
 
@@ -377,20 +503,28 @@ async function main() {
 
   const global = nginxGlobalSettings(normalized);
   const sites = /** @type {Record<string, unknown>[]} */ (global.sites);
+  const tlsDomains = tlsDomainsFromSites(sites);
+  const needVault = tlsDomains.length > 0 || global.challenge === "dns-01";
 
   const vault = createNginxVaultAccess();
-  errout.write(`[hdc] ${target} ${verb}: unlocking vault …\n`);
-  await vault.unlock({});
-  const { email, tsigSecret } = await loadSecrets(global, vault);
-  if (!email) {
-    errout.write(
-      `[hdc] ${target} ${verb}: Let's Encrypt email missing — set letsencrypt.email or hdc secrets set ${global.emailVaultKey}\n`,
-    );
-    process.stdout.write(
-      `${JSON.stringify({ ok: false, target, verb, message: "missing Let's Encrypt email" }, null, 2)}\n`,
-    );
-    process.exitCode = 1;
-    return;
+  let email = global.email;
+  let tsigSecret = "";
+  if (needVault) {
+    errout.write(`[hdc] ${target} ${verb}: unlocking vault …\n`);
+    await vault.unlock({});
+    const secrets = await loadSecrets(global, vault);
+    email = secrets.email;
+    tsigSecret = secrets.tsigSecret;
+    if (tlsDomains.length > 0 && !email) {
+      errout.write(
+        `[hdc] ${target} ${verb}: Let's Encrypt email missing — set letsencrypt.email or hdc secrets set ${global.emailVaultKey}\n`,
+      );
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, target, verb, message: "missing Let's Encrypt email" }, null, 2)}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const log = provisionLogFromConsole(console);

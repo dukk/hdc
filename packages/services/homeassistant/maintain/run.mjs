@@ -1,8 +1,179 @@
-import { basename, dirname } from "node:path";
+#!/usr/bin/env node
+/**
+ * Maintain Home Assistant OS QEMU VM (USB passthrough + HTTP health).
+ *
+ * Usage: hdc run service homeassistant maintain -- [--instance a]
+ *        [--reapply-usb] [--skip-http]
+ */
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stderr as errout } from "node:process";
+
+import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { applyQemuUsb } from "../../../infrastructure/proxmox/lib/proxmox-qemu-usb.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import {
+  locateGuest,
+  stopQemuGuest,
+  startQemuGuest,
+} from "../../bind/lib/proxmox-qemu-redeploy.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
+
+import { resolveHomeassistantDeployments } from "../lib/deployments.mjs";
+import { probeHomeAssistantHttp } from "../lib/query-status.mjs";
+import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
-console.error(`[hdc] ${target} ${verb}: stub — add maintenance tasks.`);
-process.exit(0);
+const packageRoot = join(here, "..");
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/homeassistant/config.example.json";
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+
+/** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
+let _pkgConfig = null;
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
+/**
+ * @param {ReturnType<typeof resolveHomeassistantDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ */
+async function maintainOne(deployment, flags) {
+  const px = deployment.proxmox;
+  const hostId = px.hostId;
+  const q = px.qemu;
+  const vmid = q.vmid;
+
+  errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} on ${hostId} vmid ${vmid} ï¿½\n`);
+
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+  const located = await locateGuest(
+    auth.host.apiBase,
+    auth.authorization,
+    auth.rejectUnauthorized,
+    vmid,
+  );
+  if (!located) {
+    return { ok: false, system_id: deployment.systemId, message: `vmid ${vmid} not found` };
+  }
+
+  const log = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  /** @type {Record<string, unknown>} */
+  const extra = { vmid, node: located.node };
+
+  const reapplyUsb = flagGet(flags, "reapply-usb") !== undefined;
+  const usbOverride = flagGet(flags, "usb-id");
+
+  if (reapplyUsb || usbOverride || q.usb.length) {
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    const usbDevices = await resolveUsbDevicesForDeploy({
+      user: pveSsh.user,
+      host: pveSsh.host,
+      configured: q.usb,
+      overrideId: usbOverride,
+    });
+    errout.write(`[hdc] ${target} ${verb}: stopping VM for USB update ï¿½\n`);
+    await stopQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: located.node,
+      vmid,
+      log,
+    });
+    await applyQemuUsb({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: located.node,
+      vmid,
+      usb: usbDevices,
+      sshUser: pveSsh.user,
+      sshHost: pveSsh.host,
+      log,
+    });
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: located.node,
+      vmid,
+      log,
+    });
+    extra.usb = usbDevices.map((u) => u.id);
+  }
+
+  if (flagGet(flags, "skip-http") === undefined) {
+    const ipHost = q.ip.split("/")[0];
+    const probe = await probeHomeAssistantHttp(ipHost);
+    extra.http = probe;
+    if (!probe.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: HTTP probe failed ï¿½ confirm static IP ${q.ip} in HA Settings ? System ? Network.\n`,
+      );
+    }
+  }
+
+  return { ok: true, system_id: deployment.systemId, ...extra };
+}
+
+async function main() {
+  const flags = parseArgvFlags(process.argv.slice(2));
+  const cfg = ensurePackageConfig().data;
+
+  errout.write(`[hdc] ${target} ${verb}: Home Assistant maintain.\n`);
+
+  /** @type {Record<string, unknown>[]} */
+  const results = [];
+  let ok = true;
+
+  try {
+    const deployments = resolveHomeassistantDeployments(cfg, flags);
+    for (const deployment of deployments) {
+      try {
+        const r = await maintainOne(deployment, flags);
+        results.push(r);
+        if (r.ok === false) ok = false;
+      } catch (e) {
+        ok = false;
+        const msg = String(/** @type {Error} */ (e).message || e);
+        errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
+        results.push({ ok: false, system_id: deployment.systemId, message: msg });
+      }
+    }
+  } catch (e) {
+    ok = false;
+    errout.write(`[hdc] ${target} ${verb}: fatal: ${/** @type {Error} */ (e).message || e}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, target, verb, message: String(/** @type {Error} */ (e).message || e) }, null, 2)}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const payload = { ok, target, verb, results };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  process.exitCode = ok ? 0 : 1;
+}
+
+main();

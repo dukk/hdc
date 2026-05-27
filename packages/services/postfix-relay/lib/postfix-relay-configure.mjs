@@ -153,13 +153,30 @@ export function configurePostfixRelay(opts) {
     log.info("postmap wrote /etc/postfix/sasl_passwd.db");
     runChecked(
       exec,
-      "grep -q 'main.cf.d' /etc/postfix/main.cf 2>/dev/null || echo 'include /etc/postfix/main.cf.d/*.cf' >> /etc/postfix/main.cf",
+      "sed -i '/^include \\/etc\\/postfix\\/main.cf.d/d' /etc/postfix/main.cf 2>/dev/null || true",
       log,
     );
-    log.info("ensured main.cf includes /etc/postfix/main.cf.d/*.cf");
     runChecked(
       exec,
-      "postfix check && systemctl enable postfix && systemctl reload postfix",
+      [
+        `postconf -e ${shellQuote(`myhostname=${myhostname}`)}`,
+        `postconf -e ${shellQuote(`myorigin=${myorigin}`)}`,
+        `postconf -e ${shellQuote(`mynetworks=${mynetworks}`)}`,
+        `postconf -e ${shellQuote(`inet_interfaces=${inetInterfaces}`)}`,
+        `postconf -e ${shellQuote(`relayhost=${relayhost}`)}`,
+        "postconf -e 'smtp_sasl_auth_enable=yes'",
+        "postconf -e 'smtp_sasl_password_maps=hash:/etc/postfix/sasl_passwd'",
+        "postconf -e 'smtp_sasl_security_options=noanonymous'",
+        "postconf -e 'smtp_sasl_tls_security_options=noanonymous'",
+        "postconf -e 'smtp_use_tls=yes'",
+        `postconf -e ${shellQuote(`smtp_tls_security_level=${tlsLevel}`)}`,
+        "postconf -e 'smtp_tls_CAfile=/etc/ssl/certs/ca-certificates.crt'",
+      ].join(" && "),
+      log,
+    );
+    runChecked(
+      exec,
+      "postfix check && systemctl enable postfix && systemctl restart postfix",
       log,
     );
     log.info("Postfix relay configured (SMTP2GO smarthost) and reloaded.");

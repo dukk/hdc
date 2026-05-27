@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/unifi-network.config.schema.json",
+  "title": "HDC package config — UniFi Network",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "controller_base_url"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "controller_base_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "HTTPS base URL for the UniFi gateway/controller (e.g. https://10.0.0.1)."
+    },
+    "default_site_id": {
+      "type": "string",
+      "description": "Optional UniFi site id; empty uses first site from API or HDC_UNIFI_SITE_ID."
+    },
+    "wan_ips": {
+      "type": "object",
+      "description": "Optional map of WAN suffix (.234) or bare key (234) to public IPv4 for multi-WAN port forwards. Used when port_forwards[].destination_ip is omitted and the rule name contains a suffix like (.234).",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "port_forwards": {
+      "type": "array",
+      "description": "Desired port forwarding rules (maintain applies managed entries).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "dst_port", "fwd"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable hdc slug (pf-*)."
+          },
+          "managed": {
+            "type": "boolean",
+            "default": true,
+            "description": "When false, maintain skips this entry."
+          },
+          "name": { "type": "string", "minLength": 1 },
+          "enabled": { "type": "boolean", "default": true },
+          "pfwd_interface": { "type": "string", "default": "WAN" },
+          "destination_ip": {
+            "type": "string",
+            "description": "Public WAN IPv4 to bind (UniFi destination_ip). Use any for all WAN addresses on the interface. Omit to resolve from wan_ips using a (.234) suffix in name."
+          },
+          "proto": { "type": "string", "default": "tcp_udp" },
+          "dst_port": { "type": "string", "minLength": 1 },
+          "fwd": { "type": "string", "minLength": 1 },
+          "fwd_port": { "type": "string" },
+          "log": { "type": "boolean", "default": false },
+          "src": { "type": "string", "default": "any" },
+          "src_port": { "type": "string" },
+          "src_firewall_group_id": { "type": "string" },
+          "dst_firewall_group_id": { "type": "string" },
+          "unifi_id": {
+            "type": "string",
+            "description": "Controller _id after import; optional but speeds updates."
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,9 +14,11 @@ import {
   manifestRunTier,
   manifestServices,
   manifestTitle,
+  canonicalRunTier,
   parseRunTier,
   resolveRunInvocation,
   runScriptDir,
+  runTiersUsage,
   verbSpec,
 } from "./manifests.mjs";
 
@@ -140,14 +142,22 @@ describe("manifests", () => {
     writeTree(root, {
       "packages/services/svc/manifest.json": JSON.stringify({ id: "svc", verbs: {} }),
       "packages/clients/win/manifest.json": JSON.stringify({ id: "win", verbs: {} }),
+      "packages/infrastructure/pve/manifest.json": JSON.stringify({ id: "pve", verbs: {} }),
     });
     const m = discoverManifests(join(root, "packages"));
     expect(parseRunTier("service")).toBe("services");
     expect(parseRunTier("client")).toBe("clients");
+    expect(parseRunTier("infra")).toBe("infrastructure");
+    expect(parseRunTier("infrastructure")).toBe("infrastructure");
     expect(parseRunTier("nope")).toBeNull();
+    expect(canonicalRunTier("infra")).toBe("infrastructure");
+    expect(canonicalRunTier("infrastructure")).toBe("infrastructure");
+    expect(canonicalRunTier("nope")).toBeNull();
+    expect(runTiersUsage()).toContain("infra");
     expect(manifestRunTier(manifestById(m, "svc"))).toBe("service");
     expect(manifestRunTier(manifestById(m, "win"))).toBe("client");
     expect(manifestByTierAndId(m, "service", "svc")).toBeTruthy();
+    expect(manifestByTierAndId(m, "infra", "pve")).toBeTruthy();
     expect(manifestByTierAndId(m, "client", "svc")).toBeNull();
     expect(manifestByTierAndId(m, "service", "win")).toBeNull();
   });

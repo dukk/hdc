@@ -19,6 +19,15 @@
       }
     },
     "bootstrap_hosts": { "type": "array" },
+    "winrm_bootstrap": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "psexec_path": { "type": "string" },
+        "wait_seconds": { "type": "integer", "minimum": 1 },
+        "poll_interval_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
     "hosts": {
       "type": "array",
       "items": {

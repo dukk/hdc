@@ -54,6 +54,104 @@
                 "proxied": { "type": "boolean" }
               }
             }
+          },
+          "page_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "priority", "status", "target", "actions"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "cf_id": { "type": "string" },
+                "priority": { "type": "integer" },
+                "status": { "enum": ["active", "disabled"] },
+                "target": {
+                  "type": "object",
+                  "required": ["operator", "value"],
+                  "properties": {
+                    "operator": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "value": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "email_routing": {
+            "type": "object",
+            "properties": {
+              "catch_all": {
+                "type": "object",
+                "required": ["enabled", "actions"],
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["type"],
+                      "properties": {
+                        "type": { "enum": ["drop", "forward", "worker"] },
+                        "value": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "email_routing_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "enabled", "matchers", "actions"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "cf_id": { "type": "string" },
+                "name": { "type": "string" },
+                "enabled": { "type": "boolean" },
+                "priority": { "type": "integer" },
+                "matchers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": { "enum": ["all", "literal"] },
+                      "field": { "enum": ["to"] },
+                      "value": { "type": "string" }
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": { "enum": ["drop", "forward", "worker"] },
+                      "value": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

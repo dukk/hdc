@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import { preferredPackageReportPath } from "../../tools/hdc/lib/private-repo.mjs";
 import {
   accessNodesFromSystem,
   loadManualServiceSidecar,
@@ -188,15 +189,20 @@ export function addInventoryContext(ctx, root, systemIds) {
  * @param {string} packageRoot
  * @param {string} verb
  * @param {string} [reportPathArg]
+ * @param {string} [publicRoot] hdc repo root; when set, prefer hdc-private for default path
  * @returns {string}
  */
-export function defaultOperationReportPath(packageRoot, verb, reportPathArg) {
+export function defaultOperationReportPath(packageRoot, verb, reportPathArg, publicRoot) {
   if (reportPathArg?.trim()) {
     const p = reportPathArg.trim();
     return isAbsolute(p) ? p : resolve(process.cwd(), p);
   }
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  return join(packageRoot, "reports", `${verb}-${ts}.md`);
+  const basename = `${verb}-${ts}.md`;
+  if (publicRoot?.trim()) {
+    return preferredPackageReportPath(publicRoot.trim(), packageRoot, basename);
+  }
+  return join(packageRoot, "reports", basename);
 }
 
 /**
@@ -598,7 +604,12 @@ export function writeOperationReportFile(opts) {
     if (ids.length) addInventoryContext(ctx, root, ids);
   }
 
-  const outPath = defaultOperationReportPath(packageRoot, ctx.verb, reportPathArg);
+  const outPath = defaultOperationReportPath(
+    packageRoot,
+    ctx.verb,
+    reportPathArg,
+    root ?? undefined,
+  );
   ctx.reportPath = outPath;
   const markdown = renderOperationReportMarkdown(ctx, outPath, extraSections);
   const dir = dirname(outPath);

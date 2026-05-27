@@ -1,4 +1,5 @@
 import { flagGet } from "./parse-argv-flags.mjs";
+import { waitForAptLock } from "./apt-lock-wait.mjs";
 
 /**
  * @typedef {object} ConfigureExec
@@ -86,6 +87,11 @@ export async function ensureClamav({ exec, log, flags }) {
       log.info(`${exec.label}: ClamAV already installed — ensuring services`);
       runChecked(exec, clamavEnableServicesCommand(), log);
       return { ok: true, skipped: false, message: "already installed; services ensured" };
+    }
+
+    const lock = await waitForAptLock(exec, log);
+    if (!lock.ok) {
+      return { ok: false, skipped: false, message: lock.message };
     }
 
     log.info(`${exec.label}: installing ClamAV packages`);

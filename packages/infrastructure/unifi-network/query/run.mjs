@@ -1,75 +1,49 @@
 import { createInterface } from "node:readline/promises";
-import { stdin as input, stdout as output, stderr as errout, env } from "node:process";
-import { existsSync, readFileSync } from "node:fs";
+import { stdin as input, stdout as output, stderr as errout } from "node:process";
 import { basename, dirname, join } from "node:path";
-import { fileURLToPath, URL } from "node:url";
-import https from "node:https";
-import http from "node:http";
+import { fileURLToPath } from "node:url";
 
 import {
   automatedInventoryIdFromName,
   sanitizeAutomatedInventoryId,
 } from "../../../lib/automated-ids.mjs";
-import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
-import { readLineMasked } from "../../../../tools/hdc/lib/readline-masked.mjs";
+import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import {
-  HDC_TLS_INSECURE_ENV,
-  hdcTlsInsecureSourceEnv,
-  hdcTlsRejectUnauthorized,
-} from "../../../../tools/hdc/lib/tls-insecure-env.mjs";
-import { defaultVaultPath } from "../../../../tools/hdc/vault.mjs";
+  classicActiveStations,
+  classicRestListWithFallback,
+  integrationListAllClients,
+  integrationListAllDevices,
+  integrationListAllNetworkOverviews,
+  integrationListFirewallPolicies,
+  integrationListFirewallZones,
+  integrationListPendingDevices,
+  integrationNetworkDetail,
+} from "../lib/unifi-api.mjs";
+import {
+  createUnifiRunContext,
+  fetchLivePortForwards,
+  importPortForwardsToConfig,
+} from "../lib/unifi-collect.mjs";
+import {
+  formatPortForwardBlock,
+  inventoryPortForwardEntry,
+  normalizeUnifiConfig,
+  pickFields,
+} from "../lib/unifi-config.mjs";
+import { diffPortForwardSync } from "../lib/unifi-port-forward-sync.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const packageRoot = join(here, "..");
-
-const VAULT_KEY = "HDC_UNIFI_NETWORK_API_KEY";
-const SPEC_TLS_INSECURE = "HDC_UNIFI_TLS_INSECURE";
 
 /** @param {string} line */
 function logUser(line) {
   errout.write(`[unifi-network] ${line}\n`);
 }
 
-/** @param {string} s */
-function baseUrlFromString(s) {
-  const trimmed = s.trim();
-  const withProto = /:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`;
-  const u = new URL(withProto);
-  return `${u.protocol}//${u.host}`;
-}
-
-/**
- * @returns {Record<string, unknown> | null}
- */
-function readUnifiPackageConfig() {
-  const p = join(packageRoot, "config.json");
-  if (!existsSync(p)) return null;
-  try {
-    const j = JSON.parse(readFileSync(p, "utf8"));
-    return j && typeof j === "object" && !Array.isArray(j) ? /** @type {Record<string, unknown>} */ (j) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * @param {Record<string, unknown>} cfg
- * @returns {{ url: string; provenance: string } | null}
- */
-function controllerFromPackageConfig(cfg) {
-  const u = typeof cfg.controller_base_url === "string" ? cfg.controller_base_url.trim() : "";
-  if (!u) return null;
-  return {
-    url: baseUrlFromString(u),
-    provenance: "packages/infrastructure/unifi-network/config.json (controller_base_url)",
-  };
-}
-
 /**
  * @param {string} id
  * @param {string} kind
- * @param {string} collectedAt
  */
 function unifiSidecarBase(id, kind) {
   return {
@@ -104,7 +78,6 @@ function buildUnifiNetworkSidecar(row, usedIds) {
 }
 
 /**
- * Normalize integration or classic station rows to a common client shape.
  * @param {Record<string, unknown>} row
  */
 function normalizeClientRow(row) {
@@ -155,7 +128,7 @@ function mergeClientRowsByMac(integrationRows, classicRows) {
 }
 
 /**
- * @param {Record<string, unknown>} row normalized client row
+ * @param {Record<string, unknown>} row
  * @param {string} collectedAt
  * @param {Set<string>} usedIds
  */
@@ -233,314 +206,17 @@ function buildUnifiPolicySidecar(row, policyClass, usedIds) {
 }
 
 /**
- * @param {import("node:https").RequestOptions & { url: string }} opts
- */
-function requestJson(opts) {
-  const { url, ...rest } = opts;
-  const u = new URL(url);
-  const isHttps = u.protocol === "https:";
-  const lib = isHttps ? https : http;
-  const defaultPort = isHttps ? 443 : 80;
-  return new Promise((resolve, reject) => {
-    const req = lib.request(
-      {
-        hostname: u.hostname,
-        port: u.port || defaultPort,
-        path: `${u.pathname}${u.search}`,
-        method: rest.method ?? "GET",
-        headers: rest.headers ?? {},
-        rejectUnauthorized: isHttps ? rest.rejectUnauthorized !== false : undefined,
-      },
-      (res) => {
-        let raw = "";
-        res.on("data", (c) => {
-          raw += c;
-        });
-        res.on("end", () => {
-          /** @type {unknown} */
-          let parsed;
-          try {
-            parsed = raw.length ? JSON.parse(raw) : null;
-          } catch (e) {
-            reject(new Error(`Invalid JSON from ${url} (${res.statusCode}): ${String(e)}`));
-            return;
-          }
-          if (res.statusCode === undefined || res.statusCode < 200 || res.statusCode >= 300) {
-            const err = new Error(`HTTP ${res.statusCode} ${url}`);
-            // @ts-expect-error attach
-            err.statusCode = res.statusCode;
-            // @ts-expect-error attach
-            err.body = parsed;
-            reject(err);
-            return;
-          }
-          resolve(parsed);
-        });
-      },
-    );
-    req.on("error", reject);
-    if (rest.body) req.write(rest.body);
-    req.end();
-  });
-}
-
-/**
  * @param {string} base
  * @param {string} apiKey
+ * @param {string} integrationSiteId
+ * @param {string} classicSiteKey
  * @param {boolean} rejectUnauthorized
  */
-async function integrationInfo(base, apiKey, rejectUnauthorized) {
-  const url = `${base}/proxy/network/integration/v1/info`;
-  return requestJson({
-    url,
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-    },
-    rejectUnauthorized,
-  });
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListSites(base, apiKey, rejectUnauthorized) {
-  const url = `${base}/proxy/network/integration/v1/sites?limit=200&offset=0`;
-  return requestJson({
-    url,
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-    },
-    rejectUnauthorized,
-  });
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function classicNetworkconf(base, apiKey, siteId, rejectUnauthorized) {
-  const pathSeg = encodeURIComponent(siteId);
-  const url = `${base}/proxy/network/api/s/${pathSeg}/rest/networkconf`;
-  return requestJson({
-    url,
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-    },
-    rejectUnauthorized,
-  });
-}
-
-/**
- * @param {unknown} body
- * @returns {Record<string, unknown>[]}
- */
-function integrationPageData(body) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
-  const data = /** @type {Record<string, unknown>} */ (body).data;
-  if (!Array.isArray(data)) return [];
-  return data.filter((x) => x && typeof x === "object" && !Array.isArray(x)).map((x) => /** @type {Record<string, unknown>} */ (x));
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} urlPath path after /proxy/network/integration/v1 (no leading slash)
- * @param {boolean} rejectUnauthorized
- * @returns {Promise<Record<string, unknown>[]>}
- */
-async function integrationPaginatedGet(base, apiKey, urlPath, rejectUnauthorized) {
-  /** @type {Record<string, unknown>[]} */
-  const all = [];
-  let offset = 0;
-  const limit = 200;
-  for (;;) {
-    const sep = urlPath.includes("?") ? "&" : "?";
-    const url = `${base}/proxy/network/integration/v1/${urlPath}${sep}offset=${offset}&limit=${limit}`;
-    const body = await requestJson({
-      url,
-      headers: {
-        Accept: "application/json",
-        "X-API-KEY": apiKey,
-      },
-      rejectUnauthorized,
-    });
-    const chunk = integrationPageData(body);
-    all.push(...chunk);
-    const totalCount =
-      body && typeof body === "object" && !Array.isArray(body) && typeof body.totalCount === "number"
-        ? body.totalCount
-        : chunk.length;
-    if (chunk.length < limit || all.length >= totalCount) break;
-    offset += limit;
-  }
-  return all;
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- * @returns {Promise<Record<string, unknown>[]>}
- */
-async function integrationListAllNetworkOverviews(base, apiKey, siteId, rejectUnauthorized) {
-  return integrationPaginatedGet(
-    base,
-    apiKey,
-    `sites/${encodeURIComponent(siteId)}/networks`,
-    rejectUnauthorized,
-  );
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListAllDevices(base, apiKey, siteId, rejectUnauthorized) {
-  return integrationPaginatedGet(
-    base,
-    apiKey,
-    `sites/${encodeURIComponent(siteId)}/devices`,
-    rejectUnauthorized,
-  );
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListAllClients(base, apiKey, siteId, rejectUnauthorized) {
-  return integrationPaginatedGet(
-    base,
-    apiKey,
-    `sites/${encodeURIComponent(siteId)}/clients`,
-    rejectUnauthorized,
-  );
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListPendingDevices(base, apiKey, rejectUnauthorized) {
-  return integrationPaginatedGet(base, apiKey, "pending-devices", rejectUnauthorized);
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListFirewallPolicies(base, apiKey, siteId, rejectUnauthorized) {
-  return integrationPaginatedGet(
-    base,
-    apiKey,
-    `sites/${encodeURIComponent(siteId)}/firewall/policies`,
-    rejectUnauthorized,
-  );
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function integrationListFirewallZones(base, apiKey, siteId, rejectUnauthorized) {
-  return integrationPaginatedGet(
-    base,
-    apiKey,
-    `sites/${encodeURIComponent(siteId)}/firewall/zones`,
-    rejectUnauthorized,
-  );
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {string} resource classic rest segment (e.g. portforward)
- * @param {boolean} rejectUnauthorized
- */
-async function classicRestList(base, apiKey, siteId, resource, rejectUnauthorized) {
-  const pathSeg = encodeURIComponent(siteId);
-  const url = `${base}/proxy/network/api/s/${pathSeg}/rest/${resource}`;
-  const body = await requestJson({
-    url,
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-    },
-    rejectUnauthorized,
-  });
-  return classicDataArray(body);
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- * @returns {Promise<{ rows: Record<string, unknown>[]; siteKey: string }>}
- */
-async function classicPortForwards(base, apiKey, siteId, rejectUnauthorized) {
-  let rows = await classicRestList(base, apiKey, siteId, "portforward", rejectUnauthorized);
-  let siteKey = siteId;
-  if (!rows.length && siteId !== "default") {
-    rows = await classicRestList(base, apiKey, "default", "portforward", rejectUnauthorized);
-    if (rows.length) siteKey = "default";
-  }
-  return { rows, siteKey };
-}
-
-/**
- * Active stations via classic API (often populated when Integration clients list is empty).
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function classicActiveStations(base, apiKey, siteId, rejectUnauthorized) {
-  const pathSeg = encodeURIComponent(siteId);
-  const url = `${base}/proxy/network/api/s/${pathSeg}/stat/sta`;
-  const body = await requestJson({
-    url,
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-    rejectUnauthorized,
-  });
-  return classicDataArray(body);
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {boolean} rejectUnauthorized
- */
-async function listConnectedClients(base, apiKey, siteId, rejectUnauthorized) {
+async function listConnectedClients(base, apiKey, integrationSiteId, classicSiteKey, rejectUnauthorized) {
   /** @type {Record<string, unknown>[]} */
   let integrationRows = [];
   try {
-    integrationRows = await integrationListAllClients(base, apiKey, siteId, rejectUnauthorized);
+    integrationRows = await integrationListAllClients(base, apiKey, integrationSiteId, rejectUnauthorized);
   } catch (e) {
     errout.write(`[unifi-network] Integration client list failed (${/** @type {Error} */ (e).message}).\n`);
   }
@@ -548,8 +224,8 @@ async function listConnectedClients(base, apiKey, siteId, rejectUnauthorized) {
   /** @type {Record<string, unknown>[]} */
   let classicRows = [];
   try {
-    classicRows = await classicActiveStations(base, apiKey, siteId, rejectUnauthorized);
-    if (!classicRows.length && siteId !== "default") {
+    classicRows = await classicActiveStations(base, apiKey, classicSiteKey, rejectUnauthorized);
+    if (!classicRows.length && classicSiteKey !== "default") {
       classicRows = await classicActiveStations(base, apiKey, "default", rejectUnauthorized);
     }
   } catch (e) {
@@ -565,25 +241,6 @@ async function listConnectedClients(base, apiKey, siteId, rejectUnauthorized) {
     logUser(`Using ${merged.length} client(s) from classic stat/sta (integration list was empty).`);
   }
   return merged;
-}
-
-/**
- * @param {string} base
- * @param {string} apiKey
- * @param {string} siteId
- * @param {string} netId
- * @param {boolean} rejectUnauthorized
- */
-async function integrationNetworkDetail(base, apiKey, siteId, netId, rejectUnauthorized) {
-  const url = `${base}/proxy/network/integration/v1/sites/${encodeURIComponent(siteId)}/networks/${encodeURIComponent(netId)}`;
-  return requestJson({
-    url,
-    headers: {
-      Accept: "application/json",
-      "X-API-KEY": apiKey,
-    },
-    rejectUnauthorized,
-  });
 }
 
 const CLASSIC_EXPORT_KEYS = new Set([
@@ -623,21 +280,6 @@ function sanitizeClassicRow(n) {
     if (n[k] !== undefined) out[k] = n[k];
   }
   return out;
-}
-
-/**
- * @param {unknown} body
- * @returns {Record<string, unknown>[]}
- */
-function classicDataArray(body) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
-  const o = /** @type {Record<string, unknown>} */ (body);
-  const meta = o.meta && typeof o.meta === "object" && !Array.isArray(o.meta) ? o.meta : null;
-  const rc = meta && typeof meta.rc === "string" ? meta.rc : "";
-  if (rc !== "ok") return [];
-  const data = o.data;
-  if (!Array.isArray(data)) return [];
-  return data.filter((x) => x && typeof x === "object" && !Array.isArray(x)).map((x) => /** @type {Record<string, unknown>} */ (x));
 }
 
 /**
@@ -748,19 +390,6 @@ const PENDING_DEVICE_EXPORT_KEYS = new Set([
 
 /**
  * @param {Record<string, unknown>} row
- * @param {Set<string>} keys
- */
-function pickFields(row, keys) {
-  /** @type {Record<string, unknown>} */
-  const out = {};
-  for (const k of keys) {
-    if (row[k] !== undefined) out[k] = row[k];
-  }
-  return out;
-}
-
-/**
- * @param {Record<string, unknown>} row
  * @param {string} collectedAt
  */
 function inventoryDeviceEntry(row, collectedAt) {
@@ -856,23 +485,6 @@ const FIREWALL_POLICY_EXPORT_KEYS = new Set([
   "metadata",
 ]);
 
-const PORT_FORWARD_EXPORT_KEYS = new Set([
-  "_id",
-  "name",
-  "enabled",
-  "rule_index",
-  "pfwd_interface",
-  "proto",
-  "dst_port",
-  "fwd",
-  "fwd_port",
-  "log",
-  "src",
-  "src_port",
-  "src_firewall_group_id",
-  "dst_firewall_group_id",
-]);
-
 /**
  * @param {Record<string, unknown>[]} zones
  * @returns {Map<string, string>}
@@ -918,14 +530,6 @@ function inventoryFirewallPolicyEntry(row, collectedAt) {
 
 /**
  * @param {Record<string, unknown>} row
- * @param {string} collectedAt
- */
-function inventoryPortForwardEntry(row, collectedAt) {
-  return { ...pickFields(row, PORT_FORWARD_EXPORT_KEYS), collected_at: collectedAt };
-}
-
-/**
- * @param {Record<string, unknown>} row
  * @param {Map<string, string>} zoneMap
  */
 function formatFirewallPolicyBlock(row, zoneMap) {
@@ -952,184 +556,39 @@ function formatFirewallPolicyBlock(row, zoneMap) {
   return lines.join("\n");
 }
 
-/**
- * @param {Record<string, unknown>} row
- */
-function formatPortForwardBlock(row) {
-  const lines = [];
-  const name = typeof row.name === "string" ? row.name : "(unnamed)";
-  const enabled = row.enabled === false ? "disabled" : "enabled";
-  lines.push(`— ${name} (${enabled})`);
-  const proto = typeof row.proto === "string" ? row.proto : "";
-  const dst = row.dst_port !== undefined ? String(row.dst_port) : "";
-  const fwd = typeof row.fwd === "string" ? row.fwd : "";
-  const fwdPort = row.fwd_port !== undefined ? String(row.fwd_port) : "";
-  if (proto || dst) {
-    const to = fwd ? ` → ${fwd}${fwdPort ? `:${fwdPort}` : ""}` : "";
-    lines.push(`  ${proto || "tcp/udp"} WAN:${dst || "?"}${to}`);
-  }
-  if (typeof row.pfwd_interface === "string" && row.pfwd_interface) {
-    lines.push(`  Interface: ${row.pfwd_interface}`);
-  }
-  lines.push("");
-  return lines.join("\n");
-}
-
 async function main() {
   const t0 = Date.now();
-  const pkgCfg = readUnifiPackageConfig();
-  const rejectUnauthorized = hdcTlsRejectUnauthorized(env, SPEC_TLS_INSECURE);
-  const tlsInsecureVia = hdcTlsInsecureSourceEnv(env, SPEC_TLS_INSECURE);
+  const argv = process.argv.slice(2);
+  const flags = parseArgvFlags(argv);
+  const importPortForwards = flags["import-port-forwards"] === "1";
+  const yes = flags.yes === "1";
 
   logUser(`query starting (cwd: ${process.cwd().replace(/\\/g, "/")})`);
   logUser(`package root: ${packageRoot.replace(/\\/g, "/")}`);
-  logUser(
-    rejectUnauthorized
-      ? `TLS certificate verification is ON (set ${SPEC_TLS_INSECURE}=1 or ${HDC_TLS_INSECURE_ENV}=1 if the controller uses a self-signed cert).`
-      : `TLS certificate verification is OFF (${tlsInsecureVia}=1).`,
-  );
-
-  const vault = createVaultAccess(
-    vaultDepsFromCli({
-      env,
-      log: (...a) => errout.write(`${a.join(" ")}\n`),
-      error: (...a) => errout.write(`${a.join(" ")}\n`),
-      warn: (...a) => errout.write(`${a.join(" ")}\n`),
-      defaultVaultPath,
-      existsSync,
-      readLineQuestion: async (q, opts) => {
-        if (opts?.mask) {
-          return readLineMasked(q, errout, input);
-        }
-        const rl = createInterface({ input, output: errout });
-        try {
-          return await rl.question(q);
-        } finally {
-          rl.close();
-        }
-      },
-    }),
-  );
-
-  logUser("Resolving controller base URL (env → packages/infrastructure/unifi-network/config.json → prompt)…");
-
-  /** @type {string | null} */
-  let base = null;
-  /** @type {string} */
-  let baseProvenance = "";
-
-  if (typeof env.HDC_UNIFI_CONTROLLER_URL === "string" && env.HDC_UNIFI_CONTROLLER_URL.trim()) {
-    base = baseUrlFromString(env.HDC_UNIFI_CONTROLLER_URL);
-    baseProvenance = "HDC_UNIFI_CONTROLLER_URL";
-  } else if (pkgCfg) {
-    const fromCfg = controllerFromPackageConfig(pkgCfg);
-    if (fromCfg) {
-      base = fromCfg.url;
-      baseProvenance = fromCfg.provenance;
-    }
+  if (importPortForwards) {
+    logUser("import-port-forwards: will replace port_forwards[] in config.json with live snapshot.");
   }
 
-  if (!base) {
-    logUser("No controller URL from env or config.json; you will be prompted.");
-    const rl = createInterface({ input, output: errout });
-    try {
-      const ans = await rl.question(
-        "[unifi-network] Enter UniFi controller base URL (https://gateway-ip or hostname): ",
-      );
-      if (!ans || !ans.trim()) {
-        errout.write("Aborted: controller URL is required.\n");
-        process.exitCode = 1;
-        return;
-      }
-      base = baseUrlFromString(ans);
-      baseProvenance = "interactive prompt";
-    } finally {
-      rl.close();
-    }
-  }
-
-  logUser(`Controller base URL: ${base}`);
-  logUser(`Controller URL source: ${baseProvenance}`);
-
-  logUser(`Checking vault for API key (secret name ${VAULT_KEY}; passphrase may be prompted)…`);
-  const apiKey = await vault.getSecret(VAULT_KEY, {
-    promptLabel: "UniFi Network Integration API key (Settings → Control plane → Integrations)",
-    verify: async (key) => {
-      try {
-        logUser("Verifying API key with GET /proxy/network/integration/v1/info …");
-        const info = await integrationInfo(base, key, rejectUnauthorized);
-        const ver =
-          info && typeof info === "object" && !Array.isArray(info) && typeof info.applicationVersion === "string"
-            ? info.applicationVersion
-            : "";
-        logUser(ver ? `Controller integration API OK (applicationVersion ${ver}).` : "Controller integration API OK.");
-        return true;
-      } catch (e) {
-        errout.write(
-          `[unifi-network] API key verification failed (${/** @type {Error} */ (e).message}). Check URL, TLS (set ${SPEC_TLS_INSECURE}=1 or ${HDC_TLS_INSECURE_ENV}=1 for self-signed), and key permissions.\n`,
-        );
-        return false;
-      }
-    },
-  });
-  logUser("API key loaded and verified (value not logged).");
-
-  let siteId = typeof env.HDC_UNIFI_SITE_ID === "string" && env.HDC_UNIFI_SITE_ID.trim() ? env.HDC_UNIFI_SITE_ID.trim() : "";
-  if (!siteId && pkgCfg && typeof pkgCfg.default_site_id === "string" && pkgCfg.default_site_id.trim()) {
-    siteId = pkgCfg.default_site_id.trim();
-    logUser(`Using default_site_id from config.json (${JSON.stringify(siteId)}).`);
-  }
-  if (!siteId) {
-    logUser("Listing sites: GET /proxy/network/integration/v1/sites …");
-    const sitesBody = await integrationListSites(base, apiKey, rejectUnauthorized);
-    const sites =
-      sitesBody && typeof sitesBody === "object" && !Array.isArray(sitesBody) && Array.isArray(sitesBody.data)
-        ? sitesBody.data
-        : [];
-    logUser(`Sites returned: ${sites.length} (using first site if id present).`);
-    const first = sites[0];
-    if (first && typeof first === "object" && !Array.isArray(first) && typeof first.id === "string") {
-      siteId = first.id;
-    }
-    if (!siteId) {
-      errout.write("Could not resolve a site id from GET /integration/v1/sites. Set HDC_UNIFI_SITE_ID.\n");
-      process.exitCode = 1;
-      return;
-    }
-    const nm = first && typeof first === "object" && !Array.isArray(first) && typeof first.name === "string" ? first.name : "";
-    errout.write(`[unifi-network] Resolved UniFi site id ${JSON.stringify(siteId)}${nm ? ` (${nm})` : ""} — set HDC_UNIFI_SITE_ID to pick another.\n`);
-  } else {
-    logUser(`Using UniFi site id from HDC_UNIFI_SITE_ID (${JSON.stringify(siteId)}).`);
-  }
+  const ctx = await createUnifiRunContext({ packageRoot, log: logUser });
+  const { base, apiKey, rejectUnauthorized } = ctx;
+  const integrationSiteId = ctx.siteId;
+  let classicSiteKey = ctx.classicSiteKey;
 
   /** @type {Record<string, unknown>[]} */
   let rows = [];
   /** @type {"classic" | "integration"} */
   let dataSource = "classic";
 
-  logUser(`Fetching networks via classic API: GET …/api/s/${siteId}/rest/networkconf …`);
+  logUser(`Fetching networks via classic API: GET …/api/s/${classicSiteKey}/rest/networkconf …`);
   try {
-    const classic = await classicNetworkconf(base, apiKey, siteId, rejectUnauthorized);
-    rows = classicDataArray(classic);
-    logUser(`Classic networkconf parsed: ${rows.length} network row(s) (meta.rc ok).`);
+    const net = await classicRestListWithFallback(base, apiKey, classicSiteKey, "networkconf", rejectUnauthorized);
+    classicSiteKey = net.siteKey;
+    rows = net.rows;
+    logUser(`Classic networkconf parsed: ${rows.length} network row(s) (site key "${classicSiteKey}").`);
   } catch (e) {
-    errout.write(`[unifi-network] Classic networkconf failed for site ${siteId} (${/** @type {Error} */ (e).message}).\n`);
-  }
-
-  if (!rows.length && siteId !== "default") {
-    logUser('Retrying classic networkconf with site key "default"…');
-    try {
-      const classicDef = await classicNetworkconf(base, apiKey, "default", rejectUnauthorized);
-      rows = classicDataArray(classicDef);
-      if (rows.length) {
-        siteId = "default";
-        logUser(`Classic "default" site succeeded (${rows.length} networks); site_id set to "default".`);
-      } else {
-        logUser('Classic "default" site returned no rows.');
-      }
-    } catch (e) {
-      errout.write(`[unifi-network] Classic retry with site "default" failed (${/** @type {Error} */ (e).message}).\n`);
-    }
+    errout.write(
+      `[unifi-network] Classic networkconf failed (${/** @type {Error} */ (e).message}).\n`,
+    );
   }
 
   const collectedAt = new Date().toISOString();
@@ -1141,8 +600,8 @@ async function main() {
   } else {
     dataSource = "integration";
     logUser("Classic API produced no networks; falling back to Integration API (VLAN/name/enabled; subnets/DNS need classic).");
-    logUser(`Listing networks: GET …/integration/v1/sites/${siteId}/networks (paginated) …`);
-    const overviews = await integrationListAllNetworkOverviews(base, apiKey, siteId, rejectUnauthorized);
+    logUser(`Listing networks: GET …/integration/v1/sites/${integrationSiteId}/networks (paginated) …`);
+    const overviews = await integrationListAllNetworkOverviews(base, apiKey, integrationSiteId, rejectUnauthorized);
     logUser(`Integration API listed ${overviews.length} network(s).`);
     if (!overviews.length) {
       errout.write("[unifi-network] No networks from Integration API either.\n");
@@ -1160,7 +619,7 @@ async function main() {
       let detail = /** @type {Record<string, unknown>} */ ({});
       if (id) {
         try {
-          const d = await integrationNetworkDetail(base, apiKey, siteId, id, rejectUnauthorized);
+          const d = await integrationNetworkDetail(base, apiKey, integrationSiteId, id, rejectUnauthorized);
           if (d && typeof d === "object" && !Array.isArray(d)) detail = /** @type {Record<string, unknown>} */ (d);
         } catch {
           /* overview only */
@@ -1180,19 +639,19 @@ async function main() {
   /** @type {Record<string, unknown>[]} */
   let pendingDeviceRows = [];
 
-  logUser(`Listing adopted equipment: GET …/integration/v1/sites/${siteId}/devices (paginated) …`);
+  logUser(`Listing adopted equipment: GET …/integration/v1/sites/${integrationSiteId}/devices (paginated) …`);
   try {
-    deviceRows = await integrationListAllDevices(base, apiKey, siteId, rejectUnauthorized);
+    deviceRows = await integrationListAllDevices(base, apiKey, integrationSiteId, rejectUnauthorized);
     logUser(`Adopted devices: ${deviceRows.length}.`);
   } catch (e) {
     errout.write(`[unifi-network] Device list failed (${/** @type {Error} */ (e).message}).\n`);
   }
 
   logUser(
-    `Listing connected clients: integration GET …/sites/${siteId}/clients and classic POST …/stat/sta …`,
+    `Listing connected clients: integration GET …/sites/${integrationSiteId}/clients and classic POST …/stat/sta …`,
   );
   try {
-    clientRows = await listConnectedClients(base, apiKey, siteId, rejectUnauthorized);
+    clientRows = await listConnectedClients(base, apiKey, integrationSiteId, classicSiteKey, rejectUnauthorized);
     logUser(`Connected clients (unique by MAC): ${clientRows.length}.`);
   } catch (e) {
     errout.write(`[unifi-network] Client list failed (${/** @type {Error} */ (e).message}).\n`);
@@ -1213,36 +672,63 @@ async function main() {
   let firewallZoneRows = [];
   /** @type {Record<string, unknown>[]} */
   let firewallPolicyRows = [];
-  /** @type {Record<string, unknown>[]} */
-  let portForwardRows = [];
 
-  logUser(`Listing firewall zones: GET …/integration/v1/sites/${siteId}/firewall/zones …`);
+  logUser(`Listing firewall zones: GET …/integration/v1/sites/${integrationSiteId}/firewall/zones …`);
   try {
-    firewallZoneRows = await integrationListFirewallZones(base, apiKey, siteId, rejectUnauthorized);
+    firewallZoneRows = await integrationListFirewallZones(base, apiKey, integrationSiteId, rejectUnauthorized);
     logUser(`Firewall zones: ${firewallZoneRows.length}.`);
   } catch (e) {
     errout.write(`[unifi-network] Firewall zone list failed (${/** @type {Error} */ (e).message}).\n`);
   }
 
-  logUser(`Listing firewall policies: GET …/integration/v1/sites/${siteId}/firewall/policies …`);
+  logUser(`Listing firewall policies: GET …/integration/v1/sites/${integrationSiteId}/firewall/policies …`);
   try {
-    firewallPolicyRows = await integrationListFirewallPolicies(base, apiKey, siteId, rejectUnauthorized);
+    firewallPolicyRows = await integrationListFirewallPolicies(base, apiKey, integrationSiteId, rejectUnauthorized);
     logUser(`Firewall policies: ${firewallPolicyRows.length}.`);
   } catch (e) {
     errout.write(`[unifi-network] Firewall policy list failed (${/** @type {Error} */ (e).message}).\n`);
   }
 
-  logUser(`Listing port forwards (classic API): GET …/api/s/${siteId}/rest/portforward …`);
+  /** @type {Record<string, unknown>[]} */
+  let portForwardRows = [];
+  /** @type {Error | null} */
+  let portForwardFetchError = null;
   try {
-    const pf = await classicPortForwards(base, apiKey, siteId, rejectUnauthorized);
-    portForwardRows = pf.rows;
-    if (pf.siteKey !== siteId) {
-      logUser(`Port forwards returned via classic site key "${pf.siteKey}" (${portForwardRows.length}).`);
-    } else {
-      logUser(`Port forwards: ${portForwardRows.length}.`);
-    }
+    portForwardRows = await fetchLivePortForwards(ctx, logUser);
+    classicSiteKey = ctx.classicSiteKey;
   } catch (e) {
-    errout.write(`[unifi-network] Port forward list failed (${/** @type {Error} */ (e).message}).\n`);
+    portForwardFetchError = e instanceof Error ? e : new Error(String(e));
+    errout.write(`[unifi-network] Port forward list failed (${portForwardFetchError.message}).\n`);
+  }
+
+  const port_forward_sync = diffPortForwardSync(ctx.config.managedPortForwards, portForwardRows);
+
+  /** @type {{ imported_count: number; config_rel: string } | null} */
+  let importResult = null;
+  if (importPortForwards) {
+    if (portForwardFetchError) {
+      errout.write("[unifi-network] Aborted: cannot import port forwards after API failure.\n");
+      process.exitCode = 1;
+      return;
+    }
+    if (!yes) {
+      const rl = createInterface({ input, output: errout });
+      try {
+        const ans = await rl.question(
+          `[unifi-network] Replace port_forwards[] in config with ${portForwardRows.length} live rule(s)? [y/N] `,
+        );
+        if (!/^y(es)?$/i.test(ans.trim())) {
+          errout.write("Aborted: import not confirmed (use --yes to skip prompt).\n");
+          process.exitCode = 1;
+          return;
+        }
+      } finally {
+        rl.close();
+      }
+    }
+    const written = importPortForwardsToConfig({ packageRoot, liveRows: portForwardRows, log: logUser });
+    importResult = { imported_count: written.imported.length, config_rel: written.configRel };
+    ctx.config = normalizeUnifiConfig({ ...ctx.cfgRaw, port_forwards: written.imported });
   }
 
   const firewall_zones = firewallZoneRows.map((r) => inventoryFirewallZoneEntry(r, collectedAt));
@@ -1250,7 +736,7 @@ async function main() {
   const port_forwards = portForwardRows.map((r) => inventoryPortForwardEntry(r, collectedAt));
   const zoneMap = firewallZoneNameMap(firewallZoneRows);
 
-  logUser("Building structured records for stdout JSON (no inventory directory writes) …");
+  logUser("Building structured records for stdout JSON …");
   /** @type {Set<string>} */
   const usedNetworkIds = new Set();
   /** @type {Set<string>} */
@@ -1286,11 +772,13 @@ async function main() {
   }
 
   logUser(
-    `Prepared stdout payload: ${networkRecords.length} network record(s), ${deviceSystemRecords.length} device system(s), ${clientSystemRecords.length} client system(s), ${pendingSystemRecords.length} pending, ${firewallPolicyRecords.length} firewall policy record(s), ${portForwardRecords.length} port-forward record(s) (${firewall_zones.length} zone(s) as entries only).`,
+    `Prepared stdout payload: ${networkRecords.length} network record(s), ${deviceSystemRecords.length} device system(s), ${clientSystemRecords.length} client system(s), ${pendingSystemRecords.length} pending, ${firewallPolicyRecords.length} firewall policy record(s), ${portForwardRecords.length} port-forward record(s).`,
   );
 
   errout.write(`\n[unifi-network] — Network summary (${dataSource}) —\n`);
-  errout.write(`Controller ${base} · site ${siteId} · ${networks.length} network(s)\n\n`);
+  errout.write(
+    `Controller ${base} · integration site ${integrationSiteId} · classic site ${classicSiteKey} · ${networks.length} network(s)\n\n`,
+  );
   for (const r of rows) {
     errout.write(dataSource === "classic" ? formatNetworkBlock(r) : formatIntegrationNetworkBlock(r));
   }
@@ -1323,6 +811,15 @@ async function main() {
     for (const p of portForwardRows) errout.write(formatPortForwardBlock(p));
   }
 
+  if (port_forward_sync.summary) {
+    errout.write(
+      `\n[unifi-network] — Port forward diff vs config (managed) — create ${port_forward_sync.summary.create}, update ${port_forward_sync.summary.update}, delete ${port_forward_sync.summary.delete}, unchanged ${port_forward_sync.summary.unchanged}\n`,
+    );
+    if (port_forward_sync.error) {
+      errout.write(`[unifi-network] Diff error: ${port_forward_sync.error}\n`);
+    }
+  }
+
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   logUser(`Finished in ${elapsed}s. JSON summary on stdout for hdc.`);
 
@@ -1332,7 +829,8 @@ async function main() {
     ok: true,
     collected_at: collectedAt,
     controller_base_url: base,
-    site_id: siteId,
+    site_id: integrationSiteId,
+    classic_site_key: classicSiteKey,
     data_source: dataSource,
     network_count: networks.length,
     device_count: devices.length,
@@ -1341,6 +839,11 @@ async function main() {
     firewall_zone_count: firewall_zones.length,
     firewall_policy_count: firewall_policies.length,
     port_forward_count: port_forwards.length,
+    port_forward_sync: {
+      summary: port_forward_sync.summary,
+      error: port_forward_sync.error ?? null,
+    },
+    import: importResult,
     firewall_zones,
     network_records: networkRecords,
     device_system_records: deviceSystemRecords,
@@ -1349,7 +852,7 @@ async function main() {
     firewall_policy_records: firewallPolicyRecords,
     port_forward_records: portForwardRecords,
     message:
-      "UniFi snapshot from live API; structured records on stdout only (packages/infrastructure/unifi-network/config.json for controller_base_url / default_site_id). No inventory/ paths are read or written.",
+      "UniFi snapshot from live API. Use query --import-port-forwards to bootstrap port_forwards[] in config.json; maintain applies managed rules.",
     systems: [...deviceSystemRecords, ...clientSystemRecords, ...pendingSystemRecords],
   };
   output.write(`${JSON.stringify(payload, null, 2)}\n`);

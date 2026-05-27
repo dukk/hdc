@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       "tools/hdc/**/*.test.mjs",
       "packages/lib/**/*.test.mjs",
+      "packages/clients/**/*.test.mjs",
       "packages/infrastructure/**/*.test.mjs",
     ],
     coverage: {

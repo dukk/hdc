@@ -35,12 +35,17 @@
       "ssh": {
         "user": "root"
       }
+    },
+    "synology": {
+      "instance": "a",
+      "stack_id": "immich"
     }
   },
   "deployments": [
     {
       "system_id": "vm-immich-a",
       "hostname": "immich-a",
+      "mode": "proxmox-qemu",
       "proxmox": {
         "host_id": "hypervisor-a",
         "qemu": {
@@ -52,6 +57,23 @@
         "ssh": {
           "host": "192.0.2.40"
         }
+      }
+    },
+    {
+      "system_id": "immich-a",
+      "hostname": "immich-a",
+      "mode": "synology-docker",
+      "synology": {
+        "instance": "a",
+        "stack_id": "immich"
+      },
+      "immich": {
+        "public_url": "https://immich.example.org",
+        "upload_location": "/volume1/docker/immich/library",
+        "db_data_location": "/volume1/docker/immich/postgres"
+      },
+      "install": {
+        "compose_dir": "/volume1/docker/immich"
       }
     }
   ]

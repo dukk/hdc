@@ -27,6 +27,42 @@ export function serverNames(site) {
 }
 
 /**
+ * @param {Record<string, unknown>} site
+ */
+export function staticRoot(site) {
+  const st = isObject(site.static) ? site.static : {};
+  return typeof st.root === "string" && st.root.trim() ? st.root.trim() : "";
+}
+
+/**
+ * @param {Record<string, unknown>} site
+ */
+export function staticIndex(site) {
+  const st = isObject(site.static) ? site.static : {};
+  return typeof st.index === "string" && st.index.trim() ? st.index.trim() : "index.html";
+}
+
+/**
+ * @param {Record<string, unknown>} site
+ */
+export function isStaticSite(site) {
+  return staticRoot(site) !== "";
+}
+
+/**
+ * @param {Record<string, unknown>[]} sites
+ */
+export function staticDocrootsFromSites(sites) {
+  /** @type {string[]} */
+  const roots = [];
+  for (const site of sites) {
+    const root = staticRoot(site);
+    if (root && !roots.includes(root)) roots.push(root);
+  }
+  return roots;
+}
+
+/**
  * @param {Record<string, unknown>[]} sites
  */
 export function tlsDomainsFromSites(sites) {
@@ -76,7 +112,13 @@ export function renderSiteVhost(opts) {
     : [80, 443];
   const upstream =
     typeof site.upstream === "string" && site.upstream.trim() ? site.upstream.trim() : "";
-  if (!upstream) throw new Error(`${id}: upstream required`);
+  const root = staticRoot(site);
+  if (!upstream && !root) {
+    throw new Error(`${id}: upstream or static.root required`);
+  }
+  if (upstream && root) {
+    throw new Error(`${id}: specify upstream or static.root, not both`);
+  }
 
   const tls = isObject(site.tls) ? site.tls : {};
   const tlsEnabled = tls.enabled !== false;
@@ -86,10 +128,13 @@ export function renderSiteVhost(opts) {
       : names[0];
 
   const locations = Array.isArray(site.locations) ? site.locations.filter(isObject) : [];
-  const locBlocks =
-    locations.length > 0
-      ? locations.map((loc) => renderLocationBlock(loc, upstream))
-      : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream)];
+  const locBlocks = root
+    ? (locations.length > 0
+        ? locations.map((loc) => renderStaticLocationBlock(loc, root, staticIndex(site)))
+        : [renderStaticLocationBlock({ path: "/" }, root, staticIndex(site))])
+    : locations.length > 0
+      ? locations.map((loc) => renderProxyLocationBlock(loc, upstream))
+      : [renderProxyLocationBlock({ path: "/", proxy_headers: true }, upstream)];
 
   /** @type {string[]} */
   const blocks = [];
@@ -103,7 +148,8 @@ export function renderSiteVhost(opts) {
         default_type "text/plain";
     }`
         : "";
-    blocks.push(`server {
+    if (tlsEnabled) {
+      blocks.push(`server {
     listen 80;
     listen [::]:80;
     server_name ${names.join(" ")};
@@ -113,6 +159,15 @@ ${acme}
     }
 }
 `);
+    } else {
+      blocks.push(`server {
+    listen 80;
+    listen [::]:80;
+    server_name ${names.join(" ")};
+${root ? `    root ${root};\n    index ${staticIndex(site)};\n` : ""}${locBlocks.join("\n")}
+}
+`);
+    }
   }
 
   if (listen.includes(443) && tlsEnabled) {
@@ -124,14 +179,14 @@ ${acme}
     ssl_certificate_key /etc/letsencrypt/live/${certName}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-${locBlocks.join("\n")}
+${root ? `    root ${root};\n    index ${staticIndex(site)};\n` : ""}${locBlocks.join("\n")}
 }
 `);
   } else if (!listen.includes(80)) {
     blocks.push(`server {
     listen ${listen[0]};
     server_name ${names.join(" ")};
-${locBlocks.join("\n")}
+${root ? `    root ${root};\n    index ${staticIndex(site)};\n` : ""}${locBlocks.join("\n")}
 }
 `);
   }
@@ -143,7 +198,7 @@ ${locBlocks.join("\n")}
  * @param {Record<string, unknown>} loc
  * @param {string} upstream
  */
-function renderLocationBlock(loc, upstream) {
+function renderProxyLocationBlock(loc, upstream) {
   const path = typeof loc.path === "string" && loc.path.trim() ? loc.path.trim() : "/";
   const headers = loc.proxy_headers !== false;
   const headerLines = headers
@@ -155,6 +210,24 @@ function renderLocationBlock(loc, upstream) {
     : "";
   return `    location ${path} {
         proxy_pass ${upstream};${headerLines}
+    }`;
+}
+
+/**
+ * @param {Record<string, unknown>} loc
+ * @param {string} root
+ * @param {string} index
+ */
+function renderStaticLocationBlock(loc, root, index) {
+  const path = typeof loc.path === "string" && loc.path.trim() ? loc.path.trim() : "/";
+  if (path === "/") {
+    return `    location / {
+        try_files $uri $uri/ =404;
+    }`;
+  }
+  return `    location ${path} {
+        alias ${root}${path.endsWith("/") ? path : `${path}/`};
+        try_files $uri $uri/ =404;
     }`;
 }
 

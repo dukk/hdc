@@ -14,8 +14,8 @@ const sampleCfg = {
   bind: { primary_ip: "192.0.2.2", secondary_ip: "192.0.2.3" },
   defaults: { mode: "configure-only" },
   deployments: [
-    { system_id: "vm-dns-a", role: "primary", mode: "configure-only", configure: { ssh: { host: "192.0.2.2" } } },
-    { system_id: "vm-dns-b", role: "secondary", mode: "configure-only", configure: { ssh: { host: "192.0.2.3" } } },
+    { system_id: "vm-bind-a", role: "primary", mode: "configure-only", configure: { ssh: { host: "192.0.2.2" } } },
+    { system_id: "vm-bind-b", role: "secondary", mode: "configure-only", configure: { ssh: { host: "192.0.2.3" } } },
   ],
 };
 
@@ -30,7 +30,7 @@ describe("bind-deployments", () => {
     expect(() =>
       normalizeBindConfig({
         ...sampleCfg,
-        deployments: [{ system_id: "vm-dns-b", role: "secondary", mode: "configure-only" }],
+        deployments: [{ system_id: "vm-bind-b", role: "secondary", mode: "configure-only" }],
       }),
     ).toThrow(/exactly one primary/);
   });
@@ -47,5 +47,41 @@ describe("bind-deployments", () => {
     expect(g.secondaryIp).toBe("192.0.2.3");
     expect(g.zoneIds).toEqual(["hdc.example.invalid", "2.0.192.in-addr.arpa"]);
     expect(Object.keys(g.zoneDefinitions)).toHaveLength(2);
+    expect(g.forwardUpstream.mode).toBe("plain");
+    expect(g.forwarders).toEqual(["1.1.1.1", "1.0.0.1"]);
+  });
+
+  it("bindGlobalSettings maps odoh forward_upstream to localhost forwarder", () => {
+    const g = bindGlobalSettings(
+      normalizeBindConfig({
+        ...sampleCfg,
+        bind: {
+          ...sampleCfg.bind,
+          forward_upstream: {
+            mode: "odoh",
+            server: "odoh-cloudflare",
+            relay: "odohrelay-crypto-sx",
+            listen: "127.0.0.1:5300",
+          },
+        },
+      }),
+    );
+    expect(g.forwardUpstream.mode).toBe("odoh");
+    expect(g.forwarders).toEqual(["127.0.0.1 port 5300"]);
+  });
+
+  it("rejects odoh when recursion is disabled", () => {
+    expect(() =>
+      bindGlobalSettings(
+        normalizeBindConfig({
+          ...sampleCfg,
+          bind: {
+            ...sampleCfg.bind,
+            recursion: false,
+            forward_upstream: { mode: "odoh" },
+          },
+        }),
+      ),
+    ).toThrow(/requires bind.recursion true/);
   });
 });

@@ -251,11 +251,15 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
     install.enabled = false;
   }
   const mode = typeof d.mode === "string" ? d.mode.trim() : "";
+  const hostname =
+    typeof d.hostname === "string" && d.hostname.trim() ? d.hostname.trim() : undefined;
   return {
     systemId: String(d.system_id),
     mode,
+    hostname,
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
     ubuntu: isObject(d.ubuntu) ? d.ubuntu : null,
+    configure: isObject(d.configure) ? d.configure : null,
     install,
   };
 }

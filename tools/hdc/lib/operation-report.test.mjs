@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -35,6 +35,61 @@ describe("operation-report", () => {
   it("defaultOperationReportPath uses verb and timestamp under reports/", () => {
     const p = defaultOperationReportPath("/pkg/root", "deploy");
     expect(p).toMatch(/[/\\]pkg[/\\]root[/\\]reports[/\\]deploy-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.md$/);
+  });
+
+  describe("with hdc-private", () => {
+    /** @type {string} */
+    let publicRoot;
+    /** @type {string} */
+    let privateRoot;
+    /** @type {string | undefined} */
+    let prevPrivateRoot;
+
+    beforeEach(() => {
+      publicRoot = mkdtempSync(join(tmpdir(), "hdc-op-pub-"));
+      privateRoot = mkdtempSync(join(tmpdir(), "hdc-op-priv-"));
+      prevPrivateRoot = process.env.HDC_PRIVATE_ROOT;
+      process.env.HDC_PRIVATE_ROOT = privateRoot;
+    });
+
+    afterEach(() => {
+      if (prevPrivateRoot === undefined) delete process.env.HDC_PRIVATE_ROOT;
+      else process.env.HDC_PRIVATE_ROOT = prevPrivateRoot;
+      rmSync(publicRoot, { recursive: true, force: true });
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it("defaultOperationReportPath prefers hdc-private when publicRoot is set", () => {
+      const packageRoot = join(publicRoot, "packages", "services", "bind");
+      mkdirSync(packageRoot, { recursive: true });
+      const p = defaultOperationReportPath(packageRoot, "maintain", undefined, publicRoot);
+      expect(p).toMatch(
+        new RegExp(
+          `${privateRoot.replace(/\\/g, "\\\\")}[/\\\\]packages[/\\\\]services[/\\\\]bind[/\\\\]reports[/\\\\]maintain-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}\\.md$`,
+        ),
+      );
+    });
+
+    it("writeOperationReportFile writes under hdc-private when repoRoot is set", () => {
+      const packageRoot = join(publicRoot, "packages", "services", "bind");
+      mkdirSync(packageRoot, { recursive: true });
+      const ctx = createOperationReportContext({
+        packageId: "bind",
+        packageTitle: "BIND",
+        verb: "maintain",
+      });
+      ctx.ok = true;
+      setStdoutPayload(ctx, { ok: true, results: [] });
+      const written = writeOperationReportFile({
+        packageRoot,
+        ctx,
+        repoRoot: publicRoot,
+      });
+      expect(written).toBeTruthy();
+      expect(String(written).startsWith(privateRoot)).toBe(true);
+      expect(existsSync(/** @type {string} */ (written))).toBe(true);
+      expect(existsSync(join(packageRoot, "reports"))).toBe(false);
+    });
   });
 
   it("writeOperationReportFile returns null when --no-report", () => {
@@ -127,11 +182,11 @@ describe("operation-report", () => {
       verb: "deploy",
     });
     setStdoutPayload(ctx, {
-      results: [{ ok: true, system_id: "vm-dns-a", ip: "192.0.2.10" }],
+      results: [{ ok: true, system_id: "vm-bind-a", ip: "192.0.2.10" }],
     });
     const steps = defaultNextSteps(ctx);
     expect(steps.some((s) => s.includes("run bind query"))).toBe(true);
-    expect(steps.some((s) => s.includes("vm-dns-a.json"))).toBe(true);
+    expect(steps.some((s) => s.includes("vm-bind-a.json"))).toBe(true);
   });
 
   it("manifestOperationReportNextSteps reads operation_report.next_steps", () => {

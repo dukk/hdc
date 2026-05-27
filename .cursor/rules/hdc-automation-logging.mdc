@@ -17,7 +17,7 @@ Scripts under `packages/<package>/{deploy,maintain,query,teardown}/` are often s
 3. **External I/O** — Before and after meaningful remote calls (HTTPS, SSH, subprocess), log intent and outcome: success with a short summary (counts, HTTP status if useful), or failure with a safe error message (no response body that may contain tokens).
 4. **Vault / prompts** — Never log passphrases, API keys, cookies, or `Authorization` values. It is fine to log vault key *names* (for example `HDC_UNIFI_NETWORK_API_KEY`) when explaining what will be read or saved. Use **`readLineQuestion(..., { mask: true })`** for any typed secret or passphrase (see `readline-masked.mjs`).
 5. **Artifacts** — Log repo-relative paths when writing files under `inventory/automated/` or `packages/<package>/`.
-6. **Operation reports** — `deploy`, `maintain`, and `teardown` scripts should write a markdown report under `packages/<package>/reports/<verb>-<timestamp>.md` via `packages/lib/operation-report.mjs` (unless `--no-report`). Log the repo-relative report path on **stderr** after write; never put report body on stdout. Optional `--report <path>` overrides the default path.
+6. **Operation reports** — `deploy`, `maintain`, and `teardown` scripts should write a markdown report under `packages/<package>/reports/<verb>-<timestamp>.md` via `packages/lib/operation-report.mjs` (unless `--no-report`). Default path is under **hdc-private** when that repo exists, else public hdc. Log the report path on **stderr** after write; never put report body on stdout. Optional `--report <path>` overrides the default path.
 7. **Completion** — Log a clear success or failure line before exit (stderr on failure; stdout may still carry JSON on success when required by `hdc run`).
 
 ## PR / review checklist

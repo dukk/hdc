@@ -8,6 +8,7 @@ import {
   TSIG_KEY_NAME,
 } from "./bind-render.mjs";
 import { buildZoneBundle, soaSerialFromTimestamp } from "./bind-zones.mjs";
+import { syncDnscryptProxyOdoh } from "./bind-dnscrypt-configure.mjs";
 
 export { createConfigureExec };
 
@@ -151,6 +152,7 @@ export function syncNamedOptions(opts) {
  * @param {boolean} opts.recursion
  * @param {boolean} [opts.dnssecValidation]
  * @param {string[]} [opts.forwarders]
+ * @param {{ mode: string; server: string; relay: string; listen: string }} [opts.forwardUpstream]
  * @param {string} [opts.serial]
  */
 export function configureBind(opts) {
@@ -168,6 +170,7 @@ export function configureBind(opts) {
     recursion,
     dnssecValidation,
     forwarders,
+    forwardUpstream,
   } = opts;
 
   runChecked(
@@ -177,6 +180,11 @@ export function configureBind(opts) {
   );
 
   runChecked(exec, "mkdir -p /var/lib/bind/zones /var/lib/bind/secondary", log);
+
+  const dnscrypt =
+    forwardUpstream && forwardUpstream.mode === "odoh"
+      ? syncDnscryptProxyOdoh({ exec, log, forwardUpstream })
+      : null;
 
   syncNamedOptions({
     exec,
@@ -237,6 +245,7 @@ export function configureBind(opts) {
       role,
       zones: zoneIds.length,
       tsig_key: TSIG_KEY_NAME,
+      ...(dnscrypt?.details ? { dnscrypt_proxy: dnscrypt.details } : {}),
       ...(zoneSync?.details ? { zone_sync: zoneSync.details } : {}),
     },
   };

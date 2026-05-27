@@ -2,6 +2,12 @@
 
 /** @typedef {{ id: string; type: string; name: string; content: string; ttl: number; proxied?: boolean; priority?: number }} CfDnsRecord */
 
+/** @typedef {{ id: string; priority: number; status: string; targets: unknown[]; actions: unknown[] }} CfPageRule */
+
+/** @typedef {{ id: string; name?: string; enabled: boolean; priority?: number; matchers: unknown[]; actions: unknown[] }} CfEmailRoutingRule */
+
+/** @typedef {{ enabled?: boolean; name?: string; matchers?: unknown[]; actions: unknown[] }} CfEmailRoutingCatchAll */
+
 /**
  * @param {unknown} body
  * @returns {string}
@@ -171,6 +177,150 @@ export function createCloudflareClient(opts) {
         `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(recordId)}`,
         { method: "DELETE" }
       );
+    },
+
+    /**
+     * @param {string} zoneId
+     * @returns {Promise<CfPageRule[]>}
+     */
+    async listPageRules(zoneId) {
+      const raw = await listAll(`/zones/${encodeURIComponent(zoneId)}/pagerules`);
+      return raw.map((r) => {
+        const row = /** @type {{ id?: string; priority?: number; status?: string; targets?: unknown[]; actions?: unknown[] }} */ (
+          r
+        );
+        return {
+          id: String(row.id ?? ""),
+          priority: typeof row.priority === "number" ? row.priority : 0,
+          status: String(row.status ?? "active"),
+          targets: Array.isArray(row.targets) ? row.targets : [],
+          actions: Array.isArray(row.actions) ? row.actions : [],
+        };
+      });
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {Record<string, unknown>} body
+     */
+    async createPageRule(zoneId, body) {
+      const res = await request(`/zones/${encodeURIComponent(zoneId)}/pagerules`, {
+        method: "POST",
+        body,
+      });
+      const row = /** @type {{ id?: string }} */ (res.result ?? {});
+      return String(row.id ?? "");
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {string} ruleId
+     * @param {Record<string, unknown>} body
+     */
+    async updatePageRule(zoneId, ruleId, body) {
+      await request(
+        `/zones/${encodeURIComponent(zoneId)}/pagerules/${encodeURIComponent(ruleId)}`,
+        { method: "PATCH", body }
+      );
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {string} ruleId
+     */
+    async deletePageRule(zoneId, ruleId) {
+      await request(
+        `/zones/${encodeURIComponent(zoneId)}/pagerules/${encodeURIComponent(ruleId)}`,
+        { method: "DELETE" }
+      );
+    },
+
+    /**
+     * @param {string} zoneId
+     * @returns {Promise<CfEmailRoutingRule[]>}
+     */
+    async listEmailRoutingRules(zoneId) {
+      const raw = await listAll(`/zones/${encodeURIComponent(zoneId)}/email/routing/rules`);
+      return raw.map((r) => {
+        const row = /** @type {{ id?: string; name?: string; enabled?: boolean; priority?: number; matchers?: unknown[]; actions?: unknown[] }} */ (
+          r
+        );
+        return {
+          id: String(row.id ?? ""),
+          name: typeof row.name === "string" ? row.name : undefined,
+          enabled: row.enabled !== false,
+          priority: typeof row.priority === "number" ? row.priority : undefined,
+          matchers: Array.isArray(row.matchers) ? row.matchers : [],
+          actions: Array.isArray(row.actions) ? row.actions : [],
+        };
+      });
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {Record<string, unknown>} body
+     */
+    async createEmailRoutingRule(zoneId, body) {
+      const res = await request(`/zones/${encodeURIComponent(zoneId)}/email/routing/rules`, {
+        method: "POST",
+        body,
+      });
+      const row = /** @type {{ id?: string }} */ (res.result ?? {});
+      return String(row.id ?? "");
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {string} ruleId
+     * @param {Record<string, unknown>} body
+     */
+    async updateEmailRoutingRule(zoneId, ruleId, body) {
+      await request(
+        `/zones/${encodeURIComponent(zoneId)}/email/routing/rules/${encodeURIComponent(ruleId)}`,
+        { method: "PUT", body }
+      );
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {string} ruleId
+     */
+    async deleteEmailRoutingRule(zoneId, ruleId) {
+      await request(
+        `/zones/${encodeURIComponent(zoneId)}/email/routing/rules/${encodeURIComponent(ruleId)}`,
+        { method: "DELETE" }
+      );
+    },
+
+    /**
+     * @param {string} zoneId
+     * @returns {Promise<CfEmailRoutingCatchAll | null>}
+     */
+    async getEmailRoutingCatchAll(zoneId) {
+      const res = await request(
+        `/zones/${encodeURIComponent(zoneId)}/email/routing/rules/catch_all`
+      );
+      if (!res.result || typeof res.result !== "object") return null;
+      const row = /** @type {{ enabled?: boolean; name?: string; matchers?: unknown[]; actions?: unknown[] }} */ (
+        res.result
+      );
+      return {
+        enabled: row.enabled !== false,
+        name: typeof row.name === "string" ? row.name : undefined,
+        matchers: Array.isArray(row.matchers) ? row.matchers : undefined,
+        actions: Array.isArray(row.actions) ? row.actions : [],
+      };
+    },
+
+    /**
+     * @param {string} zoneId
+     * @param {Record<string, unknown>} body
+     */
+    async updateEmailRoutingCatchAll(zoneId, body) {
+      await request(`/zones/${encodeURIComponent(zoneId)}/email/routing/rules/catch_all`, {
+        method: "PUT",
+        body,
+      });
     },
   };
 }

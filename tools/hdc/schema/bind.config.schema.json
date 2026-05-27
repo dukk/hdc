@@ -24,7 +24,26 @@
         "forwarders": {
           "type": "array",
           "items": { "type": "string", "format": "ipv4" },
-          "description": "Upstream resolvers for recursive queries (default 1.1.1.1 and 1.0.0.1)."
+          "description": "Plain DNS upstream resolvers when forward_upstream.mode is plain or absent (default 1.1.1.1 and 1.0.0.1)."
+        },
+        "forward_upstream": {
+          "type": "object",
+          "description": "Recursive upstream mode: plain IPv4 forwarders or ODoH via local dnscrypt-proxy.",
+          "properties": {
+            "mode": { "enum": ["plain", "odoh"] },
+            "server": {
+              "type": "string",
+              "description": "ODoH target name in dnscrypt-proxy static config (default odoh-cloudflare)."
+            },
+            "relay": {
+              "type": "string",
+              "description": "ODoH relay name in dnscrypt-proxy static config (default odohrelay-crypto-sx)."
+            },
+            "listen": {
+              "type": "string",
+              "description": "Local dnscrypt-proxy listen address for BIND forwarders (default 127.0.0.1:5300)."
+            }
+          }
         },
         "tsig_vault_key": { "type": "string" },
         "tsig_secret": {
@@ -41,7 +60,7 @@
         "type": "object",
         "required": ["system_id", "role"],
         "properties": {
-          "system_id": { "type": "string", "pattern": "^vm-dns-[a-z]+$" },
+          "system_id": { "type": "string", "pattern": "^vm-bind-[a-z]+$" },
           "role": { "enum": ["primary", "secondary"] },
           "hostname": { "type": "string" },
           "mode": { "enum": ["proxmox-qemu", "configure-only"] },

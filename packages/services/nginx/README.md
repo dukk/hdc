@@ -13,7 +13,7 @@ Reverse proxy and static hosting with Let's Encrypt. Optional Proxmox QEMU provi
 | Verb | Purpose |
 |------|---------|
 | `deploy` | Provision VM (optional) + nginx + certbot; push `sites[]` |
-| `maintain` | Re-push sites; `--renew-certs`; `--site <id>` |
+| `maintain` | Re-push sites; `--renew-certs`; `--site <id>` (that site only; other vhosts unchanged) |
 | `query` | nginx status, config test, upstream probes, cert expiry |
 
 ```bash
@@ -21,9 +21,11 @@ node tools/hdc/cli.mjs run service nginx deploy -- --instance a
 node tools/hdc/cli.mjs run service nginx maintain --
 ```
 
+`maintain -- --site <id>` updates only that site's vhost; other `hdc-*.conf` sites on the host are left as-is. Run full `maintain` (no `--site`) to prune sites removed from `config.json`.
+
 ## Common flags
 
-`--instance a`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--site <id>`, `--dry-run`, `--skip-clamav`.
+`--instance a`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--site <id>` (partial update only), `--dry-run`, `--skip-clamav`.
 
 ## After deploy
 

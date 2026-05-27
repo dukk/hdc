@@ -1,4 +1,4 @@
-import { renderCertbotDnsCredentials, tlsDomainsFromSites } from "./nginx-waf-render.mjs";
+import { renderCertbotDnsCredentials, serverNames, tlsDomainsFromSites } from "./nginx-waf-render.mjs";
 
 const CERTBOT_DNS_CREDENTIALS = "/etc/letsencrypt/hdc-dns-rfc2136.ini";
 
@@ -100,24 +100,44 @@ export function obtainMissingCertificates(opts) {
       skipped.push(domain);
       continue;
     }
-    const domainFlags = `-d ${domain}`;
-    if (global.challenge === "dns-01") {
-      ensureLetsencryptDnsCredentials({ exec, log, global, tsigSecret });
-      runChecked(
-        exec,
-        `certbot certonly --dns-rfc2136 --dns-rfc2136-credentials ${shellQuote(CERTBOT_DNS_CREDENTIALS)} ` +
-          `--email ${shellQuote(email)}${agree}${stagingFlag} ${domainFlags}`,
-        log,
-      );
-    } else {
-      runChecked(
-        exec,
-        `mkdir -p ${shellQuote(global.webroot)} && certbot certonly --webroot -w ${shellQuote(global.webroot)} ` +
-          `--email ${shellQuote(email)}${agree}${stagingFlag} ${domainFlags}`,
-        log,
-      );
+    /** @type {string[]} */
+    const sans = [];
+    for (const site of sites) {
+      const tls = site.tls && typeof site.tls === "object" ? site.tls : {};
+      if (tls.enabled === false) continue;
+      const certName =
+        typeof tls.cert_name === "string" && tls.cert_name.trim()
+          ? tls.cert_name.trim()
+          : serverNames(site)[0];
+      if (certName === domain) {
+        for (const name of serverNames(site)) {
+          if (!sans.includes(name)) sans.push(name);
+        }
+      }
     }
-    obtained.push(domain);
+    const domainFlags = (sans.length ? sans : [domain]).map((n) => `-d ${n}`).join(" ");
+    try {
+      if (global.challenge === "dns-01") {
+        ensureLetsencryptDnsCredentials({ exec, log, global, tsigSecret });
+        runChecked(
+          exec,
+          `certbot certonly --dns-rfc2136 --dns-rfc2136-credentials ${shellQuote(CERTBOT_DNS_CREDENTIALS)} ` +
+            `--email ${shellQuote(email)}${agree}${stagingFlag} ${domainFlags}`,
+          log,
+        );
+      } else {
+        runChecked(
+          exec,
+          `mkdir -p ${shellQuote(global.webroot)} && certbot certonly --webroot -w ${shellQuote(global.webroot)} ` +
+            `--email ${shellQuote(email)}${agree}${stagingFlag} ${domainFlags}`,
+          log,
+        );
+      }
+      obtained.push(domain);
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      log.info(`certificate obtain failed for ${domain}: ${msg.split("\n")[0]}`);
+    }
   }
   return { obtained, skipped };
 }

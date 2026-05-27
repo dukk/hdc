@@ -45,6 +45,12 @@
     "allow_query_cidrs": ["192.0.2.0/24", "198.51.100.0/24", "127.0.0.0/8"],
     "recursion": true,
     "dnssec_validation": false,
+    "forward_upstream": {
+      "mode": "odoh",
+      "server": "odoh-cloudflare",
+      "relay": "odohrelay-crypto-sx",
+      "listen": "127.0.0.1:5300"
+    },
     "forwarders": ["1.1.1.1", "1.0.0.1"],
     "tsig_vault_key": "HDC_BIND_TSIG_KEY"
   },
@@ -66,7 +72,7 @@
   },
   "deployments": [
     {
-      "system_id": "vm-dns-a",
+      "system_id": "vm-bind-a",
       "role": "primary",
       "hostname": "dns-a",
       "proxmox": {
@@ -83,7 +89,7 @@
       }
     },
     {
-      "system_id": "vm-dns-b",
+      "system_id": "vm-bind-b",
       "role": "secondary",
       "hostname": "dns-b",
       "proxmox": {

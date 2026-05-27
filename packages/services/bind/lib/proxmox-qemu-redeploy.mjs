@@ -181,6 +181,46 @@ export async function stopQemuGuest(opts) {
   }
 }
 
+/**
+ * Migrate a stopped QEMU guest to another cluster node.
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {string} opts.sourceNode
+ * @param {string} opts.targetNode
+ * @param {number} opts.vmid
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function migrateQemuGuest(opts) {
+  const { apiBase, authorization, rejectUnauthorized, sourceNode, targetNode, vmid } = opts;
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  if (sourceNode === targetNode) return;
+  const path = `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(String(vmid))}/migrate`;
+  log(`Migrating QEMU ${vmid} from ${sourceNode} to ${targetNode} …`);
+  const body = await pveJsonRequest(
+    "POST",
+    apiBase,
+    path,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({ target: targetNode, online: 0 }),
+  );
+  const upid = extractPveUpid(pveData(body));
+  if (upid) {
+    await waitForPveTask({
+      apiBase,
+      node: sourceNode,
+      upid,
+      authorization,
+      rejectUnauthorized,
+      timeoutMs: 600_000,
+      log,
+    });
+  }
+  log(`QEMU ${vmid} migrated to ${targetNode}.`);
+}
+
 export async function startQemuGuest(opts) {
   const { apiBase, authorization, rejectUnauthorized, node, vmid } = opts;
   const log = opts.log ?? ((line) => errout.write(`${line}\n`));

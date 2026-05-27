@@ -9,6 +9,12 @@
     "poll_interval_seconds": 10
   },
   "bootstrap_hosts": [],
+  "winrm_bootstrap": {
+    "enabled": true,
+    "psexec_path": "",
+    "wait_seconds": 90,
+    "poll_interval_seconds": 5
+  },
   "hosts": [
     {
       "id": "pc-example",

@@ -23,7 +23,8 @@ import { configureNginxSites, createConfigureExec } from "../lib/nginx-configure
 import { obtainMissingCertificates, queryCertExpiry, renewCertificates } from "../lib/letsencrypt.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
-import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -95,9 +96,15 @@ async function main() {
   }
 
   const global = nginxGlobalSettings(normalized);
+  const partialSiteUpdate = Boolean(siteFilter);
   const sites = /** @type {Record<string, unknown>[]} */ (
     siteFilter ? resolveSites(cfg, siteFilter) : global.sites
   );
+  if (partialSiteUpdate) {
+    errout.write(
+      `[hdc] ${target} ${verb}: updating site ${JSON.stringify(siteFilter)} only (other vhosts unchanged)\n`,
+    );
+  }
 
   const vault = createNginxVaultAccess();
   const needVault = renewCerts || global.challenge === "dns-01" || !global.email;
@@ -118,7 +125,13 @@ async function main() {
       try {
         const { user, host } = sshTargetFromDeployment(deployment);
         const exec = createConfigureExec("ssh", { user, host });
-        const configure = configureNginxSites({ exec, log, global, sites });
+        const configure = configureNginxSites({
+          exec,
+          log,
+          global,
+          sites,
+          pruneStaleSites: !partialSiteUpdate,
+        });
         results.push({
           ok: true,
           system_id: deployment.systemId,

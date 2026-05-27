@@ -2,7 +2,7 @@
 /**
  * Maintain nginx WAF: push site configs, optional cert renew/sync.
  *
- * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--skip-clamav]
+ * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--skip-clamav] [--skip-guest-agent]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -21,7 +21,11 @@ import {
   resolveSites,
   sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
-import { configureNginxWafSites, maintainModsecurityCrs } from "../lib/nginx-waf-configure.mjs";
+import {
+  configureNginxWafSites,
+  installNginxWafBase,
+  maintainModsecurityCrs,
+} from "../lib/nginx-waf-configure.mjs";
 import { configureExecFromDeployment } from "../lib/configure-exec.mjs";
 import { runCertSync } from "../lib/cert-sync.mjs";
 import { obtainMissingCertificates, queryCertExpiry, renewCertificates } from "../lib/letsencrypt.mjs";
@@ -33,7 +37,7 @@ import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs"
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { ensureQemuGuestAgentForDeploymentMaintain } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -56,6 +60,23 @@ function tryCfg() {
 }
 
 const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+
+/** @param {ReturnType<typeof resolveNginxWafDeployments>[number]} deployment */
+function defaultSshHostForNginxWafMaintain(deployment) {
+  const px = deployment.proxmox;
+  if (px && typeof px === "object" && !Array.isArray(px)) {
+    const q =
+      px.qemu && typeof px.qemu === "object" && !Array.isArray(px.qemu) ? px.qemu : {};
+    const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+    if (ip) return ip.split("/")[0];
+  }
+  try {
+    return sshTargetFromDeployment(deployment).host;
+  } catch {
+    return "";
+  }
+}
 
 async function loadSecrets(global, vault) {
   let leEmail = global.email;
@@ -102,9 +123,15 @@ async function main() {
   }
 
   const global = nginxWafGlobalSettings(normalized);
+  const partialSiteUpdate = Boolean(siteFilter);
   const sites = /** @type {Record<string, unknown>[]} */ (
     siteFilter ? resolveSites(cfg, siteFilter) : global.sites
   );
+  if (partialSiteUpdate) {
+    errout.write(
+      `[hdc] ${target} ${verb}: updating site ${JSON.stringify(siteFilter)} only (other vhosts unchanged)\n`,
+    );
+  }
 
   const vault = createNginxWafVaultAccess();
   const needVault = renewCerts || global.challenge === "dns-01" || !global.email;
@@ -116,10 +143,89 @@ async function main() {
     : { email: global.email, tsigSecret: "" };
 
   const log = provisionLogFromConsole(console);
+  const skipGuestAgent = flagGet(flags, "skip-guest-agent") !== undefined;
   /** @type {Record<string, unknown>[]} */
   const results = [];
 
+  const allDeployments = resolveNginxWafDeployments(cfg, {});
+  const certPrimary = findCertPrimaryDeployment(allDeployments, global.certPrimarySystemId);
+  const certPeer = findPeerDeployment(allDeployments, certPrimary);
+  const certPrimaryExec = configureExecFromDeployment(certPrimary);
+
+  const allDeploymentsForAgent = resolveNginxWafDeployments(cfg, {});
+  if (!skipGuestAgent) {
+    for (const deployment of allDeploymentsForAgent) {
+      if (deployment.mode !== "proxmox-qemu") continue;
+      errout.write(`[hdc] ${target} ${verb}: qemu-guest-agent on ${deployment.systemId} …\n`);
+      const guestAgent = await ensureQemuGuestAgentForDeploymentMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        defaultSshHost: defaultSshHostForNginxWafMaintain(deployment),
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.guest_agent = guestAgent;
+        if (!guestAgent.ok) existing.ok = false;
+      } else {
+        results.push({
+          ok: guestAgent.ok !== false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          guest_agent: guestAgent,
+        });
+      }
+    }
+  }
+
   if (!syncCerts && !renewCerts) {
+    const missingTlsPrimary = tlsDomainsFromSites(sites).filter(
+      (d) => !certExistsOnHost(certPrimaryExec, d),
+    );
+    if (missingTlsPrimary.length && email) {
+      errout.write(
+        `[hdc] ${target} ${verb}: obtaining certificate(s) ${missingTlsPrimary.join(", ")} on ${certPrimary.systemId} …\n`,
+      );
+      if (global.challenge === "dns-01") {
+        installNginxWafBase({ exec: certPrimaryExec, log, global, dns01: true });
+        obtainMissingCertificates({
+          exec: certPrimaryExec,
+          log,
+          global,
+          email,
+          sites,
+          tsigSecret,
+        });
+      } else {
+        errout.write(
+          `[hdc] ${target} ${verb}: HTTP-01 bootstrap nginx on ${certPrimary.systemId} (ACME webroot) …\n`,
+        );
+        configureNginxWafSites({
+          exec: certPrimaryExec,
+          log,
+          global,
+          sites,
+          pruneStaleSites: !partialSiteUpdate,
+        });
+        obtainMissingCertificates({
+          exec: certPrimaryExec,
+          log,
+          global,
+          email,
+          sites,
+          tsigSecret,
+        });
+      }
+      if (certPeer) {
+        try {
+          runCertSync(certPrimaryExec, log);
+        } catch (e) {
+          const msg = String(/** @type {Error} */ (e).message || e);
+          errout.write(`[hdc] ${target} ${verb}: cert sync to peer skipped: ${msg.split("\n")[0]}\n`);
+        }
+      }
+    }
+
     for (const deployment of deployments) {
       errout.write(`[hdc] ${target} ${verb}: pushing sites to ${deployment.systemId} …\n`);
       try {
@@ -132,22 +238,13 @@ async function main() {
           global.modsecurityEnabled && siteNeedsWaf
             ? maintainModsecurityCrs({ exec, log, global })
             : { configured: false, skipped: true };
-        let configure = configureNginxWafSites({ exec, log, global, sites });
-        const missingTls = tlsDomainsFromSites(sites).filter((d) => !certExistsOnHost(exec, d));
-        if (missingTls.length && email) {
-          errout.write(
-            `[hdc] ${target} ${verb}: obtaining certificate(s) ${missingTls.join(", ")} on ${deployment.systemId} …\n`,
-          );
-          obtainMissingCertificates({
-            exec,
-            log,
-            global,
-            email,
-            sites,
-            tsigSecret,
-          });
-          configure = configureNginxWafSites({ exec, log, global, sites });
-        }
+        const configure = configureNginxWafSites({
+          exec,
+          log,
+          global,
+          sites,
+          pruneStaleSites: !partialSiteUpdate,
+        });
         results.push({
           ok: true,
           system_id: deployment.systemId,
@@ -162,43 +259,46 @@ async function main() {
     }
   }
 
-  const allDeployments = resolveNginxWafDeployments(cfg, {});
-  const primary = findCertPrimaryDeployment(allDeployments, global.certPrimarySystemId);
-  const peer = findPeerDeployment(allDeployments, primary);
-  const primaryExec = configureExecFromDeployment(primary);
-
   if (renewCerts) {
-    errout.write(`[hdc] ${target} ${verb}: renewing certificates on ${primary.systemId} …\n`);
+    errout.write(`[hdc] ${target} ${verb}: renewing certificates on ${certPrimary.systemId} …\n`);
     try {
       if (!email) throw new Error("Let's Encrypt email required");
-      renewCertificates({ exec: primaryExec, log });
+      if (global.challenge === "dns-01") {
+        installNginxWafBase({ exec: certPrimaryExec, log, global, dns01: true });
+      }
+      renewCertificates({ exec: certPrimaryExec, log });
       obtainMissingCertificates({
-        exec: primaryExec,
+        exec: certPrimaryExec,
         log,
         global,
         email,
         sites,
         tsigSecret,
       });
-      if (peer) runCertSync(primaryExec, log);
+      if (certPeer) runCertSync(certPrimaryExec, log);
       results.push({
         ok: true,
-        system_id: primary.systemId,
+        system_id: certPrimary.systemId,
         step: "renew-certs",
-        synced_to: peer?.systemId ?? null,
+        synced_to: certPeer?.systemId ?? null,
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
-      results.push({ ok: false, system_id: primary.systemId, step: "renew-certs", message: msg });
+      results.push({ ok: false, system_id: certPrimary.systemId, step: "renew-certs", message: msg });
     }
-  } else if (syncCerts && peer) {
-    errout.write(`[hdc] ${target} ${verb}: syncing certificates to ${peer.systemId} …\n`);
+  } else if (syncCerts && certPeer) {
+    errout.write(`[hdc] ${target} ${verb}: syncing certificates to ${certPeer.systemId} …\n`);
     try {
-      runCertSync(primaryExec, log);
-      results.push({ ok: true, system_id: primary.systemId, step: "sync-certs", synced_to: peer.systemId });
+      runCertSync(certPrimaryExec, log);
+      results.push({
+        ok: true,
+        system_id: certPrimary.systemId,
+        step: "sync-certs",
+        synced_to: certPeer.systemId,
+      });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
-      results.push({ ok: false, system_id: primary.systemId, step: "sync-certs", message: msg });
+      results.push({ ok: false, system_id: certPrimary.systemId, step: "sync-certs", message: msg });
     }
   }
 

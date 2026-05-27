@@ -11,6 +11,7 @@ export const RUN_TIERS = ["client", "infrastructure", "service"];
 export const RUN_TIER_TO_DIR = {
   client: "clients",
   infrastructure: "infrastructure",
+  infra: "infrastructure",
   service: "services",
 };
 
@@ -78,6 +79,21 @@ export function manifestById(manifests, id) {
 export function parseRunTier(token) {
   const t = String(token ?? "").trim().toLowerCase();
   return RUN_TIER_TO_DIR[t] ?? null;
+}
+
+/**
+ * Canonical CLI tier token (e.g. `infra` → `infrastructure`).
+ * @param {string} token
+ * @returns {string | null}
+ */
+export function canonicalRunTier(token) {
+  const dir = parseRunTier(token);
+  return dir ? (DIR_TO_RUN_TIER[dir] ?? null) : null;
+}
+
+/** Human-readable tier list for help and error messages. */
+export function runTiersUsage() {
+  return "client, infrastructure (infra), service";
 }
 
 /**

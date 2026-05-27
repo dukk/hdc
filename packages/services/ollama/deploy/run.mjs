@@ -3,12 +3,11 @@
  * Deploy Ollama on Proxmox (LXC or QEMU clone) or as Docker on an Ubuntu SSH host.
  * Multi-instance: deployments[] in config.json. With no selector, deploys all entries.
  *
- * Usage: hdc run ollama deploy -- [--instance a | --system-id ollama-a] [--skip-install]
- *        hdc run ollama deploy -- [--skip-existing | --redeploy-existing]
+ * Usage: hdc run service ollama deploy -- [--instance a | --system-id ollama-a]
+ *        [--skip-install] [--skip-existing | --redeploy-existing] [--destroy-existing]
  *        LXC root password: prompted on create (masked), or proxmox.lxc.password / --password
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout, env } from "node:process";
 
@@ -18,19 +17,53 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import {
+  applyQemuHostpciViaSsh,
+  normalizeHostpciList,
+} from "../../../infrastructure/proxmox/lib/proxmox-qemu-hostpci.mjs";
 import { createUbuntuDockerHostProvisioner } from "../../../infrastructure/ubuntu/lib/ubuntu-docker-host-provisioner.mjs";
 import { resolveUbuntuBootstrapSsh } from "../../../infrastructure/ubuntu/lib/ubuntu-ssh-resolve.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveOllamaDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { installOllamaInCt, resolvePveSshForHost } from "../lib/ollama-install.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { installOllamaInQemu } from "../lib/ollama-qemu-install.mjs";
 import { resolveLxcRootPassword } from "../lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
+import {
+  applyQemuCloudInit,
+  cloneQemuGuest,
+  locateGuest,
+  migrateQemuGuest,
+  startQemuGuest,
+  stopAndDestroyQemu,
+  waitForSsh,
+} from "../lib/proxmox-qemu-redeploy.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import {
+  loadPackageConfigFromPackageRoot,
+  tryLoadPackageConfigFromPackageRoot,
+} from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
+const packageRoot = join(here, "..");
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/ollama/config.example.json";
+/** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
+let _pkgConfig = null;
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
 const root = repoRoot();
-const cfgPath = join(here, "..", "config.json");
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -38,10 +71,7 @@ function isObject(v) {
 }
 
 function readCfg() {
-  if (!existsSync(cfgPath)) {
-    throw new Error(`Missing ${cfgPath} — copy packages/services/ollama/config.example.json`);
-  }
-  return JSON.parse(readFileSync(cfgPath, "utf8"));
+  return ensurePackageConfig().data;
 }
 
 /**
@@ -54,9 +84,17 @@ function shouldInstall(install) {
 /**
  * @param {Record<string, string>} flags
  */
+function destroyPolicy(flags) {
+  return flagGet(flags, "destroy-existing") !== undefined;
+}
+
+/**
+ * @param {Record<string, string>} flags
+ */
 function existingGuestPolicy(flags) {
   if (flagGet(flags, "skip-existing") !== undefined) return "skip";
   if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
+  if (destroyPolicy(flags)) return "destroy";
   return "prompt";
 }
 
@@ -67,8 +105,7 @@ function existingGuestPolicy(flags) {
  * @param {{ ctPasswordCache?: { value: string | null } }} [runOpts]
  */
 async function deployOne(deployment, flags, log, runOpts = {}) {
-  const { mode, systemId, proxmox: px, ubuntu: ub, install } = deployment;
-  const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+  const { mode, systemId, hostname, proxmox: px, ubuntu: ub, configure, install } = deployment;
   const ubuntuRoot = join(root, "packages", "infrastructure", "ubuntu");
 
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
@@ -165,8 +202,9 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         authorization: auth.authorization,
         rejectUnauthorized: auth.rejectUnauthorized,
       });
-      const hostname =
+      const lxcHostname =
         (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
+        hostname ||
         systemId.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 63) ||
         "ollama";
       const memoryMb = typeof lxc.memory_mb === "number" ? lxc.memory_mb : Number(lxc.memory_mb);
@@ -194,7 +232,7 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
       /** @type {Record<string, unknown>} */
       const parameters = { ...lxc, password: rootPassword };
       provisionResult = await prov.createContainer(log, {
-        name: hostname,
+        name: lxcHostname,
         memoryMb,
         cores,
         diskGb,
@@ -238,34 +276,229 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
   }
 
   if (mode === "proxmox-qemu") {
-    const prov = createProxmoxHostProvisioner({
-      apiBase: auth.host.apiBase,
-      pveNode: auth.host.pveNode,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-    });
     const q = isObject(px.qemu) ? px.qemu : {};
-    const name =
-      (typeof q.name === "string" && q.name.trim()) ||
-      systemId.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 63) ||
-      "ollama";
-    const newid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+    const net = isObject(px.network) ? px.network : {};
+    const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
     const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
-    if (!Number.isFinite(newid) || newid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0) {
-      return { ok: false, system_id: systemId, host_id: hostId, message: "invalid qemu vmid fields" };
+    const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+    const gateway =
+      typeof net.gateway === "string" && net.gateway.trim()
+        ? net.gateway.trim()
+        : typeof q.gateway === "string"
+          ? q.gateway.trim()
+          : "10.0.0.1";
+    const guestName =
+      hostname ||
+      (typeof q.name === "string" && q.name.trim() ? q.name.trim() : systemId.replace(/^vm-/, ""));
+
+    if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
+      return { ok: false, system_id: systemId, host_id: hostId, message: "invalid qemu vmid, template_vmid, or ip" };
     }
-    const provisionResult = await prov.createVm(log, {
-      name,
-      vmid: newid,
-      templateVmid,
-      parameters: { ...q },
-    });
+
+    const located = await locateGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
+    const policy = existingGuestPolicy(flags);
+    let skipProvision = false;
+
+    if (located) {
+      let action = policy;
+      if (policy === "prompt") {
+        action = await promptExistingGuestAction(systemId, vmid, located.node, located.name);
+      }
+      if (action === "skip") {
+        errout.write(`[hdc] ${target} ${verb}: skipping ${systemId} (vmid ${vmid} already exists).\n`);
+        return {
+          ok: true,
+          system_id: systemId,
+          host_id: hostId,
+          mode,
+          skipped: true,
+          message: "guest already exists",
+          guest: { vmid, node: located.node, name: located.name },
+        };
+      }
+      if (action === "destroy" || policy === "destroy") {
+        await stopAndDestroyQemu({
+          apiBase: auth.host.apiBase,
+          authorization: auth.authorization,
+          rejectUnauthorized: auth.rejectUnauthorized,
+          node: located.node,
+          vmid,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+      } else {
+        errout.write(
+          `[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} exists — redeploy (provision skipped, install only).\n`,
+        );
+        skipProvision = true;
+      }
+    }
+
+    /** @type {import("../../../lib/host-provisioner.mjs").ProvisionResult | null} */
+    let provisionResult = null;
+    /** @type {{ ok: boolean; method?: string; message?: string; gpu?: boolean; gpu_backend?: string | null } | null} */
+    let installResult = null;
+    let cloneNode = located?.node ?? auth.host.pveNode;
+    let guestVmid = vmid;
+
+    if (!skipProvision) {
+      const prov = createProxmoxHostProvisioner({
+        apiBase: auth.host.apiBase,
+        pveNode: auth.host.pveNode,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+      });
+
+      provisionResult = await cloneQemuGuest({
+        log,
+        provisioner: prov,
+        name: guestName,
+        vmid,
+        templateVmid,
+        parameters: { ...q, vmid, template_vmid: templateVmid },
+      });
+
+      if (!provisionResult.ok) {
+        return {
+          ok: false,
+          system_id: systemId,
+          host_id: hostId,
+          mode,
+          result: provisionResult,
+        };
+      }
+
+      const cloneInfo = await waitForCloneTaskAndEnableAgent(
+        provisionResult,
+        auth,
+        vmid,
+        (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      );
+      cloneNode = cloneInfo.node;
+      guestVmid = cloneInfo.vmid;
+
+      const targetNode = auth.host.pveNode;
+      if (cloneNode !== targetNode) {
+        errout.write(
+          `[hdc] ${target} ${verb}: VM ${guestVmid} on ${cloneNode} — migrating to ${targetNode} for GPU …\n`,
+        );
+        await migrateQemuGuest({
+          apiBase: auth.host.apiBase,
+          authorization: auth.authorization,
+          rejectUnauthorized: auth.rejectUnauthorized,
+          sourceNode: cloneNode,
+          targetNode,
+          vmid: guestVmid,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+        cloneNode = targetNode;
+      }
+
+      const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+      const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+      if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+        errout.write(`[hdc] ${target} ${verb}: resizing scsi0 to ${rootfsGb}G on vmid ${guestVmid} …\n`);
+        const resize = sshRemote(pveSsh.user, pveSsh.host, `qm resize ${guestVmid} scsi0 ${rootfsGb}G`, {
+          capture: true,
+        });
+        if (resize.status !== 0) {
+          const detail = `${resize.stderr}${resize.stdout}`.trim() || `exit ${resize.status}`;
+          throw new Error(`qm resize failed: ${detail}`);
+        }
+      }
+
+      const hostpci = normalizeHostpciList(q.hostpci);
+      if (hostpci.length) {
+        errout.write(`[hdc] ${target} ${verb}: applying GPU hostpci on vmid ${guestVmid} (${cloneNode}) …\n`);
+        await applyQemuHostpciViaSsh({
+          sshUser: pveSsh.user,
+          sshHost: pveSsh.host,
+          vmid: guestVmid,
+          hostpci,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+        const q35 = sshRemote(pveSsh.user, pveSsh.host, `qm set ${guestVmid} -machine q35`, {
+          capture: true,
+        });
+        if (q35.status !== 0) {
+          const detail = `${q35.stderr}${q35.stdout}`.trim() || `exit ${q35.status}`;
+          throw new Error(`qm set -machine q35 failed: ${detail}`);
+        }
+        errout.write(`[hdc] ${target} ${verb}: set machine type q35 on vmid ${guestVmid}.\n`);
+      }
+
+      await applyQemuCloudInit({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: cloneNode,
+        vmid: guestVmid,
+        hostname: guestName,
+        ipCidr: ip,
+        gateway,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+
+      await startQemuGuest({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: cloneNode,
+        vmid: guestVmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    } else {
+      provisionResult = {
+        ok: true,
+        message: `QEMU ${vmid} already present on ${located.node}`,
+        details: { vmid, node: located.node, type: "qemu", skipped_provision: true },
+      };
+      cloneNode = located.node;
+      guestVmid = vmid;
+    }
+
+    const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+    const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+    const sshHost =
+      typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+
+    if (shouldInstall(install)) {
+      if (!skipProvision) {
+        errout.write(
+          `[hdc] ${target} ${verb}: waiting 45s for cloud-init on first boot before SSH probe …\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 45_000));
+      }
+      errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
+      await waitForSsh({ user: sshUser, host: sshHost });
+
+      await ensureQemuGuestAgentOnDeploy({
+        apiBase: auth.host.apiBase,
+        node: cloneNode,
+        vmid: guestVmid,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        sshUser,
+        sshHost,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+
+      const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+      installResult = await installOllamaInQemu({ exec, log, install });
+    } else {
+      installResult = { ok: true, method: "skipped", message: "skipped" };
+      errout.write(`[hdc] ${target} ${verb}: install skipped for ${systemId}.\n`);
+    }
+
+    const ok = provisionResult.ok && (!installResult || installResult.ok);
     return {
-      ok: provisionResult.ok,
+      ok,
       system_id: systemId,
       host_id: hostId,
       mode,
+      redeploy: skipProvision,
       result: provisionResult,
+      install: installResult,
+      ssh: { user: sshUser, host: sshHost },
     };
   }
 
@@ -275,7 +508,8 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
 async function main() {
   errout.write(`[hdc] ${target} ${verb}: Ollama via infrastructure provisioners (stderr log; JSON on stdout).\n`);
 
-  if (!existsSync(cfgPath)) {
+  const cfgLoad = tryLoadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  if (!cfgLoad) {
     const inv = deployTargetInventory(root, target);
     logDeployInventoryStatus(target, verb, inv);
     process.stdout.write(
@@ -284,6 +518,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  errout.write(`[hdc] ${target} ${verb}: config ${cfgLoad.source}\n`);
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
@@ -320,9 +555,17 @@ async function main() {
   }
 
   const ok = results.every((r) => r.ok);
-  process.stdout.write(
-    `${JSON.stringify({ ok, target, verb, count: results.length, results }, null, 2)}\n`,
-  );
+  const payload = { ok, target, verb, count: results.length, results };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 

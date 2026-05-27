@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  formatRepoJson,
   formatResolvedRepoFileLabel,
   hdcPrivateRoot,
   normalizeRepoRelPath,
   preferredNewFilePath,
+  preferredPackageReportPath,
   readResolvedRepoJson,
   resolveRepoFile,
   writeResolvedRepoJson,
@@ -79,6 +81,21 @@ describe("private-repo", () => {
     expect(preferredNewFilePath(publicRoot, rel, env)).toBe(join(privateRoot, rel));
   });
 
+  it("preferredPackageReportPath targets private reports dir when available", () => {
+    const packageRoot = join(publicRoot, "packages", "services", "bind");
+    mkdirSync(packageRoot, { recursive: true });
+    const env = { HDC_PRIVATE_ROOT: privateRoot };
+    const path = preferredPackageReportPath(
+      publicRoot,
+      packageRoot,
+      "maintain-2026-05-26T12-00-00.md",
+      env,
+    );
+    expect(path).toBe(
+      join(privateRoot, "packages", "services", "bind", "reports", "maintain-2026-05-26T12-00-00.md"),
+    );
+  });
+
   it("writeResolvedRepoJson writes to resolved path", () => {
     const rel = "inventory/manual/systems/vm-test-a.json";
     mkdirSync(join(privateRoot, "inventory", "manual", "systems"), { recursive: true });
@@ -100,5 +117,87 @@ describe("private-repo", () => {
     r.source = "private";
     r.path = join(privateRoot, rel);
     expect(formatResolvedRepoFileLabel(r, publicRoot)).toContain("hdc-private");
+  });
+
+  it("formatRepoJson compacts zones[].records[] to one line per record", () => {
+    const data = {
+      schema_version: 1,
+      zones: [
+        {
+          name: "dukk.org",
+          records: [
+            { type: "A", name: "@", data: "1.2.3.4", ttl: 1, proxied: true },
+            { type: "CNAME", name: "www", data: "dukk.org", proxied: false },
+          ],
+        },
+      ],
+    };
+    const text = formatRepoJson(data);
+    expect(text).toContain('"name": "dukk.org"');
+    expect(text).toMatch(
+      /\{ "type": "A", "name": "@", "data": "1\.2\.3\.4", "ttl": 1, "proxied": true \}/,
+    );
+    expect(text).toMatch(/\{ "type": "CNAME", "name": "www", "data": "dukk\.org", "proxied": false \}/);
+    expect(text.split("\n").length).toBeLessThan(15);
+    expect(JSON.parse(text.trimEnd())).toEqual(data);
+  });
+
+  it("formatRepoJson compacts port_forwards[] to one line per rule", () => {
+    const data = {
+      schema_version: 1,
+      port_forwards: [
+        { id: "pf-a", managed: true, name: "Rule A", enabled: false },
+        { id: "pf-b", managed: true, name: "Rule B", enabled: true },
+      ],
+    };
+    const text = formatRepoJson(data);
+    expect(text).toMatch(/\{ "id": "pf-a", "managed": true, "name": "Rule A", "enabled": false \}/);
+    expect(text).toMatch(/\{ "id": "pf-b", "managed": true, "name": "Rule B", "enabled": true \}/);
+    expect(JSON.parse(text.trimEnd())).toEqual(data);
+  });
+
+  it("formatRepoJson compacts page_rules[] to one line per rule", () => {
+    const data = {
+      schema_version: 1,
+      zones: [
+        {
+          name: "example.com",
+          records: [],
+          page_rules: [
+            {
+              id: "force-https",
+              priority: 1,
+              status: "active",
+              target: { operator: "matches", value: "*example.com/*" },
+              actions: [{ id: "always_use_https", value: "on" }],
+            },
+          ],
+        },
+      ],
+    };
+    const text = formatRepoJson(data);
+    expect(text).toMatch(/\{ "id": "force-https", "priority": 1, "status": "active"/);
+    expect(JSON.parse(text.trimEnd())).toEqual(data);
+  });
+
+  it("formatRepoJson keeps other string arrays expanded", () => {
+    const data = {
+      cloudflare: { zone_filter: { mode: "include", names: ["dukk.org", "example.com"] } },
+    };
+    const text = formatRepoJson(data);
+    expect(text).toContain('"dukk.org"');
+    expect(text).toContain('"example.com"');
+    expect(text).not.toMatch(/\{ "dukk\.org"/);
+    expect(JSON.parse(text.trimEnd())).toEqual(data);
+  });
+
+  it("formatRepoJson compactArrayKeys [] uses fully expanded objects", () => {
+    const data = {
+      zones: [{ name: "dukk.org", records: [{ type: "A", name: "@", data: "1.2.3.4", ttl: 1 }] }],
+    };
+    const text = formatRepoJson(data, { compactArrayKeys: [] });
+    expect(text).toContain('"type": "A"');
+    expect(text.split("\n").length).toBeGreaterThan(8);
+    expect(JSON.parse(text.trimEnd())).toEqual(data);
   });
 });
