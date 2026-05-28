@@ -22,6 +22,7 @@ import {
 } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { pveJsonRequest } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { ensureQemuGuestAgentForDeployment } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { createNginxWafVaultAccess } from "../lib/vault-deps.mjs";
 import {
@@ -123,6 +124,7 @@ function runConfigure(deployment, global, sites, log, skipBaseInstall) {
     global,
     sites,
     skipBaseInstall,
+    wafNodeId: deployment.systemId,
   });
 }
 
@@ -462,6 +464,7 @@ async function deployOne(deployment, flags, global, sites, log) {
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
   );
 
   const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);

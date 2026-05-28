@@ -2,7 +2,7 @@
 /**
  * Deploy BIND primary/secondary on Proxmox QEMU (rebuild) or configure-only on SSH hosts.
  *
- * Usage: hdc run service bind deploy -- [--instance a|b] [--destroy-existing] [--skip-provision]
+ * Usage: hdc run service bind deploy -- [--instance a|b] [--destroy-existing] [--skip-provision] [--reboot]
  *   [--regenerate-tsig]  Generate a new TSIG secret and save to config.json + vault
  */
 import { basename, dirname, join } from "node:path";
@@ -36,6 +36,7 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { ensureQemuGuestAgentForDeployment } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -290,6 +291,7 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
   );
 
   await applyQemuCloudInit({

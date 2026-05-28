@@ -10,6 +10,9 @@ import {
 } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { waitForSsh } from "../../../lib/ssh-wait.mjs";
+
+export { waitForSsh };
 import { discoverLocalSshMaterial } from "../../../../tools/hdc/lib/ssh-host-access.mjs";
 import {
   collectClusterVmids,
@@ -18,6 +21,12 @@ import {
 
 export { stopAndDestroyQemu };
 export { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
+export {
+  applyQemuGuestResources,
+  rebootQemuGuest,
+  guestResourceOptsFromBlock,
+  parseGuestResourceSizing,
+} from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 
 /**
  * @param {string} apiBase
@@ -248,25 +257,3 @@ export async function startQemuGuest(opts) {
   }
 }
 
-/**
- * Wait until SSH accepts connections.
- * @param {object} opts
- * @param {string} opts.user
- * @param {string} opts.host
- * @param {number} [opts.timeoutMs]
- * @param {number} [opts.intervalMs]
- */
-export async function waitForSsh(opts) {
-  const timeoutMs = opts.timeoutMs ?? 300_000;
-  const intervalMs = opts.intervalMs ?? 5_000;
-  const deadline = Date.now() + timeoutMs;
-  const probe = "echo hdc-ssh-ready";
-  while (Date.now() < deadline) {
-    const r = sshRemote(opts.user, opts.host, probe, { capture: true });
-    if (r.status === 0 && r.stdout.includes("hdc-ssh-ready")) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  throw new Error(`SSH not ready on ${opts.user}@${opts.host} within ${timeoutMs}ms`);
-}

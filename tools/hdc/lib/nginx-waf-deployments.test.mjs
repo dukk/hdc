@@ -144,6 +144,24 @@ describe("nginx-waf deployments", () => {
     expect(global.cloudflareIpv4).toBe(true);
   });
 
+  it("resolveSiteAccessSettings inherits defaults.nginx_waf.client_ip", () => {
+    const normalized = normalizeNginxWafConfig({
+      ...sampleCfg,
+      defaults: {
+        ...sampleCfg.defaults,
+        nginx_waf: { client_ip: "cloudflare" },
+      },
+    });
+    const global = nginxWafGlobalSettings(normalized);
+    const access = resolveSiteAccessSettings({ id: "example-app" }, global);
+    expect(access.clientIp).toBe("cloudflare");
+    const override = resolveSiteAccessSettings(
+      { id: "example-app", client_ip: "remote_addr" },
+      global,
+    );
+    expect(override.clientIp).toBe("remote_addr");
+  });
+
   it("resolveSiteAccessSettings uses site trusted_cidrs override", () => {
     const normalized = normalizeNginxWafConfig({
       ...sampleCfg,

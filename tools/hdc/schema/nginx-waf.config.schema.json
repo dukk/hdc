@@ -73,7 +73,8 @@
               }
             },
             "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
-            "cloudflare_ipv4": { "type": "boolean" }
+            "cloudflare_ipv4": { "type": "boolean" },
+            "client_ip": { "enum": ["remote_addr", "cloudflare"] }
           }
         }
       }

@@ -71,6 +71,7 @@
       },
       "trusted_cidrs": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
       "cloudflare_ipv4": true,
+      "client_ip": "remote_addr",
       "client_max_body_size": "64m",
       "proxy_read_timeout": "300s",
       "proxy_connect_timeout": "60s"

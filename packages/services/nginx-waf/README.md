@@ -29,8 +29,21 @@ Restrict specific URL paths so only clients on trusted networks reach the upstre
 
 **Per-site** (optional):
 
-- `client_ip`: `remote_addr` (default) or `cloudflare` (uses `CF-Connecting-IP` + Cloudflare `set_real_ip_from` ranges on HTTPS).
+- `client_ip`: `remote_addr` (default) or `cloudflare` (uses `CF-Connecting-IP` + Cloudflare `set_real_ip_from` ranges on ports 80 and 443). Omit on a site to inherit `defaults.nginx_waf.client_ip` when set.
 - `trusted_cidrs`: replaces global list for that site when set.
+
+## Upstream proxy headers
+
+When `proxy_headers` is true (default), hdc sets on requests to backends:
+
+| Header | Value |
+|--------|--------|
+| `X-HDC-Nginx-Waf-Node` | Deployed node id (`vm-nginx-waf-a`, `vm-nginx-waf-b`, …) |
+| `X-Real-IP` | Client IP (`$remote_addr` after Cloudflare `real_ip` when `client_ip` is `cloudflare`) |
+| `X-Forwarded-For` | Appended chain |
+| `X-Forwarded-Proto` | `http` or `https` |
+
+Set `proxy_headers: false` on a location to omit these headers.
 
 **Per-location** `access` (only on paths you want restricted):
 

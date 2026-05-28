@@ -16,6 +16,8 @@ import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
@@ -32,9 +34,16 @@ import {
 } from "../lib/open-webui-install.mjs";
 import { hostPort, resolveWebUiUrl } from "../lib/open-webui-render.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
+import {
+  ensureLxcDockerApparmorWorkaround,
+  pctRestart,
+  pctSetFeatures,
+} from "../../../lib/pve-pct-remote.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
+import { waitForOpenWebuiProvisionTask } from "../lib/proxmox-task-wait.mjs";
 import { createOpenWebuiVaultAccess } from "../lib/vault-deps.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,6 +213,12 @@ async function deployOne(deployment, flags, log, runOpts) {
         result: provisionResult,
       };
     }
+    await waitForOpenWebuiProvisionTask(
+      provisionResult,
+      auth,
+      `${target} ${verb}: ${systemId}`,
+      vmid,
+    );
   } else {
     provisionResult = {
       ok: true,
@@ -218,6 +233,75 @@ async function deployOne(deployment, flags, log, runOpts) {
     (typeof provisionResult.details?.node === "string" && provisionResult.details.node.trim()) ||
     located?.node ||
     auth.host.pveNode;
+
+  await waitForLxcCreateTaskAndApplyResources(
+    provisionResult,
+    auth,
+    vmid,
+    (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+    guestResourceOptsFromBlock(lxc, flags),
+  );
+
+  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+  const unprivileged =
+    lxc.unprivileged === undefined ? 1 : Number(lxc.unprivileged) === 0 ? 0 : 1;
+  const lxcFeatures = typeof lxc.features === "string" ? lxc.features.trim() : "";
+  if (unprivileged === 0 && lxcFeatures) {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: applying LXC features via pct on ${pveSsh.host} …\n`,
+    );
+    const fr = pctSetFeatures(pveSsh.user, pveSsh.host, guestVmid, lxcFeatures, { capture: true });
+    if (fr.status !== 0) {
+      const msg = `pct set -features failed (exit ${fr.status}): ${(fr.stderr || fr.stdout).trim()}`;
+      errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${msg}\n`);
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+        message: msg,
+      };
+    }
+  }
+
+  if (unprivileged === 0) {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: ensuring Docker AppArmor workaround on ${pveSsh.host} …\n`,
+    );
+    const ar = ensureLxcDockerApparmorWorkaround(pveSsh.user, pveSsh.host, guestVmid, {
+      capture: true,
+    });
+    if (ar.status !== 0) {
+      const msg = `LXC AppArmor workaround failed (exit ${ar.status}): ${(ar.stderr || ar.stdout).trim()}`;
+      errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${msg}\n`);
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+        message: msg,
+      };
+    }
+    if (/changed=1/.test(ar.stdout)) {
+      errout.write(
+        `[hdc] ${target} ${verb}: ${systemId}: restarting CT ${guestVmid} to apply LXC config …\n`,
+      );
+      const rr = pctRestart(pveSsh.user, pveSsh.host, guestVmid, { capture: true });
+      if (rr.status !== 0) {
+        const msg = `pct restart failed (exit ${rr.status}): ${(rr.stderr || rr.stdout).trim()}`;
+        return {
+          ok: false,
+          system_id: systemId,
+          host_id: hostId,
+          mode,
+          result: provisionResult,
+          message: msg,
+        };
+      }
+    }
+  }
 
   if (shouldInstall(install)) {
     try {
@@ -242,7 +326,6 @@ async function deployOne(deployment, flags, log, runOpts) {
     }
   }
 
-  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const openWebuiCfg = isObject(openWebui) ? openWebui : {};
   const installCfg = isObject(install) ? install : {};
 

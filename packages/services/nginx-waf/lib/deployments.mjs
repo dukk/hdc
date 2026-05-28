@@ -271,6 +271,11 @@ export function nginxWafGlobalSettings(normalized) {
         : "60s",
     trustedCidrs: parseTrustedCidrs(nw.trusted_cidrs, DEFAULT_TRUSTED_CIDRS),
     cloudflareIpv4: nw.cloudflare_ipv4 !== false,
+    defaultClientIp: (() => {
+      const raw =
+        typeof nw.client_ip === "string" ? nw.client_ip.trim().toLowerCase() : "remote_addr";
+      return raw === "cloudflare" ? "cloudflare" : "remote_addr";
+    })(),
   };
 }
 
@@ -292,7 +297,9 @@ export function resolveSiteAccessSettings(site, global) {
   const siteCidrs = parseTrustedCidrs(site.trusted_cidrs, []);
   const trustedCidrs = siteCidrs.length > 0 ? siteCidrs : global.trustedCidrs;
   const clientIpRaw =
-    typeof site.client_ip === "string" ? site.client_ip.trim().toLowerCase() : "remote_addr";
+    typeof site.client_ip === "string"
+      ? site.client_ip.trim().toLowerCase()
+      : global.defaultClientIp;
   const clientIp = clientIpRaw === "cloudflare" ? "cloudflare" : "remote_addr";
   return {
     trustedCidrs,

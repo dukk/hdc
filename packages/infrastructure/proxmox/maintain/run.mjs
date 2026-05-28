@@ -27,8 +27,8 @@
  *   --report <path>        Override markdown report output path
  *   --skip-templates       Skip Ubuntu LTS template verify/build
  */
-import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { stderr as errout } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -80,10 +80,10 @@ function warn(line) {
  * @returns {string[]}
  */
 function downHostIdsFromConfig(packageRoot) {
-  const cfgPath = join(packageRoot, "config.json");
-  if (!existsSync(cfgPath)) return [];
   try {
-    const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+    const { data: cfg } = loadPackageConfigFromPackageRoot(packageRoot, {
+      exampleRel: "packages/infrastructure/proxmox/config.example.json",
+    });
     if (!isProxmoxConfigObject(cfg) || !Array.isArray(cfg.clusters)) return [];
     /** @type {string[]} */
     const ids = [];
@@ -336,13 +336,13 @@ async function main() {
 
     if (!skipOsUpdates) {
       let rebootWaitMs = 5 * 60 * 1000;
-      const cfgPath = join(packageRoot, "config.json");
-      if (existsSync(cfgPath)) {
-        try {
-          rebootWaitMs = hostOsRebootWaitMsFromConfig(JSON.parse(readFileSync(cfgPath, "utf8")));
-        } catch {
-          /* use default */
-        }
+      try {
+        const { data: cfg } = loadPackageConfigFromPackageRoot(packageRoot, {
+          exampleRel: "packages/infrastructure/proxmox/config.example.json",
+        });
+        rebootWaitMs = hostOsRebootWaitMsFromConfig(cfg);
+      } catch {
+        /* use default */
       }
       try {
         const osResult = await runProxmoxHostOsMaintain({

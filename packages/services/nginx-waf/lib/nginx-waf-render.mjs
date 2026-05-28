@@ -102,6 +102,24 @@ export function renderCloudflareRealIp(cloudflareIpv4) {
 
 /**
  * @param {object} opts
+ * @param {string} [opts.wafNodeId]
+ */
+export function renderProxyHeaders(opts) {
+  const { wafNodeId } = opts;
+  const nodeLine =
+    typeof wafNodeId === "string" && wafNodeId.trim()
+      ? `
+        proxy_set_header X-HDC-Nginx-Waf-Node ${wafNodeId.trim()};`
+      : "";
+  return `
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;${nodeLine}`;
+}
+
+/**
+ * @param {object} opts
  * @param {string} opts.ruleEngine
  * @param {string} opts.crsSetup
  * @param {string} opts.crsRulesGlob
@@ -193,6 +211,7 @@ export function renderHdcNginxInclude(opts) {
  * @param {string[]} [opts.trustedCidrs]
  * @param {"remote_addr" | "cloudflare"} [opts.clientIp]
  * @param {boolean} [opts.cloudflareIpv4]
+ * @param {string} [opts.wafNodeId]
  */
 export function renderSiteVhost(opts) {
   const {
@@ -204,6 +223,7 @@ export function renderSiteVhost(opts) {
     trustedCidrs = [],
     clientIp = "remote_addr",
     cloudflareIpv4 = true,
+    wafNodeId,
   } = opts;
   const id = siteId(site);
   const names = serverNames(site);
@@ -230,12 +250,14 @@ export function renderSiteVhost(opts) {
   }
 
   const renderLoc = (/** @type {Record<string, unknown>} */ loc) =>
-    renderLocationBlock(loc, upstream, wafOn, id, needsTrustedGeo);
+    renderLocationBlock(loc, upstream, wafOn, id, needsTrustedGeo, wafNodeId);
 
   const locBlocks =
     locations.length > 0
       ? locations.map(renderLoc)
-      : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false)];
+      : [
+          renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false, wafNodeId),
+        ];
   const needsWebsocketMap = locations.some((loc) => loc.websocket === true);
 
   const trustedGeoBlock = needsTrustedGeo
@@ -267,7 +289,9 @@ export function renderSiteVhost(opts) {
     const locBlocksHttp =
       locations.length > 0
         ? locations.map(renderLoc)
-        : [renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false)];
+        : [
+            renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false, wafNodeId),
+          ];
     const httpServe = deferTlsUntilCertExists
       ? locBlocksHttp.join("\n")
       : `
@@ -278,8 +302,7 @@ export function renderSiteVhost(opts) {
     listen 80;
     listen [::]:80;
     server_name ${names.join(" ")};
-${acme}
-${httpServe}
+${acme}${cloudflareRealIp}${httpServe}
 }
 `);
   }
@@ -319,8 +342,9 @@ ${locBlocks.join("\n")}
  * @param {boolean} wafOn
  * @param {string} siteContext
  * @param {boolean} trustedGeoEnabled
+ * @param {string} [wafNodeId]
  */
-function renderLocationBlock(loc, upstream, _wafOn, siteContext, trustedGeoEnabled) {
+function renderLocationBlock(loc, upstream, _wafOn, siteContext, trustedGeoEnabled, wafNodeId) {
   const path = typeof loc.path === "string" && loc.path.trim() ? loc.path.trim() : "/";
   const access = parseLocationAccess(loc, siteContext);
   const accessGuard =
@@ -329,13 +353,7 @@ function renderLocationBlock(loc, upstream, _wafOn, siteContext, trustedGeoEnabl
         if ($hdc_trusted_internal = 0) { return ${access.denyStatus}; }`
       : "";
   const headers = loc.proxy_headers !== false;
-  const headerLines = headers
-    ? `
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;`
-    : "";
+  const headerLines = headers ? renderProxyHeaders({ wafNodeId }) : "";
   const websocket = loc.websocket === true;
   const websocketLines = websocket
     ? `

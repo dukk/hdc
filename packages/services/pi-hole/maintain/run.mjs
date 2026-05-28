@@ -4,6 +4,7 @@
  *
  * Usage: hdc run service pi-hole maintain -- [--instance a | --system-id pi-hole-a] [--skip-core-update]
  *        hdc run service pi-hole maintain -- --apply-network [--dry-run]
+ *        [--skip-resources] [--no-reboot] [--reboot]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -15,6 +16,7 @@ import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { applyLxcNet0 } from "../../../infrastructure/proxmox/lib/proxmox-lxc-network.mjs";
+import { syncProxmoxGuestResourcesOnMaintain } from "../../../lib/proxmox-guest-resources-maintain.mjs";
 import { resolvePiHoleDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/pi-hole-install.mjs";
 import { configurePiHoleInCt, maintainPiHoleInCt } from "../lib/pi-hole-configure.mjs";
@@ -65,6 +67,22 @@ async function maintainOne(deployment, flags) {
   }
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} …\n`);
+
+  const guestResources = await syncProxmoxGuestResourcesOnMaintain({
+    deployment,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+  });
+  if (!guestResources.ok) {
+    return {
+      ok: false,
+      system_id: systemId,
+      host_id: hostId,
+      guest_resources: guestResources,
+      message: guestResources.message ?? "guest resource sync failed",
+    };
+  }
 
   const dryRun = flags["dry-run"] !== undefined;
   const applyNetwork = flags["apply-network"] !== undefined;
@@ -143,6 +161,7 @@ async function maintainOne(deployment, flags) {
     system_id: systemId,
     host_id: hostId,
     vmid,
+    guest_resources: guestResources,
     configure,
     ...result,
     ok,

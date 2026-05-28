@@ -6,6 +6,7 @@
       "qemu": {
         "template_vmid": 9024,
         "storage": "local-lvm",
+        "data_disk_storage": "nas-1",
         "full": 1,
         "cores": 4,
         "memory_mb": 8192,

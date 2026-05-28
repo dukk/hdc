@@ -18,10 +18,12 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import {
   dataDiskGbFromDeployment,
+  dataDiskStorageFromDeployment,
   dbPasswordVaultKey,
   normalizeImmichConfig,
   resolveImmichDeployments,
@@ -172,6 +174,7 @@ async function deployOne(deployment, dbPassword, flags, log) {
     (typeof q.name === "string" && q.name.trim() ? q.name.trim() : deployment.systemId.replace(/^vm-/, ""));
   const storage = typeof q.storage === "string" && q.storage.trim() ? q.storage.trim() : "local-lvm";
   const dataDiskGb = dataDiskGbFromDeployment(deployment);
+  const dataDiskStorage = dataDiskStorageFromDeployment(deployment);
 
   if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
     return { ok: false, system_id: deployment.systemId, message: "invalid qemu vmid, template_vmid, or ip" };
@@ -248,6 +251,7 @@ async function deployOne(deployment, dbPassword, flags, log) {
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
   );
 
   if (dataDiskGb > 0) {
@@ -257,7 +261,7 @@ async function deployOne(deployment, dbPassword, flags, log) {
       rejectUnauthorized: auth.rejectUnauthorized,
       node: cloneNode,
       vmid: guestVmid,
-      storage,
+      storage: dataDiskStorage,
       sizeGb: dataDiskGb,
       log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
     });

@@ -123,12 +123,7 @@ async function main() {
         maxmemoryPolicy: global.maxmemoryPolicy,
         runInstall: false,
       });
-      const baseline = await ensureGuestLinuxBaseline({
-        exec,
-        log,
-        flags,
-        vaultAccess,
-      });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       nodes.push({
         system_id: deployment.systemId,
         host,

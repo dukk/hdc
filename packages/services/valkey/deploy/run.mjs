@@ -40,6 +40,7 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -246,6 +247,7 @@ async function deployOne(deployment, flags, global, password, log) {
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
   );
 
   await applyQemuCloudInit({

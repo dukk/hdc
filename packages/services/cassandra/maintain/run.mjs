@@ -96,7 +96,7 @@ async function main() {
           skipInstall: true,
         });
       }
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       const ready = await waitForCassandraReady({
         user,
         host,

@@ -8,6 +8,10 @@
 		}
 	],
 	"settings": {
+		"files.associations": {
+			"**/packages/**/config.json": "jsonc",
+			"**/packages/**/config.example.json": "jsonc"
+		},
 		"cSpell.words": [
 			"Bitwarden",
 			"dnssec",
@@ -15,8 +19,10 @@
 			"dukk",
 			"GATUS",
 			"homeassistant",
+			"hostpci",
 			"IMMICH",
 			"keyctl",
+			"kimi",
 			"letsencrypt",
 			"mgmt",
 			"modsecurity",
@@ -24,8 +30,10 @@
 			"mynetworks",
 			"myorigin",
 			"nextcloud",
+			"nomic",
 			"odoh",
 			"odohrelay",
+			"ollama",
 			"onboot",
 			"ostemplate",
 			"pfwd",
@@ -33,7 +41,9 @@
 			"POSTIZ",
 			"PVEAPI",
 			"pveum",
+			"qwen",
 			"relayhost",
+			"rombar",
 			"rootfs",
 			"Scanopy",
 			"Smallstep",

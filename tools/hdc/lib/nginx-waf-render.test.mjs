@@ -3,6 +3,7 @@ import {
   renderCertSyncScript,
   renderCloudflareRealIp,
   renderModsecurityMainConf,
+  renderProxyHeaders,
   renderSiteVhost,
   renderTrustedGeo,
   tlsDomainsFromSites,
@@ -86,6 +87,27 @@ describe("nginx-waf render", () => {
     expect(vhost).toContain("geo $realip_remote_addr $hdc_trusted_internal {");
     expect(vhost).toContain("real_ip_header CF-Connecting-IP;");
     expect(vhost).toContain("set_real_ip_from 173.245.48.0/20;");
+    const realIpBlocks = vhost.match(/real_ip_header CF-Connecting-IP;/g);
+    expect(realIpBlocks?.length).toBe(2);
+    expect(vhost).toMatch(/listen 80;[\s\S]*real_ip_header CF-Connecting-IP;/);
+    expect(vhost).toMatch(/listen 443 ssl[\s\S]*real_ip_header CF-Connecting-IP;/);
+  });
+
+  it("renders X-HDC-Nginx-Waf-Node when wafNodeId is set", () => {
+    const vhost = renderSiteVhost({
+      site: sampleSite,
+      modsecurityEnabled: true,
+      http01Acme: true,
+      webroot: "/var/www/letsencrypt",
+      wafNodeId: "vm-nginx-waf-a",
+    });
+    expect(vhost).toContain("proxy_set_header X-HDC-Nginx-Waf-Node vm-nginx-waf-a;");
+  });
+
+  it("renderProxyHeaders omits node header without wafNodeId", () => {
+    const headers = renderProxyHeaders({});
+    expect(headers).toContain("proxy_set_header X-Real-IP $remote_addr;");
+    expect(headers).not.toContain("X-HDC-Nginx-Waf-Node");
   });
 
   it("renderTrustedGeo uses remote_addr by default", () => {

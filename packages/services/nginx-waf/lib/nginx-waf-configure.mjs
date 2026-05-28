@@ -166,9 +166,10 @@ export function installNginxWafBase(opts) {
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {Record<string, unknown>[]} opts.sites
  * @param {boolean} [opts.pruneStaleSites] Remove hdc-* vhosts on host not in sites[] (default true)
+ * @param {string} [opts.wafNodeId] deployment.system_id baked into upstream headers
  */
 export function configureNginxWafSites(opts) {
-  const { exec, log, global, sites, pruneStaleSites = true } = opts;
+  const { exec, log, global, sites, pruneStaleSites = true, wafNodeId } = opts;
   runChecked(exec, "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled", log);
 
   const http01 = global.challenge === "http-01";
@@ -194,6 +195,7 @@ export function configureNginxWafSites(opts) {
       trustedCidrs: access.trustedCidrs,
       clientIp: access.clientIp,
       cloudflareIpv4: access.cloudflareIpv4,
+      wafNodeId,
     });
     const avail = `/etc/nginx/sites-available/hdc-${id}.conf`;
     uploadFile(exec, avail, vhost, log);
@@ -246,15 +248,16 @@ export function configureNginxWafSites(opts) {
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {Record<string, unknown>[]} opts.sites
  * @param {boolean} [opts.skipBaseInstall]
+ * @param {string} [opts.wafNodeId]
  */
 export function configureNginxWaf(opts) {
-  const { exec, log, global, sites, skipBaseInstall } = opts;
+  const { exec, log, global, sites, skipBaseInstall, wafNodeId } = opts;
   if (!skipBaseInstall) {
     installNginxWafBase({ exec, log, global, dns01: global.challenge === "dns-01" });
   } else if (global.modsecurityEnabled) {
     configureModsecurityCrs({ exec, log, global, verifyPackages: false });
   }
-  const sitesResult = configureNginxWafSites({ exec, log, global, sites });
+  const sitesResult = configureNginxWafSites({ exec, log, global, sites, wafNodeId });
   return { ...sitesResult };
 }
 

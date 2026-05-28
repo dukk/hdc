@@ -125,7 +125,7 @@ async function main() {
         skipUpgrade,
         dataDiskGb,
       });
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       results.push({
         ok: maintain.ok && baseline.clamav.ok,
         system_id: deployment.systemId,

@@ -2,12 +2,13 @@
 /**
  * Proxmox deploy — create LXC or clone QEMU guests via API (see `packages/infrastructure/proxmox/config.json` + vault token).
  *
- * Usage (after `hdc run proxmox deploy --`):
- *   create-container --host <inventory-id> --vmid <n> --hostname <name> [--ostemplate …] [--storage …] …
- *   create-vm --host <id> --vmid <newid> --template-vmid <src> --name <guest-name> [--storage …]
+ * Usage (after `hdc run infrastructure proxmox deploy --`):
+ *   create-container --host <inventory-id> --vmid <n> --hostname <name> [--memory-mb N] [--cores N] [--reboot] …
+ *   create-vm --host <id> --vmid <newid> --template-vmid <src> --name <guest-name> [--memory-mb N] [--cores N] [--reboot] …
  *   list-templates --host <id>   (QEMU templates in the cluster — use vmid for --template-vmid)
  *
- * Defaults for LXC may come from `provision.lxc` in config.json (see config.example.json).
+ * Defaults for LXC/QEMU sizing may come from `provision.lxc` / `provision.qemu` in config.json.
+ * After template clone or LXC create, memory and cores are applied from flags or config; `--reboot` reboots a running guest.
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,8 @@ import {
   fetchClusterVmResources,
   listQemuTemplates,
 } from "../lib/proxmox-host-provisioner.mjs";
+import { waitForLxcCreateTaskAndApplyResources } from "../lib/proxmox-lxc-post-create.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../lib/proxmox-qemu-post-clone.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verb = basename(here);
@@ -55,6 +58,20 @@ function pick(base, flags, flagName, objKey) {
   if (f !== undefined) return f;
   const v = base[objKey];
   return typeof v === "string" || typeof v === "number" ? String(v) : undefined;
+}
+
+/**
+ * @param {number | undefined} memoryMb
+ * @param {number | undefined} cores
+ * @param {Record<string, string>} flags
+ */
+function resourceOptsFromSizing(memoryMb, cores, flags) {
+  if (memoryMb === undefined || cores === undefined) return undefined;
+  return {
+    memoryMb,
+    cores,
+    reboot: flagGet(flags, "reboot") !== undefined,
+  };
 }
 
 async function main() {
@@ -226,6 +243,17 @@ async function main() {
       parameters,
     });
 
+    if (result.ok) {
+      const logLine = (line) => errout.write(`[hdc] proxmox ${verb}: ${line}\n`);
+      await waitForLxcCreateTaskAndApplyResources(
+        result,
+        auth,
+        vmid,
+        logLine,
+        resourceOptsFromSizing(memoryMb, cores, flags),
+      );
+    }
+
     process.stdout.write(
       `${JSON.stringify(
         {
@@ -271,6 +299,11 @@ async function main() {
     return;
   }
 
+  const memStr = pick(defQemu, flags, "memory-mb", "memory_mb");
+  const memoryMb = flagNumber(memStr, flagNumber(String(defQemu.memory_mb), undefined));
+  const coresStr = pick(defQemu, flags, "cores", "cores");
+  const cores = flagNumber(coresStr, flagNumber(String(defQemu.cores), undefined));
+
   /** @type {Record<string, unknown>} */
   const parameters = { vmid: newid, template_vmid: templateVmid };
   const st = pick(defQemu, flags, "storage", "storage");
@@ -281,8 +314,21 @@ async function main() {
     name,
     vmid: newid,
     templateVmid,
+    memoryMb,
+    cores,
     parameters,
   });
+
+  if (result.ok) {
+    const logLine = (line) => errout.write(`[hdc] proxmox ${verb}: ${line}\n`);
+    await waitForCloneTaskAndEnableAgent(
+      result,
+      auth,
+      newid,
+      logLine,
+      resourceOptsFromSizing(memoryMb, cores, flags),
+    );
+  }
 
   if (!result.ok) {
     errout.write(

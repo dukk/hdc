@@ -47,8 +47,10 @@ function loadCfg() {
 }
 
 async function main() {
-  const rel = relative(root, ensurePackageConfig().path).replace(/\\/g, "/");
   const loaded = loadCfg();
+  const rel = _pkgConfig
+    ? relative(root, _pkgConfig.path).replace(/\\/g, "/")
+    : PACKAGE_CONFIG_EXAMPLE;
   const cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;

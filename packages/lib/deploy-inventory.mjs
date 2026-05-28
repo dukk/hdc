@@ -19,6 +19,7 @@ export const DEPLOY_TARGET_WORKLOAD = {
   homeassistant: { workloadClass: "vm", role: "homeassistant", instance: "a" },
   audiobookshelf: { workloadClass: "vm", role: "audiobookshelf", instance: "a" },
   ollama: { workloadClass: "lxc", role: "ollama", instance: "a" },
+  lms: { workloadClass: "vm", role: "lms", instance: "a" },
   "postfix-relay": { workloadClass: "lxc", role: "postfix-relay", instance: "a" },
   vaultwarden: { workloadClass: "lxc", role: "vaultwarden", instance: "a" },
   scanopy: { workloadClass: "lxc", role: "scanopy", instance: "a" },

@@ -206,6 +206,7 @@ async function main() {
           global,
           sites,
           pruneStaleSites: !partialSiteUpdate,
+          wafNodeId: certPrimary.systemId,
         });
         obtainMissingCertificates({
           exec: certPrimaryExec,
@@ -244,6 +245,7 @@ async function main() {
           global,
           sites,
           pruneStaleSites: !partialSiteUpdate,
+          wafNodeId: deployment.systemId,
         });
         results.push({
           ok: true,
@@ -312,7 +314,14 @@ async function main() {
         continue;
       }
       const exec = configureExecFromDeployment(deployment);
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({
+        exec,
+        log,
+        flags,
+        vaultAccess,
+        deployment,
+        proxmoxPackageRoot: proxmoxRoot,
+      });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {
         existing.clamav = baseline.clamav;

@@ -205,7 +205,14 @@ async function main() {
     const { user, host } = sshTarget(deployment, defaultHost);
     try {
       const exec = createConfigureExec("ssh", { user, host });
-      await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      await ensureGuestLinuxBaseline({
+        exec,
+        log,
+        flags,
+        vaultAccess,
+        deployment,
+        proxmoxPackageRoot: proxmoxRoot,
+      });
     } catch (e) {
       errout.write(
         `[hdc] ${target} ${verb}: baseline on ${deployment.systemId}: ${String(/** @type {Error} */ (e).message || e)}\n`,

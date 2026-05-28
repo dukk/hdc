@@ -104,7 +104,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
 - **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — shared [`packages/clients/config.json`](packages/clients/config.json). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -353,14 +353,22 @@ Example: `node tools/hdc/cli.mjs run service kafka deploy --`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC (`ollama-*`) or QEMU (`vm-ollama-*`): clone/provision, optional `proxmox.qemu.hostpci[]` GPU passthrough, cloud-init, SSH install (`install.gpu_backend`: `nvidia` or `intel`) |
-| `maintain` | Stub (no remote changes yet) |
-| `query` | Config / deployment summaries |
+| `deploy` | LXC (`ollama-*`) or QEMU (`vm-ollama-*`): clone/provision, optional `proxmox.qemu.hostpci[]` GPU passthrough, cloud-init, SSH install (`install.gpu_backend`: `nvidia` or `intel`); pulls `ollama.models[]` after install unless `--skip-models` |
+| `maintain` | Sync `proxmox.*.memory_mb` / `cores` on live guests (no destroy); sync `defaults.ollama.models[]` / per-deployment `ollama.models[]` (`ollama pull` / `ollama rm` with `--prune` only); guest Linux baseline on LXC/QEMU; `--dry-run`, `--skip-models`, `--skip-resources`, `--no-reboot`, `--reboot` |
+| `query` | Config / deployment summaries; `--live` lists installed models (HTTP `/api/tags` or remote exec) |
 | `teardown` | Destroy LXC or QEMU guest (`--instance a`, `--yes`, `--dry-run`) |
+
+Set desired models under `defaults.ollama.models[]` and/or per `deployments[]` entry (strings or `{ "name": "llama3.2:latest" }`). Per-node lists override defaults after merge. Removal of models not in config requires **`maintain --prune`** (not implicit on deploy).
 
 **GPU passthrough (ollama-a on hypervisor-d):** Use `mode: proxmox-qemu`, `system_id: vm-ollama-a`, and `hostpci[]` with the PCI BDF from `lspci` on hypervisor-d. Complete VFIO/IOMMU host setup manually before deploy. If migrating from LXC vmid 470, run `teardown --instance a --yes` first.
 
-Example: `node tools/hdc/cli.mjs run service ollama deploy -- --instance a --destroy-existing`
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run service ollama deploy -- --instance a --destroy-existing
+node tools/hdc/cli.mjs run service ollama maintain -- --prune --dry-run
+node tools/hdc/cli.mjs run service ollama query -- --live
+```
 
 ## Scanopy in this repo
 
@@ -378,6 +386,23 @@ Example: `node tools/hdc/cli.mjs run service ollama deploy -- --instance a --des
 Vault: `HDC_SCANOPY_POSTGRES_PASSWORD` (Postgres password for the compose stack).
 
 Example: `node tools/hdc/cli.mjs run service scanopy deploy --`
+
+## YaCy in this repo
+
+- **Config:** [`packages/services/yacy/config.json`](packages/services/yacy/config.json) (copy from [`config.example.json`](packages/services/yacy/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/yacy-a.json`](inventory/manual/systems/yacy-a.json); service sidecar [`inventory/manual/services/yacy.json`](inventory/manual/services/yacy.json).
+- **Schema:** [`tools/hdc/schema/yacy.config.schema.json`](tools/hdc/schema/yacy.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (privileged, Docker) + `yacy/yacy_search_server` Compose in `/opt/yacy`; admin password via `passwd.sh` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-admin-password`) |
+| `maintain` | Re-push `.env`, `docker compose pull` + `up -d`; guest Linux baseline; re-apply admin password unless `--skip-admin-password`; `--skip-upgrade` skips image pull |
+| `query` | Config summary; `--live` for Docker/HTTP probe on port 8090 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Vault: `HDC_YACY_ADMIN_PASSWORD` (required for deploy/maintain unless `--skip-admin-password`). Default YaCy UI login is `admin` with this password after deploy.
+
+Example: `node tools/hdc/cli.mjs run service yacy deploy --`
 
 ## Immich in this repo
 
@@ -556,6 +581,25 @@ Vault: `HDC_POSTIZ_DB_PASSWORD`, `HDC_POSTIZ_JWT_SECRET` (auto-generated on firs
 
 Example: `node tools/hdc/cli.mjs run service postiz deploy --`
 
+## LMS (LM Studio) in this repo
+
+- **Config:** [`packages/services/lms/config.json`](packages/services/lms/config.json) (copy from [`config.example.json`](packages/services/lms/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-lms-a.json`](inventory/manual/systems/vm-lms-a.json); service sidecar [`inventory/manual/services/lms.json`](inventory/manual/services/lms.json).
+- **Schema:** [`tools/hdc/schema/lms.config.schema.json`](tools/hdc/schema/lms.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU Ubuntu clone, cloud-init static IP, llmster via `https://lmstudio.ai/install.sh`, systemd `lmstudio.service` (`deployments[]`; `--instance a`; `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-models`) |
+| `maintain` | Re-run install.sh, restart service, sync `lms.models[]` via `lms get`; guest Linux baseline; Proxmox CPU/RAM sync (`--skip-models`, `--skip-resources`, `--prune` ignored for removals) |
+| `query` | Config summary; `--live` for systemd, `lms ls`, HTTP `/v1/models` |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Set `lms.load_on_start` to pin a model at boot. Optional `install.gpu` + `hostpci[]` for NVIDIA passthrough (hypervisor VFIO required). API default: `http://<guest-ip>:1234`.
+
+No vault secrets for v1.
+
+Example: `node tools/hdc/cli.mjs run service lms deploy -- --instance a`
+
 ## Llama.cpp in this repo
 
 - **Config:** [`packages/services/llama-cpp/config.json`](packages/services/llama-cpp/config.json) (copy from [`config.example.json`](packages/services/llama-cpp/config.example.json); keep local config out of git).
@@ -620,6 +664,8 @@ node tools/hdc/cli.mjs run client client-ubuntu maintain -- --reboot --host-id w
 Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructure ubuntu maintain` or `users bootstrap-hdc` — not from `proxmox maintain`.
 
 **QEMU guest agent:** Deploy scripts enable `agent=1` on new QEMU VMs and install `qemu-guest-agent` in Linux guests when deploy has SSH (e.g. BIND). LXC deploys are unchanged. See [`.cursor/rules/proxmox-qemu-guest-agent.mdc`](.cursor/rules/proxmox-qemu-guest-agent.mdc). Maintain `verify-templates` reports agent config + ping.
+
+**Guest CPU/RAM:** QEMU clones and LXC creates apply `proxmox.qemu` / `proxmox.lxc` `memory_mb` and `cores` after the Proxmox task completes (template sizing is not kept when config differs). **Service maintain** syncs the same fields on live guests without destroy (QEMU reboot when running and sizing changed; LXC stop/PUT/start). Shared helpers: [`proxmox-guest-resources.mjs`](packages/infrastructure/proxmox/lib/proxmox-guest-resources.mjs), [`proxmox-guest-resources-maintain.mjs`](packages/lib/proxmox-guest-resources-maintain.mjs) (via [`guest-linux-baseline.mjs`](packages/lib/guest-linux-baseline.mjs) for Proxmox guests). Flags: `--skip-resources`, `--no-reboot` (disable auto-reboot on change); `--reboot` forces reboot. Infrastructure deploy: `create-vm` / `create-container` accept `--memory-mb`, `--cores`, and `--reboot`. Service deploy: optional `--reboot` when resizing a running guest.
 
 **Resource planning** (CPU, RAM, storage, bridges): follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](.cursor/skills/proxmox-resource-planning/SKILL.md) and [`.cursor/rules/proxmox-resource-planning.mdc`](.cursor/rules/proxmox-resource-planning.mdc).
 

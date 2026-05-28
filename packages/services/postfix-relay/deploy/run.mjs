@@ -21,6 +21,8 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { createPostfixRelayVaultAccess } from "../lib/vault-deps.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 import { findClusterGuest } from "../../gatus/lib/guest-exists.mjs";
@@ -235,6 +237,14 @@ async function deployFromConfig(cfg, systemId, flags, log, vault) {
       (typeof provisionResult?.details?.node === "string" && provisionResult.details.node.trim()) ||
       located?.node ||
       auth.host.pveNode;
+
+    await waitForLxcCreateTaskAndApplyResources(
+      provisionResult,
+      auth,
+      vmid,
+      (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+      guestResourceOptsFromBlock(lxc, flags),
+    );
 
     await ensureLxcStarted({
       apiBase: auth.host.apiBase,

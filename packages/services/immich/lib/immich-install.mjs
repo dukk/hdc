@@ -16,6 +16,7 @@ import { buildImmichDataDiskMountScript } from "./proxmox-data-disk.mjs";
  * @param {string} envContent hdc-rendered .env (overwrites example)
  * @param {string[]} mkdirPaths
  * @param {string} [dataDiskMountScript]
+ * @param {string} [dockerDataRoot] when set, store container images on this path (e.g. /data/immich/docker)
  */
 export function buildInstallScript(
   composeDirPath,
@@ -24,6 +25,7 @@ export function buildInstallScript(
   envContent,
   mkdirPaths,
   dataDiskMountScript,
+  dockerDataRoot,
 ) {
   const escapedCompose = composeUrl.replace(/'/g, `'\\''`);
   const escapedEnv = envExample.replace(/'/g, `'\\''`);
@@ -39,6 +41,16 @@ export function buildInstallScript(
   for (const p of mkdirPaths) {
     const mp = p.replace(/'/g, `'\\''`);
     lines.push(`mkdir -p '${mp}'`);
+  }
+  if (dockerDataRoot) {
+    const dr = dockerDataRoot.replace(/'/g, `'\\''`);
+    lines.push(
+      `mkdir -p '${dr}'`,
+      "install -d /etc/docker",
+      `printf '%s\\n' '{"data-root": "${dr}"}' > /etc/docker/daemon.json`,
+      "if systemctl is-active --quiet docker 2>/dev/null; then systemctl stop docker; fi",
+      "if [ -d /var/lib/docker ] && [ ! -L /var/lib/docker ]; then rm -rf /var/lib/docker/* 2>/dev/null || true; fi",
+    );
   }
   lines.push(
     "apt-get update -qq",
@@ -130,6 +142,7 @@ export async function installImmichOnHost(exec, immich, install, dbPassword, dat
 
   const dataDiskScript =
     dataDiskGb > 0 ? buildImmichDataDiskMountScript("/data/immich") : undefined;
+  const dockerDataRoot = dataDiskGb > 0 ? "/data/immich/docker" : undefined;
   const inner = buildInstallScript(
     dir,
     composeFileUrl(release),
@@ -137,6 +150,7 @@ export async function installImmichOnHost(exec, immich, install, dbPassword, dat
     envContent,
     [...new Set(mkdirPaths)],
     dataDiskScript,
+    dockerDataRoot,
   );
 
   const r = exec.run(inner);

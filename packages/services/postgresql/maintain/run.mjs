@@ -194,7 +194,7 @@ async function main() {
             : undefined,
         });
       }
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       const rowOk = clamav.ok;
       results.push({
         ok: rowOk,

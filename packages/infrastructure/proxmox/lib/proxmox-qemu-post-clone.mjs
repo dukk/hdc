@@ -1,4 +1,5 @@
 import { waitForPveTask } from "./pve-http.mjs";
+import { applyQemuGuestResources } from "./proxmox-guest-resources.mjs";
 import { enableQemuAgentInConfig } from "./proxmox-qemu-guest-agent-install.mjs";
 import { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
 
@@ -25,8 +26,9 @@ export function extractPveUpid(taskData) {
  * @param {boolean} auth.rejectUnauthorized
  * @param {number} vmid
  * @param {(line: string) => void} log
+ * @param {import("./proxmox-guest-resources.mjs").GuestResourceOpts} [resourceOpts]
  */
-export async function waitForCloneTaskAndEnableAgent(provisionResult, auth, vmid, log) {
+export async function waitForCloneTaskAndEnableAgent(provisionResult, auth, vmid, log, resourceOpts) {
   const guestVmid = resolveProvisionVmid(provisionResult, vmid);
   const details = provisionResult.details;
   const reassigned =
@@ -59,6 +61,20 @@ export async function waitForCloneTaskAndEnableAgent(provisionResult, auth, vmid
     log(`QEMU ${guestVmid}: clone task completed.`);
   } else {
     log(`QEMU ${guestVmid}: no Proxmox task UPID — skipping task wait.`);
+  }
+
+  if (resourceOpts) {
+    await applyQemuGuestResources({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      memoryMb: resourceOpts.memoryMb,
+      cores: resourceOpts.cores,
+      reboot: resourceOpts.reboot,
+      log,
+    });
   }
 
   await enableQemuAgentInConfig({

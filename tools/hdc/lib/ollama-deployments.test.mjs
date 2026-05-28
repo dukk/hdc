@@ -111,6 +111,27 @@ describe("ollama deployments", () => {
     expect(list.map((x) => x.system_id)).toEqual(["ollama-b", "ollama-c"]);
   });
 
+  it("merges ollama.models from defaults and per-deployment", () => {
+    const cfg = {
+      schema_version: 2,
+      defaults: {
+        ollama: { models: ["llama3.2:latest", "nomic-embed-text"] },
+      },
+      deployments: [
+        {
+          system_id: "ollama-b",
+          proxmox: { host_id: "hypervisor-c", lxc: { vmid: 471 } },
+          ollama: { models: ["qwen2.5:7b"] },
+        },
+      ],
+    };
+    const list = listOllamaDeploymentSummaries(cfg);
+    expect(list[0].configured_models).toEqual(["qwen2.5:7b"]);
+    expect(list[0].model_count).toBe(1);
+    const d = resolveOllamaDeployment(cfg, { instance: "b" });
+    expect(d.ollama.models).toEqual(["qwen2.5:7b"]);
+  });
+
   it("honors --skip-install", () => {
     const d = resolveOllamaDeployment(v2Lxc, { instance: "b", "skip-install": "1" });
     expect(d.install.enabled).toBe(false);

@@ -25,7 +25,7 @@ import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs"
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -47,6 +47,8 @@ function tryCfg() {
 
 const target = basename(dirname(here));
 const verb = basename(here);
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /**
  * @param {ReturnType<typeof nginxGlobalSettings>} global
@@ -181,11 +183,19 @@ async function main() {
     try {
       const { user, host } = sshTargetFromDeployment(deployment);
       const exec = createConfigureExec("ssh", { user, host });
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({
+        exec,
+        log,
+        flags,
+        vaultAccess,
+        deployment,
+        proxmoxPackageRoot: proxmoxRoot,
+      });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {
-        existing.clamav = clamav;
-        if (existing.ok !== false) existing.ok = clamav.ok;
+        existing.guest_resources = baseline.guest_resources;
+        existing.clamav = baseline.clamav;
+        if (existing.ok !== false) existing.ok = baseline.ok;
       } else {
         results.push({ ok: baseline.ok, system_id: deployment.systemId, clamav });
       }

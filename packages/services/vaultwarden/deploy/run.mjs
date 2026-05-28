@@ -16,6 +16,8 @@ import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
@@ -39,7 +41,8 @@ import {
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { createVaultwardenVaultAccess } from "../lib/vault-deps.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -223,6 +226,14 @@ async function deployOne(deployment, flags, log, runOpts) {
     (typeof provisionResult.details?.node === "string" && provisionResult.details.node.trim()) ||
     located?.node ||
     auth.host.pveNode;
+
+  await waitForLxcCreateTaskAndApplyResources(
+    provisionResult,
+    auth,
+    vmid,
+    (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+    guestResourceOptsFromBlock(lxc, flags),
+  );
 
   if (shouldInstall(install)) {
     try {

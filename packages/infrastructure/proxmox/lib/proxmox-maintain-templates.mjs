@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { clusterConfigByKey, isProxmoxConfigObject, loadProxmoxHostsByCluster } from "./proxmox-config.mjs";
 import {
   authorizeProxmoxForClusterMembers,
@@ -95,22 +95,19 @@ export async function runProxmoxMaintainTemplates(opts) {
     pruneUnsupported = true,
     dryRun = false,
   } = opts;
-  const configPath = join(packageRoot, "config.json");
   const configRel = "packages/infrastructure/proxmox/config.json";
-
-  if (!existsSync(configPath)) {
+  /** @type {{ data: Record<string, unknown>; path: string; source: string }} */
+  let loaded;
+  try {
+    loaded = loadPackageConfigFromPackageRoot(packageRoot, {
+      exampleRel: "packages/infrastructure/proxmox/config.example.json",
+    });
+  } catch (e) {
     log(`Missing ${configRel} — copy config.example.json before maintain.`);
     return { ok: false, checks: [] };
   }
-
-  /** @type {unknown} */
-  let cfg;
-  try {
-    cfg = JSON.parse(readFileSync(configPath, "utf8"));
-  } catch (e) {
-    log(`Invalid JSON in ${configRel}: ${/** @type {Error} */ (e).message}`);
-    return { ok: false, checks: [] };
-  }
+  const configPath = loaded.path;
+  const cfg = loaded.data;
 
   const policy = templatesPolicyFromConfig(cfg);
   if (policy !== "ubuntu-lts") {

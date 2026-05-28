@@ -23,6 +23,9 @@
       "method": "github-release",
       "gpu": false
     },
+    "ollama": {
+      "models": ["llama3.2:latest", "nomic-embed-text"]
+    },
     "ubuntu": {
       "bootstrap_host_id": "example-ubuntu-host",
       "docker": {
@@ -35,6 +38,9 @@
   "deployments": [
     {
       "system_id": "ollama-a",
+      "ollama": {
+        "models": ["llama3.2:latest"]
+      },
       "proxmox": {
         "host_id": "hypervisor-d",
         "lxc": { "vmid": 470 }

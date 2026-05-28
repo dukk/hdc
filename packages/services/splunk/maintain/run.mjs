@@ -128,7 +128,7 @@ async function main() {
         skipPackageUpgrade: skipUpgrade,
         dataDiskGb: dataDiskGbFromDeployment(deployment),
       });
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       results.push({ ok: baseline.ok, system_id: deployment.systemId, configure, clamav });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

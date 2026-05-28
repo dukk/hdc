@@ -93,7 +93,7 @@ async function maintainOne(deployment, flags, encryptionKey, vaultAccess) {
     vmid,
     pveHost: pveSsh.host,
   });
-  const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+  const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
 
   return {
     ok: result.ok && baseline.ok,

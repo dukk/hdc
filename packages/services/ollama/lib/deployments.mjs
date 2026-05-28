@@ -4,6 +4,7 @@ import {
   vmSystemId,
 } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { normalizeModelNames } from "./ollama-models.mjs";
 
 const OLLAMA_ROLE = "ollama";
 const OLLAMA_LXC_SYSTEM_ID = deploymentSystemIdPattern(OLLAMA_ROLE);
@@ -61,6 +62,7 @@ function normalizeV1(cfg) {
   if (isObject(cfg.proxmox)) defaults.proxmox = structuredClone(cfg.proxmox);
   if (isObject(cfg.ubuntu)) defaults.ubuntu = structuredClone(cfg.ubuntu);
   if (isObject(cfg.install)) defaults.install = structuredClone(cfg.install);
+  if (isObject(cfg.ollama)) defaults.ollama = structuredClone(cfg.ollama);
   return {
     schemaVersion: 1,
     defaults,
@@ -147,6 +149,7 @@ export function listOllamaDeploymentSummaries(cfg) {
     const lxc = isObject(px.lxc) ? px.lxc : {};
     const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
     const install = isObject(d.install) ? d.install : {};
+    const models = normalizeModelNames(d.ollama);
     return {
       system_id: d.system_id,
       mode,
@@ -155,6 +158,8 @@ export function listOllamaDeploymentSummaries(cfg) {
       install_enabled: install.enabled !== false,
       install_method:
         typeof install.method === "string" ? install.method : "github-release",
+      configured_models: models,
+      model_count: models.length,
     };
   });
 }
@@ -253,6 +258,7 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
   const mode = typeof d.mode === "string" ? d.mode.trim() : "";
   const hostname =
     typeof d.hostname === "string" && d.hostname.trim() ? d.hostname.trim() : undefined;
+  const models = normalizeModelNames(d.ollama);
   return {
     systemId: String(d.system_id),
     mode,
@@ -261,5 +267,7 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
     ubuntu: isObject(d.ubuntu) ? d.ubuntu : null,
     configure: isObject(d.configure) ? d.configure : null,
     install,
+    ollama: { models },
+    raw: d,
   };
 }

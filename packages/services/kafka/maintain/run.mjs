@@ -104,7 +104,7 @@ async function main() {
         global,
         restart: true,
       });
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       results.push({
         system_id: deployment.systemId,
         node_id: deployment.nodeId,

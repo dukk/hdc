@@ -20,6 +20,7 @@ import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/li
 import { fetchClusterVmResources } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { pveJsonRequest } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { createNginxVaultAccess } from "../lib/vault-deps.mjs";
 import {
@@ -381,6 +382,7 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
   );
 
   await applyQemuCloudInit({

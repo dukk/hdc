@@ -117,7 +117,7 @@ async function main() {
         skipPackageInstall: true,
         restartService: true,
       });
-      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess });
+      const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
       results.push({
         ok: baseline.ok,
         system_id: deployment.systemId,

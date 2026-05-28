@@ -18,7 +18,8 @@ import {
   resolveOpenWebuiDeployments,
 } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/open-webui-install.mjs";
-import { queryOpenWebuiInCt } from "../lib/query-status.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { queryOpenWebuiInCt } from "../lib/query-status.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +38,13 @@ function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
 function loadCfg() {
   const loaded = tryLoadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
   if (loaded.ok && loaded.data) {
@@ -46,8 +54,8 @@ function loadCfg() {
 }
 
 async function main() {
-  const rel = relative(root, ensurePackageConfig().path).replace(/\\/g, "/");
   const loaded = loadCfg();
+  const rel = relative(root, ensurePackageConfig().path).replace(/\\/g, "/");
   const cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;

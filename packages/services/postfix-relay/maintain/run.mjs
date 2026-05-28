@@ -4,6 +4,7 @@
  *
  * Usage: hdc run service postfix-relay maintain --
  *        hdc run service postfix-relay maintain -- --apply-network [--dry-run]
+ *        [--skip-resources] [--no-reboot] [--reboot]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,7 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { applyLxcNet0 } from "../../../infrastructure/proxmox/lib/proxmox-lxc-network.mjs";
+import { syncProxmoxGuestResourcesOnMaintain } from "../../../lib/proxmox-guest-resources-maintain.mjs";
 import { createPostfixRelayVaultAccess } from "../lib/vault-deps.mjs";
 import { configurePostfixRelay } from "../lib/postfix-relay-configure.mjs";
 import { resolveConfigureTarget } from "../lib/configure-target.mjs";
@@ -104,6 +106,31 @@ async function main() {
     return;
   }
 
+  const deploy = isObject(cfg.deploy) ? cfg.deploy : {};
+  const deployMode = typeof deploy.mode === "string" ? deploy.mode.trim() : "";
+  /** @type {Record<string, unknown> | null} */
+  let guestResources = null;
+  if (deployMode === "proxmox-lxc") {
+    const deployment = {
+      mode: deployMode,
+      proxmox: cfg.proxmox,
+      system_id: typeof deploy.system_id === "string" ? deploy.system_id : "postfix-relay-a",
+    };
+    guestResources = await syncProxmoxGuestResourcesOnMaintain({
+      deployment,
+      proxmoxPackageRoot: proxmoxRoot,
+      flags,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    if (!guestResources.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: guest resource sync failed: ${guestResources.message ?? "unknown"}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   /** @type {Record<string, unknown> | null} */
   let network = null;
   if (applyNetwork) {
@@ -163,11 +190,11 @@ async function main() {
   try {
     const configure = configurePostfixRelay({ exec, log, postfix, smtp, smtpUser, smtpPass });
     errout.write(`[hdc] ${target} ${verb}: ok (${via}).\n`);
-    payload = { ok: true, target, verb, configure_via: via, network, configure };
+    payload = { ok: true, target, verb, configure_via: via, network, guest_resources: guestResources, configure };
   } catch (e) {
     const msg = /** @type {Error} */ (e).message || String(e);
     errout.write(`[hdc] ${target} ${verb}: failed: ${msg}\n`);
-    payload = { ok: false, target, verb, network, message: msg };
+    payload = { ok: false, target, verb, network, guest_resources: guestResources, message: msg };
     process.exitCode = 1;
   }
 

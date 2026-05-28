@@ -4,7 +4,7 @@
  * Multi-instance: deployments[] in config.json. With no selector, deploys all entries.
  *
  * Usage: hdc run service ollama deploy -- [--instance a | --system-id ollama-a]
- *        [--skip-install] [--skip-existing | --redeploy-existing] [--destroy-existing]
+ *        [--skip-install] [--skip-models] [--skip-existing | --redeploy-existing] [--destroy-existing]
  *        LXC root password: prompted on create (masked), or proxmox.lxc.password / --password
  */
 import { basename, dirname, join } from "node:path";
@@ -18,6 +18,8 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import {
   applyQemuHostpciViaSsh,
@@ -27,6 +29,7 @@ import { createUbuntuDockerHostProvisioner } from "../../../infrastructure/ubunt
 import { resolveUbuntuBootstrapSsh } from "../../../infrastructure/ubuntu/lib/ubuntu-ssh-resolve.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveOllamaDeployments } from "../lib/deployments.mjs";
+import { createOllamaExec, syncOllamaModels } from "../lib/ollama-models.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { installOllamaInCt, resolvePveSshForHost } from "../lib/ollama-install.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
@@ -64,6 +67,7 @@ function ensurePackageConfig() {
 
 const root = repoRoot();
 const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+const ubuntuInfraRoot = join(root, "packages", "infrastructure", "ubuntu");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -96,6 +100,35 @@ function existingGuestPolicy(flags) {
   if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
   if (destroyPolicy(flags)) return "destroy";
   return "prompt";
+}
+
+/**
+ * Pull configured models after a successful deploy (never prunes on deploy).
+ * @param {ReturnType<typeof resolveOllamaDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {Record<string, unknown>} deployResult
+ */
+async function applyDeployModelSync(deployment, flags, deployResult) {
+  if (flagGet(flags, "skip-models", "skip_models") !== undefined) {
+    return { ...deployResult, models: { skipped: true, message: "--skip-models" } };
+  }
+  const models = deployment.ollama?.models ?? [];
+  if (!models.length) {
+    return deployResult;
+  }
+  try {
+    const exec = createOllamaExec(deployment, proxmoxRoot, ubuntuInfraRoot);
+    errout.write(
+      `[hdc] ${target} ${verb}: ${deployment.systemId} — pulling ${models.length} configured model(s) …\n`,
+    );
+    const sync = await syncOllamaModels(exec, models, flags, { prune: false });
+    const ok = deployResult.ok !== false && sync.ok;
+    return { ...deployResult, ok, models: sync };
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    errout.write(`[hdc] ${target} ${verb}: model sync failed: ${msg}\n`);
+    return { ...deployResult, ok: false, models: { ok: false, message: msg } };
+  }
 }
 
 /**
@@ -255,6 +288,14 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
       };
     }
 
+    await waitForLxcCreateTaskAndApplyResources(
+      provisionResult,
+      auth,
+      vmid,
+      (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      guestResourceOptsFromBlock(lxc, flags),
+    );
+
     if (shouldInstall(install)) {
       const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
       installResult = await installOllamaInCt(pveSsh.user, pveSsh.host, vmid, install);
@@ -372,6 +413,7 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         auth,
         vmid,
         (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        guestResourceOptsFromBlock(q, flags),
       );
       cloneNode = cloneInfo.node;
       guestVmid = cloneInfo.vmid;
@@ -546,7 +588,11 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache }));
+      let one = await deployOne(deployment, flags, log, { ctPasswordCache });
+      if (one.ok) {
+        one = await applyDeployModelSync(deployment, flags, one);
+      }
+      results.push(one);
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

@@ -180,6 +180,22 @@ export function dataDiskGbFromDeployment(deployment) {
 }
 
 /**
+ * Proxmox storage for the optional data disk (scsi1). Falls back to qemu.storage.
+ * @param {ReturnType<typeof finalizeDeployment>} deployment
+ */
+export function dataDiskStorageFromDeployment(deployment) {
+  const px = deployment.proxmox;
+  if (!isObject(px) || !isObject(px.qemu)) return "local-lvm";
+  const q = px.qemu;
+  const dataStorage =
+    typeof q.data_disk_storage === "string" && q.data_disk_storage.trim()
+      ? q.data_disk_storage.trim()
+      : "";
+  if (dataStorage) return dataStorage;
+  return typeof q.storage === "string" && q.storage.trim() ? q.storage.trim() : "local-lvm";
+}
+
+/**
  * @param {Record<string, unknown>} d
  * @param {boolean} skipInstallCli
  */
