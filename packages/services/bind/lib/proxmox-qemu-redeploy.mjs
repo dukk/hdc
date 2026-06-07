@@ -10,9 +10,10 @@ import {
 } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { waitForQemuGuestSshAfterBoot } from "../../../lib/qemu-guest-ssh-wait.mjs";
 import { waitForSsh } from "../../../lib/ssh-wait.mjs";
 
-export { waitForSsh };
+export { waitForQemuGuestSshAfterBoot, waitForSsh };
 import { discoverLocalSshMaterial } from "../../../../tools/hdc/lib/ssh-host-access.mjs";
 import {
   collectClusterVmids,

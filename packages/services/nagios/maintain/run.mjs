@@ -1,4 +1,3 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Nagios: regenerate checks from BIND and reload LXC guests.
@@ -12,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";

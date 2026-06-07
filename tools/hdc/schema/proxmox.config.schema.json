@@ -461,7 +461,29 @@
         "memory_mb": { "type": "number" },
         "cores": { "type": "number" },
         "bridge": { "type": "string" },
-        "vmid": { "type": "number" }
+        "vmid": { "type": "number" },
+        "first_boot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "settle_seconds": {
+              "type": "number",
+              "description": "Delay after QEMU start before SSH probe on fresh clone deploy (default 45)."
+            },
+            "ssh_probe_seconds": {
+              "type": "number",
+              "description": "Short SSH wait before optional Proxmox reboot workaround (default 90)."
+            },
+            "ssh_timeout_seconds": {
+              "type": "number",
+              "description": "Full SSH wait after reboot workaround (default 300)."
+            },
+            "reboot_on_probe_fail": {
+              "type": ["boolean", "integer"],
+              "description": "When true (default), reboot guest via Proxmox API if short SSH probe fails (serial-console hang)."
+            }
+          }
+        }
       }
     },
     "bootstrap_host": {

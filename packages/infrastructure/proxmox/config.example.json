@@ -143,7 +143,13 @@
       "build_template": true,
       "memory_mb": 2048,
       "cores": 2,
-      "bridge": "vmbr0"
+      "bridge": "vmbr0",
+      "first_boot": {
+        "settle_seconds": 45,
+        "ssh_probe_seconds": 90,
+        "ssh_timeout_seconds": 300,
+        "reboot_on_probe_fail": true
+      }
     }
   },
   "bootstrap_hosts": []

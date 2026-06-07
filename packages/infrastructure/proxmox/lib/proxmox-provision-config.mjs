@@ -74,3 +74,78 @@ export function qemuBuildSpecForUbuntuLts(cfg, entry) {
     release: entry.release,
   };
 }
+
+const DEFAULT_FIRST_BOOT_SETTLE_MS = 45_000;
+const DEFAULT_FIRST_BOOT_PROBE_MS = 90_000;
+const DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS = 300_000;
+
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ */
+function positiveSecondsToMs(value, fallback) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return Math.round(value * 1000);
+}
+
+/**
+ * QEMU first-boot SSH wait timing from provision.qemu.first_boot.
+ * @param {unknown} cfg
+ * @returns {{
+ *   settleMs: number;
+ *   sshProbeMs: number;
+ *   sshTimeoutMs: number;
+ *   rebootOnProbeFail: boolean;
+ * }}
+ */
+export function qemuFirstBootWaitOptsFromConfig(cfg) {
+  if (!isProxmoxConfigObject(cfg)) {
+    return {
+      settleMs: DEFAULT_FIRST_BOOT_SETTLE_MS,
+      sshProbeMs: DEFAULT_FIRST_BOOT_PROBE_MS,
+      sshTimeoutMs: DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS,
+      rebootOnProbeFail: true,
+    };
+  }
+  const provision = cfg.provision;
+  if (!isProxmoxConfigObject(provision)) {
+    return {
+      settleMs: DEFAULT_FIRST_BOOT_SETTLE_MS,
+      sshProbeMs: DEFAULT_FIRST_BOOT_PROBE_MS,
+      sshTimeoutMs: DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS,
+      rebootOnProbeFail: true,
+    };
+  }
+  const qemu = provision.qemu;
+  if (!isProxmoxConfigObject(qemu)) {
+    return {
+      settleMs: DEFAULT_FIRST_BOOT_SETTLE_MS,
+      sshProbeMs: DEFAULT_FIRST_BOOT_PROBE_MS,
+      sshTimeoutMs: DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS,
+      rebootOnProbeFail: true,
+    };
+  }
+  const firstBoot = qemu.first_boot;
+  if (!isProxmoxConfigObject(firstBoot)) {
+    return {
+      settleMs: DEFAULT_FIRST_BOOT_SETTLE_MS,
+      sshProbeMs: DEFAULT_FIRST_BOOT_PROBE_MS,
+      sshTimeoutMs: DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS,
+      rebootOnProbeFail: true,
+    };
+  }
+
+  const rebootOnProbeFail =
+    firstBoot.reboot_on_probe_fail === false || firstBoot.reboot_on_probe_fail === 0
+      ? false
+      : true;
+
+  return {
+    settleMs: positiveSecondsToMs(firstBoot.settle_seconds, DEFAULT_FIRST_BOOT_SETTLE_MS),
+    sshProbeMs: positiveSecondsToMs(firstBoot.ssh_probe_seconds, DEFAULT_FIRST_BOOT_PROBE_MS),
+    sshTimeoutMs: positiveSecondsToMs(firstBoot.ssh_timeout_seconds, DEFAULT_FIRST_BOOT_SSH_TIMEOUT_MS),
+    rebootOnProbeFail,
+  };
+}

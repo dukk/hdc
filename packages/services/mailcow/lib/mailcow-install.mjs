@@ -8,6 +8,7 @@ import {
   buildGenerateConfigEnv,
   buildInstallScript,
   buildMaintainScript,
+  buildReverseProxyConfScript,
   installDir,
   normalizeGitRef,
   resolveAdminUrl,
@@ -125,6 +126,17 @@ export async function maintainMailcowStackOnHost(exec, mailcow, install, opts = 
   errout.write(`[hdc] mailcow maintain: refreshing stack via ${exec.label} …\n`);
 
   const dir = installDir(install);
+  const reverseProxy = buildReverseProxyConfScript(dir, mailcow);
+  if (reverseProxy) {
+    errout.write(`[hdc] mailcow maintain: applying reverse-proxy settings in mailcow.conf …\n`);
+    const rpResult = exec.run(reverseProxy);
+    if (rpResult.status !== 0) {
+      return {
+        ok: false,
+        message: `reverse-proxy mailcow.conf update failed (exit ${rpResult.status})`,
+      };
+    }
+  }
   const inner = buildMaintainScript(dir, opts);
   const r = exec.run(inner);
   if (r.status !== 0) {

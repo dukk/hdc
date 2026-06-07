@@ -29,7 +29,7 @@ import {
   locateGuest,
   startQemuGuest,
   stopAndDestroyQemu,
-  waitForSsh,
+  waitForQemuGuestSshAfterBoot,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
@@ -262,8 +262,20 @@ async function deployOne(deployment, flags, allDeployments, global, log) {
   });
 
   const ssh = sshFromDeployment(deployment, ip);
-  errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${ssh.user}@${ssh.host} …\n`);
-  await waitForSsh({ user: ssh.user, host: ssh.host });
+  const sshWait = await waitForQemuGuestSshAfterBoot({
+    user: ssh.user,
+    host: ssh.host,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    freshClone: true,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  ssh.user = sshWait.user;
 
   await ensureQemuGuestAgentOnDeploy({
     apiBase: auth.host.apiBase,

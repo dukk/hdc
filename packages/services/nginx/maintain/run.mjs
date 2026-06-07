@@ -2,7 +2,7 @@
 /**
  * Maintain nginx web nodes: push site configs, optional cert renew.
  *
- * Usage: hdc run service nginx maintain -- [--renew-certs] [--site <id>] [--skip-clamav]
+ * Usage: hdc run service nginx maintain -- [--renew-certs] [--site <id>] [--skip-clamav] [--skip-disk-resize] [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -22,7 +22,8 @@ import {
 import { configureNginxSites, createConfigureExec } from "../lib/nginx-configure.mjs";
 import { obtainMissingCertificates, queryCertExpiry, renewCertificates } from "../lib/letsencrypt.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
-import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
+import { mergeGuestBaselineIntoResult, guestBaselineUsersOk, guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
+import { syncQemuRootfsOnMaintain } from "../../../lib/qemu-rootfs-resize.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -122,6 +123,45 @@ async function main() {
   /** @type {Record<string, unknown>[]} */
   const results = [];
 
+  const allDeployments = resolveNginxDeployments(cfg, {});
+  for (const deployment of allDeployments) {
+    if (deployment.mode !== "proxmox-qemu") continue;
+    errout.write(`[hdc] ${target} ${verb}: disk resize check on ${deployment.systemId} …\n`);
+    try {
+      const diskResize = await syncQemuRootfsOnMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        flags,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.disk_resize = diskResize;
+        if (diskResize.ok === false) existing.ok = false;
+      } else {
+        results.push({
+          ok: diskResize.ok !== false,
+          system_id: deployment.systemId,
+          disk_resize: diskResize,
+        });
+      }
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} disk resize failed: ${msg}\n`);
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.ok = false;
+        existing.message = msg;
+      } else {
+        results.push({
+          ok: false,
+          system_id: deployment.systemId,
+          message: msg,
+        });
+      }
+    }
+  }
+
   if (!renewCerts) {
     for (const deployment of deployments) {
       errout.write(`[hdc] ${target} ${verb}: pushing sites to ${deployment.systemId} …\n`);
@@ -178,7 +218,6 @@ async function main() {
   }
 
   const domains = tlsDomainsFromSites(sites);
-  const allDeployments = resolveNginxDeployments(cfg, {});
   for (const deployment of allDeployments) {
     errout.write(`[hdc] ${target} ${verb}: ClamAV on ${deployment.systemId} …\n`);
     try {

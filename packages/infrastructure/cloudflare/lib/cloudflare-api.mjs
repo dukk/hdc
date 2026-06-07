@@ -322,5 +322,16 @@ export function createCloudflareClient(opts) {
         body,
       });
     },
+
+    /**
+     * Disable Email Routing for a zone (unlocks MX records for custom mail servers).
+     * @param {string} zoneId
+     */
+    async disableEmailRouting(zoneId) {
+      await request(`/zones/${encodeURIComponent(zoneId)}/email/routing/disable`, {
+        method: "POST",
+        body: {},
+      });
+    },
   };
 }

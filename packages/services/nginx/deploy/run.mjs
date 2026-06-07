@@ -44,7 +44,7 @@ import {
   locateGuest,
   startQemuGuest,
   stopAndDestroyQemu,
-  waitForSsh,
+  waitForQemuGuestSshAfterBoot,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -410,11 +410,23 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = resolveGuestSshUser(sshCfg.user);
+  let sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
-  errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
-  await waitForSsh({ user: sshUser, host: sshHost });
+  const sshWait = await waitForQemuGuestSshAfterBoot({
+    user: sshUser,
+    host: sshHost,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    freshClone: true,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  sshUser = sshWait.user;
 
   await ensureQemuGuestAgentOnDeploy({
     apiBase: auth.host.apiBase,

@@ -13,7 +13,7 @@ Nginx with ModSecurity (OWASP CRS), reverse proxy `sites[]`, and Let's Encrypt w
 | Verb | Purpose |
 |------|---------|
 | `deploy` | QEMU (optional) + nginx + ModSecurity + CRS; push sites; LE on cert-primary |
-| `maintain` | Re-push CRS and sites; `--renew-certs`; `--sync-certs`; `--site <id>` (that site only; other vhosts unchanged) |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push CRS and sites; `--renew-certs`; `--sync-certs`; `--site <id>` (that site only; other vhosts unchanged) |
 | `query` | nginx, ModSecurity, CRS rule count, certs, upstream probes |
 
 ```bash
@@ -79,9 +79,13 @@ Apply after editing: `node tools/hdc/cli.mjs run service nginx-waf maintain --` 
 
 Run full `maintain` (no `--site`) after removing a site from `config.json` so stale `hdc-*.conf` files are pruned from the hosts.
 
+## Root disk
+
+Set `defaults.proxmox.qemu.rootfs_gb` (e.g. `32`) for QEMU guests. Maintain grows the Proxmox `scsi0` volume and guest filesystem when config exceeds live size (`--skip-disk-resize` to skip).
+
 ## Common flags
 
-`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>` (partial update only), `--dry-run`.
+`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>` (partial update only), `--skip-disk-resize`, `--dry-run`.
 
 ## After deploy
 

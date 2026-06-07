@@ -2,7 +2,7 @@
 /**
  * Maintain nginx WAF: push site configs, optional cert renew/sync.
  *
- * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--skip-clamav] [--skip-guest-agent]
+ * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--skip-clamav] [--skip-guest-agent] [--skip-disk-resize] [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -39,6 +39,7 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { ensureQemuGuestAgentForDeploymentMaintain } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
+import { syncQemuRootfsOnMaintain } from "../../../lib/qemu-rootfs-resize.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -174,6 +175,46 @@ async function main() {
           system_id: deployment.systemId,
           role: deployment.role,
           guest_agent: guestAgent,
+        });
+      }
+    }
+  }
+
+  for (const deployment of allDeploymentsForAgent) {
+    if (deployment.mode !== "proxmox-qemu") continue;
+    errout.write(`[hdc] ${target} ${verb}: disk resize check on ${deployment.systemId} …\n`);
+    try {
+      const diskResize = await syncQemuRootfsOnMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        flags,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.disk_resize = diskResize;
+        if (diskResize.ok === false) existing.ok = false;
+      } else {
+        results.push({
+          ok: diskResize.ok !== false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          disk_resize: diskResize,
+        });
+      }
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} disk resize failed: ${msg}\n`);
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.ok = false;
+        existing.message = msg;
+      } else {
+        results.push({
+          ok: false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          message: msg,
         });
       }
     }

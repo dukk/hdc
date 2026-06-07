@@ -50,7 +50,7 @@ import {
   locateGuest,
   startQemuGuest,
   stopAndDestroyQemu,
-  waitForSsh,
+  waitForQemuGuestSshAfterBoot,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
@@ -510,18 +510,20 @@ async function deployQemuOne(deployment, flags, log, dbSecrets) {
   let sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
-  errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
-  try {
-    await waitForSsh({ user: sshUser, host: sshHost });
-  } catch (e) {
-    if (sshUser !== "root") {
-      errout.write(`[hdc] ${target} ${verb}: ${sshUser} not ready — trying root@${sshHost} …\n`);
-      await waitForSsh({ user: "root", host: sshHost });
-      sshUser = "root";
-    } else {
-      throw e;
-    }
-  }
+  const sshWait = await waitForQemuGuestSshAfterBoot({
+    user: sshUser,
+    host: sshHost,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    freshClone: true,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  sshUser = sshWait.user;
 
   await ensureQemuGuestAgentOnDeploy({
     apiBase: auth.host.apiBase,

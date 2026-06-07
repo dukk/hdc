@@ -21,6 +21,8 @@ export const GUEST_BASELINE_SAFE_ARGS = ["--no-reboot", "--skip-resources", "--s
 /** @type {readonly string[]} */
 const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "crowdsec",
+  "draw-io",
+  "homepage",
   "gatus",
   "gitlab",
   "immich",
@@ -245,7 +247,7 @@ export function dailyRecipeSteps() {
     note: "synopkg upgrade when behind",
   });
 
-  for (const id of ["minecraft", "jenkins", "audiobookshelf"]) {
+  for (const id of ["minecraft", "jenkins"]) {
     steps.push({
       tier: "service",
       id,

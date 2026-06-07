@@ -13,7 +13,7 @@ Reverse proxy and static hosting with Let's Encrypt. Optional Proxmox QEMU provi
 | Verb | Purpose |
 |------|---------|
 | `deploy` | Provision VM (optional) + nginx + certbot; push `sites[]` |
-| `maintain` | Re-push sites; `--renew-certs`; `--site <id>` (that site only; other vhosts unchanged) |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push sites; `--renew-certs`; `--site <id>` (that site only; other vhosts unchanged) |
 | `query` | nginx status, config test, upstream probes, cert expiry |
 
 ```bash
@@ -25,7 +25,9 @@ node tools/hdc/cli.mjs run service nginx maintain --
 
 ## Common flags
 
-`--instance a`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--site <id>` (partial update only), `--dry-run`, `--skip-clamav`.
+`--instance a`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--site <id>` (partial update only), `--skip-disk-resize`, `--dry-run`, `--skip-clamav`.
+
+Set `defaults.proxmox.qemu.rootfs_gb` (e.g. `32`) for QEMU guests. Maintain grows the Proxmox `scsi0` volume and guest filesystem when config exceeds live size (`--skip-disk-resize` to skip).
 
 ## After deploy
 

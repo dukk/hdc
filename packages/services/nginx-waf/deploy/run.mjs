@@ -44,7 +44,7 @@ import {
   startQemuGuest,
   stopAndDestroyQemu,
   stopQemuGuest,
-  waitForSsh,
+  waitForQemuGuestSshAfterBoot,
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { nginxWafReportExtraSections } from "../lib/nginx-waf-report.mjs";
@@ -257,7 +257,17 @@ async function destroyQemuVmidInCluster(auth, vmid, hostId, logLine) {
  * @param {ReturnType<typeof resolveNginxWafDeployments>[number]} deployment
  * @param {(line: string) => void} logLine
  */
-async function bootstrapGuestNetworkAndSsh(auth, node, vmid, hostname, ipCidr, gateway, deployment, logLine) {
+async function bootstrapGuestNetworkAndSsh(
+  auth,
+  node,
+  vmid,
+  hostname,
+  ipCidr,
+  gateway,
+  deployment,
+  logLine,
+  flags,
+) {
   await stopQemuGuest({
     apiBase: auth.host.apiBase,
     authorization: auth.authorization,
@@ -288,10 +298,22 @@ async function bootstrapGuestNetworkAndSsh(auth, node, vmid, hostname, ipCidr, g
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = resolveGuestSshUser(sshCfg.user);
+  let sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ipCidr.split("/")[0];
-  errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
-  await waitForSsh({ user: sshUser, host: sshHost });
+  const sshWait = await waitForQemuGuestSshAfterBoot({
+    user: sshUser,
+    host: sshHost,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node,
+    vmid,
+    freshClone: true,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: logLine,
+  });
+  return { user: sshWait.user, host: sshHost };
 }
 
 /**
@@ -416,6 +438,7 @@ async function deployOne(deployment, flags, global, sites, log) {
         gateway,
         deployment,
         logLine,
+        flags,
       );
       const guestAgent = await ensureNginxWafGuestAgent(deployment, logLine);
       const configure = runConfigure(deployment, global, sites, log, skipBase);
@@ -469,7 +492,7 @@ async function deployOne(deployment, flags, global, sites, log) {
   );
 
   const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
-  await bootstrapGuestNetworkAndSsh(
+  const sshTarget = await bootstrapGuestNetworkAndSsh(
     auth,
     cloneNode,
     guestVmid,
@@ -478,18 +501,13 @@ async function deployOne(deployment, flags, global, sites, log) {
     gateway,
     deployment,
     logLine,
+    flags,
   );
-
-  const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
-    ? deployment.configure.ssh
-    : {};
-  const sshUser = resolveGuestSshUser(sshCfg.user);
-  const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   const guestAgent = await ensureNginxWafGuestAgent(
     {
       ...deployment,
-      configure: { ssh: { user: sshUser, host: sshHost } },
+      configure: { ssh: { user: sshTarget.user, host: sshTarget.host } },
     },
     logLine,
   );

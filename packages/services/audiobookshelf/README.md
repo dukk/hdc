@@ -1,33 +1,60 @@
 # Audiobookshelf (`audiobookshelf`)
 
-**Deploy is a stub** — hdc records inventory alignment but does not install Audiobookshelf remotely yet.
+Self-hosted audiobook and podcast server via [Audiobookshelf](https://www.audiobookshelf.org/) Docker Compose on Proxmox **QEMU**.
 
-## Prerequisites
+## Deploy mode
 
-- **Config:** add `config.json` with `configure.ssh` when you want ClamAV via maintain (copy from a pattern in other service packages).
-- **Inventory:** [`inventory/manual/systems/vm-audiobookshelf-a.json`](../../../inventory/manual/systems/vm-audiobookshelf-a.json)
+| Mode | System id | Guest access |
+| --- | --- | --- |
+| `proxmox-qemu` | `vm-audiobookshelf-a` | SSH + optional `data_disk_gb` on `data_disk_storage` (e.g. `local-lvm-data`) |
+
+Libraries, SQLite config, and metadata live under `install.data_mount` (default `/data/audiobookshelf`).
+
+## Config
+
+Copy [`config.example.json`](config.example.json) to hdc-private `packages/services/audiobookshelf/config.json`.
+
+Key blocks:
+
+- `audiobookshelf.public_url` — public HTTPS URL when behind nginx-waf (e.g. `https://bookshelf.dukk.org`)
+- `audiobookshelf.host_port` — host port mapped to container port 80 (default **13378**)
+- `install.compose_dir` — Docker Compose directory (default `/opt/audiobookshelf`)
+- `install.data_mount` — mount point for libraries + `/config` + `/metadata` (default `/data/audiobookshelf`)
+
+QEMU defaults: 4 vCPU, 8 GiB RAM, 32 GiB rootfs + optional data disk.
+
+No vault secrets for v1 — users and settings are stored in SQLite under `/config`.
 
 ## Commands
 
-| Verb | Purpose |
-|------|---------|
-| `deploy` | Stub — JSON ok, no remote install |
-| `maintain` | ClamAV on Ubuntu guest **only if** `configure.ssh` or `deployments[].configure.ssh` is in config |
-| `query` | Config/inventory summary |
-
 ```bash
-node tools/hdc/cli.mjs run service audiobookshelf deploy --
-node tools/hdc/cli.mjs run service audiobookshelf maintain -- --skip-clamav
+node tools/hdc/cli.mjs run service audiobookshelf deploy -- --instance a
+node tools/hdc/cli.mjs run service audiobookshelf deploy -- --instance a --destroy-existing
+node tools/hdc/cli.mjs run service audiobookshelf maintain --
+node tools/hdc/cli.mjs run service audiobookshelf query -- --live
+node tools/hdc/cli.mjs run service audiobookshelf teardown -- --dry-run
 ```
 
-## Common flags
+### Flags
 
-`--skip-clamav` (maintain), `--dry-run`, `--no-report`.
+| Verb | Flags |
+| --- | --- |
+| `deploy` | `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` |
+| `maintain` | `--skip-upgrade`, `--skip-clamav`, guest baseline skip flags |
+| `query` | `--live` |
+| `teardown` | `--dry-run`, `--yes`, `--skip-compose-down` |
 
-## After deploy
+## Dependencies (manual)
 
-Install and operate Audiobookshelf manually until deploy is implemented. Typical access (when you run it yourself): **Audiobookshelf web UI** on the port you configure (often **13378**).
+- **BIND** — forward A record `audiobookshelf-a` → guest IP
+- **nginx-waf** — site upstream `http://<guest-ip>:13378` (WebSockets for playback)
+- **Cloudflare** — optional; CNAME to WAF when proxied
+
+## Migration
+
+When moving from a legacy Docker host, rsync `config`, `metadata`, and library folders into `data_mount` subdirs preserving container paths (`/audiobooks`, `/podcasts`, `/config`, `/metadata`). Stop the source stack before the final rsync for a consistent SQLite copy.
 
 ## Related
 
-- [AGENTS.md — stub services](../../../AGENTS.md)
+- Inventory: [`inventory/manual/systems/vm-audiobookshelf-a.json`](../../../inventory/manual/systems/vm-audiobookshelf-a.json)
+- Schema: [`tools/hdc/schema/audiobookshelf.config.schema.json`](../../../tools/hdc/schema/audiobookshelf.config.schema.json)

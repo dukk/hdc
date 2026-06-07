@@ -1,5 +1,3 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain llama-cpp: upgrade binary from GitHub release and restart llama-server.
@@ -13,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";

@@ -244,6 +244,70 @@ export function buildInstallScript(dirPath, gitRef, genEnv, opts = {}) {
 }
 
 /**
+ * @param {Record<string, unknown>} mailcow
+ * @returns {string[]}
+ */
+export function reverseProxyTrustedProxies(mailcow) {
+  const rp = isObject(mailcow.reverse_proxy) ? mailcow.reverse_proxy : {};
+  const raw = Array.isArray(rp.trusted_proxies) ? rp.trusted_proxies : [];
+  return raw
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean);
+}
+
+/**
+ * @param {Record<string, unknown>} mailcow
+ * @returns {string[]}
+ */
+export function reverseProxyAdditionalServerNames(mailcow) {
+  const rp = isObject(mailcow.reverse_proxy) ? mailcow.reverse_proxy : {};
+  const explicit = Array.isArray(rp.additional_server_names) ? rp.additional_server_names : [];
+  const fromExplicit = explicit
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean);
+  if (fromExplicit.length) return fromExplicit;
+  return normalizeDomainList(mailcow).map((d) => `mail.${d.name}`);
+}
+
+/**
+ * @param {string} dirPath
+ * @param {Record<string, unknown>} mailcow
+ * @returns {string | null}
+ */
+export function buildReverseProxyConfScript(dirPath, mailcow) {
+  const trusted = reverseProxyTrustedProxies(mailcow);
+  const additional = reverseProxyAdditionalServerNames(mailcow);
+  if (!trusted.length && !additional.length) return null;
+
+  const dir = dirPath.replace(/'/g, `'\\''`);
+  const trustedVal = trusted.join(",").replace(/'/g, `'\\''`);
+  const additionalVal = additional.join(",").replace(/'/g, `'\\''`);
+
+  /** @type {string[]} */
+  const lines = [
+    "set -euo pipefail",
+    `cd '${dir}'`,
+    "test -f mailcow.conf",
+    `set_kv() {`,
+    `  key="$1"`,
+    `  val="$2"`,
+    `  if grep -q "^$key=" mailcow.conf; then`,
+    `    sed -i "s|^$key=.*|$key=$val|" mailcow.conf`,
+    `  else`,
+    `    printf '%s=%s\\n' "$key" "$val" >> mailcow.conf`,
+    `  fi`,
+    `}`,
+  ];
+  if (trusted.length) {
+    lines.push(`set_kv TRUSTED_PROXIES '${trustedVal}'`);
+  }
+  if (additional.length) {
+    lines.push(`set_kv ADDITIONAL_SERVER_NAMES '${additionalVal}'`);
+  }
+  return lines.join("\n");
+}
+
+/**
  * @param {string} dirPath
  * @param {{ skipUpgrade?: boolean }} [opts]
  */

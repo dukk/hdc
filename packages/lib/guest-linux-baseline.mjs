@@ -14,6 +14,7 @@ import {
   proxmoxGuestTypeFromMode,
   syncProxmoxGuestResourcesOnMaintain,
 } from "./proxmox-guest-resources-maintain.mjs";
+import { waitForQemuGuestSshAfterBoot } from "./qemu-guest-ssh-wait.mjs";
 import { waitForSsh } from "./ssh-wait.mjs";
 
 /** @param {unknown} v */
@@ -132,7 +133,38 @@ export async function ensureGuestLinuxBaseline(opts) {
           /** @type {Record<string, unknown>} */ (deployment),
           opts.env,
         );
-        if (sshTarget) {
+        const gr = /** @type {Record<string, unknown>} */ (guest_resources);
+        const apiBase = typeof gr.apiBase === "string" ? gr.apiBase : "";
+        const authorization = typeof gr.authorization === "string" ? gr.authorization : "";
+        const rejectUnauthorized = gr.rejectUnauthorized === false ? false : true;
+        const node = typeof gr.node === "string" ? gr.node : "";
+        const vmid = typeof gr.vmid === "number" ? gr.vmid : Number(gr.vmid);
+        if (
+          sshTarget &&
+          apiBase &&
+          authorization &&
+          node &&
+          Number.isFinite(vmid) &&
+          vmid > 0 &&
+          proxmoxPackageRoot
+        ) {
+          opts.log.info(
+            `waiting for SSH on ${sshTarget.user}@${sshTarget.host} after guest resource change …`,
+          );
+          await waitForQemuGuestSshAfterBoot({
+            user: sshTarget.user,
+            host: sshTarget.host,
+            apiBase,
+            authorization,
+            rejectUnauthorized,
+            node,
+            vmid,
+            freshClone: false,
+            proxmoxPackageRoot,
+            flags: effectiveFlags,
+            log: (line) => opts.log.info(line),
+          });
+        } else if (sshTarget) {
           opts.log.info(
             `waiting for SSH on ${sshTarget.user}@${sshTarget.host} after guest resource change …`,
           );

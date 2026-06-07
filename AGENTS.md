@@ -363,7 +363,7 @@ Example: `node tools/hdc/cli.mjs run service nginx-waf maintain --`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Optional Proxmox QEMU provision or configure-only; install nginx + certbot; push `sites[]` (reverse proxy, same shape as nginx-waf without WAF); LE certs per node |
-| `maintain` | Re-push `sites[]` to all nodes (default); `--renew-certs`; `--site <id>` updates only that site (other vhosts unchanged); full maintain prunes sites removed from config |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push `sites[]` to all nodes (default); `--renew-certs`; `--site <id>` updates only that site (other vhosts unchanged); full maintain prunes sites removed from config |
 | `query` | `nginx` status, config test, enabled sites, upstream probes, cert expiry |
 
 Vault: `HDC_NGINX_LE_EMAIL` (required for deploy); `HDC_BIND_TSIG_KEY` when `letsencrypt.challenge` is `dns-01`.
@@ -903,6 +903,8 @@ node tools/hdc/cli.mjs run client client-ubuntu maintain -- --reboot --host-id w
 Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructure ubuntu maintain` or `users bootstrap-hdc` — not from `proxmox maintain`.
 
 **QEMU guest agent:** Deploy scripts enable `agent=1` on new QEMU VMs and install `qemu-guest-agent` in Linux guests when deploy has SSH (e.g. BIND). LXC deploys are unchanged. See [`.cursor/rules/proxmox-qemu-guest-agent.mdc`](.cursor/rules/proxmox-qemu-guest-agent.mdc). Maintain `verify-templates` reports agent config + ping.
+
+**QEMU first-boot SSH wait:** Ubuntu cloud templates use `serial0: socket` / `vga: serial0`; clones can hang at the serial console on first boot. Deploy and maintain use [`qemu-guest-ssh-wait.mjs`](packages/lib/qemu-guest-ssh-wait.mjs): optional settle delay, short SSH probe, then Proxmox API reboot if the probe fails. Tune `provision.qemu.first_boot` in proxmox config; flags: `--skip-first-boot-reboot`, `--first-boot-reboot`.
 
 **Guest CPU/RAM:** QEMU clones and LXC creates apply `proxmox.qemu` / `proxmox.lxc` `memory_mb` and `cores` after the Proxmox task completes (template sizing is not kept when config differs). **Service maintain** syncs the same fields on live guests without destroy (QEMU reboot when running and sizing changed; LXC stop/PUT/start). Shared helpers: [`proxmox-guest-resources.mjs`](packages/infrastructure/proxmox/lib/proxmox-guest-resources.mjs), [`proxmox-guest-resources-maintain.mjs`](packages/lib/proxmox-guest-resources-maintain.mjs) (via [`guest-linux-baseline.mjs`](packages/lib/guest-linux-baseline.mjs) for Proxmox guests). Flags: `--skip-resources`, `--no-reboot` (disable auto-reboot on change); `--reboot` forces reboot. Infrastructure deploy: `create-vm` / `create-container` accept `--memory-mb`, `--cores`, and `--reboot`. Service deploy: optional `--reboot` when resizing a running guest.
 

@@ -30,7 +30,8 @@
         "storage": "local-lvm",
         "full": 1,
         "cores": 2,
-        "memory_mb": 2048
+        "memory_mb": 2048,
+        "rootfs_gb": 32
       },
       "network": {
         "bridge": "vmbr0",

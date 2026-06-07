@@ -134,5 +134,8 @@ export async function syncProxmoxGuestResourcesOnMaintain(opts) {
     changed: applied.changed,
     previous: applied.previous,
     applied: applied.applied,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
   };
 }

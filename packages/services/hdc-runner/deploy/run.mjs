@@ -34,7 +34,7 @@ import {
   locateGuest,
   startQemuGuest,
   stopAndDestroyQemu,
-  waitForSsh,
+  waitForQemuGuestSshAfterBoot,
 } from "../../step-ca/lib/proxmox-qemu-redeploy.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { resolvePveSshForHost } from "../../gatus/lib/gatus-install.mjs";
@@ -313,12 +313,25 @@ async function deployQemu(deployment, flags) {
     isObject(deployment.configure) && isObject(deployment.configure.ssh)
       ? deployment.configure.ssh
       : {};
-  const sshUser = resolveGuestSshUser(sshCfg.user);
+  let sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost =
     typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   if (shouldInstall(install)) {
-    await waitForSsh({ user: sshUser, host: sshHost });
+    const sshWait = await waitForQemuGuestSshAfterBoot({
+      user: sshUser,
+      host: sshHost,
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      freshClone: true,
+      proxmoxPackageRoot: proxmoxRoot,
+      flags,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    sshUser = sshWait.user;
     await ensureQemuGuestAgentOnDeploy({
       apiBase: auth.host.apiBase,
       node: cloneNode,

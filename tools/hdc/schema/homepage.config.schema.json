@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/homepage.config.schema.json",
+  "title": "HDC homepage service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^homepage-[a-z]+$" },
+          "mode": { "enum": ["proxmox-lxc"] },
+          "proxmox": { "type": "object" },
+          "homepage": {
+            "type": "object",
+            "properties": {
+              "image_tag": { "type": "string" },
+              "host_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "public_url": { "type": "string", "pattern": "^https://.+" },
+              "allowed_hosts": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              },
+              "title": { "type": "string" },
+              "theme": { "type": "string" },
+              "service_groups": { "type": "array" },
+              "bookmarks": { "type": "array" }
+            },
+            "required": ["allowed_hosts"]
+          },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "compose_dir": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
