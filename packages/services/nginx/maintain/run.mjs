@@ -22,6 +22,7 @@ import {
 import { configureNginxSites, createConfigureExec } from "../lib/nginx-configure.mjs";
 import { obtainMissingCertificates, queryCertExpiry, renewCertificates } from "../lib/letsencrypt.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -193,11 +194,15 @@ async function main() {
       });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {
-        existing.guest_resources = baseline.guest_resources;
-        existing.clamav = baseline.clamav;
-        if (existing.ok !== false) existing.ok = baseline.ok;
+        mergeGuestBaselineIntoResult(existing, baseline);
       } else {
-        results.push({ ok: baseline.ok, system_id: deployment.systemId, clamav });
+        results.push({
+          ok: baseline.admin_user?.ok !== false,
+          system_id: deployment.systemId,
+          guest_resources: baseline.guest_resources,
+          admin_user: baseline.admin_user,
+          clamav: baseline.clamav,
+        });
       }
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

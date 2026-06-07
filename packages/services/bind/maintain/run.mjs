@@ -2,7 +2,7 @@
 /**
  * Re-sync BIND zone files on primary, named options on all nodes, verify SOA on secondary.
  *
- * Usage: hdc run service bind maintain -- [--skip-clamav] [--skip-guest-agent] [--skip-apt] [--skip-disk-resize]
+ * Usage: hdc run service bind maintain -- [--skip-admin-user] [--skip-clamav] [--skip-guest-agent] [--skip-apt] [--skip-disk-resize]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,7 @@ import { waitForSoaSerialMatch } from "../lib/bind-query-remote.mjs";
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { soaSerialFromTimestamp } from "../lib/bind-zones.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -242,9 +243,10 @@ async function main() {
   for (const deployment of deployments) {
     const defaultHost = deployment.role === "primary" ? global.primaryIp : global.secondaryIp;
     const { user, host } = sshTarget(deployment, defaultHost);
+    errout.write(`[hdc] ${target} ${verb}: guest baseline on ${deployment.systemId} (${user}@${host}) …\n`);
     try {
       const exec = createConfigureExec("ssh", { user, host });
-      await ensureGuestLinuxBaseline({
+      const baseline = await ensureGuestLinuxBaseline({
         exec,
         log,
         flags,
@@ -252,10 +254,34 @@ async function main() {
         deployment,
         proxmoxPackageRoot: proxmoxRoot,
       });
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        mergeGuestBaselineIntoResult(existing, baseline);
+      } else {
+        results.push({
+          ok: baseline.admin_user?.ok !== false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          guest_resources: baseline.guest_resources,
+          admin_user: baseline.admin_user,
+          clamav: baseline.clamav,
+        });
+      }
     } catch (e) {
-      errout.write(
-        `[hdc] ${target} ${verb}: baseline on ${deployment.systemId}: ${String(/** @type {Error} */ (e).message || e)}\n`,
-      );
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: baseline on ${deployment.systemId}: ${msg}\n`);
+      const existing = results.find((r) => r.system_id === deployment.systemId);
+      if (existing) {
+        existing.ok = false;
+        existing.baseline_error = msg;
+      } else {
+        results.push({
+          ok: false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          message: msg,
+        });
+      }
     }
   }
 

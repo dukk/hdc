@@ -130,7 +130,9 @@ Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`package
 
 Coexists with the per-host `hdc` automation user from `node tools/hdc/cli.mjs users bootstrap-hdc` (`HDC_USER_HDC_PASSWORD_*`).
 
-- **Out of scope:** Proxmox hypervisors (`proxmox maintain`), Synology NAS (`synology-nas`), home clients (`packages/clients/*`), and `ubuntu maintain` (bootstrap `hdc` only). **Nagios** LXC guests get the local admin user only (no ClamAV).
+Maintain JSON payloads should include `admin_user` (and `clamav` when applicable) per instance. **Maintain operation reports** add a **Guest baseline** section automatically when those fields are present ([`packages/lib/guest-baseline-report.mjs`](packages/lib/guest-baseline-report.mjs)).
+
+- **Out of scope:** Proxmox hypervisors (`proxmox maintain`), Synology NAS (`synology-nas`), home clients (`packages/clients/*`), `ubuntu maintain` (bootstrap `hdc` only), **Home Assistant** (HAOS), and **Windows** guests. **Nagios** LXC guests get the local admin user only (no ClamAV).
 - **Stub services** (`minecraft`, `jenkins`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
 
 Example: set `HDC_ADMIN_USER` in `.env`, then `node tools/hdc/cli.mjs run service postgresql maintain --`
@@ -194,7 +196,7 @@ Example: `node tools/hdc/cli.mjs run service solidtime deploy --`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Rebuild QEMU guests from Ubuntu template (optional `--destroy-existing`), cloud-init static IP from config, auto VMID, optional `rootfs_gb` scsi0 resize, BIND primary then secondary (`deployments[]`; `--instance a\|b`) |
-| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push dnscrypt-proxy (ODoH) and named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push dnscrypt-proxy (ODoH) and named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary; guest Linux baseline (local admin from `HDC_ADMIN_USER` + ClamAV; `--skip-admin-user`, `--skip-clamav`) |
 | `query` | `named` service status and per-zone `dig SOA` on each node |
 
 TSIG: deploy auto-generates `bind.tsig_secret` in `config.json` and syncs vault `HDC_BIND_TSIG_KEY` when missing; `--regenerate-tsig` to rotate.

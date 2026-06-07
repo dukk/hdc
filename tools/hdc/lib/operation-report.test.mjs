@@ -196,6 +196,31 @@ describe("operation-report", () => {
     expect(steps).toEqual(["Step A"]);
   });
 
+  it("renderOperationReportMarkdown includes Guest baseline on maintain when payload has admin_user", () => {
+    const ctx = createOperationReportContext({
+      packageId: "bind",
+      packageTitle: "BIND",
+      verb: "maintain",
+    });
+    setStdoutPayload(ctx, {
+      ok: true,
+      results: [
+        {
+          ok: true,
+          system_id: "vm-bind-a",
+          role: "primary",
+          admin_user: { ok: true, username: "dukk", message: "ensured" },
+          clamav: { ok: true, skipped: true, message: "skipped by flag" },
+        },
+      ],
+    });
+    ctx.ok = true;
+    const md = renderOperationReportMarkdown(ctx);
+    expect(md).toContain("## Guest baseline");
+    expect(md).toContain("**admin_user:** dukk — ensured");
+    expect(md).toContain("**clamav:** skipped");
+  });
+
   it("inventory-sidecar loads system and primary IP", () => {
     const tmp = mkdtempSync(join(tmpdir(), "hdc-inv-"));
     try {

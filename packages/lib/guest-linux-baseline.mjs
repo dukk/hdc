@@ -69,35 +69,39 @@ export async function ensureGuestLinuxBaseline(opts) {
       flags: opts.flags,
       log: logLine,
     });
-    if (!guest_resources.ok) {
-      return {
-        ok: false,
-        guest_resources,
-        admin_user: { ok: false, skipped: true },
-        clamav: { ok: false, skipped: true },
-      };
-    }
-
-    const resourcesChanged = guest_resources.changed === true;
-    const qemuMode = mode === "proxmox-qemu";
-    const skipRebootWait = noRebootFromFlags(opts.flags);
-    if (resourcesChanged && qemuMode && !skipRebootWait && deployment) {
-      const sshTarget = resolveQemuSshTargetFromDeployment(
-        /** @type {Record<string, unknown>} */ (deployment),
-      );
-      if (sshTarget) {
-        opts.log.info(
-          `waiting for SSH on ${sshTarget.user}@${sshTarget.host} after guest resource change …`,
+    if (guest_resources.ok === false) {
+      const msg =
+        typeof guest_resources.message === "string"
+          ? guest_resources.message
+          : "guest resource sync failed";
+      if (opts.log.warn) {
+        opts.log.warn(`guest resource sync: ${msg} (continuing with admin user / ClamAV)`);
+      } else {
+        opts.log.info(`guest resource sync: ${msg} (continuing with admin user / ClamAV)`);
+      }
+    } else {
+      const resourcesChanged = guest_resources.changed === true;
+      const qemuMode = mode === "proxmox-qemu";
+      const skipRebootWait = noRebootFromFlags(opts.flags);
+      if (resourcesChanged && qemuMode && !skipRebootWait && deployment) {
+        const sshTarget = resolveQemuSshTargetFromDeployment(
+          /** @type {Record<string, unknown>} */ (deployment),
         );
-        await waitForSsh({ user: sshTarget.user, host: sshTarget.host });
+        if (sshTarget) {
+          opts.log.info(
+            `waiting for SSH on ${sshTarget.user}@${sshTarget.host} after guest resource change …`,
+          );
+          await waitForSsh({ user: sshTarget.user, host: sshTarget.host });
+        }
       }
     }
   }
 
   const adminUser = await ensureAdminUser(opts);
   const clamav = await ensureClamav(opts);
+  const guestResourcesOk = guest_resources.ok !== false || guest_resources.skipped === true;
   return {
-    ok: guest_resources.ok !== false && adminUser.ok && clamav.ok,
+    ok: guestResourcesOk && adminUser.ok && clamav.ok,
     guest_resources,
     admin_user: adminUser,
     clamav,

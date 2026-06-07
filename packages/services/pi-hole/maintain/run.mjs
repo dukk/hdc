@@ -4,7 +4,8 @@
  *
  * Usage: hdc run service pi-hole maintain -- [--instance a | --system-id pi-hole-a] [--skip-core-update]
  *        hdc run service pi-hole maintain -- --apply-network [--dry-run]
- *        [--skip-allowlist] [--prune] [--skip-resources] [--no-reboot] [--reboot]
+ *        [--skip-allowlist] [--prune] [--skip-resources] [--skip-admin-user] [--skip-clamav]
+ *        [--no-reboot] [--reboot]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -13,6 +14,10 @@ import { stderr as errout } from "node:process";
 
 import { buildNet0, gatewayFromProxmox, resolveLxcIpConfig } from "../../../lib/lxc-network.mjs";
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { applyLxcNet0 } from "../../../infrastructure/proxmox/lib/proxmox-lxc-network.mjs";
@@ -54,8 +59,9 @@ function readCfg() {
 /**
  * @param {ReturnType<typeof resolvePiHoleDeployments>[number]} deployment
  * @param {Record<string, string>} flags
+ * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
-async function maintainOne(deployment, flags) {
+async function maintainOne(deployment, flags, vaultAccess) {
   const { systemId, proxmox: px } = deployment;
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -160,10 +166,30 @@ async function maintainOne(deployment, flags) {
   });
   const skipCoreUpdate = flags["skip-core-update"] !== undefined;
   const result = maintainPiHoleInCt(pveSsh.user, pveSsh.host, vmid, { skipCoreUpdate });
+
+  errout.write(`[hdc] ${target} ${verb}: guest baseline on ${systemId} (vmid ${vmid}) …\n`);
+  const log = provisionLogFromConsole(console);
+  const exec = createConfigureExec("pct", {
+    user: pveSsh.user,
+    host: pveSsh.host,
+    vmid,
+    pveHost: pveSsh.host,
+  });
+  const baseline = await ensureGuestLinuxBaseline({
+    exec,
+    log,
+    flags,
+    vaultAccess,
+    deployment,
+    proxmoxPackageRoot: proxmoxRoot,
+  });
+
   const ok =
     configure.ok &&
     allowlist.ok &&
     result.ok &&
+    baseline.admin_user?.ok !== false &&
+    baseline.clamav?.ok !== false &&
     (network === null || network.ok !== false);
   return {
     system_id: systemId,
@@ -173,6 +199,8 @@ async function maintainOne(deployment, flags) {
     configure,
     allowlist,
     ...result,
+    admin_user: baseline.admin_user,
+    clamav: baseline.clamav,
     ok,
     network,
   };
@@ -192,6 +220,8 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const vaultAccess = createPackageVaultAccess();
+  await vaultAccess.unlock({});
   let deployments;
   try {
     deployments = resolvePiHoleDeployments(cfg, flags, { skipInstall: true });
@@ -208,7 +238,7 @@ async function main() {
   const instances = [];
   for (const deployment of deployments) {
     try {
-      instances.push(await maintainOne(deployment, flags));
+      instances.push(await maintainOne(deployment, flags, vaultAccess));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

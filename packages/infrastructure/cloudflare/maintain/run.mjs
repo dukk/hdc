@@ -321,9 +321,12 @@ async function main() {
   });
 
   await runOperationReportTail({
-    ctx: reportCtx,
+    reportCtx,
     packageRoot,
     repoRoot: repoRoot(),
+    ok: overallOk,
+    payload: reportCtx.stdoutPayload,
+    log,
   });
 
   log(overallOk ? `${verb}: completed successfully` : `${verb}: completed with errors`);

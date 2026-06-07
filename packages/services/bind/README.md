@@ -22,7 +22,7 @@ Authoritative DNS on Proxmox QEMU VMs: primary/secondary pair, zone files from `
 | Verb | Purpose |
 |------|---------|
 | `deploy` | Clone Ubuntu VMs, auto-allocate VMID, cloud-init static IP, install BIND (primary before secondary) |
-| `maintain` | Grow root disk when `rootfs_gb` exceeds live size; re-push dnscrypt-proxy (when ODoH) and `named.conf.options` on all nodes; re-render zones on primary; verify SOA serial |
+| `maintain` | Grow root disk when `rootfs_gb` exceeds live size; re-push dnscrypt-proxy (when ODoH) and `named.conf.options` on all nodes; re-render zones on primary; verify SOA serial; guest Linux baseline (local admin from `HDC_ADMIN_USER` + ClamAV; `--skip-admin-user`, `--skip-clamav`) |
 | `query` | `named` status; per-zone `dig SOA` |
 
 ```bash
@@ -32,7 +32,7 @@ node tools/hdc/cli.mjs run service bind maintain --
 
 ## Common flags
 
-`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--regenerate-tsig`, `--skip-disk-resize`, `--skip-clamav`, `--skip-guest-agent`, `--skip-apt`, `--dry-run`, `--no-report`.
+`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--regenerate-tsig`, `--skip-disk-resize`, `--skip-admin-user`, `--skip-clamav`, `--skip-guest-agent`, `--skip-apt`, `--dry-run`, `--no-report`.
 
 ## After deploy
 

@@ -33,6 +33,7 @@ import { tlsDomainsFromSites } from "../lib/nginx-waf-render.mjs";
 import { certExistsOnHost } from "../lib/letsencrypt.mjs";
 import { nginxWafReportExtraSections } from "../lib/nginx-waf-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
@@ -324,13 +325,14 @@ async function main() {
       });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {
-        existing.clamav = baseline.clamav;
-        if (existing.ok !== false) existing.ok = baseline.ok;
+        mergeGuestBaselineIntoResult(existing, baseline);
       } else {
         results.push({
-          ok: baseline.ok,
+          ok: baseline.admin_user?.ok !== false,
           system_id: deployment.systemId,
           role: deployment.role,
+          guest_resources: baseline.guest_resources,
+          admin_user: baseline.admin_user,
           clamav: baseline.clamav,
         });
       }

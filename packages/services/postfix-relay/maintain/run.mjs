@@ -13,6 +13,8 @@ import { stderr as errout, env } from "node:process";
 import { buildNet0, gatewayFromProxmox, resolveLxcIpConfig } from "../../../lib/lxc-network.mjs";
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
@@ -186,15 +188,62 @@ async function main() {
 
   const { via, exec } = resolveConfigureTarget(proxmoxRoot, cfg);
   const log = provisionLogFromConsole(console);
+  const packageVault = createPackageVaultAccess();
+  await packageVault.unlock({});
+  /** @type {Record<string, unknown> | null} */
+  let baseline = null;
+  if (deployMode === "proxmox-lxc") {
+    errout.write(`[hdc] ${target} ${verb}: guest baseline …\n`);
+    baseline = await ensureGuestLinuxBaseline({
+      exec,
+      log,
+      flags,
+      vaultAccess: packageVault,
+      deployment: {
+        mode: deployMode,
+        proxmox: cfg.proxmox,
+        system_id: typeof deploy.system_id === "string" ? deploy.system_id : "postfix-relay-a",
+      },
+      proxmoxPackageRoot: proxmoxRoot,
+    });
+  }
   let payload;
   try {
     const configure = configurePostfixRelay({ exec, log, postfix, smtp, smtpUser, smtpPass });
     errout.write(`[hdc] ${target} ${verb}: ok (${via}).\n`);
-    payload = { ok: true, target, verb, configure_via: via, network, guest_resources: guestResources, configure };
+    const baselineOk = !baseline || baseline.admin_user?.ok !== false;
+    payload = {
+      ok: baselineOk,
+      target,
+      verb,
+      configure_via: via,
+      network,
+      guest_resources: guestResources,
+      configure,
+      ...(baseline
+        ? {
+            admin_user: baseline.admin_user,
+            clamav: baseline.clamav,
+          }
+        : {}),
+    };
   } catch (e) {
     const msg = /** @type {Error} */ (e).message || String(e);
     errout.write(`[hdc] ${target} ${verb}: failed: ${msg}\n`);
-    payload = { ok: false, target, verb, network, guest_resources: guestResources, message: msg };
+    payload = {
+      ok: false,
+      target,
+      verb,
+      network,
+      guest_resources: guestResources,
+      ...(baseline
+        ? {
+            admin_user: baseline.admin_user,
+            clamav: baseline.clamav,
+          }
+        : {}),
+      message: msg,
+    };
     process.exitCode = 1;
   }
 

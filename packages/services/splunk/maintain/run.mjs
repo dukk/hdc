@@ -25,7 +25,8 @@ import { splunkReportExtraSections } from "../lib/splunk-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
-import { repoRoot } from "../../../../tools/hdc/paths.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,7 +130,15 @@ async function main() {
         dataDiskGb: dataDiskGbFromDeployment(deployment),
       });
       const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
-      results.push({ ok: baseline.ok, system_id: deployment.systemId, configure, clamav });
+      const rowOk = configure.ok && baseline.admin_user?.ok !== false && baseline.clamav?.ok !== false;
+      results.push({
+        ok: rowOk,
+        system_id: deployment.systemId,
+        configure,
+        guest_resources: baseline.guest_resources,
+        admin_user: baseline.admin_user,
+        clamav: baseline.clamav,
+      });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       results.push({ ok: false, system_id: deployment.systemId, message: msg });

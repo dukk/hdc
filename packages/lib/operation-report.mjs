@@ -1,4 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  guestBaselineReportExtraSections,
+  payloadHasGuestBaseline,
+} from "./guest-baseline-report.mjs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { preferredPackageReportPath } from "../../tools/hdc/lib/private-repo.mjs";
@@ -550,6 +554,10 @@ export function renderOperationReportMarkdown(ctx, reportPathForHeader, extraSec
   lines.push(...renderServiceNotesMarkdown(ctx));
   lines.push(...renderNextStepsMarkdown(ctx));
   lines.push(...renderWarningsMarkdown(ctx));
+
+  if (ctx.verb === "maintain" && payloadHasGuestBaseline(ctx)) {
+    lines.push(...guestBaselineReportExtraSections(ctx));
+  }
 
   if (extraSections) {
     const extra = extraSections(ctx);

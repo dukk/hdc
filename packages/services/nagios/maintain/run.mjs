@@ -3,7 +3,7 @@
  * Maintain Nagios: regenerate checks from BIND and reload LXC guests.
  *
  * Usage: hdc run service nagios maintain -- [--instance a | --system-id nagios-a]
- *        hdc run service nagios maintain -- [--apply-upgrades] [--skip-upgrade]
+ *        hdc run service nagios maintain -- [--apply-upgrades] [--skip-upgrade] [--skip-admin-user]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -11,6 +11,10 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -50,8 +54,9 @@ function readCfg() {
  * @param {ReturnType<typeof resolveNagiosDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {string} nagiosCfg
+ * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
-async function maintainOne(deployment, flags, nagiosCfg) {
+async function maintainOne(deployment, flags, nagiosCfg, vaultAccess) {
   const { systemId, proxmox: px } = deployment;
   const applyUpgrades = flagGet(flags, "apply-upgrades", "apply_upgrades") !== undefined;
   const skipUpgrade =
@@ -70,12 +75,34 @@ async function maintainOne(deployment, flags, nagiosCfg) {
   errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const result = await maintainNagiosInCt(pveSsh.user, pveSsh.host, vmid, nagiosCfg, { skipUpgrade });
+
+  errout.write(`[hdc] ${target} ${verb}: guest baseline on ${systemId} (vmid ${vmid}) …\n`);
+  const log = provisionLogFromConsole(console);
+  const exec = createConfigureExec("pct", {
+    user: pveSsh.user,
+    host: pveSsh.host,
+    vmid,
+    pveHost: pveSsh.host,
+  });
+  const baselineFlags = { ...flags, "skip-clamav": "1" };
+  const baseline = await ensureGuestLinuxBaseline({
+    exec,
+    log,
+    flags: baselineFlags,
+    vaultAccess,
+    deployment,
+    proxmoxPackageRoot: proxmoxRoot,
+  });
+
   return {
+    ...result,
     system_id: systemId,
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
-    ...result,
+    admin_user: baseline.admin_user,
+    clamav: baseline.clamav,
+    ok: result.ok !== false && baseline.admin_user?.ok !== false,
   };
 }
 
@@ -92,6 +119,8 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const vaultAccess = createPackageVaultAccess();
+  await vaultAccess.unlock({});
   let norm;
   let deployments;
   try {
@@ -124,7 +153,7 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await maintainOne(deployment, flags, bindBundle.nagiosCfg));
+      results.push(await maintainOne(deployment, flags, bindBundle.nagiosCfg, vaultAccess));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
