@@ -6,7 +6,7 @@
  *        hdc run service llama-cpp maintain -- [--skip-restart] [--skip-clamav]
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
@@ -18,10 +18,14 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { resolveLlamaCppDeployments } from "../lib/deployments.mjs";
-import { installLlamaCppInCt, resolvePveSshForHost } from "../lib/llama-cpp-install.mjs";
+import {
+  installLlamaCppInCt,
+  installLlamaCppViaSsh,
+  resolvePveSshForHost,
+} from "../lib/llama-cpp-install.mjs";
 
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -53,7 +57,7 @@ function readCfg() {
  * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  */
-async function maintainOne(deployment, flags, vaultAccess) {
+async function maintainLxcOne(deployment, flags, vaultAccess) {
   const { systemId, proxmox: px, install, server } = deployment;
   const skipRestart = flagGet(flags, "skip-restart", "skip_restart") !== undefined;
 
@@ -70,7 +74,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     return { ok: false, system_id: systemId, message: "invalid vmid" };
   }
 
-  errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} …\n`);
+  errout.write(`[hdc] ${target} ${verb}: ${systemId} LXC on ${hostId} vmid ${vmid} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const serverCfg = isObject(server) ? server : {};
   const installResult = await installLlamaCppInCt(
@@ -110,17 +114,114 @@ async function maintainOne(deployment, flags, vaultAccess) {
     vmid,
     pveHost: pveSsh.host,
   });
-  const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
+  const baseline = await ensureGuestLinuxBaseline({
+    exec,
+    log,
+    flags,
+    vaultAccess,
+    deployment,
+    proxmoxPackageRoot: proxmoxRoot,
+  });
 
   return {
     ok: baseline.ok,
     system_id: systemId,
     host_id: hostId,
+    mode: deployment.mode,
     install: installResult,
     restarted: !skipRestart,
     admin_user: baseline.admin_user,
     clamav: baseline.clamav,
   };
+}
+
+/**
+ * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ */
+async function maintainQemuOne(deployment, flags, vaultAccess) {
+  const { systemId, mode, proxmox: px, configure, install, server } = deployment;
+  const skipRestart = flagGet(flags, "skip-restart", "skip_restart") !== undefined;
+  const log = provisionLogFromConsole(console);
+
+  if (!isObject(px)) {
+    return { ok: false, system_id: systemId, message: "bad proxmox config" };
+  }
+  const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+  const q = isObject(px.qemu) ? px.qemu : {};
+  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+  const sshHost =
+    typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+  if (!sshHost) {
+    return { ok: false, system_id: systemId, message: "configure.ssh.host or proxmox.qemu.ip required" };
+  }
+
+  errout.write(`[hdc] ${target} ${verb}: ${systemId} QEMU via ${sshUser}@${sshHost} …\n`);
+  const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+  const serverCfg = isObject(server) ? server : {};
+  let installResult;
+  try {
+    installResult = await installLlamaCppViaSsh({ exec, log, install, server: serverCfg });
+  } catch (e) {
+    return {
+      ok: false,
+      system_id: systemId,
+      message: String(/** @type {Error} */ (e).message || e),
+    };
+  }
+  if (!installResult.ok) {
+    return { ok: false, system_id: systemId, install: installResult };
+  }
+
+  if (!skipRestart) {
+    errout.write(`[hdc] ${target} ${verb}: restarting llama-server on ${systemId} …\n`);
+    const r = exec.run(
+      "systemctl restart llama-server 2>/dev/null || systemctl start llama-server 2>/dev/null || true",
+      { capture: true },
+    );
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        system_id: systemId,
+        message: `restart failed (exit ${r.status})`,
+        install: installResult,
+      };
+    }
+  }
+
+  const baseline = await ensureGuestLinuxBaseline({
+    exec,
+    log,
+    flags,
+    vaultAccess,
+    deployment,
+    proxmoxPackageRoot: proxmoxRoot,
+  });
+
+  return {
+    ok: baseline.ok,
+    system_id: systemId,
+    mode,
+    install: installResult,
+    restarted: !skipRestart,
+    admin_user: baseline.admin_user,
+    clamav: baseline.clamav,
+  };
+}
+
+/**
+ * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ */
+async function maintainOne(deployment, flags, vaultAccess) {
+  if (deployment.mode === "proxmox-qemu") {
+    return maintainQemuOne(deployment, flags, vaultAccess);
+  }
+  if (deployment.mode === "proxmox-lxc") {
+    return maintainLxcOne(deployment, flags, vaultAccess);
+  }
+  return { ok: false, system_id: deployment.systemId, message: `unsupported mode ${deployment.mode}` };
 }
 
 async function main() {

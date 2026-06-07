@@ -104,7 +104,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
 - **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — shared [`packages/clients/config.json`](packages/clients/config.json). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -139,14 +139,17 @@ Example: set `HDC_ADMIN_USER` in `.env`, then `node tools/hdc/cli.mjs run servic
 
 - **Config:** [`packages/services/pi-hole/config.json`](packages/services/pi-hole/config.json) (copy from [`config.example.json`](packages/services/pi-hole/config.example.json); keep local config out of git).
 - **Inventory:** [`inventory/manual/systems/pi-hole-a.json`](inventory/manual/systems/pi-hole-a.json), [`pi-hole-b.json`](inventory/manual/systems/pi-hole-b.json).
+- **Schema:** [`tools/hdc/schema/pi-hole.config.schema.json`](tools/hdc/schema/pi-hole.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC provision + unattended Pi-hole install (`deployments[]`; `--instance a` / `--system-id pi-hole-b`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Gravity update + optional core update (`--skip-core-update`) |
-| `query` | Per-instance status via `pct exec`; optional API summary when `HDC_PIHOLE_API_TOKEN` (or `_A` / `_B`) is in vault |
+| `deploy` | Proxmox LXC provision + unattended Pi-hole install + allowlist sync (`deployments[]`; `--instance a` / `--system-id pi-hole-b`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-apply upstream/listening/local DNS + sync `pihole.allowlist[]` via `pihole allow`; gravity update + optional core update (`--skip-core-update`, `--skip-allowlist`, `--prune` removes allowlist entries not in config) |
+| `query` | Per-instance status via `pct exec`; `--live` reports configured vs live allowlist counts |
 
-Vault: `HDC_PIHOLE_WEBPASSWORD` (required for deploy); `HDC_PIHOLE_API_TOKEN` optional for query.
+Set blocklist exceptions in `defaults.pihole.allowlist[]` (strings or `{ "domain", "comment"? }`). Example bundle for Google Analytics: `marketingplatform.google.com`, `www.googletagmanager.com`, `www.google-analytics.com`, `analytics.google.com`. Not the same as `local_dns[]` custom A records.
+
+Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpassword` today); `HDC_PIHOLE_API_TOKEN` optional for future API query.
 
 ## Uptime Kuma in this repo
 
@@ -184,14 +187,14 @@ Example: `node tools/hdc/cli.mjs run service solidtime deploy --`
 
 ## BIND DNS in this repo
 
-- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones[]` objects (`id`, `zone_type`, `records`, optional `subnet` for reverse). Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
+- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones[]` objects (`id`, `zone_type`, `records`, optional `subnet` for reverse, optional `cloudflare_fallback` to merge public records from [`packages/infrastructure/cloudflare/config.json`](packages/infrastructure/cloudflare/config.json) with local overrides). Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
 - **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](inventory/manual/systems/vm-bind-b.json).
 - **Schema:** [`tools/hdc/schema/bind.config.schema.json`](tools/hdc/schema/bind.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Rebuild QEMU guests from Ubuntu template (optional `--destroy-existing`), cloud-init static IP from config, auto VMID, BIND primary then secondary (`deployments[]`; `--instance a\|b`) |
-| `maintain` | Re-push dnscrypt-proxy (ODoH) and named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary |
+| `deploy` | Rebuild QEMU guests from Ubuntu template (optional `--destroy-existing`), cloud-init static IP from config, auto VMID, optional `rootfs_gb` scsi0 resize, BIND primary then secondary (`deployments[]`; `--instance a\|b`) |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push dnscrypt-proxy (ODoH) and named options (forwarders) on all nodes; re-render zone files on primary (timestamp SOA serial); verify SOA serial match on secondary |
 | `query` | `named` service status and per-zone `dig SOA` on each node |
 
 TSIG: deploy auto-generates `bind.tsig_secret` in `config.json` and syncs vault `HDC_BIND_TSIG_KEY` when missing; `--regenerate-tsig` to rotate.
@@ -222,8 +225,8 @@ Example: `node tools/hdc/cli.mjs run service postgresql deploy -- --instance a`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox QEMU clone from Ubuntu template, cloud-init static IP, apt `step-cli`/`step-ca`, non-interactive `step ca init` when missing, systemd under `/etc/step-ca` (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`) |
-| `maintain` | Re-push `ca.json` and password file, optional package upgrade, restart `step-ca` (omit `--skip-package-upgrade` to refresh packages) |
+| `deploy` | Proxmox QEMU clone from Ubuntu template, cloud-init static IP, optional `rootfs_gb` scsi0 resize, apt `step-cli`/`step-ca`, non-interactive `step ca init` when missing, systemd under `/etc/step-ca` (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`) |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push `ca.json` and password file, optional package upgrade, restart `step-ca` (omit `--skip-package-upgrade` to refresh packages) |
 
 Vault: `HDC_STEP_CA_PASSWORD` (required; optional per-instance `HDC_STEP_CA_PASSWORD_A`). Distribute `/etc/step-ca/certs/root_ca.crt` to clients manually after deploy.
 
@@ -403,6 +406,23 @@ Example: `node tools/hdc/cli.mjs run service scanopy deploy --`
 Vault: `HDC_YACY_ADMIN_PASSWORD` (required for deploy/maintain unless `--skip-admin-password`). Default YaCy UI login is `admin` with this password after deploy.
 
 Example: `node tools/hdc/cli.mjs run service yacy deploy --`
+
+## SearXNG in this repo
+
+- **Config:** [`packages/services/searxng/config.json`](packages/services/searxng/config.json) (copy from [`config.example.json`](packages/services/searxng/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/searxng-a.json`](inventory/manual/systems/searxng-a.json); service sidecar [`inventory/manual/services/searxng.json`](inventory/manual/services/searxng.json).
+- **Schema:** [`tools/hdc/schema/searxng.config.schema.json`](tools/hdc/schema/searxng.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (privileged, Docker) + official SearXNG Compose (`searxng` + `valkey`) in `/opt/searxng` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `.env` + `core-config/settings.yml`, `docker compose pull` + `up -d`; guest Linux baseline; `--skip-upgrade` skips image pull |
+| `query` | Config summary; `--live` for Docker/HTTP probe on port 8080 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Vault: `HDC_SEARXNG_SECRET` (auto-generated on first deploy if missing). Internal LAN: browse `http://<ct-ip>:8080` (set `searxng.public_url` only when exposing via reverse proxy).
+
+Example: `node tools/hdc/cli.mjs run service searxng deploy --`
 
 ## Immich in this repo
 
@@ -603,19 +623,21 @@ Example: `node tools/hdc/cli.mjs run service lms deploy -- --instance a`
 ## Llama.cpp in this repo
 
 - **Config:** [`packages/services/llama-cpp/config.json`](packages/services/llama-cpp/config.json) (copy from [`config.example.json`](packages/services/llama-cpp/config.example.json); keep local config out of git).
-- **Inventory:** optional [`inventory/manual/systems/llama-cpp-{a,b}.json`](inventory/manual/systems/) per instance.
+- **Inventory:** optional [`inventory/manual/systems/llama-cpp-{a,b}.json`](inventory/manual/systems/) (LXC) or `vm-llama-cpp-a.json` (QEMU GPU).
 - **Schema:** [`tools/hdc/schema/llama-cpp.config.schema.json`](tools/hdc/schema/llama-cpp.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC provision + `llama-server` from GitHub releases (`deployments[]`; per-deployment `install.backend`: cpu/cuda/vulkan/rocm; `--instance a`) |
-| `maintain` | Upgrade binary to latest/pinned release and restart `llama-server` (`--skip-restart` optional) |
-| `query` | Config summary; `--live` for systemd/health via `pct exec` |
-| `teardown` | Destroy LXC guests (`--dry-run`, `--yes`, `--instance`) |
+| `deploy` | Proxmox LXC or QEMU + `llama-server` from GitHub releases (`deployments[]`; per-deployment `install.backend`: cpu/cuda/vulkan/rocm; `--instance a`; QEMU: `--destroy-existing`, `--skip-provision`) |
+| `maintain` | Upgrade binary to latest/pinned release and restart `llama-server`; guest Linux baseline on QEMU/LXC (`--skip-restart` optional) |
+| `query` | Config summary; `--live` for systemd/health (LXC via `pct exec`, QEMU via SSH; GPU name when CUDA) |
+| `teardown` | Destroy LXC or QEMU guests (`--dry-run`, `--yes`, `--instance`) |
+
+**QEMU GPU (`vm-llama-cpp-a`):** `mode: proxmox-qemu`, `proxmox.qemu.hostpci[]`, `install.backend: vulkan` (or `cuda` if you build from source — upstream no longer ships Ubuntu CUDA tarballs). Installs NVIDIA drivers in guest for GPU passthrough. Complete VFIO/IOMMU on the Proxmox host before deploy; PCI BDF from `lspci`.
 
 Set `server.model` or `server.hf_model` in config to enable and start the unit at deploy; otherwise install leaves the service disabled until a model is configured.
 
-Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a`
+Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --destroy-existing`
 
 ## Home clients in this repo
 

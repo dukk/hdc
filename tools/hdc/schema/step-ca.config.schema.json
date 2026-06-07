@@ -20,7 +20,10 @@
         "step_path": { "type": "string" }
       }
     },
-    "defaults": { "type": "object" },
+    "defaults": {
+      "type": "object",
+      "description": "Merged into each deployments[] entry. For proxmox-qemu, defaults.proxmox.qemu.rootfs_gb sets the target root disk size in GiB (deploy resize after clone; maintain grows live guests)."
+    },
     "deployments": {
       "type": "array",
       "minItems": 1,

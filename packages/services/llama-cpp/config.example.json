@@ -11,6 +11,12 @@
         "cores": 8,
         "bridge": "vmbr0",
         "ip_config": "dhcp"
+      },
+      "qemu": {
+        "template_vmid": 9024,
+        "storage": "local-lvm",
+        "full": 1,
+        "bridge": "vmbr0"
       }
     },
     "install": {
@@ -44,5 +50,25 @@
         "lxc": { "vmid": 481 }
       }
     }
-  ]
+  ],
+  "_comment_qemu_gpu_example": {
+    "system_id": "vm-llama-cpp-a",
+    "mode": "proxmox-qemu",
+    "hostname": "llama-cpp-a",
+    "install": { "backend": "cuda", "cuda_version": "12.4" },
+    "proxmox": {
+      "host_id": "pve-d",
+      "network": { "gateway": "10.0.0.1" },
+      "qemu": {
+        "vmid": 480,
+        "template_vmid": 9024,
+        "cores": 8,
+        "memory_mb": 24576,
+        "rootfs_gb": 128,
+        "ip": "10.0.0.28/24",
+        "hostpci": [{ "id": "0000:01:00.0", "pcie": true, "rombar": false }]
+      }
+    },
+    "configure": { "ssh": { "user": "root", "host": "10.0.0.28" } }
+  }
 }

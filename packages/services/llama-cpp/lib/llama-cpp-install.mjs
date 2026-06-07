@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { stderr as errout } from "node:process";
 
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { loadProxmoxConfigFromRepo } from "../../../infrastructure/proxmox/lib/proxmox-package-config.mjs";
 import { resolveProxmoxHost } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
@@ -182,10 +183,24 @@ function assetCaseLines(backend, cudaVersion, rocmVersion) {
 }
 
 /**
+ * NVIDIA host drivers for GPU passthrough guests (CUDA and Vulkan backends on Linux).
+ * @param {string} backend
+ */
+export function nvidiaDriverInstallLines(backend) {
+  const b = normalizeInstallBackend(backend);
+  if (b !== "cuda" && b !== "vulkan") return [];
+  return [
+    "apt-get install -y -qq ubuntu-drivers-common",
+    "DEBIAN_FRONTEND=noninteractive ubuntu-drivers install nvidia || ubuntu-drivers autoinstall",
+  ];
+}
+
+/**
  * @param {Record<string, unknown>} install
  * @param {Record<string, unknown>} server
+ * @param {{ growRootfs?: boolean }} [opts]
  */
-export function buildInstallShellScript(install, server) {
+export function buildInstallShellScript(install, server, opts = {}) {
   const backend = normalizeInstallBackend(
     typeof install.backend === "string" ? install.backend : "cpu",
   );
@@ -209,12 +224,19 @@ export function buildInstallShellScript(install, server) {
   const startNow = serverHasModel(server);
 
   /** @type {string[]} */
-  const head = [
-    "set -euo pipefail",
-    "export DEBIAN_FRONTEND=noninteractive",
-    "apt-get update -qq",
-    "apt-get install -y -qq curl ca-certificates tar",
-  ];
+  const head = ["set -euo pipefail", "export DEBIAN_FRONTEND=noninteractive"];
+  if (opts.growRootfs) {
+    head.push(
+      "ROOT_PART=$(findmnt -n -o SOURCE / | sed 's/[0-9]*$//')",
+      "ROOT_NUM=$(findmnt -n -o SOURCE / | grep -oE '[0-9]+$')",
+      'if [ -n "$ROOT_PART" ] && [ -n "$ROOT_NUM" ]; then',
+      '  growpart "$ROOT_PART" "$ROOT_NUM" 2>/dev/null || true',
+      '  resize2fs "$(findmnt -n -o SOURCE /)" 2>/dev/null || true',
+      "fi",
+    );
+  }
+  head.push("apt-get update -qq", ...nvidiaDriverInstallLines(backend));
+  head.push("apt-get install -y -qq curl ca-certificates tar");
 
   if (pinned) {
     const asset = resolveReleaseAsset(backend, pinned, { cudaVersion, rocmVersion });
@@ -319,5 +341,50 @@ export async function installLlamaCppInCt(user, pveHost, vmid, install, server) 
     errout.write(`[hdc] llama-cpp install: llama-server started on CT ${vmid}.\n`);
   }
   errout.write(`[hdc] llama-cpp install: completed on CT ${vmid}.\n`);
+  return { ok: true, backend, message: "installed" };
+}
+
+/**
+ * @param {ReturnType<typeof createConfigureExec>} exec
+ * @param {string} cmd
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ */
+function runChecked(exec, cmd, log) {
+  log.info(`${exec.label}: ${cmd.split("\n")[0].slice(0, 120)}`);
+  const r = exec.run(cmd, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    throw new Error(detail);
+  }
+  return r;
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
+ * @param {Record<string, unknown>} opts.install
+ * @param {Record<string, unknown>} opts.server
+ */
+export async function installLlamaCppViaSsh(opts) {
+  const { exec, log, install, server } = opts;
+  const backend = normalizeInstallBackend(
+    typeof install.backend === "string" ? install.backend : "cpu",
+  );
+  const release =
+    typeof install.release === "string" && install.release.trim()
+      ? install.release.trim()
+      : "latest";
+  errout.write(`[hdc] llama-cpp install: backend ${backend} release ${release} via SSH …\n`);
+  const inner = buildInstallShellScript(install, server, { growRootfs: true });
+  runChecked(exec, inner, log);
+  if (!serverHasModel(server)) {
+    errout.write(
+      `[hdc] llama-cpp install: unit installed but not started — set server.model or server.hf_model, then systemctl start llama-server.\n`,
+    );
+  } else {
+    errout.write(`[hdc] llama-cpp install: llama-server started.\n`);
+  }
+  errout.write(`[hdc] llama-cpp install: completed via SSH.\n`);
   return { ok: true, backend, message: "installed" };
 }

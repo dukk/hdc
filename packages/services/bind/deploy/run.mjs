@@ -41,6 +41,13 @@ import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import {
+  growRootFilesystemInGuest,
+  resizeQemuScsi0OnHypervisor,
+  resolveRootfsGbFromDeployment,
+  syncQemuRootfsOnMaintain,
+} from "../../../lib/qemu-rootfs-resize.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -119,6 +126,7 @@ function runConfigure(deployment, global, tsigSecret, log) {
     forwarders: global.forwarders,
     forwardUpstream: global.forwardUpstream,
     serial: deployment.role === "primary" ? soaSerialFromTimestamp() : undefined,
+    repoRoot: root,
   });
 }
 
@@ -242,6 +250,12 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
         `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
       );
       const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+      const diskResize = await syncQemuRootfsOnMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        flags,
+        log: logLine,
+      });
       const guestAgent = await ensureBindGuestAgent(deployment, global, logLine);
       const configure = runConfigure(deployment, global, tsigSecret, log);
       return {
@@ -250,6 +264,7 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
         role: deployment.role,
         skipped_provision: true,
         vmid: existingVmid,
+        disk_resize: diskResize,
         guest_agent: guestAgent,
         configure,
       };
@@ -294,6 +309,18 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
     guestResourceOptsFromBlock(q, flags),
   );
 
+  const rootfsGb = resolveRootfsGbFromDeployment(deployment);
+  if (rootfsGb) {
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    resizeQemuScsi0OnHypervisor({
+      sshUser: pveSsh.user,
+      sshHost: pveSsh.host,
+      vmid: guestVmid,
+      rootfsGb,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  }
+
   await applyQemuCloudInit({
     apiBase: auth.host.apiBase,
     authorization: auth.authorization,
@@ -329,6 +356,11 @@ async function deployOne(deployment, flags, global, tsigSecret, log) {
   await waitForSsh({ user: sshUser, host: sshHost });
 
   const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  if (rootfsGb) {
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    growRootFilesystemInGuest({ exec, log });
+  }
+
   const guestAgent = await ensureBindGuestAgent(
     {
       ...deployment,

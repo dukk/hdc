@@ -2,7 +2,7 @@
 /**
  * Query Pi-hole instance status.
  *
- * Usage: hdc run service pi-hole query -- [--instance a | --system-id pi-hole-a]
+ * Usage: hdc run service pi-hole query -- [--instance a | --system-id pi-hole-a] [--live]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -14,6 +14,7 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { loadManualSystemSidecar, primaryIpFromSystem } from "../lib/inventory.mjs";
 import { resolvePiHoleDeployments } from "../lib/deployments.mjs";
 import { readCtPrimaryIp, resolvePveSshForHost } from "../lib/pi-hole-install.mjs";
+import { allowlistFromPiholeConfig, queryLiveAllowlistInCt } from "../lib/pi-hole-allowlist.mjs";
 import { queryPiHoleStatusInCt } from "../lib/pi-hole-configure.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -45,8 +46,9 @@ function readCfg() {
 
 /**
  * @param {ReturnType<typeof resolvePiHoleDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
  */
-async function queryOne(deployment) {
+async function queryOne(deployment, flags) {
   const { systemId, proxmox: px } = deployment;
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -67,7 +69,8 @@ async function queryOne(deployment) {
   }
 
   const status = queryPiHoleStatusInCt(pveSsh.user, pveSsh.host, vmid);
-  return {
+  /** @type {Record<string, unknown>} */
+  const row = {
     system_id: systemId,
     host_id: hostId,
     vmid,
@@ -76,6 +79,33 @@ async function queryOne(deployment) {
     ok: status.ok,
     status,
   };
+
+  if (flags.live !== undefined) {
+    const piholeCfg = isObject(deployment.pihole) ? deployment.pihole : {};
+    let configured;
+    try {
+      configured = allowlistFromPiholeConfig(piholeCfg);
+    } catch (e) {
+      row.allowlist = {
+        ok: false,
+        message: String(/** @type {Error} */ (e).message || e),
+      };
+      row.ok = false;
+      return row;
+    }
+    const live = queryLiveAllowlistInCt(pveSsh.user, pveSsh.host, vmid);
+    row.allowlist = {
+      ok: live.ok,
+      configured_count: configured.length,
+      configured_domains: configured.map((entry) => entry.domain),
+      live_count: live.count ?? live.domains?.length ?? 0,
+      live_domains: live.domains ?? [],
+      message: live.message,
+    };
+    if (!live.ok) row.ok = false;
+  }
+
+  return row;
 }
 
 async function main() {
@@ -108,7 +138,7 @@ async function main() {
   const instances = [];
   for (const deployment of deployments) {
     try {
-      instances.push(await queryOne(deployment));
+      instances.push(await queryOne(deployment, flags));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

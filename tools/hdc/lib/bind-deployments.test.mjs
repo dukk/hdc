@@ -41,6 +41,28 @@ describe("bind-deployments", () => {
     expect(list[1].role).toBe("secondary");
   });
 
+  it("merges rootfs_gb from defaults.proxmox.qemu", () => {
+    const list = resolveBindDeployments(
+      {
+        ...sampleCfg,
+        defaults: {
+          mode: "proxmox-qemu",
+          proxmox: { qemu: { rootfs_gb: 16, memory_mb: 2048 } },
+        },
+        deployments: [
+          {
+            system_id: "vm-bind-a",
+            role: "primary",
+            hostname: "bind-a",
+            proxmox: { host_id: "pve-b", qemu: { ip: "10.0.0.2/24" } },
+          },
+        ],
+      },
+      {},
+    );
+    expect(list[0].proxmox.qemu.rootfs_gb).toBe(16);
+  });
+
   it("bindGlobalSettings reads IPs from bind block", () => {
     const g = bindGlobalSettings(normalizeBindConfig(sampleCfg));
     expect(g.primaryIp).toBe("192.0.2.2");

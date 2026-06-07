@@ -1,7 +1,14 @@
-import { deploymentSystemIdPattern, lxcSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import {
+  deploymentSystemIdPattern,
+  lxcSystemId,
+  vmSystemId,
+} from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const LLAMA_CPP_ROLE = "llama-cpp";
+const LLAMA_CPP_LXC_SYSTEM_ID = deploymentSystemIdPattern(LLAMA_CPP_ROLE);
+const LLAMA_CPP_QEMU_SYSTEM_ID = /^vm-llama-cpp-[a-z]+$/;
+
 /** Minimum LXC root disk (GB) for GGUF model storage. */
 export const MIN_LLAMA_CPP_ROOTFS_GB = 128;
 
@@ -60,6 +67,7 @@ function normalizeV1(cfg) {
   if (isObject(cfg.proxmox)) defaults.proxmox = structuredClone(cfg.proxmox);
   if (isObject(cfg.install)) defaults.install = structuredClone(cfg.install);
   if (isObject(cfg.server)) defaults.server = structuredClone(cfg.server);
+  if (isObject(cfg.configure)) defaults.configure = structuredClone(cfg.configure);
   return {
     schemaVersion: 1,
     defaults,
@@ -117,8 +125,18 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!deploymentSystemIdPattern(LLAMA_CPP_ROLE).test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match llama-cpp-<letter>`);
+    const mode = typeof d.mode === "string" ? d.mode.trim() : "";
+    if (mode === "proxmox-qemu") {
+      if (!LLAMA_CPP_QEMU_SYSTEM_ID.test(sid)) {
+        throw new Error(
+          `system_id ${JSON.stringify(sid)} must match vm-llama-cpp-<letter> for proxmox-qemu`,
+        );
+      }
+    } else if (!LLAMA_CPP_LXC_SYSTEM_ID.test(sid)) {
+      throw new Error(`system_id ${JSON.stringify(sid)} must match llama-cpp-<letter> for LXC`);
+    }
+    if (/^ct-/.test(sid)) {
+      throw new Error(`system_id ${JSON.stringify(sid)} must not use legacy ct- prefix`);
     }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
@@ -128,7 +146,6 @@ function validateDeployments(deployments) {
       typeof install.backend === "string" ? install.backend : "cpu",
     );
 
-    const mode = typeof d.mode === "string" ? d.mode.trim() : "";
     if (mode === "proxmox-lxc" || mode === "proxmox-qemu") {
       const px = isObject(d.proxmox) ? d.proxmox : {};
       const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
@@ -152,6 +169,22 @@ function validateDeployments(deployments) {
           );
         }
       }
+      if (mode === "proxmox-qemu") {
+        const q = isObject(px.qemu) ? px.qemu : {};
+        const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+        const templateVmid =
+          typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+        const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+        if (!Number.isFinite(vmid) || vmid <= 0) {
+          throw new Error(`${sid}: proxmox.qemu.vmid must be a positive number`);
+        }
+        if (!Number.isFinite(templateVmid) || templateVmid <= 0) {
+          throw new Error(`${sid}: proxmox.qemu.template_vmid must be a positive number`);
+        }
+        if (!ip) {
+          throw new Error(`${sid}: proxmox.qemu.ip required for proxmox-qemu`);
+        }
+      }
     }
   }
 }
@@ -166,14 +199,22 @@ export function listLlamaCppDeploymentSummaries(cfg) {
     const px = isObject(d.proxmox) ? d.proxmox : {};
     const hostId = typeof px.host_id === "string" ? px.host_id : null;
     const lxc = isObject(px.lxc) ? px.lxc : {};
-    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const qemu = isObject(px.qemu) ? px.qemu : {};
+    const lxcVmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const qemuVmid = typeof qemu.vmid === "number" ? qemu.vmid : Number(qemu.vmid);
+    const vmid =
+      mode === "proxmox-qemu" && Number.isFinite(qemuVmid)
+        ? qemuVmid
+        : Number.isFinite(lxcVmid)
+          ? lxcVmid
+          : null;
     const install = isObject(d.install) ? d.install : {};
     const server = isObject(d.server) ? d.server : {};
     return {
       system_id: d.system_id,
       mode,
       host_id: hostId,
-      vmid: Number.isFinite(vmid) ? vmid : null,
+      vmid,
       install_enabled: install.enabled !== false,
       install_backend: normalizeInstallBackend(
         typeof install.backend === "string" ? install.backend : "cpu",
@@ -187,12 +228,36 @@ export function listLlamaCppDeploymentSummaries(cfg) {
 }
 
 /**
+ * Resolve instance flag to a system id (`a` → configured vm-llama-cpp-a or llama-cpp-a).
  * @param {string | undefined} instance
+ * @param {Record<string, unknown>[] | undefined} [deployments]
  */
-export function instanceFlagToSystemId(instance) {
+export function instanceFlagToSystemId(instance, deployments) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (deploymentSystemIdPattern(LLAMA_CPP_ROLE).test(t)) return t;
+  if (LLAMA_CPP_LXC_SYSTEM_ID.test(t) || LLAMA_CPP_QEMU_SYSTEM_ID.test(t)) return t;
+  if (Array.isArray(deployments) && deployments.length > 0) {
+    const letter = t.length === 1 || /^[a-z]+$/.test(t) ? t : null;
+    if (letter) {
+      const qemu = deployments.find(
+        (d) =>
+          typeof d.system_id === "string" &&
+          LLAMA_CPP_QEMU_SYSTEM_ID.test(d.system_id) &&
+          d.system_id.endsWith(`-${letter}`),
+      );
+      if (qemu && typeof qemu.system_id === "string") return qemu.system_id;
+      const lxc = deployments.find(
+        (d) =>
+          typeof d.system_id === "string" &&
+          LLAMA_CPP_LXC_SYSTEM_ID.test(d.system_id) &&
+          d.system_id.endsWith(`-${letter}`),
+      );
+      if (lxc && typeof lxc.system_id === "string") return lxc.system_id;
+    }
+  }
+  if (LLAMA_CPP_QEMU_SYSTEM_ID.test(vmSystemId(LLAMA_CPP_ROLE, t))) {
+    return vmSystemId(LLAMA_CPP_ROLE, t);
+  }
   return lxcSystemId(LLAMA_CPP_ROLE, t);
 }
 
@@ -208,7 +273,7 @@ export function resolveLlamaCppDeployments(cfg, flags, opts = {}) {
   let selectedId = flagGet(flags, "system-id", "system_id");
   const instance = flagGet(flags, "instance");
   if (!selectedId && instance) {
-    selectedId = instanceFlagToSystemId(instance);
+    selectedId = instanceFlagToSystemId(instance, deployments);
   }
 
   if (deployments.length === 1) {
@@ -259,11 +324,15 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
     install.enabled = false;
   }
   const mode = typeof d.mode === "string" ? d.mode.trim() : "";
+  const hostname =
+    typeof d.hostname === "string" && d.hostname.trim() ? d.hostname.trim() : undefined;
   const server = isObject(d.server) ? d.server : {};
   return {
     systemId: String(d.system_id),
     mode,
+    hostname,
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
+    configure: isObject(d.configure) ? d.configure : null,
     install,
     server,
   };

@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   buildZoneBundle,
@@ -75,5 +78,46 @@ describe("bind-zones", () => {
     expect(bundles).toHaveLength(1);
     expect(bundles[0].serial).toBe("2026052570");
     expect(bundles[0].records).toHaveLength(1);
+  });
+
+  it("buildZoneBundle merges cloudflare_fallback when repoRoot is set", () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-bind-zones-cf-"));
+    const cfDir = join(root, "packages/infrastructure/cloudflare");
+    mkdirSync(cfDir, { recursive: true });
+    writeFileSync(
+      join(cfDir, "config.json"),
+      JSON.stringify({
+        zones: [
+          {
+            name: "example.invalid",
+            records: [
+              { type: "A", name: "vault", data: "198.51.100.10", ttl: 1 },
+              { type: "NS", name: "hdc", data: "ns-a.example.invalid", ttl: 1 },
+            ],
+          },
+        ],
+      }),
+    );
+    const zoneMap = {
+      "example.invalid": {
+        zone_type: "forward",
+        cloudflare_fallback: { zone: "example.invalid" },
+        records: [{ type: "A", name: "local-only", data: "192.0.2.50", ttl: 3600 }],
+      },
+    };
+    const ns = {
+      primaryNs: "dns-a.hdc.example.invalid.",
+      secondaryNs: "dns-b.hdc.example.invalid.",
+      primaryIp: "192.0.2.2",
+      secondaryIp: "192.0.2.3",
+      hostmaster: "hostmaster.hdc.example.invalid",
+    };
+    const { bundles } = buildZoneBundle(["example.invalid"], zoneMap, ns, {
+      serial: "2026052570",
+      repoRoot: root,
+    });
+    expect(bundles[0].records.some((r) => r.name === "local-only")).toBe(true);
+    expect(bundles[0].records.some((r) => r.name === "vault" && r.data === "198.51.100.10")).toBe(true);
+    expect(bundles[0].records.some((r) => r.type === "NS")).toBe(false);
   });
 });

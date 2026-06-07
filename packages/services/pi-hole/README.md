@@ -1,6 +1,6 @@
 # Pi-hole DNS filtering (`pi-hole`)
 
-Deploy Pi-hole on Proxmox LXC (multi-instance), update blocklists, and query status.
+Deploy Pi-hole on Proxmox LXC (multi-instance), sync allowlist exceptions, update blocklists, and query status.
 
 ## Prerequisites
 
@@ -12,15 +12,35 @@ Deploy Pi-hole on Proxmox LXC (multi-instance), update blocklists, and query sta
 
 | Verb | Purpose |
 |------|---------|
-| `deploy` | LXC provision + unattended Pi-hole install |
-| `maintain` | Gravity update; optional core update; `--apply-network` to set static `ip_config` on existing CTs |
-| `query` | Per-instance status via `pct exec` |
+| `deploy` | LXC provision + unattended Pi-hole install + allowlist sync |
+| `maintain` | Re-apply config/allowlist; gravity update; optional core update; `--apply-network` to set static `ip_config` on existing CTs |
+| `query` | Per-instance status via `pct exec`; `--live` compares configured vs live allowlist |
 
 ```bash
 node tools/hdc/cli.mjs run service pi-hole deploy --
 node tools/hdc/cli.mjs run service pi-hole maintain --
-node tools/hdc/cli.mjs run service pi-hole query --
+node tools/hdc/cli.mjs run service pi-hole query -- --live
 ```
+
+## Allowlist (exceptions)
+
+Add domains under `defaults.pihole.allowlist[]` (or per-deployment override). Deploy and maintain run `pihole allow` on each instance so listed domains bypass blocklists.
+
+```json
+"allowlist": [
+  "marketingplatform.google.com",
+  { "domain": "www.googletagmanager.com", "comment": "Google Analytics / GTM" }
+]
+```
+
+This is **not** the same as `local_dns[]` (custom A records). Allowlist entries only stop Pi-hole from blocking those hostnames.
+
+**Google Analytics:** the example bundle includes `marketingplatform.google.com`, GTM, and common GA hostnames. Browser privacy extensions may still block tracking scripts even when DNS is allowed.
+
+| Flag | Effect |
+|------|--------|
+| `--skip-allowlist` | Skip allowlist sync (gravity-only maintain) |
+| `--prune` | Remove allowlist entries not in config (maintain only; may delete UI-added entries) |
 
 ## Common flags
 

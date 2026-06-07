@@ -1,3 +1,8 @@
+import {
+  mergeZoneWithCloudflareFallback,
+  normalizeLocalBindRecords,
+} from "./bind-cloudflare-fallback.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -159,9 +164,10 @@ export function validateZoneRecords(records, zoneId) {
  * @param {string[]} zoneIds
  * @param {Record<string, Record<string, unknown>>} zoneMap
  * @param {{ primaryNs: string; secondaryNs: string; primaryIp: string; secondaryIp: string; hostmaster: string }} ns
- * @param {{ serial: string }} opts
+ * @param {{ serial: string; repoRoot?: string }} opts
  */
 export function buildZoneBundle(zoneIds, zoneMap, ns, opts) {
+  const repoRoot = typeof opts.repoRoot === "string" && opts.repoRoot.trim() ? opts.repoRoot.trim() : "";
   const forwardAs = collectForwardARecords(zoneMap);
   /** @type {{ id: string; zoneType: string; records: { type: string; name: string; data: string; ttl: number }[]; serial: string }[]} */
   const bundles = [];
@@ -176,15 +182,13 @@ export function buildZoneBundle(zoneIds, zoneMap, ns, opts) {
     if (zoneType === "reverse") {
       records = mergeReverseRecords(zone, forwardAs);
     } else {
-      records = (Array.isArray(zone.records) ? zone.records : [])
-        .filter(isObject)
-        .map((rec) => ({
-          type: String(rec.type ?? ""),
-          name: typeof rec.name === "string" ? rec.name.trim() : "",
-          data: typeof rec.data === "string" ? rec.data.trim() : "",
-          ttl: typeof rec.ttl === "number" && rec.ttl > 0 ? rec.ttl : 3600,
-        }))
-        .filter((r) => r.type && r.name && r.data);
+      const localRecords = normalizeLocalBindRecords(
+        Array.isArray(zone.records) ? zone.records : [],
+      );
+      records =
+        isObject(zone.cloudflare_fallback) && repoRoot
+          ? mergeZoneWithCloudflareFallback(zone, localRecords, id, repoRoot)
+          : localRecords;
     }
     validateZoneRecords(records, id);
     bundles.push({ id, zoneType, records, serial: opts.serial });

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Teardown llama-cpp Proxmox LXC deployments.
+ * Teardown llama-cpp Proxmox LXC or QEMU deployments.
  *
  * Usage: hdc run service llama-cpp teardown -- [--instance a | --system-id llama-cpp-a]
  *        hdc run service llama-cpp teardown -- [--dry-run] [--yes]
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
@@ -16,12 +16,14 @@ import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/pro
 import { stopAndDestroyLxc } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
 import { resolveLlamaCppDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../../ollama/lib/guest-exists.mjs";
+import { stopAndDestroyQemu } from "../../ollama/lib/proxmox-qemu-redeploy.mjs";
 import {
   confirmTeardown,
   teardownDryRun,
 } from "../../ollama/lib/teardown-confirm.mjs";
 
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +60,7 @@ async function teardownOne(deployment, flags) {
   const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
   const dryRun = teardownDryRun(flags);
 
-  if (mode !== "proxmox-lxc") {
+  if (mode !== "proxmox-lxc" && mode !== "proxmox-qemu") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
   }
 
@@ -70,8 +72,10 @@ async function teardownOne(deployment, flags) {
     return { ok: false, system_id: systemId, message: "missing host_id" };
   }
 
-  const lxc = isObject(px.lxc) ? px.lxc : {};
-  const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+  const guestKind = mode === "proxmox-lxc" ? "lxc" : "qemu";
+  const guestCfg =
+    guestKind === "lxc" ? (isObject(px.lxc) ? px.lxc : {}) : isObject(px.qemu) ? px.qemu : {};
+  const vmid = typeof guestCfg.vmid === "number" ? guestCfg.vmid : Number(guestCfg.vmid);
   if (!Number.isFinite(vmid) || vmid <= 0) {
     return { ok: false, system_id: systemId, host_id: hostId, message: "invalid vmid" };
   }
@@ -146,15 +150,20 @@ async function teardownOne(deployment, flags) {
   }
 
   const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`);
+  const destroyOpts = {
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: located.node,
+    vmid,
+    log: logLine,
+  };
   try {
-    await stopAndDestroyLxc({
-      apiBase: auth.host.apiBase,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-      node: located.node,
-      vmid,
-      log: logLine,
-    });
+    if (guestKind === "lxc") {
+      await stopAndDestroyLxc(destroyOpts);
+    } else {
+      await stopAndDestroyQemu(destroyOpts);
+    }
   } catch (e) {
     const msg = String(/** @type {Error} */ (e).message || e);
     errout.write(`[hdc] ${target} ${verb}: ${systemId} destroy failed: ${msg}\n`);
@@ -177,12 +186,12 @@ async function teardownOne(deployment, flags) {
     destroyed: true,
     vmid,
     node: located.node,
-    message: `lxc ${vmid} destroyed`,
+    message: `${guestKind} ${vmid} destroyed`,
   };
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: tear down llama-cpp LXC (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: tear down llama-cpp LXC or QEMU (stderr log; JSON on stdout).\n`);
 
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(

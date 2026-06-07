@@ -13,7 +13,7 @@ export function buildStepCaInitCommand(global, passwordFileRemote) {
   const dnsFlags = global.dnsNames.map((d) => `--dns=${shellQuote(d)}`).join(" ");
   const acme = global.enableAcme ? " --acme" : "";
   const stepPath = shellQuote(global.stepPath);
-  return `export STEPPATH=${stepPath}; mkdir -p "$STEPPATH" && step ca init --deployment-type=${shellQuote(global.deploymentType)} --name=${shellQuote(global.caName)} ${dnsFlags} --address=${shellQuote(global.listenAddress)} --provisioner=${shellQuote(global.provisionerName)} --password-file=${shellQuote(passwordFileRemote)}${acme}`;
+  return `export STEPPATH=${stepPath}; mkdir -p "$STEPPATH" && step ca init --deployment-type=${shellQuote(global.deploymentType)} --name=${shellQuote(global.caName)} ${dnsFlags} --address=${shellQuote(global.listenAddress)} --provisioner=${shellQuote(global.provisionerName)} --password-file=${shellQuote(passwordFileRemote)} --provisioner-password-file=${shellQuote(passwordFileRemote)}${acme}`;
 }
 
 /**

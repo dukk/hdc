@@ -15,8 +15,24 @@
         "type": "object",
         "required": ["system_id"],
         "properties": {
-          "system_id": { "type": "string", "pattern": "^llama-cpp-[a-z]+$" },
+          "system_id": {
+            "type": "string",
+            "pattern": "^(llama-cpp|vm-llama-cpp)-[a-z]+$"
+          },
           "mode": { "enum": ["proxmox-lxc", "proxmox-qemu"] },
+          "hostname": { "type": "string" },
+          "configure": {
+            "type": "object",
+            "properties": {
+              "ssh": {
+                "type": "object",
+                "properties": {
+                  "user": { "type": "string" },
+                  "host": { "type": "string" }
+                }
+              }
+            }
+          },
           "proxmox": { "type": "object" },
           "install": {
             "type": "object",
@@ -25,7 +41,9 @@
               "backend": { "enum": ["cpu", "cuda", "vulkan", "rocm"] },
               "release": { "type": "string" },
               "cuda_version": { "type": "string" },
-              "rocm_version": { "type": "string" }
+              "rocm_version": { "type": "string" },
+              "gpu": { "type": "boolean" },
+              "gpu_backend": { "enum": ["nvidia", "intel"] }
             }
           },
           "server": {

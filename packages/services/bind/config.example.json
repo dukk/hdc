@@ -20,9 +20,14 @@
     {
       "id": "example.invalid",
       "zone_type": "forward",
+      "cloudflare_fallback": {
+        "zone": "example.invalid",
+        "config_path": "packages/infrastructure/cloudflare/config.json",
+        "exclude_types": ["NS"]
+      },
       "records": [
-        { "type": "NS", "name": "@", "data": "dns-a.hdc.example.invalid." },
-        { "type": "NS", "name": "@", "data": "dns-b.hdc.example.invalid." }
+        { "type": "A", "name": "bind-a.hdc", "data": "192.0.2.2", "ttl": 3600 },
+        { "type": "A", "name": "bind-b.hdc", "data": "192.0.2.3", "ttl": 3600 }
       ]
     },
     {
@@ -62,7 +67,8 @@
         "storage": "local-lvm",
         "full": 1,
         "cores": 2,
-        "memory_mb": 2048
+        "memory_mb": 2048,
+        "rootfs_gb": 16
       },
       "network": {
         "bridge": "vmbr0",

@@ -1,0 +1,142 @@
+# Deploy plan: {{service_id}} (instance {{instance}})
+
+**Created:** {{date}}  
+**Status:** Draft — **do not run deploy until approved below**
+
+---
+
+## 1. Summary
+
+| Field | Value |
+|-------|-------|
+| Service package | `{{service_id}}` |
+| Instance | `{{instance}}` (`{{system_id}}`) |
+| Deploy backend | `{{mode}}` (e.g. `proxmox-lxc`, `proxmox-qemu`, `synology-docker`, `configure-only`) |
+| Target host | `{{proxmox_host_id}}` / `{{synology_instance}}` |
+| Access | {{lan_only_or_public}} |
+
+---
+
+## 2. Network
+
+| Field | Value |
+|-------|-------|
+| Static IP (CIDR) | `{{ip_cidr}}` |
+| Gateway | `{{gateway}}` |
+| Bridge | `{{bridge}}` |
+| DNS hostname | `{{hostname}}` |
+| Service port | `{{host_port}}` |
+| BIND A record | {{planned_or_existing}} |
+
+---
+
+## 3. Sizing (Proxmox)
+
+| Resource | Planned | Notes |
+|----------|---------|-------|
+| vCPU / cores | {{cores}} | See proxmox-resource-planning skill if estimated |
+| RAM (MiB) | {{memory_mb}} | |
+| Root disk (GiB) | {{rootfs_gb}} | |
+| Data disk | {{data_disk_or_none}} | |
+
+---
+
+## 4. Files to create or change
+
+| Path (repo) | Action |
+|-------------|--------|
+| `hdc-private/packages/services/{{service_id}}/config.json` | {{create_or_update}} |
+| `hdc-private/inventory/manual/systems/{{system_id}}.json` | {{create_or_update}} |
+| `hdc-private/inventory/manual/services/{{service_id}}.json` | {{create_or_update}} |
+| `packages/services/{{service_id}}/*` (public hdc) | {{only_if_scaffolding_or_script_fix}} |
+
+---
+
+## 5. Secrets (names only — no values)
+
+| Vault key | Required | Set before deploy? |
+|-----------|----------|-------------------|
+| {{vault_keys_table}} | | |
+
+```bash
+# Run only after approval; values entered interactively (masked).
+node tools/hdc/cli.mjs secrets set {{VAULT_KEY}}
+```
+
+---
+
+## 6. Deploy commands (ordered)
+
+Run from **hdc repo root** after approval.
+
+```bash
+# Optional: ensure private config exists
+node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs
+
+# Pre-flight (read-only)
+node tools/hdc/cli.mjs run service {{service_id}} query --
+
+# Deploy
+node tools/hdc/cli.mjs run service {{service_id}} deploy -- {{deploy_flags}}
+```
+
+**Deploy flags for this run:** `{{deploy_flags}}`
+
+---
+
+## 7. Dependencies (optional — unchecked until you confirm)
+
+Only run steps you explicitly approve. Upstream URLs must come from deploy/query output, not guesses.
+
+- [ ] **synology-nas** maintain (before Synology Docker stacks)
+- [ ] **bind** maintain — forward A record for `{{dns_name}}` → `{{ip}}`
+- [ ] **nginx-waf** or **nginx** maintain — site `{{site_id}}` → `http://{{guest_ip}}:{{port}}`
+- [ ] **cloudflare** maintain — public A/CNAME for `{{public_hostname}}`
+- [ ] **nagios** maintain — after BIND A record exists
+
+```bash
+# Example (fill after guest IP is known):
+# node tools/hdc/cli.mjs run service bind maintain --
+# node tools/hdc/cli.mjs run service nginx-waf maintain -- --site {{site_id}}
+# node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone {{zone}}
+# node tools/hdc/cli.mjs run service nagios maintain --
+```
+
+---
+
+## 8. Validation
+
+```bash
+node tools/hdc/cli.mjs run service {{service_id}} query -- --live
+```
+
+- [ ] Guest reachable at planned IP
+- [ ] HTTP/service health OK
+- [ ] Inventory `access.nodes[].ip` and `web_ui` updated
+- [ ] Operation report reviewed: `hdc-private/packages/services/{{service_id}}/reports/deploy-*.md`
+
+---
+
+## 9. Rollback
+
+```bash
+node tools/hdc/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --dry-run
+# After review:
+# node tools/hdc/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --yes
+```
+
+Proxmox destroy flags (if applicable): `{{destroy_existing_notes}}`
+
+---
+
+## 10. Approval
+
+**The agent must not run deploy or dependency maintain commands until you reply.**
+
+- [ ] I approve this plan as written
+- [ ] I approve deploy only (dependencies later)
+- [ ] I approve deploy + checked dependency items in section 7
+
+**Approver:** _____________ **Date:** _____________
+
+**Revision notes (if any):**

@@ -30,6 +30,7 @@ import {
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/pi-hole-install.mjs";
+import { syncPiHoleAllowlistInCt } from "../lib/pi-hole-allowlist.mjs";
 import { configurePiHoleInCt, queryPiHoleStatusInCt } from "../lib/pi-hole-configure.mjs";
 import { piHoleReportExtraSections } from "../lib/pi-hole-report.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
@@ -305,9 +306,17 @@ async function deployOne(deployment, flags, log, runOpts) {
     webPassword,
   );
 
+  const allowlistResult = syncPiHoleAllowlistInCt(
+    pveSsh.user,
+    pveSsh.host,
+    guestVmid,
+    piholeCfg,
+    { prune: false },
+  );
+
   const status = queryPiHoleStatusInCt(pveSsh.user, pveSsh.host, guestVmid);
   const ip = readCtPrimaryIp(pveSsh.user, pveSsh.host, guestVmid);
-  const ok = provisionResult.ok && configureResult.ok && status.ok;
+  const ok = provisionResult.ok && configureResult.ok && allowlistResult.ok && status.ok;
   return {
     ok,
     system_id: systemId,
@@ -319,6 +328,7 @@ async function deployOne(deployment, flags, log, runOpts) {
     result: provisionResult,
     install: installResult,
     configure: configureResult,
+    allowlist: allowlistResult,
     status,
   };
 }

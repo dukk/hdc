@@ -11,6 +11,8 @@ You help operate the HDC repo using the **hdc** CLI and the files under `invento
 
 ## Workflow
 
+For configure → plan → approve → deploy (and optional bind/nginx-waf deps), use skill **`hdc-service-deploy`** (`.cursor/skills/hdc-service-deploy/SKILL.md`).
+
 1. Discover packages: `node tools/hdc/cli.mjs list`.
 2. Run work: `node tools/hdc/cli.mjs run <tier> <package> <verb>` (tier: `client`, `infrastructure`, or `service`; add `--` before plugin-specific flags).
 3. Validate docs: `node tools/hdc/cli.mjs docs lint`.

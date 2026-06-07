@@ -13,7 +13,7 @@ Deploy Smallstep `step-ca` on Proxmox QEMU for internal certificate authority (A
 | Verb | Purpose |
 |------|---------|
 | `deploy` | QEMU clone, `step ca init`, systemd under `/etc/step-ca` |
-| `maintain` | Re-push `ca.json` and password file; optional package upgrade |
+| `maintain` | Grow root disk when `rootfs_gb` exceeds live size; re-push `ca.json` and password file; optional package upgrade |
 | `query` | CA service and health |
 
 ```bash
@@ -23,7 +23,9 @@ node tools/hdc/cli.mjs run service step-ca maintain --
 
 ## Common flags
 
-`--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`, `--skip-package-upgrade`, `--dry-run`.
+`--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`, `--skip-package-upgrade`, `--skip-disk-resize`, `--skip-clamav`, `--dry-run`.
+
+Set `defaults.proxmox.qemu.rootfs_gb` (e.g. `16`) for deploy resize after clone and maintain growth on live guests.
 
 ## After deploy
 

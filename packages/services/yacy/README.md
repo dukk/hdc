@@ -5,7 +5,7 @@ Decentralized search engine on Proxmox LXC via Docker Compose (`yacy/yacy_search
 ## Prerequisites
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json` (in hdc-private for production)
-- **Inventory:** `inventory/manual/systems/yacy-a.json`; `inventory/manual/services/yacy.json`
+- **Inventory:** `inventory/manual/systems/yacy-a.json`, `yacy-b.json`; `inventory/manual/services/yacy.json`
 - **Vault:** `HDC_YACY_ADMIN_PASSWORD` (applied via `passwd.sh` after the container starts)
 
 ## Commands
@@ -25,7 +25,9 @@ node tools/hdc/cli.mjs run service yacy query -- --live
 
 ## Common flags
 
-`--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-admin-password`, `--skip-clamav`, `--skip-admin-user`, `--skip-compose-down` (teardown), `--dry-run`, `--yes`.
+`--instance a` / `--instance b`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-admin-password`, `--skip-clamav`, `--skip-admin-user`, `--skip-compose-down` (teardown), `--dry-run`, `--yes`.
+
+Multi-instance: omit `--instance` to deploy all entries in `deployments[]` (e.g. `yacy-a` on `pve-a`, `yacy-b` on `pve-b`).
 
 ## After deploy
 

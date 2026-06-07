@@ -55,6 +55,7 @@ function uploadFile(exec, remotePath, content, log) {
  * @param {string} opts.secondaryIp
  * @param {string} opts.hostmaster
  * @param {string} [opts.serial] SOA serial (default: UTC timestamp YYYYMMDDHHmm).
+ * @param {string} [opts.repoRoot] Repo root for cloudflare_fallback zone merge.
  */
 export function syncPrimaryZoneFiles(opts) {
   const { exec, log, zoneIds, zoneDefinitions, primaryIp, secondaryIp, hostmaster } = opts;
@@ -70,7 +71,10 @@ export function syncPrimaryZoneFiles(opts) {
   const secondaryNs = `bind-b.${apex}.`;
   const ns = { primaryNs, secondaryNs, primaryIp, secondaryIp, hostmaster };
 
-  const { bundles } = buildZoneBundle(zoneIds, zoneDefinitions, ns, { serial });
+  const { bundles } = buildZoneBundle(zoneIds, zoneDefinitions, ns, {
+    serial,
+    repoRoot: opts.repoRoot,
+  });
   const zoneFiles = renderPrimaryZoneFiles({
     role: "primary",
     bundles,
@@ -154,6 +158,7 @@ export function syncNamedOptions(opts) {
  * @param {string[]} [opts.forwarders]
  * @param {{ mode: string; server: string; relay: string; listen: string }} [opts.forwardUpstream]
  * @param {string} [opts.serial]
+ * @param {string} [opts.repoRoot]
  */
 export function configureBind(opts) {
   const {
@@ -231,6 +236,7 @@ export function configureBind(opts) {
       secondaryIp,
       hostmaster,
       serial: opts.serial,
+      repoRoot: opts.repoRoot,
     });
   }
 

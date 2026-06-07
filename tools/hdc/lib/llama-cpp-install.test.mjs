@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLlamaServerArgv,
+  buildInstallShellScript,
   formatSystemdExecStart,
+  nvidiaDriverInstallLines,
   releaseDownloadUrl,
   resolveReleaseAsset,
   serverHasModel,
@@ -54,5 +56,19 @@ describe("llama-cpp install", () => {
     expect(serverHasModel({ model: "  " })).toBe(false);
     expect(serverHasModel({ model: "/x.gguf" })).toBe(true);
     expect(serverHasModel({ hf_model: "org/repo" })).toBe(true);
+  });
+
+  it("nvidiaDriverInstallLines for cuda and vulkan on Linux GPU guests", () => {
+    expect(nvidiaDriverInstallLines("cpu")).toEqual([]);
+    for (const backend of ["cuda", "vulkan"]) {
+      expect(nvidiaDriverInstallLines(backend).join("\n")).toContain("ubuntu-drivers install nvidia");
+    }
+  });
+
+  it("buildInstallShellScript includes nvidia drivers for cuda", () => {
+    const script = buildInstallShellScript({ backend: "cuda", release: "b100" }, {}, { growRootfs: true });
+    expect(script).toContain("ubuntu-drivers install nvidia");
+    expect(script).toContain("growpart");
+    expect(script).toContain("llama-b100-bin-ubuntu-cuda-12.4-x64.tar.gz");
   });
 });

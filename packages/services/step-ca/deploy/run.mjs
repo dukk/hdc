@@ -38,6 +38,13 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import {
+  growRootFilesystemInGuest,
+  resizeQemuScsi0OnHypervisor,
+  resolveRootfsGbFromDeployment,
+  syncQemuRootfsOnMaintain,
+} from "../../../lib/qemu-rootfs-resize.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -197,12 +204,20 @@ async function deployOne(deployment, flags, global, caPassword, log) {
       errout.write(
         `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
       );
+      const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+      const diskResize = await syncQemuRootfsOnMaintain({
+        proxmoxPackageRoot: proxmoxRoot,
+        deployment,
+        flags,
+        log: logLine,
+      });
       const configure = await runConfigure({ deployment, global, caPassword, log });
       return {
         ok: true,
         system_id: deployment.systemId,
         role: deployment.role,
         skipped_provision: true,
+        disk_resize: diskResize,
         configure,
       };
     }
@@ -241,6 +256,18 @@ async function deployOne(deployment, flags, global, caPassword, log) {
     guestResourceOptsFromBlock(q, flags),
   );
 
+  const rootfsGb = resolveRootfsGbFromDeployment(deployment);
+  if (rootfsGb) {
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    resizeQemuScsi0OnHypervisor({
+      sshUser: pveSsh.user,
+      sshHost: pveSsh.host,
+      vmid: guestVmid,
+      rootfsGb,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  }
+
   await applyQemuCloudInit({
     apiBase: auth.host.apiBase,
     authorization: auth.authorization,
@@ -270,6 +297,11 @@ async function deployOne(deployment, flags, global, caPassword, log) {
 
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
   await waitForSsh({ user: sshUser, host: sshHost });
+
+  if (rootfsGb) {
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    growRootFilesystemInGuest({ exec, log });
+  }
 
   await ensureQemuGuestAgentOnDeploy({
     apiBase: auth.host.apiBase,

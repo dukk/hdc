@@ -121,8 +121,19 @@ function installDnscryptProxyFromGithub(exec, log) {
 /**
  * @param {ReturnType<typeof import("./bind-configure.mjs").createConfigureExec>} exec
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ skipApt?: boolean }} [opts]
  */
-function ensureDnscryptProxyPackage(exec, log) {
+function ensureDnscryptProxyPackage(exec, log, opts = {}) {
+  if (opts.skipApt) {
+    const installed = readDnscryptVersion(exec);
+    if (!installed || !versionAtLeast(installed, MIN_DNSCRYPT_PROXY_VERSION)) {
+      throw new Error(
+        `dnscrypt-proxy ${installed || "(missing)"} is below required ${MIN_DNSCRYPT_PROXY_VERSION} for ODoH (--skip-apt)`,
+      );
+    }
+    log.info(`${exec.label}: dnscrypt-proxy ${installed} (--skip-apt)`);
+    return;
+  }
   runChecked(
     exec,
     "export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y dnscrypt-proxy",
@@ -149,9 +160,10 @@ function ensureDnscryptProxyPackage(exec, log) {
  * @param {ReturnType<typeof import("./bind-configure.mjs").createConfigureExec>} opts.exec
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
  * @param {{ mode: string; server: string; relay: string; listen: string }} opts.forwardUpstream
+ * @param {boolean} [opts.skipApt]
  */
 export function syncDnscryptProxyOdoh(opts) {
-  const { exec, log, forwardUpstream } = opts;
+  const { exec, log, forwardUpstream, skipApt } = opts;
   if (forwardUpstream.mode !== "odoh") {
     return {
       ok: true,
@@ -160,7 +172,7 @@ export function syncDnscryptProxyOdoh(opts) {
     };
   }
 
-  ensureDnscryptProxyPackage(exec, log);
+  ensureDnscryptProxyPackage(exec, log, { skipApt });
 
   const toml = renderDnscryptProxyToml({
     listen: forwardUpstream.listen,

@@ -2,7 +2,7 @@
 /**
  * Re-sync BIND zone files on primary, named options on all nodes, verify SOA on secondary.
  *
- * Usage: hdc run service bind maintain -- [--skip-clamav] [--skip-guest-agent]
+ * Usage: hdc run service bind maintain -- [--skip-clamav] [--skip-guest-agent] [--skip-apt] [--skip-disk-resize]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs"
 import { soaSerialFromTimestamp } from "../lib/bind-zones.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { ensureQemuGuestAgentForDeploymentMaintain } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
+import { syncQemuRootfsOnMaintain } from "../../../lib/qemu-rootfs-resize.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -80,6 +81,7 @@ async function main() {
   errout.write(`[hdc] ${target} ${verb}: SOA serial ${serial} (UTC timestamp)\n`);
 
   const skipGuestAgent = flagGet(flags, "skip-guest-agent") !== undefined;
+  const skipApt = flagGet(flags, "skip-apt") !== undefined;
 
   /** @type {Record<string, unknown>[]} */
   const results = [];
@@ -112,6 +114,41 @@ async function main() {
   }
 
   for (const deployment of deployments) {
+    if (deployment.mode === "proxmox-qemu") {
+      errout.write(`[hdc] ${target} ${verb}: disk resize check on ${deployment.systemId} …\n`);
+      try {
+        const diskResize = await syncQemuRootfsOnMaintain({
+          proxmoxPackageRoot: proxmoxRoot,
+          deployment,
+          flags,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+        const existing = results.find((r) => r.system_id === deployment.systemId);
+        if (existing) {
+          existing.disk_resize = diskResize;
+          if (diskResize.ok === false) existing.ok = false;
+        } else {
+          results.push({
+            ok: diskResize.ok !== false,
+            system_id: deployment.systemId,
+            role: deployment.role,
+            disk_resize: diskResize,
+          });
+        }
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} disk resize failed: ${msg}\n`);
+        results.push({
+          ok: false,
+          system_id: deployment.systemId,
+          role: deployment.role,
+          message: msg,
+        });
+      }
+    }
+  }
+
+  for (const deployment of deployments) {
     const defaultHost = deployment.role === "primary" ? global.primaryIp : global.secondaryIp;
     const { user, host } = sshTarget(deployment, defaultHost);
     errout.write(`[hdc] ${target} ${verb}: syncing upstream and named options on ${user}@${host} …\n`);
@@ -123,6 +160,7 @@ async function main() {
           exec,
           log,
           forwardUpstream: global.forwardUpstream,
+          skipApt,
         });
       }
       const options = syncNamedOptions({
@@ -161,6 +199,7 @@ async function main() {
         secondaryIp: global.secondaryIp,
         hostmaster: global.hostmaster,
         serial,
+        repoRoot: root,
       });
       const row = results.find((r) => r.system_id === primary.systemId);
       if (row) {

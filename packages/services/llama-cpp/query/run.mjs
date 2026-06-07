@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /**
- * Query llama-cpp deployments (config summary + optional live CT status).
+ * Query llama-cpp deployments (config summary + optional live status).
  *
  * Usage: hdc run service llama-cpp query -- [--instance a]
- *        hdc run service llama-cpp query -- --live   (pct exec on each deployment)
+ *        hdc run service llama-cpp query -- --live
  */
 import { basename, dirname, join, relative } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
@@ -18,8 +17,8 @@ import {
   resolveLlamaCppDeployments,
 } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/llama-cpp-install.mjs";
-import { queryLlamaCppInCt } from "../lib/query-status.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { queryLlamaCppInCt, queryLlamaCppViaSsh } from "../lib/query-status.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -37,6 +36,13 @@ function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+function ensurePackageConfig() {
+  if (!_pkgConfig) {
+    _pkgConfig = loadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
+  }
+  return _pkgConfig;
+}
+
 function loadCfg() {
   const loaded = tryLoadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
   if (loaded.ok && loaded.data) {
@@ -46,8 +52,8 @@ function loadCfg() {
 }
 
 async function main() {
-  const rel = relative(root, ensurePackageConfig().path).replace(/\\/g, "/");
   const loaded = loadCfg();
+  const rel = loaded.ok && loaded.path ? relative(root, loaded.path).replace(/\\/g, "/") : PACKAGE_CONFIG_EXAMPLE;
   const cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;
@@ -86,25 +92,52 @@ async function main() {
         const px = isObject(d.proxmox) ? d.proxmox : null;
         const hostId =
           px && typeof px.host_id === "string" ? px.host_id.trim() : "";
-        const lxc = px && isObject(px.lxc) ? px.lxc : {};
-        const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-        if (!hostId || !Number.isFinite(vmid)) {
+        if (!hostId) {
           liveResults.push({
             system_id: d.systemId,
             ok: false,
-            message: "missing host_id or vmid",
+            message: "missing host_id",
           });
           continue;
         }
         try {
-          const ssh = resolvePveSshForHost(proxmoxRoot, hostId);
-          const status = await queryLlamaCppInCt(
-            ssh.user,
-            ssh.host,
-            vmid,
-            isObject(d.server) ? d.server : {},
-          );
-          liveResults.push({ system_id: d.systemId, host_id: hostId, ok: true, ...status });
+          const serverCfg = isObject(d.server) ? d.server : {};
+          if (d.mode === "proxmox-qemu") {
+            const configure = isObject(d.configure) ? d.configure : {};
+            const sshCfg = isObject(configure.ssh) ? configure.ssh : {};
+            const q = px && isObject(px.qemu) ? px.qemu : {};
+            const sshUser =
+              typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+            const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+            const sshHost =
+              typeof sshCfg.host === "string" && sshCfg.host.trim()
+                ? sshCfg.host.trim()
+                : ip.split("/")[0];
+            if (!sshHost) {
+              liveResults.push({
+                system_id: d.systemId,
+                ok: false,
+                message: "missing configure.ssh.host or proxmox.qemu.ip",
+              });
+              continue;
+            }
+            const status = await queryLlamaCppViaSsh(sshUser, sshHost, serverCfg);
+            liveResults.push({ system_id: d.systemId, host_id: hostId, ok: true, ...status });
+          } else {
+            const lxc = px && isObject(px.lxc) ? px.lxc : {};
+            const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+            if (!Number.isFinite(vmid)) {
+              liveResults.push({
+                system_id: d.systemId,
+                ok: false,
+                message: "missing vmid",
+              });
+              continue;
+            }
+            const ssh = resolvePveSshForHost(proxmoxRoot, hostId);
+            const status = await queryLlamaCppInCt(ssh.user, ssh.host, vmid, serverCfg);
+            liveResults.push({ system_id: d.systemId, host_id: hostId, ok: true, ...status });
+          }
         } catch (e) {
           liveResults.push({
             system_id: d.systemId,

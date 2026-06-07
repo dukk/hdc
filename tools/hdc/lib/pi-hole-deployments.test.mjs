@@ -99,4 +99,29 @@ describe("pi-hole deployments", () => {
     const list = resolvePiHoleDeployments(sampleCfg, { "skip-install": "1" });
     expect(list.every((d) => d.install.enabled === false)).toBe(true);
   });
+
+  it("merges defaults allowlist with per-deployment override", () => {
+    const { deployments } = normalizePiHoleConfig({
+      ...sampleCfg,
+      defaults: {
+        ...sampleCfg.defaults,
+        pihole: {
+          ...sampleCfg.defaults.pihole,
+          allowlist: ["marketingplatform.google.com", "analytics.google.com"],
+        },
+      },
+      deployments: [
+        sampleCfg.deployments[0],
+        {
+          ...sampleCfg.deployments[1],
+          pihole: { allowlist: ["www.googletagmanager.com"] },
+        },
+      ],
+    });
+    expect(deployments[0].pihole.allowlist).toEqual([
+      "marketingplatform.google.com",
+      "analytics.google.com",
+    ]);
+    expect(deployments[1].pihole.allowlist).toEqual(["www.googletagmanager.com"]);
+  });
 });

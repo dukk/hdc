@@ -105,6 +105,7 @@ export function parseBindZones(rawZones) {
       zone_type: /** @type {"forward" | "reverse"} */ (zoneType),
       subnet: typeof entry.subnet === "string" ? entry.subnet.trim() : undefined,
       records,
+      ...(isObject(entry.cloudflare_fallback) ? { cloudflare_fallback: entry.cloudflare_fallback } : {}),
     });
   }
   return zones;
@@ -116,6 +117,7 @@ export function parseBindZones(rawZones) {
  * @property {"forward" | "reverse"} zone_type
  * @property {string} [subnet]
  * @property {Record<string, unknown>[]} records
+ * @property {Record<string, unknown>} [cloudflare_fallback]
  */
 
 /**
@@ -131,6 +133,7 @@ export function zoneDefinitionsToMap(zones) {
       zone_type: z.zone_type,
       ...(z.subnet ? { subnet: z.subnet } : {}),
       records: z.records,
+      ...(z.cloudflare_fallback ? { cloudflare_fallback: z.cloudflare_fallback } : {}),
     };
   }
   return map;

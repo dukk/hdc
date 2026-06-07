@@ -48,7 +48,7 @@ function uploadFile(exec, remotePath, content, log) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  */
 function remoteFileExists(exec, remotePath) {
-  const r = exec.run(`test -f ${shellQuote(remotePath)}`, { capture: true });
+  const r = exec.run(`test -s ${shellQuote(remotePath)}`, { capture: true });
   return r.status === 0;
 }
 
@@ -85,6 +85,15 @@ export async function configureStepCaServer(opts) {
   runChecked(exec, `mkdir -p ${shellQuote(stepPath)}/config ${shellQuote(stepPath)}/certs ${shellQuote(stepPath)}/secrets`, log);
 
   const initialized = remoteFileExists(exec, configPath, log);
+  const rootCertPath = `${stepPath}/certs/root_ca.crt`;
+  const hasExistingCaCerts =
+    exec.run(`test -f ${shellQuote(rootCertPath)}`, { capture: true }).status === 0;
+
+  if (!initialized && hasExistingCaCerts) {
+    throw new Error(
+      `${configPath} is missing or empty but ${rootCertPath} exists on ${exec.label}; restore ca.json from backup before maintain (re-init would rotate the CA)`,
+    );
+  }
 
   if (!initialized && global) {
     uploadFile(exec, initPassPath, `${caPassword}\n`, log);
@@ -100,6 +109,11 @@ export async function configureStepCaServer(opts) {
     }
   } else if (initialized) {
     let caJson = readRemoteFile(exec, configPath, log);
+    if (!caJson.trim()) {
+      throw new Error(
+        `${configPath} is empty on ${exec.label}; restore ca.json from backup before maintain (re-init would rotate the CA)`,
+      );
+    }
     caJson = rewriteCaJsonPaths(caJson, stepPath);
     caJson = patchCaJsonListenAddress(caJson, global.listenAddress);
     uploadFile(exec, configPath, caJson, log);

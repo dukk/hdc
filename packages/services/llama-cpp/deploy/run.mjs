@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Deploy llama-server on Proxmox LXC (multi-instance deployments[]).
+ * Deploy llama-server on Proxmox LXC or QEMU (multi-instance deployments[]).
  *
- * Usage: hdc run service llama-cpp deploy -- [--instance a | --system-id llama-cpp-a] [--skip-install]
+ * Usage: hdc run service llama-cpp deploy -- [--instance a | --system-id llama-cpp-a]
+ *        hdc run service llama-cpp deploy -- [--skip-install] [--destroy-existing]
  *        hdc run service llama-cpp deploy -- [--skip-existing | --redeploy-existing]
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
@@ -16,15 +17,36 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import {
+  applyQemuHostpciViaSsh,
+  normalizeHostpciList,
+} from "../../../infrastructure/proxmox/lib/proxmox-qemu-hostpci.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 
 import { resolveLlamaCppDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../../ollama/lib/guest-exists.mjs";
-import { installLlamaCppInCt, resolvePveSshForHost } from "../lib/llama-cpp-install.mjs";
+import {
+  installLlamaCppInCt,
+  installLlamaCppViaSsh,
+  resolvePveSshForHost,
+} from "../lib/llama-cpp-install.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
-import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
+import { promptExistingGuestAction } from "../../ollama/lib/prompt-existing.mjs";
+import {
+  applyQemuCloudInit,
+  cloneQemuGuest,
+  locateGuest,
+  migrateQemuGuest,
+  startQemuGuest,
+  stopAndDestroyQemu,
+  waitForSsh,
+} from "../../ollama/lib/proxmox-qemu-redeploy.mjs";
 import { waitForLlamaCppProvisionTask } from "../lib/proxmox-task-wait.mjs";
 
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -69,7 +91,12 @@ function shouldInstall(install) {
 function existingGuestPolicy(flags) {
   if (flagGet(flags, "skip-existing") !== undefined) return "skip";
   if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
+  if (flagGet(flags, "destroy-existing", "destroy_existing") !== undefined) return "destroy";
   return "prompt";
+}
+
+function skipProvision(flags) {
+  return flagGet(flags, "skip-provision", "skip_provision") !== undefined;
 }
 
 /**
@@ -78,7 +105,7 @@ function existingGuestPolicy(flags) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  * @param {{ ctPasswordCache?: { value: string | null } }} [runOpts]
  */
-async function deployOne(deployment, flags, log, runOpts = {}) {
+async function deployLxcOne(deployment, flags, log, runOpts = {}) {
   const { mode, systemId, proxmox: px, install, server } = deployment;
   const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
@@ -93,7 +120,7 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
     return {
       ok: false,
       system_id: systemId,
-      message: `mode ${mode} not supported — use proxmox-lxc`,
+      message: `deployLxcOne called with mode ${mode}`,
     };
   }
 
@@ -268,9 +295,288 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
   };
 }
 
+/**
+ * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ */
+async function deployQemuOne(deployment, flags, log) {
+  const { mode, systemId, hostname, proxmox: px, configure, install, server } = deployment;
+  const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+
+  const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
+  logDeployInventoryStatus(target, verb, inv);
+
+  if (mode !== "proxmox-qemu") {
+    return { ok: false, system_id: systemId, message: `deployQemuOne called with mode ${mode}` };
+  }
+
+  if (!isObject(px)) {
+    return { ok: false, system_id: systemId, message: "bad proxmox config" };
+  }
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  if (!hostId) {
+    return { ok: false, system_id: systemId, message: "missing host_id" };
+  }
+
+  errout.write(
+    `[hdc] ${target} ${verb}: ${JSON.stringify(systemId)} proxmox-qemu on ${JSON.stringify(hostId)} …\n`,
+  );
+  errout.write(`[hdc] ${target} ${verb}: authorizing Proxmox API for host ${JSON.stringify(hostId)} …\n`);
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+
+  const q = isObject(px.qemu) ? px.qemu : {};
+  const net = isObject(px.network) ? px.network : {};
+  const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+  const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+  const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+  const gateway =
+    typeof net.gateway === "string" && net.gateway.trim()
+      ? net.gateway.trim()
+      : typeof q.gateway === "string"
+        ? q.gateway.trim()
+        : "10.0.0.1";
+  const guestName =
+    hostname ||
+    (typeof q.name === "string" && q.name.trim() ? q.name.trim() : systemId.replace(/^vm-/, ""));
+
+  if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
+    return { ok: false, system_id: systemId, host_id: hostId, message: "invalid qemu vmid, template_vmid, or ip" };
+  }
+
+  const located = await locateGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
+  const policy = existingGuestPolicy(flags);
+  let skipProv = skipProvision(flags);
+
+  if (located) {
+    let action = policy;
+    if (policy === "prompt") {
+      action = await promptExistingGuestAction(systemId, vmid, located.node, located.name);
+    }
+    if (action === "skip") {
+      errout.write(`[hdc] ${target} ${verb}: skipping ${systemId} (vmid ${vmid} already exists).\n`);
+      return {
+        ok: true,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        skipped: true,
+        message: "guest already exists",
+        guest: { vmid, node: located.node, name: located.name },
+      };
+    }
+    if (action === "destroy" || policy === "destroy") {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    } else {
+      errout.write(
+        `[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} exists — redeploy (provision skipped, install only).\n`,
+      );
+      skipProv = true;
+    }
+  }
+
+  /** @type {import("../../../lib/host-provisioner.mjs").ProvisionResult | null} */
+  let provisionResult = null;
+  /** @type {{ ok: boolean; backend?: string; message?: string } | null} */
+  let installResult = null;
+  let cloneNode = located?.node ?? auth.host.pveNode;
+  let guestVmid = vmid;
+
+  if (!skipProv) {
+    const prov = createProxmoxHostProvisioner({
+      apiBase: auth.host.apiBase,
+      pveNode: auth.host.pveNode,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
+
+    provisionResult = await cloneQemuGuest({
+      log,
+      provisioner: prov,
+      name: guestName,
+      vmid,
+      templateVmid,
+      parameters: { ...q, vmid, template_vmid: templateVmid },
+    });
+
+    if (!provisionResult.ok) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+      };
+    }
+
+    const cloneInfo = await waitForCloneTaskAndEnableAgent(
+      provisionResult,
+      auth,
+      vmid,
+      (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      guestResourceOptsFromBlock(q, flags),
+    );
+    cloneNode = cloneInfo.node;
+    guestVmid = cloneInfo.vmid;
+
+    const targetNode = auth.host.pveNode;
+    if (cloneNode !== targetNode) {
+      errout.write(
+        `[hdc] ${target} ${verb}: VM ${guestVmid} on ${cloneNode} — migrating to ${targetNode} for GPU …\n`,
+      );
+      await migrateQemuGuest({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        sourceNode: cloneNode,
+        targetNode,
+        vmid: guestVmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      cloneNode = targetNode;
+    }
+
+    const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+      errout.write(`[hdc] ${target} ${verb}: resizing scsi0 to ${rootfsGb}G on vmid ${guestVmid} …\n`);
+      const resize = sshRemote(pveSsh.user, pveSsh.host, `qm resize ${guestVmid} scsi0 ${rootfsGb}G`, {
+        capture: true,
+      });
+      if (resize.status !== 0) {
+        const detail = `${resize.stderr}${resize.stdout}`.trim() || `exit ${resize.status}`;
+        throw new Error(`qm resize failed: ${detail}`);
+      }
+    }
+
+    const hostpci = normalizeHostpciList(q.hostpci);
+    if (hostpci.length) {
+      errout.write(`[hdc] ${target} ${verb}: applying GPU hostpci on vmid ${guestVmid} (${cloneNode}) …\n`);
+      await applyQemuHostpciViaSsh({
+        sshUser: pveSsh.user,
+        sshHost: pveSsh.host,
+        vmid: guestVmid,
+        hostpci,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      const q35 = sshRemote(pveSsh.user, pveSsh.host, `qm set ${guestVmid} -machine q35`, {
+        capture: true,
+      });
+      if (q35.status !== 0) {
+        const detail = `${q35.stderr}${q35.stdout}`.trim() || `exit ${q35.status}`;
+        throw new Error(`qm set -machine q35 failed: ${detail}`);
+      }
+      errout.write(`[hdc] ${target} ${verb}: set machine type q35 on vmid ${guestVmid}.\n`);
+    }
+
+    await applyQemuCloudInit({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      hostname: guestName,
+      ipCidr: ip,
+      gateway,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  } else if (located) {
+    provisionResult = {
+      ok: true,
+      message: `QEMU ${vmid} already present on ${located.node}`,
+      details: { vmid, node: located.node, type: "qemu", skipped_provision: true },
+    };
+    cloneNode = located.node;
+    guestVmid = vmid;
+  }
+
+  const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshHost =
+    typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+  const serverCfg = isObject(server) ? server : {};
+
+  if (shouldInstall(install)) {
+    if (!skipProv) {
+      errout.write(
+        `[hdc] ${target} ${verb}: waiting 45s for cloud-init on first boot before SSH probe …\n`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 45_000));
+    }
+    errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
+    await waitForSsh({ user: sshUser, host: sshHost });
+
+    await ensureQemuGuestAgentOnDeploy({
+      apiBase: auth.host.apiBase,
+      node: cloneNode,
+      vmid: guestVmid,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      sshUser,
+      sshHost,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    installResult = await installLlamaCppViaSsh({ exec, log, install, server: serverCfg });
+  } else {
+    installResult = { ok: true, message: "skipped" };
+    errout.write(`[hdc] ${target} ${verb}: install skipped for ${systemId}.\n`);
+  }
+
+  const ok = provisionResult?.ok !== false && (!installResult || installResult.ok);
+  return {
+    ok,
+    system_id: systemId,
+    host_id: hostId,
+    mode,
+    redeploy: skipProv,
+    result: provisionResult,
+    install: installResult,
+    ssh: { user: sshUser, host: sshHost },
+  };
+}
+
+/**
+ * @param {ReturnType<typeof resolveLlamaCppDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ ctPasswordCache?: { value: string | null } }} [runOpts]
+ */
+async function deployOne(deployment, flags, log, runOpts = {}) {
+  const { mode } = deployment;
+  if (mode === "proxmox-qemu") {
+    return deployQemuOne(deployment, flags, log);
+  }
+  if (mode === "proxmox-lxc") {
+    return deployLxcOne(deployment, flags, log, runOpts);
+  }
+  return {
+    ok: false,
+    system_id: deployment.systemId,
+    message: mode ? `unsupported mode ${mode}` : "missing mode",
+  };
+}
+
 async function main() {
   errout.write(
-    `[hdc] ${target} ${verb}: llama-server via Proxmox LXC (stderr log; JSON on stdout).\n`,
+    `[hdc] ${target} ${verb}: llama-server via Proxmox LXC or QEMU (stderr log; JSON on stdout).\n`,
   );
 
   if (!existsSync(ensurePackageConfig().path)) {

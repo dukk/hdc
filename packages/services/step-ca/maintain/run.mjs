@@ -2,14 +2,16 @@
 /**
  * Re-apply step-ca configuration; optional package upgrade.
  *
- * Usage: hdc run service step-ca maintain -- [--instance a] [--skip-package-upgrade] [--skip-clamav]
+ * Usage: hdc run service step-ca maintain -- [--instance a] [--skip-package-upgrade] [--skip-clamav] [--skip-disk-resize]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { syncQemuRootfsOnMaintain } from "../../../lib/qemu-rootfs-resize.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { configureStepCaServer, createConfigureExec } from "../lib/step-ca-configure.mjs";
 import { aptInstallStepCaCommand } from "../lib/step-ca-install.mjs";
@@ -21,7 +23,8 @@ import {
 import { caPasswordVaultKey, instanceLetterFromSystemId } from "../lib/inventory.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
-import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +47,8 @@ function tryCfg() {
 
 const target = basename(dirname(here));
 const verb = basename(here);
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -91,6 +96,26 @@ async function main() {
     }
 
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
+
+    /** @type {Record<string, unknown> | undefined} */
+    let diskResize;
+    if (deployment.mode === "proxmox-qemu") {
+      errout.write(`[hdc] ${target} ${verb}: disk resize check on ${deployment.systemId} …\n`);
+      try {
+        diskResize = await syncQemuRootfsOnMaintain({
+          proxmoxPackageRoot: proxmoxRoot,
+          deployment,
+          flags,
+          log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        });
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} disk resize failed: ${msg}\n`);
+        results.push({ ok: false, system_id: deployment.systemId, message: msg });
+        continue;
+      }
+    }
+
     const letter = instanceLetterFromSystemId(deployment.systemId);
     const pwKey = caPasswordVaultKey(stepCaBlock, letter);
     const caPassword = String(
@@ -122,6 +147,7 @@ async function main() {
         ok: baseline.ok,
         system_id: deployment.systemId,
         role: deployment.role,
+        ...(diskResize ? { disk_resize: diskResize } : {}),
         configure,
         admin_user: baseline.admin_user,
         clamav: baseline.clamav,

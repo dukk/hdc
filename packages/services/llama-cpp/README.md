@@ -1,31 +1,40 @@
 # Llama.cpp (`llama-cpp`)
 
-Deploy `llama-server` on Proxmox LXC from GitHub releases (CPU, CUDA, Vulkan, or ROCm backends).
+Deploy `llama-server` on Proxmox LXC or QEMU from GitHub releases (CPU, CUDA, Vulkan, or ROCm backends).
 
 ## Prerequisites
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json`
-- **Inventory:** optional [`inventory/manual/systems/llama-cpp-a.json`](../../../inventory/manual/systems/llama-cpp-a.json) per instance
+- **Inventory:** optional [`inventory/manual/systems/llama-cpp-a.json`](../../../inventory/manual/systems/llama-cpp-a.json) (LXC) or `vm-llama-cpp-a.json` (QEMU GPU)
 - **Vault:** none required
 - Set `server.model` or `server.hf_model` to enable the systemd unit at deploy
+- **QEMU GPU:** complete VFIO/IOMMU on the Proxmox host before deploy; PCI BDF from `lspci` on the hypervisor (`proxmox.qemu.hostpci[]`)
 
 ## Commands
 
 | Verb | Purpose |
 |------|---------|
-| `deploy` | LXC + `llama-server` (`install.backend`: cpu/cuda/vulkan/rocm) |
-| `maintain` | Upgrade binary; restart service |
-| `query` | Config summary; `--live` for systemd/health |
-| `teardown` | Destroy LXC |
+| `deploy` | LXC or QEMU + `llama-server` (`install.backend`: cpu/cuda/vulkan/rocm) |
+| `maintain` | Upgrade binary; restart service; guest Linux baseline |
+| `query` | Config summary; `--live` for systemd/health (and GPU name on QEMU CUDA) |
+| `teardown` | Destroy LXC or QEMU guest |
 
 ```bash
 node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a
+node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --destroy-existing
 node tools/hdc/cli.mjs run service llama-cpp query -- --live
 ```
 
+## Deploy modes
+
+| Mode | `system_id` | GPU |
+|------|-------------|-----|
+| `proxmox-lxc` | `llama-cpp-a` | Manual device passthrough only (not automated) |
+| `proxmox-qemu` | `vm-llama-cpp-a` | `proxmox.qemu.hostpci[]` + NVIDIA drivers when `install.backend` is `cuda` or `vulkan` (Ubuntu CUDA prebuilds are not published — use `vulkan` on Linux GPU) |
+
 ## Common flags
 
-`--instance a|b`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-restart` (maintain), `--dry-run`, `--yes`.
+`--instance a|b`, `--skip-install`, `--skip-provision`, `--destroy-existing`, `--skip-existing`, `--redeploy-existing`, `--skip-restart` (maintain), `--dry-run`, `--yes`.
 
 ## After deploy
 
