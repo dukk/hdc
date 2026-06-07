@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { env } from "node:process";
 
 import { parseSshUrl } from "../../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
@@ -22,7 +23,7 @@ export function resolveConfigureTarget(proxmoxRoot, cfg) {
 
   if (via === "ssh") {
     const ssh = isObject(configure.ssh) ? configure.ssh : {};
-    const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
     if (!host) throw new Error("configure.via ssh requires configure.ssh.host");
     return { via: "ssh", exec: createConfigureExec("ssh", { user, host }) };

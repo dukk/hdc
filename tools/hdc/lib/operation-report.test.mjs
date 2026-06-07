@@ -209,16 +209,20 @@ describe("operation-report", () => {
           ok: true,
           system_id: "vm-bind-a",
           role: "primary",
+          hdc_user: { ok: true, username: "hdc", message: "ensured" },
           admin_user: { ok: true, username: "dukk", message: "ensured" },
           clamav: { ok: true, skipped: true, message: "skipped by flag" },
+          root_login_disabled: { ok: true, message: "root locked; PermitRootLogin no" },
         },
       ],
     });
     ctx.ok = true;
     const md = renderOperationReportMarkdown(ctx);
     expect(md).toContain("## Guest baseline");
+    expect(md).toContain("**hdc_user:** hdc — ensured");
     expect(md).toContain("**admin_user:** dukk — ensured");
     expect(md).toContain("**clamav:** skipped");
+    expect(md).toContain("**root_login_disabled:** root locked");
   });
 
   it("inventory-sidecar loads system and primary IP", () => {

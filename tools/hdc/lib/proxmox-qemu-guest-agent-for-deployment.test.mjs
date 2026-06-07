@@ -39,7 +39,7 @@ describe("proxmox-qemu-guest-agent-for-deployment", () => {
     it("falls back to defaultSshHost", () => {
       expect(
         sshTargetForGuestAgentDeployment({ systemId: "vm-bind-a", configure: {} }, "192.0.2.2"),
-      ).toEqual({ user: "root", host: "192.0.2.2" });
+      ).toEqual({ user: "hdc", host: "192.0.2.2" });
     });
   });
 

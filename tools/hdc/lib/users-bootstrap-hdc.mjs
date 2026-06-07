@@ -4,7 +4,13 @@ import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import { readResolvedPackageConfigJson } from "./json-config-preprocess.mjs";
 import { resolveRepoFile, resolveRepoFilePath } from "./private-repo.mjs";
 
-import { remoteBootstrapHdcBash } from "../../../packages/lib/linux-local-admin-user.mjs";
+import {
+  remoteBootstrapHdcBash,
+  remoteEnsureHdcAutomationUserBash,
+} from "../../../packages/lib/linux-local-admin-user.mjs";
+import {
+  resolveHdcPasswordForSystem,
+} from "../../../packages/lib/hdc-user-ensure.mjs";
 
 export { remoteBootstrapHdcBash };
 
@@ -302,9 +308,18 @@ export async function runUsersBootstrapHdc(argv, deps, options = {}) {
     }
 
     const vaultKey = vaultKeyForHdcLocalPassword(id);
-    const password = generateHdcPassword();
+    let password;
+    if (dryRun) {
+      password = "(dry-run)";
+    } else {
+      if (!vaultAccess) {
+        deps.error("users bootstrap-hdc: internal error (vault not initialized)");
+        throw new CliExit(1);
+      }
+      password = await resolveHdcPasswordForSystem(id, vaultAccess, { autoGenerate: true });
+    }
     const pwB64 = Buffer.from(password, "utf8").toString("base64");
-    const remote = remoteBootstrapHdcBash(pwB64);
+    const remote = remoteEnsureHdcAutomationUserBash(pwB64);
 
     deps.log(`[${id}] vault key ${vaultKey} (${targets.length} host(s))`);
 
@@ -314,12 +329,6 @@ export async function runUsersBootstrapHdc(argv, deps, options = {}) {
       }
       continue;
     }
-
-    if (!vaultAccess) {
-      deps.error("users bootstrap-hdc: internal error (vault not initialized)");
-      throw new CliExit(1);
-    }
-    await vaultAccess.setSecret(vaultKey, password);
 
     for (const t of targets) {
       const args = [

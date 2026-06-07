@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Redis Cluster nodes: re-apply config, optional apt upgrade, cluster check.
@@ -130,8 +131,7 @@ async function main() {
         ok: baseline.ok,
         configure,
         apt_upgrade: !skipApt,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

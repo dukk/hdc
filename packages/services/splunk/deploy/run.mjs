@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy Splunk Free standalone on Proxmox QEMU.
@@ -110,7 +111,7 @@ async function runConfigure(ctx) {
 
   const cfg = deployment.configure;
   const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) {
     throw new Error(`${deployment.systemId}: configure.ssh.host required`);
@@ -300,7 +301,7 @@ async function deployOne(deployment, global, adminPassword, flags, log) {
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);

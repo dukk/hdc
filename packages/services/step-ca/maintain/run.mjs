@@ -22,6 +22,8 @@ import {
 } from "../lib/deployments.mjs";
 import { caPasswordVaultKey, instanceLetterFromSystemId } from "../lib/inventory.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
+import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -88,7 +90,7 @@ async function main() {
   for (const deployment of toMaintain) {
     const cfgSsh = deployment.configure;
     const ssh = isObject(cfgSsh) && isObject(cfgSsh.ssh) ? cfgSsh.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" ? ssh.host : "";
     if (!host) {
       results.push({ ok: false, system_id: deployment.systemId, message: "missing ssh host" });
@@ -149,8 +151,7 @@ async function main() {
         role: deployment.role,
         ...(diskResize ? { disk_resize: diskResize } : {}),
         configure,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

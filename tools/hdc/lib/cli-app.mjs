@@ -35,6 +35,7 @@ import {
   parseSecretsExportArgv,
   writeSecretExport,
 } from "./secrets-export.mjs";
+import { cmdMaintainDaily } from "./daily-maintain.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -106,6 +107,7 @@ Usage:
   ${c} secrets dump --out-dir <dir> [--format files|env|json]
   ${c} secrets unlock   # pre-unlock Vaultwarden when HDC_SECRET_BACKEND uses it
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
+  ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades] [--only <tier>/<id>] [--skip <tier>/<id>] [--no-report] [--report <path>]
   ${c} env              # HDC_* variables (secrets redacted)
 
 verbs: ${VERBS.join(", ")}
@@ -187,6 +189,7 @@ function cmdHelp(deps, root, topics) {
   ${c} help run [ <tier> [ <package> [ <verb> ] ] ]
   ${c} help secrets [ path | init | change-passphrase | set | list | get | dump | delete ]
   ${c} help users [ bootstrap-hdc ]
+  ${c} help maintain [ daily ]
   ${c} help env`);
     return;
   }
@@ -631,6 +634,45 @@ Examples:
     die(deps, `help users: unknown subtopic ${JSON.stringify(a1)} (try: bootstrap-hdc)`);
   }
 
+  if (a0 === "maintain") {
+    if (topics.length === 1) {
+      const c = helpExe(deps);
+      deps.log(`maintain — scheduled / cross-package maintenance
+
+Subcommands:
+  daily  Run a curated non-destructive recipe across packages with config.json.
+
+Example:
+  ${c} help maintain daily`);
+      return;
+    }
+    if (topics.length > 2) die(deps, `help: too many arguments after "maintain ${a1}"`);
+    if (a1 === "daily") {
+      const c = helpExe(deps);
+      deps.log(`maintain daily — safe daily maintenance orchestrator
+
+Usage:
+  ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades]
+  ${c} maintain daily [--only <tier>/<id>] [--skip <tier>/<id>] [--no-report] [--report <path>]
+  ${c} maintain daily -- [--only service/bind]   # flags after -- also accepted
+
+Runs configured packages sequentially (continues on failure). Skips packages without
+config.json. Applies routine updates (Docker pull, guest apt, DSM packages) but avoids
+prune, rolling restarts, and reboots. Home clients run query only.
+
+Writes an aggregated markdown report under tools/hdc/reports/ (hdc-private when present).
+
+Examples:
+  ${c} maintain daily
+  ${c} maintain daily --dry-run
+  ${c} maintain daily -- --only infrastructure/proxmox
+  ${c} maintain daily -- --skip service/trivy --skip-upgrades
+`);
+      return;
+    }
+    die(deps, `help maintain: unknown subtopic ${JSON.stringify(a1)} (try: daily)`);
+  }
+
   die(
     deps,
     `help: unknown topic ${JSON.stringify(a0)} (try: help, list, run, secrets, users, env)`,
@@ -1004,6 +1046,11 @@ export async function runCli(argv, deps) {
       }
       await cmdUsers(deps, rest);
       return 0;
+    } else if (cmd === "maintain") {
+      if (rest.length === 0) {
+        die(deps, "maintain: need a subcommand (daily)");
+      }
+      return await cmdMaintainDaily(deps, root, rest);
     } else {
       usage(deps);
       die(deps, `unknown command: ${cmd}`, 1);

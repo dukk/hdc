@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Teardown Immich (Synology compose down or destroy Proxmox QEMU).
@@ -187,7 +188,7 @@ async function teardownOne(deployment, flags) {
 
   if (!skipComposeDown && isObject(configure) && isObject(configure.ssh)) {
     const ssh = configure.ssh;
-    const user = typeof ssh.user === "string" ? ssh.user.trim() : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
     if (host) {
       try {

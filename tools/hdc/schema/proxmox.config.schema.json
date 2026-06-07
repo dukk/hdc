@@ -110,6 +110,8 @@
         "api_token": { "$ref": "#/$defs/provision_api_token" },
         "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
         "host_firewall": { "$ref": "#/$defs/provision_host_firewall" },
+        "guest_firewall": { "$ref": "#/$defs/provision_guest_firewall" },
+        "guest_agents": { "$ref": "#/$defs/provision_guest_agents" },
         "apt_sources": { "$ref": "#/$defs/provision_apt_sources" },
         "lxc": { "$ref": "#/$defs/provision_lxc" },
         "qemu": { "$ref": "#/$defs/provision_qemu" },
@@ -212,9 +214,9 @@
             },
             "devices": {
               "type": "array",
-              "minItems": 2,
+              "minItems": 1,
               "items": { "type": "string", "minLength": 1 },
-              "description": "Block devices (prefer /dev/disk/by-id/...)."
+              "description": "Block devices (prefer /dev/disk/by-id/...). One device for a direct PV pool; two or more for RAID0."
             }
           }
         }
@@ -303,6 +305,49 @@
           "minimum": 1,
           "maximum": 65535,
           "description": "Proxmox web UI port to restrict (default 8006)."
+        }
+      }
+    },
+    "provision_guest_firewall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When true, maintain writes /etc/pve/firewall/<vmid>.fw for vmids from service package deployments."
+        },
+        "allowed_source_cidrs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Inbound allow list for managed guests (falls back to host_firewall cidrs when omitted)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), collect vmids from packages/services/*/config.json deployments."
+        }
+      }
+    },
+    "provision_guest_agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "crowdsec": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": ["boolean", "integer"] },
+            "lapi_url": { "type": "string", "minLength": 1 },
+            "enroll_key_vault_key": { "type": "string", "minLength": 1 }
+          }
+        },
+        "wazuh": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": ["boolean", "integer"] },
+            "manager_host": { "type": "string", "minLength": 1 },
+            "registration_password_vault_key": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },

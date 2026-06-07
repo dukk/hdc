@@ -69,6 +69,6 @@
         "hostpci": [{ "id": "0000:01:00.0", "pcie": true, "rombar": false }]
       }
     },
-    "configure": { "ssh": { "user": "root", "host": "10.0.0.28" } }
+    "configure": { "ssh": { "host": "10.0.0.28" } }
   }
 }

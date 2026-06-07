@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { stderr as errout } from "node:process";
 
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
@@ -98,7 +99,7 @@ export function createOllamaExec(deployment, proxmoxRoot, ubuntuRoot, processEnv
     const ip = typeof q.ip === "string" ? q.ip.trim() : "";
     const configure = isObject(deployment.configure) ? deployment.configure : {};
     const sshCfg = isObject(configure.ssh) ? configure.ssh : {};
-    const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+    const sshUser = resolveGuestSshUser(sshCfg.user);
     const sshHost =
       typeof sshCfg.host === "string" && sshCfg.host.trim()
         ? sshCfg.host.trim()

@@ -1,3 +1,5 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Re-apply Splunk configuration; optional package upgrade.
@@ -97,7 +99,7 @@ async function main() {
   for (const deployment of toMaintain) {
     const cfgSsh = deployment.configure;
     const ssh = isObject(cfgSsh) && isObject(cfgSsh.ssh) ? cfgSsh.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" ? ssh.host : "";
     if (!host) {
       results.push({ ok: false, system_id: deployment.systemId, message: "missing ssh host" });
@@ -135,9 +137,7 @@ async function main() {
         ok: rowOk,
         system_id: deployment.systemId,
         configure,
-        guest_resources: baseline.guest_resources,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

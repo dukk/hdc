@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Query LMS deployments (config summary + optional live status).
@@ -89,7 +90,7 @@ async function main() {
 
         const configure = isObject(d.configure) ? d.configure : {};
         const sshCfg = isObject(configure.ssh) ? configure.ssh : {};
-        const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+        const sshUser = resolveGuestSshUser(sshCfg.user);
         const px = isObject(d.proxmox) ? d.proxmox : {};
         const q = isObject(px.qemu) ? px.qemu : {};
         const ip = typeof q.ip === "string" ? q.ip.trim() : "";

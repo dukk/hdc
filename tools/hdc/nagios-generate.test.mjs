@@ -81,13 +81,15 @@ describe("nagios generate from BIND", () => {
   });
 
   it("renders PING host and service from BIND records", () => {
-    const bundle = buildNagiosBundleFromBind([
-      { zone: "hdc.dukk.org", name: "pve-b", fqdn: "pve-b.hdc.dukk.org.", ip: "10.0.0.12", ttl: 3600 },
-    ]);
+    const bundle = buildNagiosBundleFromBind(
+      [{ zone: "hdc.dukk.org", name: "pve-b", fqdn: "pve-b.hdc.dukk.org.", ip: "10.0.0.12", ttl: 3600 }],
+      { adminEmail: "ops@example.invalid" },
+    );
     expect(bundle.stats.hostCount).toBe(1);
     expect(bundle.stats.serviceCount).toBe(1);
     expect(bundle.nagiosCfg).toContain("host_name pve-b_hdc_dukk_org");
-    expect(bundle.nagiosCfg).toContain("use hdc-bind-host");
+    expect(bundle.nagiosCfg).toContain("contact_groups hdc-admins");
+    expect(bundle.nagiosCfg).toContain("email ops@example.invalid");
     expect(bundle.nagiosCfg).toContain("check_ping!100.0,20%!500.0,60%");
     expect(bundle.nagiosCfg).toContain("address 10.0.0.12");
   });

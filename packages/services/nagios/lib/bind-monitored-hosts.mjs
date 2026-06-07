@@ -72,13 +72,15 @@ export function dedupeBindRecordsByFqdn(records) {
 }
 
 /**
- * Load BIND forward A records and render Nagios object config.
  * @param {string} repoRoot
  * @param {string} bindConfigPath
+ * @param {{ adminEmail?: string }} [notifications]
  */
-export function loadNagiosBindBundle(repoRoot, bindConfigPath) {
+export function loadNagiosBindBundle(repoRoot, bindConfigPath, notifications) {
   const { bindPath, records } = loadBindForwardARecords(repoRoot, bindConfigPath);
   const deduped = dedupeBindRecordsByFqdn(records);
-  const bundle = buildNagiosBundleFromBind(deduped);
+  const bundle = buildNagiosBundleFromBind(deduped, {
+    adminEmail: notifications?.adminEmail,
+  });
   return { bindPath, bindRecordCount: deduped.length, ...bundle };
 }

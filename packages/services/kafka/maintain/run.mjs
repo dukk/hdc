@@ -1,3 +1,5 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Re-apply Kafka server.properties and rolling-restart brokers.
@@ -57,7 +59,7 @@ function isObject(v) {
 function sshFromDeployment(deployment) {
   const cfg = isObject(deployment.configure) ? deployment.configure : {};
   const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = deployment.sshHost;
   if (!host) throw new Error(`${deployment.systemId}: configure.ssh.host required`);
   return { user, host };
@@ -111,8 +113,7 @@ async function main() {
         host: ssh.host,
         ok: configure.ok && clamav.ok,
         configure,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

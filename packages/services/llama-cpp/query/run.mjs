@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Query llama-cpp deployments (config summary + optional live status).
@@ -107,7 +108,7 @@ async function main() {
             const sshCfg = isObject(configure.ssh) ? configure.ssh : {};
             const q = px && isObject(px.qemu) ? px.qemu : {};
             const sshUser =
-              typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+              resolveGuestSshUser(sshCfg.user);
             const ip = typeof q.ip === "string" ? q.ip.trim() : "";
             const sshHost =
               typeof sshCfg.host === "string" && sshCfg.host.trim()

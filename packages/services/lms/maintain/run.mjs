@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Maintain LMS: re-install/upgrade llmster, sync models, guest Linux baseline.
@@ -69,7 +70,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
       : {};
   const px = proxmox && typeof proxmox === "object" ? proxmox : {};
   const q = px.qemu && typeof px.qemu === "object" ? px.qemu : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const ip = typeof q.ip === "string" ? q.ip.trim() : "";
   const sshHost =
     typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];

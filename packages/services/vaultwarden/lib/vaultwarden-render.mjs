@@ -1,3 +1,5 @@
+import { vaultwardenMailEnvLines } from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -78,6 +80,9 @@ export function renderVaultwardenEnv(vaultwarden, adminToken) {
     `WEBSOCKET_ENABLED=${websocket ? "true" : "false"}`,
     "ROCKET_PORT=80",
   ];
+  for (const line of vaultwardenMailEnvLines(vaultwarden)) {
+    lines.push(line);
+  }
   return `${lines.join("\n")}\n`;
 }
 

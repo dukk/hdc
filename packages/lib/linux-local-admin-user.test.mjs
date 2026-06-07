@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LINUX_USERNAME_RE,
   remoteBootstrapHdcBash,
+  remoteEnsureHdcAutomationUserBash,
   remoteEnsureLocalAdminUserBash,
   remoteInstallAuthorizedKeysForUserBash,
   validateLinuxUsername,
@@ -34,6 +35,14 @@ describe("linux-local-admin-user", () => {
   it("remoteBootstrapHdcBash uses hdc", () => {
     const s = remoteBootstrapHdcBash("YWJj");
     expect(s).toContain("useradd -m -s /bin/bash hdc");
+    expect(s).toContain("hdc-automation");
+  });
+
+  it("remoteEnsureHdcAutomationUserBash installs passwordless sudo drop-in", () => {
+    const s = remoteEnsureHdcAutomationUserBash("YWJj");
+    expect(s).toContain("useradd -m -s /bin/bash hdc");
+    expect(s).toContain("/etc/sudoers.d/hdc-automation");
+    expect(s).toContain("NOPASSWD:ALL");
   });
 
   it("remoteInstallAuthorizedKeysForUserBash targets user home and is idempotent", () => {

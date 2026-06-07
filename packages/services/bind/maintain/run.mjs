@@ -22,7 +22,8 @@ import { waitForSoaSerialMatch } from "../lib/bind-query-remote.mjs";
 import { bindReportExtraSections } from "../lib/bind-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
-import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
+import { mergeGuestBaselineIntoResult, guestBaselineUsersOk, guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { soaSerialFromTimestamp } from "../lib/bind-zones.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -59,7 +60,7 @@ function sshTarget(deployment, defaultHost) {
   const ssh = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : defaultHost;
   return { user, host };
 }
@@ -259,12 +260,10 @@ async function main() {
         mergeGuestBaselineIntoResult(existing, baseline);
       } else {
         results.push({
-          ok: baseline.admin_user?.ok !== false,
+          ok: guestBaselineUsersOk(baseline),
           system_id: deployment.systemId,
           role: deployment.role,
-          guest_resources: baseline.guest_resources,
-          admin_user: baseline.admin_user,
-          clamav: baseline.clamav,
+          ...guestBaselineResultFields(baseline),
         });
       }
     } catch (e) {

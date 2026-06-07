@@ -32,7 +32,7 @@
           "proxy_headers": true,
           "access": { "policy": "internal_only", "deny_status": 401 }
         },
-        { "path": "/", "proxy_headers": true }
+        { "path": "/", "proxy_headers": true, "websocket": true }
       ]
     },
     {
@@ -88,7 +88,7 @@
         "qemu": { "vmid": 300, "ip": "192.0.2.20/24" }
       },
       "configure": {
-        "ssh": { "user": "root", "host": "192.0.2.20" }
+        "ssh": { "host": "192.0.2.20" }
       }
     },
     {
@@ -100,7 +100,7 @@
         "qemu": { "vmid": 301, "ip": "192.0.2.21/24" }
       },
       "configure": {
-        "ssh": { "user": "root", "host": "192.0.2.21" }
+        "ssh": { "host": "192.0.2.21" }
       }
     }
   ]

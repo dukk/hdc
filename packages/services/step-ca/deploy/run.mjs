@@ -20,6 +20,7 @@ import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/li
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { configureStepCaServer, createConfigureExec } from "../lib/step-ca-configure.mjs";
 import {
   normalizeStepCaConfig,
@@ -110,7 +111,7 @@ async function runConfigure(ctx) {
 
   const cfg = deployment.configure;
   const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) {
     throw new Error(`${deployment.systemId}: configure.ssh.host required`);
@@ -292,7 +293,7 @@ async function deployOne(deployment, flags, global, caPassword, log) {
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);

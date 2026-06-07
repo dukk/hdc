@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Re-apply Postfix relay configuration from packages/services/postfix-relay/config.json.
@@ -222,8 +223,7 @@ async function main() {
       configure,
       ...(baseline
         ? {
-            admin_user: baseline.admin_user,
-            clamav: baseline.clamav,
+            ...guestBaselineResultFields(baseline),
           }
         : {}),
     };
@@ -238,8 +238,7 @@ async function main() {
       guest_resources: guestResources,
       ...(baseline
         ? {
-            admin_user: baseline.admin_user,
-            clamav: baseline.clamav,
+            ...guestBaselineResultFields(baseline),
           }
         : {}),
       message: msg,

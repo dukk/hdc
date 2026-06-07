@@ -8,6 +8,8 @@ import {
   relayhostForSaslMap,
 } from "./postfix-relay-render.mjs";
 import { pctExec, qemuGuestExec, sshRemote } from "./remote.mjs";
+import { createGuestSshExec } from "../../../lib/guest-ssh-exec.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 
 /**
  * @typedef {object} ConfigureExec
@@ -17,7 +19,7 @@ import { pctExec, qemuGuestExec, sshRemote } from "./remote.mjs";
 
 /**
  * @param {"pct" | "ssh" | "qemu-guest"} via
- * @param {{ user: string; host: string; vmid?: number; pveHost?: string }} target
+ * @param {{ user?: string; host: string; vmid?: number; pveHost?: string; useGuestSshFallback?: boolean; log?: (line: string) => void; env?: NodeJS.ProcessEnv }} target
  */
 export function createConfigureExec(via, target) {
   if (via === "qemu-guest") {
@@ -40,14 +42,24 @@ export function createConfigureExec(via, target) {
     if (!Number.isFinite(vmid) || vmid <= 0) {
       throw new Error("pct configure requires a positive numeric vmid");
     }
+    const pveUser =
+      typeof target.user === "string" && target.user.trim() ? target.user.trim() : "root";
     return /** @type {ConfigureExec} */ ({
-      label: `pct exec ${vmid} on ${target.user}@${pveHost}`,
-      run: (inner, opts) => pctExec(target.user, pveHost, Number(vmid), inner, opts),
+      label: `pct exec ${vmid} on ${pveUser}@${pveHost}`,
+      run: (inner, opts) => pctExec(pveUser, pveHost, Number(vmid), inner, opts),
     });
   }
+  const configuredUser = resolveGuestSshUser(target.user, target.env);
+  const guestExec = createGuestSshExec({
+    host: target.host,
+    configuredUser,
+    env: target.env,
+    useFallback: target.useGuestSshFallback !== false,
+    log: target.log,
+  });
   return /** @type {ConfigureExec} */ ({
-    label: `ssh ${target.user}@${target.host}`,
-    run: (inner, opts) => sshRemote(target.user, target.host, `bash -lc ${shellQuote(inner)}`, opts),
+    label: guestExec.label,
+    run: guestExec.run,
   });
 }
 

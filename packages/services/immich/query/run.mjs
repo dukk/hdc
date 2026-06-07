@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Query Immich deployments (config summary + optional live VM status).
@@ -102,7 +103,7 @@ async function main() {
 
           const configure = isObject(d.configure) ? d.configure : {};
           const ssh = isObject(configure.ssh) ? configure.ssh : {};
-          const user = typeof ssh.user === "string" ? ssh.user.trim() : "root";
+          const user = resolveGuestSshUser(ssh.user);
           const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
           if (!host) {
             liveResults.push({

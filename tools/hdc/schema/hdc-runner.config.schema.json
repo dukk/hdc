@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/hdc-runner.config.schema.json",
+  "title": "HDC hdc-runner service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": {
+            "type": "string",
+            "pattern": "^(hdc-runner-[a-z]+|vm-hdc-runner-[a-z]+)$"
+          },
+          "mode": { "enum": ["proxmox-lxc", "proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" },
+          "install": { "type": "object" },
+          "hdc_runner": { "type": "object" }
+        }
+      }
+    }
+  }
+}

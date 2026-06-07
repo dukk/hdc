@@ -20,7 +20,11 @@
       "app_url": null,
       "enable_registration": true,
       "mail_mailer": "log",
-      "db_password_vault_key": "HDC_SOLIDTIME_DB_PASSWORD"
+      "db_password_vault_key": "HDC_SOLIDTIME_DB_PASSWORD",
+      "mail": {
+        "enabled": false,
+        "from": "noreply@example.invalid"
+      }
     },
     "install": {
       "enabled": true

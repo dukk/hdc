@@ -29,7 +29,25 @@
           "pve_node": "hypervisor-d",
           "ip": "198.51.100.218",
           "web_ui": "https://198.51.100.218:8006",
-          "ssh": "ssh://root@198.51.100.218"
+          "ssh": "ssh://root@198.51.100.218",
+          "local_lvm": {
+            "extend": false,
+            "pools": [
+              {
+                "storage_id": "local-lvm-data",
+                "vg": "pve-data",
+                "thin_pool": "data",
+                "md_name": "pve-data",
+                "raid": {
+                  "level": 0,
+                  "devices": [
+                    "/dev/disk/by-id/disk-a",
+                    "/dev/disk/by-id/disk-b"
+                  ]
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -52,13 +70,26 @@
     },
     "host_os": {
       "enabled": true,
-      "reboot_wait_seconds": 300
+      "reboot_wait_seconds": 300,
+      "mail_relay": true
     },
     "storage": {
       "enabled": true,
       "ids": ["nas-a", "nas-b"],
       "discover_from_host": "hypervisor-a",
       "targets": []
+    },
+    "local_lvm": {
+      "extend": {
+        "enabled": true,
+        "storage_id": "local-lvm",
+        "vg": "pve",
+        "thin_pool": "data"
+      },
+      "extra_pools": {
+        "enabled": true,
+        "content": "images,rootdir"
+      }
     },
     "api_token": {
       "enabled": true,
@@ -67,6 +98,29 @@
     },
     "ssh_keys": {
       "enabled": true
+    },
+    "host_firewall": {
+      "enabled": true,
+      "allowed_source_cidrs": ["192.0.2.0/24", "198.51.100.0/24", "198.51.101.0/24"],
+      "ssh_port": 22,
+      "web_port": 8006
+    },
+    "guest_firewall": {
+      "enabled": true,
+      "allowed_source_cidrs": ["10.0.0.0/24", "192.168.0.0/16", "172.16.0.0/12"],
+      "manage_from_deployments": true
+    },
+    "guest_agents": {
+      "crowdsec": {
+        "enabled": true,
+        "lapi_url": "http://10.0.0.50:8080",
+        "enroll_key_vault_key": "HDC_CROWDSEC_ENROLL_KEY"
+      },
+      "wazuh": {
+        "enabled": true,
+        "manager_host": "10.0.0.51",
+        "registration_password_vault_key": "HDC_WAZUH_AGENT_PASSWORD"
+      }
     },
     "lxc": {
       "ostemplate_storage": "local",

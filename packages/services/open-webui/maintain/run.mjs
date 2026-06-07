@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Open WebUI: re-push .env from config, refresh Docker images, recreate containers.
@@ -103,8 +104,7 @@ async function maintainOne(deployment, flags, secretKey, vaultAccess) {
     skip_upgrade: skipUpgrade,
     web_ui_url: result.web_ui_url ?? null,
     message: result.message,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

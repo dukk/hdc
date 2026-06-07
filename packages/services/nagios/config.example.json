@@ -1,6 +1,9 @@
 {
   "schema_version": 2,
   "bind_config_path": "packages/services/bind/config.json",
+  "notifications": {
+    "admin_email": "ops@example.invalid"
+  },
   "defaults": {
     "mode": "proxmox-lxc",
     "proxmox": {

@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Query Kafka broker health on configured nodes.
@@ -66,7 +67,7 @@ async function main() {
 
   for (const d of deployments) {
     const ssh = isObject(d.configure) && isObject(d.configure.ssh) ? d.configure.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = d.sshHost;
     errout.write(`[hdc] ${target} ${verb}: checking ${d.systemId} node ${d.nodeId} at ${user}@${host} …\n`);
 

@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy nginx web nodes: optional Proxmox QEMU provision, base install, sites, per-node certs.
@@ -409,7 +410,7 @@ async function deployOne(deployment, flags, global, sites, log, email, tsigSecre
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);

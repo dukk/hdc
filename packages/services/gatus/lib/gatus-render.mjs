@@ -1,3 +1,7 @@
+import {
+  gatusMailAlertingYaml,
+} from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -88,6 +92,11 @@ export function renderGatusConfigYaml(gatus) {
     typeof gatus.config_yaml_extra === "string" && gatus.config_yaml_extra.trim()
       ? gatus.config_yaml_extra.trim()
       : "";
+  const mailYaml = gatusMailAlertingYaml(gatus);
+  if (mailYaml && !extra.includes("alerting:")) {
+    parts.push("");
+    parts.push(mailYaml);
+  }
   if (extra) {
     parts.push("");
     parts.push(extra);

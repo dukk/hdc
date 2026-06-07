@@ -148,7 +148,7 @@ export function localLvmPoolsForHost(cfg, hostId) {
     const devices = Array.isArray(raid.devices)
       ? raid.devices.map((d) => String(d).trim()).filter(Boolean)
       : [];
-    if (devices.length < 2) continue;
+    if (devices.length < 1) continue;
     const content =
       typeof p.content === "string" && p.content.trim() ? p.content.trim() : defaultContent;
     const mdName =
@@ -335,7 +335,13 @@ LV_PATH="/dev/\${VG}/\${THIN}"
 DEVICES=()
 ${devLines}
 
-echo "extra pool: storage=\${STORAGE_ID} vg=\${VG} md=\${MD_DEV}"
+echo "extra pool: storage=\${STORAGE_ID} vg=\${VG} devices=\${#DEVICES[@]}"
+
+if command -v pvesm >/dev/null 2>&1 && pvesm status 2>/dev/null | awk '{print $1}' | grep -qxF "\${STORAGE_ID}"; then
+  echo "Proxmox storage \${STORAGE_ID} already registered — skip."
+  pvesm status "\${STORAGE_ID}" 2>/dev/null || true
+  exit 0
+fi
 
 for d in "\${DEVICES[@]}"; do
   if [ ! -b "\${d}" ]; then
@@ -347,29 +353,55 @@ for d in "\${DEVICES[@]}"; do
     exit 1
   fi
   if pvs "\${d}" 2>/dev/null | grep -q .; then
-    echo "ERROR: device \${d} already has a physical volume"
-    exit 1
+    vg_on_dev=$(pvs --noheadings -o vg_name "\${d}" 2>/dev/null | awk '{print $1}' | head -1 || true)
+    if [ -n "\${vg_on_dev}" ] && [ "\${vg_on_dev}" = "\${VG}" ]; then
+      echo "Device \${d} already PV in \${VG}"
+    else
+      echo "ERROR: device \${d} already has a physical volume in \${vg_on_dev:-unknown}"
+      exit 1
+    fi
   fi
 done
 
-if ! mdadm --detail "\${MD_DEV}" >/dev/null 2>&1; then
-  echo "Creating RAID0 array \${MD_DEV} …"
-  mdadm --create "\${MD_DEV}" --level=0 --raid-devices=\${#DEVICES[@]} --name="\${MD_NAME}" "\${DEVICES[@]}"
+PV_DEV=""
+if [ "\${#DEVICES[@]}" -eq 1 ]; then
+  PV_DEV="\${DEVICES[0]}"
+  echo "Single-disk pool on \${PV_DEV}"
+  if ! pvs "\${PV_DEV}" >/dev/null 2>&1 && ! vgs "\${VG}" >/dev/null 2>&1; then
+    echo "wipefs -a \${PV_DEV} …"
+    wipefs -a "\${PV_DEV}"
+  fi
 else
-  echo "MD array \${MD_DEV} already exists"
-  mdadm --detail "\${MD_DEV}" | head -5
+  if ! command -v mdadm >/dev/null 2>&1; then
+    echo "Installing mdadm …"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq mdadm
+  fi
+  if ! mdadm --detail "\${MD_DEV}" >/dev/null 2>&1; then
+    echo "Creating RAID0 array \${MD_DEV} …"
+    for d in "\${DEVICES[@]}"; do
+      echo "wipefs -a \${d} …"
+      wipefs -a "\${d}"
+    done
+    mdadm --create "\${MD_DEV}" --level=0 --raid-devices=\${#DEVICES[@]} --name="\${MD_NAME}" "\${DEVICES[@]}"
+  else
+    echo "MD array \${MD_DEV} already exists"
+    mdadm --detail "\${MD_DEV}" | head -5
+  fi
+  PV_DEV="\${MD_DEV}"
 fi
 
-if ! pvs "\${MD_DEV}" >/dev/null 2>&1; then
-  echo "pvcreate \${MD_DEV} …"
-  pvcreate -y "\${MD_DEV}"
+if ! pvs "\${PV_DEV}" >/dev/null 2>&1; then
+  echo "pvcreate \${PV_DEV} …"
+  pvcreate -y "\${PV_DEV}"
 else
-  echo "PV on \${MD_DEV} already exists"
+  echo "PV on \${PV_DEV} already exists"
 fi
 
 if ! vgs "\${VG}" >/dev/null 2>&1; then
   echo "vgcreate \${VG} …"
-  vgcreate "\${VG}" "\${MD_DEV}"
+  vgcreate "\${VG}" "\${PV_DEV}"
 else
   echo "VG \${VG} already exists"
 fi
@@ -385,8 +417,8 @@ if command -v pvesm >/dev/null 2>&1; then
   if pvesm status 2>/dev/null | awk '{print $1}' | grep -qxF "\${STORAGE_ID}"; then
     echo "Proxmox storage \${STORAGE_ID} already registered"
   else
-    echo "pvesm add lvmthin \${STORAGE_ID} \${VG} --content \${CONTENT} …"
-    pvesm add lvmthin "\${STORAGE_ID}" "\${VG}" --content "\${CONTENT}"
+    echo "pvesm add lvmthin \${STORAGE_ID} --vgname \${VG} --thinpool \${THIN} --content \${CONTENT} …"
+    pvesm add lvmthin "\${STORAGE_ID}" --vgname "\${VG}" --thinpool "\${THIN}" --content "\${CONTENT}"
   fi
 else
   echo "WARN: pvesm not found — register \${STORAGE_ID} manually"
@@ -507,7 +539,11 @@ export async function runProxmoxLocalLvmMaintain(opts) {
       /** @type {Record<string, unknown>[]} */
       const poolResults = [];
       for (const pool of pools) {
-        log(`[${target.id}] extra pool ${pool.storageId} (RAID${pool.raidLevel}, ${pool.devices.length} disks) …`);
+        const poolLabel =
+          pool.devices.length === 1
+            ? `single disk`
+            : `RAID${pool.raidLevel}, ${pool.devices.length} disks`;
+        log(`[${target.id}] extra pool ${pool.storageId} (${poolLabel}) …`);
         const script = buildExtraPoolScript(pool);
         if (dryRun) {
           log(`[${target.id}] dry-run pool ${pool.storageId}:\n${script}`);

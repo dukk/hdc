@@ -9,6 +9,24 @@ import {
   readInstalledVersion,
   releaseTarballUrl,
 } from "./solidtime-install.mjs";
+import { solidtimeMailEnvBashSnippet } from "../../../lib/app-mail-render.mjs";
+
+/**
+ * Apply mail relay settings to /opt/solidtime/.env (idempotent).
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {Record<string, unknown>} solidtime
+ */
+export function applySolidtimeMailInCt(user, pveHost, vmid, solidtime) {
+  const inner = solidtimeMailEnvBashSnippet(solidtime);
+  const r = pctExec(user, pveHost, vmid, inner, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim();
+    return { ok: false, message: detail || `exit ${r.status}` };
+  }
+  return { ok: true, message: "mail settings applied" };
+}
 
 /**
  * Compare semver-like tags (v0.12.1 vs v0.12.2). Returns positive if a > b.

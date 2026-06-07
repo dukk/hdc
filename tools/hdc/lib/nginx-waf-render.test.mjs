@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   renderCertSyncScript,
   renderCloudflareRealIp,
+  renderHdcNginxInclude,
   renderModsecurityMainConf,
   renderProxyHeaders,
   renderSiteVhost,
   renderTrustedGeo,
+  renderWebsocketUpgradeMap,
+  sitesNeedWebsocketMap,
   tlsDomainsFromSites,
   validateTrustedCidrs,
 } from "../../../packages/services/nginx-waf/lib/nginx-waf-render.mjs";
@@ -152,5 +155,47 @@ describe("nginx-waf render", () => {
     expect(script).toContain("root@192.0.2.21");
     expect(script).toContain("rsync");
     expect(script).toContain("nginx -s reload");
+  });
+
+  it("sitesNeedWebsocketMap detects websocket locations", () => {
+    expect(sitesNeedWebsocketMap([sampleSite])).toBe(false);
+    expect(
+      sitesNeedWebsocketMap([
+        {
+          ...sampleSite,
+          locations: [{ path: "/", proxy_headers: true, websocket: true }],
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("renderWebsocketUpgradeMap emits connection_upgrade map", () => {
+    const map = renderWebsocketUpgradeMap();
+    expect(map).toContain("map $http_upgrade $connection_upgrade");
+    expect(map).toContain("default upgrade;");
+  });
+
+  it("renderHdcNginxInclude adds websocket map when enabled", () => {
+    const withMap = renderHdcNginxInclude({ modsecurityEnabled: true, websocketMapEnabled: true });
+    expect(withMap).toContain("map $http_upgrade $connection_upgrade");
+    expect(withMap).toContain("modsecurity on;");
+    const withoutMap = renderHdcNginxInclude({ modsecurityEnabled: false, websocketMapEnabled: false });
+    expect(withoutMap).not.toContain("map $http_upgrade");
+  });
+
+  it("renderSiteVhost websocket location has Upgrade headers but no map block", () => {
+    const vhost = renderSiteVhost({
+      site: {
+        ...sampleSite,
+        locations: [{ path: "/", proxy_headers: true, websocket: true }],
+      },
+      modsecurityEnabled: true,
+      http01Acme: true,
+      webroot: "/var/www/letsencrypt",
+    });
+    expect(vhost).toContain("proxy_set_header Upgrade $http_upgrade;");
+    expect(vhost).toContain("proxy_set_header Connection $connection_upgrade;");
+    expect(vhost).toContain("proxy_cache_bypass $http_upgrade;");
+    expect(vhost).not.toContain("map $http_upgrade $connection_upgrade");
   });
 });

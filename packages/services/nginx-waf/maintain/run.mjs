@@ -206,6 +206,7 @@ async function main() {
           log,
           global,
           sites,
+          allSites: global.sites,
           pruneStaleSites: !partialSiteUpdate,
           wafNodeId: certPrimary.systemId,
         });
@@ -245,6 +246,7 @@ async function main() {
           log,
           global,
           sites,
+          allSites: global.sites,
           pruneStaleSites: !partialSiteUpdate,
           wafNodeId: deployment.systemId,
         });
@@ -328,12 +330,10 @@ async function main() {
         mergeGuestBaselineIntoResult(existing, baseline);
       } else {
         results.push({
-          ok: baseline.admin_user?.ok !== false,
+          ok: guestBaselineUsersOk(baseline),
           system_id: deployment.systemId,
           role: deployment.role,
-          guest_resources: baseline.guest_resources,
-          admin_user: baseline.admin_user,
-          clamav: baseline.clamav,
+          ...guestBaselineResultFields(baseline),
         });
       }
     } catch (e) {

@@ -33,7 +33,17 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
    `node tools/hdc/cli.mjs run service pi-hole query -- --verbose`
 
-3. **Lint** inventory JSON (`docs lint`). Optional **`docs sync`** runs the same validation; hdc does not read or write companion `.md` files.
+3. **Daily maintain** — cross-package orchestrator (safe updates, health checks, no prune/reboot):
+
+   `node tools/hdc/cli.mjs maintain daily`
+
+   `node tools/hdc/cli.mjs maintain daily --dry-run`
+
+   `node tools/hdc/cli.mjs maintain daily -- --only service/bind`
+
+   Writes `tools/hdc/reports/daily-maintain-<timestamp>.md`. Schedule via Task Scheduler or cron on the operator host.
+
+4. **Lint** inventory JSON (`docs lint`). Optional **`docs sync`** runs the same validation; hdc does not read or write companion `.md` files.
 
    `node tools/hdc/cli.mjs docs lint`
 
@@ -41,7 +51,7 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
    `node tools/hdc/cli.mjs docs sync`
 
-4. **Apply** query JSON output into a sidecar (explicit merge of `query_last` and `last_verified`):
+5. **Apply** query JSON output into a sidecar (explicit merge of `query_last` and `last_verified`):
 
    `node tools/hdc/cli.mjs inventory apply --sidecar inventory/manual/systems/foo.json --from-json /path/to/query.json`
 

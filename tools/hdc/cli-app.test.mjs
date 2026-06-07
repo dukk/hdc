@@ -154,6 +154,12 @@ describe("runCli", () => {
     expect(await runCli(["help", "users", "nope"], deps)).toBe(1);
     expect(await runCli(["help", "users", "bootstrap-hdc", "x"], deps)).toBe(1);
 
+    expect(await runCli(["help", "maintain"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toContain("daily");
+    capture.logLines.length = 0;
+    expect(await runCli(["help", "maintain", "daily"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/prune, rolling restarts/);
+
     expect(await runCli(["help", "env"], deps)).toBe(0);
     expect(capture.logLines.join("\n")).toContain("HDC_");
     expect(await runCli(["help", "env", "x"], deps)).toBe(1);

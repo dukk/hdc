@@ -39,7 +39,7 @@
         }
       },
       "configure": {
-        "ssh": { "user": "root", "host": "10.0.0.28" }
+        "ssh": { "host": "10.0.0.28" }
       }
     }
   ]

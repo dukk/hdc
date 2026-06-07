@@ -71,6 +71,40 @@ describe("proxmox local-lvm maintain", () => {
     expect(localLvmPoolsForHost(fixtureCfg, "hypervisor-b")).toEqual([]);
   });
 
+  it("localLvmPoolsForHost accepts single-device extra pools", () => {
+    const cfg = {
+      ...fixtureCfg,
+      clusters: [
+        {
+          id: "c1",
+          hosts: [
+            {
+              id: "pve-a",
+              pve_node: "pve-a",
+              ip: "192.0.2.11",
+              web_ui: "https://192.0.2.11:8006",
+              ssh: "ssh://root@192.0.2.11",
+              local_lvm: {
+                extend: false,
+                pools: [
+                  {
+                    storage_id: "local-lvm-data",
+                    vg: "pve-data",
+                    thin_pool: "data",
+                    raid: { level: 0, devices: ["/dev/disk/by-id/ssd-a"] },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const pools = localLvmPoolsForHost(cfg, "pve-a");
+    expect(pools).toHaveLength(1);
+    expect(pools[0].devices).toEqual(["/dev/disk/by-id/ssd-a"]);
+  });
+
   it("buildExtendLocalLvmScript contains growpart and lvextend", () => {
     const script = buildExtendLocalLvmScript({ vg: "pve", thinPool: "data", storageId: "local-lvm" });
     expect(script).toContain("growpart");
@@ -98,7 +132,25 @@ describe("proxmox local-lvm maintain", () => {
     });
     expect(script).toContain("mdadm --create");
     expect(script).toContain("pvesm add lvmthin");
+    expect(script).toContain("--vgname");
+    expect(script).toContain("--thinpool");
     expect(script).toContain("local-lvm-mirrored");
     expect(script).toContain("/dev/disk/by-id/a");
+  });
+
+  it("buildExtraPoolScript skips mdadm for a single device", () => {
+    const script = buildExtraPoolScript({
+      storageId: "local-lvm-data",
+      vg: "pve-data",
+      thinPool: "data",
+      content: "images,rootdir",
+      mdName: "pve-data",
+      raidLevel: 0,
+      devices: ["/dev/disk/by-id/ssd-a"],
+    });
+    expect(script).toContain("Single-disk pool");
+    expect(script.split("else")[0]).not.toContain("mdadm --create");
+    expect(script).toContain("pvcreate");
+    expect(script).toContain("/dev/disk/by-id/ssd-a");
   });
 });

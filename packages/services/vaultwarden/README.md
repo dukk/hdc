@@ -34,7 +34,7 @@ node tools/hdc/cli.mjs run vaultwarden maintain --
 1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.123:80`).
 2. **Inventory:** set `access.nodes[0].ip` on `vaultwarden-a.json`.
 3. **BIND:** forward A record for the hostname in `vaultwarden.domain`.
-4. **nginx-waf:** add a site with `proxy_pass` to the CT upstream; enable WebSockets if needed (`websocket_enabled: true` in config).
+4. **nginx-waf:** add a site with upstream to the CT IP; set `"websocket": true` on locations that need WebSockets (e.g. `/` and `/notifications/hub` for Vaultwarden).
 5. **Admin:** open `{domain}/admin` and sign in with `HDC_VAULTWARDEN_ADMIN_TOKEN`.
 6. **hdc secrets:** set `HDC_VAULTWARDEN_URL`, `HDC_VAULTWARDEN_EMAIL` in `.env`; install [Bitwarden CLI](../../../docs/manually-deployed/bitwarden-cli.md); create your Vaultwarden user account.
 7. **Nagios:** `node tools/hdc/cli.mjs run service nagios maintain --` after BIND A record exists.

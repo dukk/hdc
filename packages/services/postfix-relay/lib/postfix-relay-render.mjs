@@ -86,3 +86,27 @@ export function renderSaslPasswd(relayhost, username, password) {
 export function relayhostForSaslMap(relayhost) {
   return relayhost.trim();
 }
+
+/**
+ * Postfix satellite client: forward all mail to internal hdc relay (no SASL).
+ * @param {object} opts
+ * @param {string} opts.relayhost e.g. [10.0.0.60]
+ * @param {string} opts.myhostname
+ * @param {string} opts.myorigin
+ * @param {string} [opts.inetInterfaces]
+ * @returns {string} Written to /etc/postfix/main.cf.d/hdc-satellite.cf
+ */
+export function renderSatelliteCfSnippet(opts) {
+  const relayhost = opts.relayhost.trim();
+  const inetInterfaces = (opts.inetInterfaces ?? "loopback-only").trim();
+  const lines = [
+    "# hdc postfix-relay — satellite client (internal smarthost)",
+    `myhostname = ${opts.myhostname}`,
+    `myorigin = ${opts.myorigin}`,
+    `relayhost = ${relayhost}`,
+    `inet_interfaces = ${inetInterfaces}`,
+    "mydestination =",
+    "local_transport = error:local delivery disabled on satellite",
+  ];
+  return `${lines.join("\n")}\n`;
+}

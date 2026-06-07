@@ -1,3 +1,5 @@
+import { postizMailEnvEntries } from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -110,7 +112,8 @@ export function renderPostizEnv(postiz, dbPassword, jwtSecret, baseUrl) {
     "NX_ADD_PLUGINS=false",
   ];
 
-  const extra = isObject(postiz.env_extra) ? postiz.env_extra : {};
+  const mailExtra = postizMailEnvEntries(postiz);
+  const extra = { ...mailExtra, ...(isObject(postiz.env_extra) ? postiz.env_extra : {}) };
   for (const [key, val] of Object.entries(extra)) {
     if (!key || val === undefined || val === null) continue;
     lines.push(`${key}=${String(val)}`);

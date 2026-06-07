@@ -32,6 +32,7 @@ import {
  * @property {string[]} downHosts
  * @property {import("./proxmox-oem-windows-license.mjs").OemLicenseHostResult[]} [oemWindowsLicense]
  * @property {import("./proxmox-qemu-guest-agent.mjs").QemuGuestAgentReportData | null} [qemuGuestAgent]
+ * @property {Record<string, unknown>[]} [mailRelay]
  * @property {number | null} exitCode
  * @property {string | null} reportPath
  */
@@ -49,10 +50,12 @@ export function createMaintainReportContext(argv) {
     skipApiToken: argv.includes("--skip-api-token"),
     skipTemplates: argv.includes("--skip-templates"),
     skipStorage: argv.includes("--skip-storage"),
+    skipLocalLvm: argv.includes("--skip-local-lvm"),
     skipOsUpdates: argv.includes("--skip-os-updates"),
     skipLoadReport: argv.includes("--skip-load-report"),
     skipOemLicense: argv.includes("--skip-oem-license"),
     skipGuestAgent: argv.includes("--skip-guest-agent"),
+    skipMailRelay: argv.includes("--skip-mail-relay"),
     noDownload: argv.includes("--no-download"),
     noBuildQemu: argv.includes("--no-build-qemu"),
     noPrune: argv.includes("--no-prune"),
@@ -74,6 +77,7 @@ export function createMaintainReportContext(argv) {
     downHosts: [],
     oemWindowsLicense: [],
     qemuGuestAgent: null,
+    mailRelay: [],
     exitCode: null,
     reportPath: null,
   };
@@ -379,6 +383,28 @@ export function renderMaintainReportMarkdown(ctx) {
     lines.push(`| ${s.title} | ${status} | ${result} | ${notes} |`);
   }
   lines.push("");
+
+  if (ctx.mailRelay?.length) {
+    lines.push("## Mail relay (Postfix satellite)", "");
+    for (const h of ctx.mailRelay) {
+      const id = typeof h.id === "string" ? h.id : "?";
+      const mr = h.mail_relay;
+      const status =
+        h.dry_run === true
+          ? "dry-run"
+          : h.ok === true
+            ? "ok"
+            : "fail";
+      const detail =
+        mr && typeof mr === "object" && mr !== null && typeof mr.message === "string"
+          ? mr.message
+          : typeof h.message === "string"
+            ? h.message
+            : "—";
+      lines.push(`- **${id}:** ${status} — ${detail}`);
+    }
+    lines.push("");
+  }
 
   if (ctx.downHosts.length) {
     lines.push("## Hosts marked down in config", "");

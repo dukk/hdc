@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Nagios: regenerate checks from BIND and reload LXC guests.
@@ -100,8 +101,7 @@ async function maintainOne(deployment, flags, nagiosCfg, vaultAccess) {
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
     ok: result.ok !== false && baseline.admin_user?.ok !== false,
   };
 }
@@ -137,7 +137,9 @@ async function main() {
 
   let bindBundle;
   try {
-    bindBundle = loadNagiosBindBundle(root, norm.bindConfigPath);
+    bindBundle = loadNagiosBindBundle(root, norm.bindConfigPath, {
+      adminEmail: norm.notifications?.adminEmail,
+    });
     errout.write(
       `[hdc] ${target} ${verb}: BIND ${bindBundle.bindPath} → ${bindBundle.stats.hostCount} hosts.\n`,
     );

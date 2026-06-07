@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Uptime Kuma (upgrade or restart).
@@ -82,8 +83,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     vmid,
     ...result,
     ok: result.ok && baseline.ok,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

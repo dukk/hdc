@@ -1,3 +1,5 @@
+import { resolveGuestSshUser } from "./guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "./guest-baseline-report.mjs";
 import { join } from "node:path";
 
 import { tryLoadPackageConfigFromPackageRoot } from "../../tools/hdc/lib/package-config.mjs";
@@ -21,7 +23,7 @@ function isObject(v) {
 export function sshTargetFromConfigure(configure) {
   if (!isObject(configure)) return null;
   const ssh = isObject(configure.ssh) ? configure.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) return null;
   return { user, host };
@@ -153,8 +155,7 @@ export async function runClamavOnlyMaintain(opts) {
       results.push({
         ok: baseline.ok,
         system_id: systemId,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

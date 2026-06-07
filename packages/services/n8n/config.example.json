@@ -21,7 +21,12 @@
       "host_port": 5678,
       "public_url": "https://n8n.example.invalid",
       "timezone": "America/New_York",
-      "encryption_key_vault_key": "HDC_N8N_ENCRYPTION_KEY"
+      "encryption_key_vault_key": "HDC_N8N_ENCRYPTION_KEY",
+      "mail": {
+        "enabled": false,
+        "to": "ops@example.invalid",
+        "from": "noreply@example.invalid"
+      }
     },
     "install": {
       "enabled": true,

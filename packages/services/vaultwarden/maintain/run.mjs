@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Vaultwarden: re-push .env from config, refresh Docker images, ClamAV baseline.
@@ -107,8 +108,7 @@ async function maintainOne(deployment, flags, adminToken, vaultAccess) {
     admin_url: result.admin_url ?? null,
     upstream_url: result.upstream_url ?? null,
     message: result.message,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

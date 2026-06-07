@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Scanopy: refresh Docker images and recreate containers.
@@ -85,8 +86,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     host_id: hostId,
     vmid,
     message: result.message,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

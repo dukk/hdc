@@ -197,11 +197,9 @@ async function main() {
         mergeGuestBaselineIntoResult(existing, baseline);
       } else {
         results.push({
-          ok: baseline.admin_user?.ok !== false,
+          ok: guestBaselineUsersOk(baseline),
           system_id: deployment.systemId,
-          guest_resources: baseline.guest_resources,
-          admin_user: baseline.admin_user,
-          clamav: baseline.clamav,
+          ...guestBaselineResultFields(baseline),
         });
       }
     } catch (e) {

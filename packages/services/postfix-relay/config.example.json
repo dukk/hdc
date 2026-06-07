@@ -24,7 +24,6 @@
   "configure": {
     "via": "pct",
     "ssh": {
-      "user": "root",
       "host": "192.0.2.48"
     }
   },
@@ -41,5 +40,13 @@
     "auth_pass_vault_key": "HDC_POSTFIX_RELAY_SMTP_PASSWORD",
     "auth_user_env": "HDC_POSTFIX_RELAY_SMTP_USER",
     "tls_security_level": "encrypt"
+  },
+  "client_defaults": {
+    "relayhost": "[10.0.0.60]",
+    "relay_hostname": "postfix-relay.hdc.dukk.org",
+    "relay_port": 25,
+    "myorigin": "hdc.dukk.org",
+    "default_from": "noreply@hdc.dukk.org",
+    "inet_interfaces": "loopback-only"
   }
 }

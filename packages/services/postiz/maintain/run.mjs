@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Postiz: upgrade, rebuild, or restart services + ClamAV baseline.
@@ -111,8 +112,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     installed_version: result.installed_version,
     target_version: result.target_version,
     message: result.message,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

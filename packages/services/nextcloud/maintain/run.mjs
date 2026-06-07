@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Nextcloud AIO: re-push compose.yaml, refresh mastercontainer image.
@@ -18,7 +19,9 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveNextcloudDeployments } from "../lib/deployments.mjs";
 import { maintainNextcloudInCt, resolvePveSshForHost } from "../lib/nextcloud-install.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { applyNextcloudMailInCt } from "../lib/nextcloud-mail.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +79,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
   const result = await maintainNextcloudInCt(pveSsh.user, pveSsh.host, vmid, nextcloudCfg, installCfg, {
     skipUpgrade,
   });
+  const mail = applyNextcloudMailInCt(pveSsh.user, pveSsh.host, vmid, nextcloudCfg);
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
     user: pveSsh.user,
@@ -85,15 +89,15 @@ async function maintainOne(deployment, flags, vaultAccess) {
   });
   const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
   return {
-    ok: result.ok && baseline.ok,
+    ok: result.ok && baseline.ok && mail.ok !== false,
     system_id: systemId,
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
     aio_interface_url: result.aio_interface_url ?? null,
     message: result.message,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    mail,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

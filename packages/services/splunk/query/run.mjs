@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Query Splunk Free standalone health.
@@ -72,7 +73,7 @@ async function main() {
 
   for (const d of deployments) {
     const ssh = isObject(d.configure) && isObject(d.configure.ssh) ? d.configure.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" ? ssh.host : "";
     if (!host) {
       nodes.push({ system_id: d.systemId, ok: false, message: "missing ssh host" });

@@ -74,5 +74,21 @@ export function remoteInstallAuthorizedKeysForUserBash(username, keyLinesB64) {
  * @returns {string}
  */
 export function remoteBootstrapHdcBash(passwordB64) {
-  return remoteEnsureLocalAdminUserBash("hdc", passwordB64);
+  return remoteEnsureHdcAutomationUserBash(passwordB64);
+}
+
+/**
+ * Create/update hdc automation user with passwordless sudo for non-root SSH ops.
+ * @param {string} passwordB64 base64-encoded UTF-8 password
+ * @returns {string}
+ */
+export function remoteEnsureHdcAutomationUserBash(passwordB64) {
+  const userPart = remoteEnsureLocalAdminUserBash("hdc", passwordB64);
+  return [
+    userPart,
+    "install -d -m 750 /etc/sudoers.d",
+    'printf "%s\\n" "hdc ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/hdc-automation',
+    "chmod 440 /etc/sudoers.d/hdc-automation",
+    "visudo -cf /etc/sudoers.d/hdc-automation >/dev/null",
+  ].join("; ");
 }

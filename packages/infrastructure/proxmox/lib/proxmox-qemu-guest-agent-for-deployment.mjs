@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { authorizeProxmoxForHost } from "./proxmox-deploy-auth.mjs";
 import {
   fetchClusterVmResources,
@@ -44,7 +45,7 @@ export function locateQemuGuestByName(resources, name) {
 export function sshTargetForGuestAgentDeployment(deployment, defaultSshHost) {
   const cfg = deployment.configure;
   const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   let host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host && typeof defaultSshHost === "string" && defaultSshHost.trim()) {
     host = defaultSshHost.trim();

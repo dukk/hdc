@@ -21,7 +21,12 @@
       "listen_port": 80,
       "storage_provider": "local",
       "db_password_vault_key": "HDC_POSTIZ_DB_PASSWORD",
-      "jwt_secret_vault_key": "HDC_POSTIZ_JWT_SECRET"
+      "jwt_secret_vault_key": "HDC_POSTIZ_JWT_SECRET",
+      "mail": {
+        "enabled": false,
+        "to": "ops@example.invalid",
+        "from": "noreply@example.invalid"
+      }
     },
     "install": {
       "enabled": true,

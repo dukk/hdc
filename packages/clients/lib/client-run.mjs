@@ -19,6 +19,8 @@ import {
   primaryNodeFromHost,
   resolveHostMac,
   wolDefaultsFromConfig,
+  mailRelayDefaultsFromConfig,
+  hostMailRelayEnabled,
 } from "./client-config.mjs";
 import {
   ensureWinRmViaPsExec,
@@ -45,6 +47,7 @@ export async function runClientVerb(opts) {
   const dryRun = flags["dry-run"] !== undefined;
   const skipUpdates = flags["skip-updates"] !== undefined;
   const reboot = flags["reboot"] !== undefined;
+  const skipMailRelay = flags["skip-mail-relay"] !== undefined;
   const noWol = flags["no-wol"] !== undefined;
   const noWinrmBootstrap = flags["no-winrm-bootstrap"] !== undefined;
   const noReport = flags["no-report"] !== undefined;
@@ -59,6 +62,7 @@ export async function runClientVerb(opts) {
   try {
     const cfg = loadClientConfig(cfgPath);
     const wolDefaults = wolDefaultsFromConfig(cfg);
+    const mailRelayDefaults = mailRelayDefaultsFromConfig(cfg);
     const winrmBootstrapDefaults = winrmBootstrapDefaultsFromConfig(cfg);
     const hosts = hostsForPlatform(cfg, platform, hostIdFilter);
     if (!hosts.length) {
@@ -260,6 +264,9 @@ export async function runClientVerb(opts) {
             skipUpdates: skipUpdates || !hostUpdatesEnabled(host),
             reboot,
             dryRun,
+            skipMailRelay,
+            mailRelayEnabled: hostMailRelayEnabled(host, mailRelayDefaults),
+            hostId: id,
             log: (m) => errout.write(`[hdc] ${m}\n`),
             warn: (m) => errout.write(`[hdc] warning: ${m}\n`),
           });

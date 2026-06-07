@@ -1,5 +1,6 @@
 import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 
 const NGINX_ROLE = "nginx";
 
@@ -236,7 +237,7 @@ export function resolveSites(cfg, siteIdFilter) {
 export function sshTargetFromDeployment(deployment) {
   const cfg = deployment.configure;
   const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) throw new Error(`${deployment.systemId}: configure.ssh.host required`);
   return { user, host };

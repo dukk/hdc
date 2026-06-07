@@ -184,13 +184,46 @@ export function tlsDomainsFromSites(sites) {
 }
 
 /**
+ * @param {Record<string, unknown>[]} sites
+ */
+export function sitesNeedWebsocketMap(sites) {
+  for (const site of sites) {
+    const locations = Array.isArray(site.locations) ? site.locations.filter(isObject) : [];
+    if (locations.some((loc) => loc.websocket === true)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** @returns {string} */
+export function renderWebsocketUpgradeMap() {
+  return `map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+`;
+}
+
+/**
  * @param {object} opts
  * @param {boolean} opts.modsecurityEnabled
+ * @param {boolean} [opts.websocketMapEnabled]
  */
 export function renderHdcNginxInclude(opts) {
-  const { modsecurityEnabled } = opts;
+  const { modsecurityEnabled, websocketMapEnabled = false } = opts;
   const lines = [
     "# Managed by hdc nginx-waf — do not edit manually",
+    ...(websocketMapEnabled
+      ? [
+          "map $http_upgrade $connection_upgrade {",
+          "    default upgrade;",
+          "    ''      close;",
+          "}",
+          "",
+        ]
+      : []),
     "client_max_body_size 64m;",
     "proxy_read_timeout 300s;",
     "proxy_connect_timeout 60s;",
@@ -258,7 +291,6 @@ export function renderSiteVhost(opts) {
       : [
           renderLocationBlock({ path: "/", proxy_headers: true }, upstream, wafOn, id, false, wafNodeId),
         ];
-  const needsWebsocketMap = locations.some((loc) => loc.websocket === true);
 
   const trustedGeoBlock = needsTrustedGeo
     ? `${renderTrustedGeo({ cidrs: trustedCidrs, clientIp })}\n`
@@ -268,14 +300,6 @@ export function renderSiteVhost(opts) {
 
   /** @type {string[]} */
   const blocks = [];
-  const websocketMap = needsWebsocketMap
-    ? `map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-`
-    : "";
 
   if (listen.includes(80)) {
     const acme =
@@ -333,7 +357,7 @@ ${locBlocks.join("\n")}
 `);
   }
 
-  return `# hdc site ${id}\n${trustedGeoBlock}${websocketMap}${blocks.join("\n")}`;
+  return `# hdc site ${id}\n${trustedGeoBlock}${blocks.join("\n")}`;
 }
 
 /**
@@ -359,7 +383,8 @@ function renderLocationBlock(loc, upstream, _wafOn, siteContext, trustedGeoEnabl
     ? `
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;`
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;`
     : "";
   return `    location ${path} {${accessGuard}
         proxy_pass ${upstream};${headerLines}${websocketLines}

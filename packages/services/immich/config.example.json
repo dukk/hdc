@@ -34,7 +34,6 @@
     },
     "configure": {
       "ssh": {
-        "user": "root"
       }
     },
     "synology": {

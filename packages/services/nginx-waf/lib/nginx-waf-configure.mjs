@@ -7,6 +7,7 @@ import {
   renderSiteVhost,
   serverNames,
   siteId,
+  sitesNeedWebsocketMap,
 } from "./nginx-waf-render.mjs";
 import { certExistsOnHost } from "./letsencrypt.mjs";
 
@@ -105,14 +106,33 @@ export function configureModsecurityCrs(opts) {
 }
 
 /**
+ * Upload /etc/nginx/hdc/waf-global.conf (timeouts, ModSecurity, optional WebSocket map).
+ * @param {object} opts
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
+ * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
+ * @param {Record<string, unknown>[]} opts.allSites
+ */
+export function uploadHdcNginxGlobalInclude(opts) {
+  const { exec, log, global, allSites } = opts;
+  runChecked(exec, "mkdir -p /etc/nginx/hdc", log);
+  const include = renderHdcNginxInclude({
+    modsecurityEnabled: global.modsecurityEnabled,
+    websocketMapEnabled: sitesNeedWebsocketMap(allSites),
+  });
+  uploadFile(exec, "/etc/nginx/hdc/waf-global.conf", include, log);
+}
+
+/**
  * @param {object} opts
  * @param {ReturnType<typeof createConfigureExec>} opts.exec
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {boolean} [opts.dns01]
+ * @param {Record<string, unknown>[]} [opts.allSites]
  */
 export function installNginxWafBase(opts) {
-  const { exec, log, global, dns01 } = opts;
+  const { exec, log, global, dns01, allSites = [] } = opts;
   const pkgs = [
     "nginx",
     "libmodsecurity3",
@@ -130,10 +150,7 @@ export function installNginxWafBase(opts) {
     log,
   );
   runChecked(exec, "mkdir -p /etc/nginx/hdc /var/www/letsencrypt", log);
-  const include = renderHdcNginxInclude({
-    modsecurityEnabled: global.modsecurityEnabled,
-  });
-  uploadFile(exec, "/etc/nginx/hdc/waf-global.conf", include, log);
+  uploadHdcNginxGlobalInclude({ exec, log, global, allSites });
   runChecked(
     exec,
     `grep -q 'hdc/waf-global.conf' /etc/nginx/nginx.conf || ` +
@@ -165,12 +182,14 @@ export function installNginxWafBase(opts) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {Record<string, unknown>[]} opts.sites
+ * @param {Record<string, unknown>[]} [opts.allSites] Full site list for global WebSocket map (defaults to sites)
  * @param {boolean} [opts.pruneStaleSites] Remove hdc-* vhosts on host not in sites[] (default true)
  * @param {string} [opts.wafNodeId] deployment.system_id baked into upstream headers
  */
 export function configureNginxWafSites(opts) {
-  const { exec, log, global, sites, pruneStaleSites = true, wafNodeId } = opts;
+  const { exec, log, global, sites, allSites = sites, pruneStaleSites = true, wafNodeId } = opts;
   runChecked(exec, "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled", log);
+  uploadHdcNginxGlobalInclude({ exec, log, global, allSites });
 
   const http01 = global.challenge === "http-01";
   /** @type {string[]} */
@@ -253,11 +272,11 @@ export function configureNginxWafSites(opts) {
 export function configureNginxWaf(opts) {
   const { exec, log, global, sites, skipBaseInstall, wafNodeId } = opts;
   if (!skipBaseInstall) {
-    installNginxWafBase({ exec, log, global, dns01: global.challenge === "dns-01" });
+    installNginxWafBase({ exec, log, global, dns01: global.challenge === "dns-01", allSites: sites });
   } else if (global.modsecurityEnabled) {
     configureModsecurityCrs({ exec, log, global, verifyPackages: false });
   }
-  const sitesResult = configureNginxWafSites({ exec, log, global, sites, wafNodeId });
+  const sitesResult = configureNginxWafSites({ exec, log, global, sites, allSites: sites, wafNodeId });
   return { ...sitesResult };
 }
 

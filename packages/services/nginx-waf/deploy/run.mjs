@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy nginx WAF nodes: optional Proxmox QEMU provision, base install, sites, certs, peer sync.
@@ -287,7 +288,7 @@ async function bootstrapGuestNetworkAndSsh(auth, node, vmid, hostname, ipCidr, g
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ipCidr.split("/")[0];
   errout.write(`[hdc] ${target} ${verb}: waiting for SSH on ${sshUser}@${sshHost} …\n`);
   await waitForSsh({ user: sshUser, host: sshHost });
@@ -482,7 +483,7 @@ async function deployOne(deployment, flags, global, sites, log) {
   const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
     ? deployment.configure.ssh
     : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 
   const guestAgent = await ensureNginxWafGuestAgent(

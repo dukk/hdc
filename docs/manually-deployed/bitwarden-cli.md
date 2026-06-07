@@ -91,6 +91,10 @@ These never sync to Vaultwarden:
 
 The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still protects `~/.hdc/vault.enc` when reading bootstrap keys.
 
+## hdc-runner scheduled host
+
+The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault). Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`packages/services/hdc-runner/README.md`](../packages/services/hdc-runner/README.md).
+
 ## Troubleshooting
 
 - **`bw not found`** — Install CLI or set `HDC_BW_EXECUTABLE`.

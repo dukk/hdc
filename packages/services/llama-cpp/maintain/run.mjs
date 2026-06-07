@@ -1,3 +1,5 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain llama-cpp: upgrade binary from GitHub release and restart llama-server.
@@ -130,8 +132,7 @@ async function maintainLxcOne(deployment, flags, vaultAccess) {
     mode: deployment.mode,
     install: installResult,
     restarted: !skipRestart,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 
@@ -149,7 +150,7 @@ async function maintainQemuOne(deployment, flags, vaultAccess) {
   }
   const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
   const q = isObject(px.qemu) ? px.qemu : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const ip = typeof q.ip === "string" ? q.ip.trim() : "";
   const sshHost =
     typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
@@ -205,8 +206,7 @@ async function maintainQemuOne(deployment, flags, vaultAccess) {
     mode,
     install: installResult,
     restarted: !skipRestart,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

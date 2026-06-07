@@ -30,9 +30,10 @@ export function nagiosHostNameFromFqdn(fqdn) {
 /**
  * Build Nagios object config from BIND forward A records (PING checks only).
  * @param {BindForwardARecord[]} records
+ * @param {{ adminEmail?: string }} [opts]
  * @returns {{ hosts: { nagiosHostName: string; address: string; alias: string }[]; nagiosCfg: string; stats: { hostCount: number; serviceCount: number } }}
  */
-export function buildNagiosBundleFromBind(records) {
+export function buildNagiosBundleFromBind(records, opts = {}) {
   /** @type {{ nagiosHostName: string; address: string; alias: string }[]} */
   const hosts = [];
   for (const r of records) {
@@ -67,8 +68,31 @@ export function buildNagiosBundleFromBind(records) {
   lines.push("  max_check_attempts 3");
   lines.push("  check_interval 5");
   lines.push("  retry_interval 1");
+  const adminEmail =
+    typeof opts.adminEmail === "string" && opts.adminEmail.trim() ? opts.adminEmail.trim() : "";
+  if (adminEmail) {
+    lines.push("  contact_groups hdc-admins");
+    lines.push("  notification_options w,u,c,r");
+  }
   lines.push("}");
   lines.push("");
+
+  if (adminEmail) {
+    lines.push("define contact {");
+    lines.push("  contact_name hdc-mail");
+    lines.push("  alias HDC Mail");
+    lines.push(`  email ${escapeNagiosString(adminEmail)}`);
+    lines.push("  host_notifications_enabled 1");
+    lines.push("  service_notifications_enabled 1");
+    lines.push("}");
+    lines.push("");
+    lines.push("define contactgroup {");
+    lines.push("  contactgroup_name hdc-admins");
+    lines.push("  alias HDC Administrators");
+    lines.push("  members hdc-mail");
+    lines.push("}");
+    lines.push("");
+  }
   let serviceCount = 0;
   for (const h of hosts) {
     lines.push("define host {");

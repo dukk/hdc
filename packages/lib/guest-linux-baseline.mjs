@@ -1,6 +1,15 @@
 import { noRebootFromFlags } from "../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { ensureAdminUser } from "./admin-user-ensure.mjs";
 import { ensureClamav } from "./clamav-ensure.mjs";
+import { ensureClamavScanSchedule } from "./clamav-scan-schedule.mjs";
+import { ensureCrowdsecAgent } from "./crowdsec-agent-ensure.mjs";
+import { ensureHdcUser } from "./hdc-user-ensure.mjs";
+import { ensurePostfixSatellite } from "./postfix-satellite-ensure.mjs";
+import { resolveGuestSshUser } from "./guest-ssh-resolve.mjs";
+import { ensureRootDisabled } from "./root-login-disable.mjs";
+import { ensureUnattendedUpgrades } from "./unattended-upgrades-ensure.mjs";
+import { ensureWazuhAgent } from "./wazuh-agent-ensure.mjs";
+import { isNagiosGuestSystem } from "./guest-agents-config.mjs";
 import {
   proxmoxGuestTypeFromMode,
   syncProxmoxGuestResourcesOnMaintain,
@@ -13,11 +22,33 @@ function isObject(v) {
 }
 
 /**
+ * @param {Record<string, unknown>} [deployment]
+ * @param {Record<string, string>} [flags]
+ */
+function baselineFlagsForDeployment(deployment, flags) {
+  const systemId =
+    deployment && typeof deployment.system_id === "string"
+      ? deployment.system_id.trim()
+      : "";
+  if (!isNagiosGuestSystem(systemId)) {
+    return flags ?? {};
+  }
+  return {
+    ...(flags ?? {}),
+    "skip-clamav": "1",
+    "skip-clamav-scan": "1",
+    "skip-crowdsec-agent": "1",
+    "skip-wazuh-agent": "1",
+  };
+}
+
+/**
  * SSH target for proxmox-qemu guests (configure.ssh or proxmox.qemu.ip).
  * @param {Record<string, unknown>} deployment
+ * @param {NodeJS.ProcessEnv} [env]
  * @returns {{ user: string; host: string } | null}
  */
-export function resolveQemuSshTargetFromDeployment(deployment) {
+export function resolveQemuSshTargetFromDeployment(deployment, env) {
   const mode = typeof deployment.mode === "string" ? deployment.mode.trim() : "";
   if (mode !== "proxmox-qemu") return null;
 
@@ -26,8 +57,7 @@ export function resolveQemuSshTargetFromDeployment(deployment) {
   const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
   const q = isObject(px.qemu) ? px.qemu : {};
 
-  const user =
-    typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const user = resolveGuestSshUser(sshCfg.user, env);
   let host = "";
   if (typeof sshCfg.host === "string" && sshCfg.host.trim()) {
     host = sshCfg.host.trim().split("/")[0];
@@ -39,7 +69,8 @@ export function resolveQemuSshTargetFromDeployment(deployment) {
 }
 
 /**
- * Guest maintain baseline: Proxmox CPU/RAM sync (optional), local admin user + ClamAV.
+ * Guest maintain baseline: Proxmox CPU/RAM sync (optional), hdc + admin users, ClamAV,
+ * staggered scan, unattended-upgrades, mail relay, CrowdSec/Wazuh agents, root disable.
  *
  * @param {object} opts
  * @param {import("./clamav-ensure.mjs").ConfigureExec} opts.exec
@@ -49,6 +80,7 @@ export function resolveQemuSshTargetFromDeployment(deployment) {
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @param {Record<string, unknown>} [opts.deployment] when set with proxmoxPackageRoot, sync memory_mb/cores
  * @param {string} [opts.proxmoxPackageRoot]
+ * @param {string} [opts.repoRoot]
  */
 export async function ensureGuestLinuxBaseline(opts) {
   /** @type {Record<string, unknown> | { skipped: boolean; message?: string }} */
@@ -61,12 +93,24 @@ export async function ensureGuestLinuxBaseline(opts) {
       ? /** @type {Record<string, unknown>} */ (deployment).mode
       : undefined;
 
+  const systemId =
+    deployment && typeof deployment === "object" && !Array.isArray(deployment)
+      ? typeof /** @type {Record<string, unknown>} */ (deployment).system_id === "string"
+        ? /** @type {Record<string, unknown>} */ (deployment).system_id.trim()
+        : ""
+      : "";
+
+  const effectiveFlags = baselineFlagsForDeployment(
+    deployment && isObject(deployment) ? deployment : undefined,
+    opts.flags,
+  );
+
   if (deployment && proxmoxPackageRoot && proxmoxGuestTypeFromMode(mode)) {
     const logLine = (line) => opts.log.info(line);
     guest_resources = await syncProxmoxGuestResourcesOnMaintain({
       deployment,
       proxmoxPackageRoot,
-      flags: opts.flags,
+      flags: effectiveFlags,
       log: logLine,
     });
     if (guest_resources.ok === false) {
@@ -75,17 +119,18 @@ export async function ensureGuestLinuxBaseline(opts) {
           ? guest_resources.message
           : "guest resource sync failed";
       if (opts.log.warn) {
-        opts.log.warn(`guest resource sync: ${msg} (continuing with admin user / ClamAV)`);
+        opts.log.warn(`guest resource sync: ${msg} (continuing with guest users / ClamAV)`);
       } else {
-        opts.log.info(`guest resource sync: ${msg} (continuing with admin user / ClamAV)`);
+        opts.log.info(`guest resource sync: ${msg} (continuing with guest users / ClamAV)`);
       }
     } else {
       const resourcesChanged = guest_resources.changed === true;
       const qemuMode = mode === "proxmox-qemu";
-      const skipRebootWait = noRebootFromFlags(opts.flags);
+      const skipRebootWait = noRebootFromFlags(effectiveFlags);
       if (resourcesChanged && qemuMode && !skipRebootWait && deployment) {
         const sshTarget = resolveQemuSshTargetFromDeployment(
           /** @type {Record<string, unknown>} */ (deployment),
+          opts.env,
         );
         if (sshTarget) {
           opts.log.info(
@@ -97,13 +142,79 @@ export async function ensureGuestLinuxBaseline(opts) {
     }
   }
 
-  const adminUser = await ensureAdminUser(opts);
-  const clamav = await ensureClamav(opts);
+  const baselineOpts = { ...opts, flags: effectiveFlags };
+
+  const hdcUser = await ensureHdcUser(baselineOpts);
+  const adminUser = await ensureAdminUser(baselineOpts);
+  const clamav = await ensureClamav(baselineOpts);
+  const clamavInstalled = clamav.ok && !clamav.skipped;
+  const clamav_scan_schedule = await ensureClamavScanSchedule({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    systemId,
+    clamavInstalled,
+  });
+  const unattended_upgrades = await ensureUnattendedUpgrades({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    systemId,
+  });
+  const mail_relay = await ensurePostfixSatellite({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    deployment: deployment && isObject(deployment) ? deployment : undefined,
+  });
+  const crowdsec_agent = await ensureCrowdsecAgent({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    vaultAccess: opts.vaultAccess,
+    proxmoxPackageRoot,
+    repoRoot: opts.repoRoot,
+  });
+  const wazuh_agent = await ensureWazuhAgent({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    vaultAccess: opts.vaultAccess,
+    proxmoxPackageRoot,
+    repoRoot: opts.repoRoot,
+  });
+  const root_login_disabled = ensureRootDisabled({
+    exec: opts.exec,
+    log: opts.log,
+    flags: effectiveFlags,
+    env: opts.env,
+    hdcUser,
+    adminUser,
+  });
+
   const guestResourcesOk = guest_resources.ok !== false || guest_resources.skipped === true;
+  const usersOk =
+    (hdcUser.skipped || hdcUser.ok) &&
+    (adminUser.skipped || adminUser.ok) &&
+    (root_login_disabled.skipped || root_login_disabled.ok);
+  const mailOk = mail_relay.skipped || mail_relay.ok;
+  const clamavOk = clamav.ok || clamav.skipped;
+  const scanOk = clamav_scan_schedule.ok || clamav_scan_schedule.skipped;
+  const uuOk = unattended_upgrades.ok || unattended_upgrades.skipped;
+  const csOk = crowdsec_agent.ok || crowdsec_agent.skipped;
+  const wzOk = wazuh_agent.ok || wazuh_agent.skipped;
+
   return {
-    ok: guestResourcesOk && adminUser.ok && clamav.ok,
+    ok: guestResourcesOk && usersOk && clamavOk && mailOk && scanOk && uuOk && csOk && wzOk,
     guest_resources,
+    hdc_user: hdcUser,
     admin_user: adminUser,
     clamav,
+    clamav_scan_schedule,
+    unattended_upgrades,
+    mail_relay,
+    crowdsec_agent,
+    wazuh_agent,
+    root_login_disabled,
   };
 }

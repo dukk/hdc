@@ -64,11 +64,21 @@ export function normalizeNagiosConfig(cfg) {
   const raw = cfg.deployments.filter(isObject);
   const deployments = raw.map((entry) => mergeDeploymentEntry(defaults, entry));
   validateDeployments(deployments);
+  const notifications = isObject(cfg.notifications) ? cfg.notifications : {};
+  const mail = isObject(cfg.mail) ? cfg.mail : {};
+  let adminEmail =
+    typeof notifications.admin_email === "string" && notifications.admin_email.trim()
+      ? notifications.admin_email.trim()
+      : "";
+  if (!adminEmail && (mail.enabled === true || mail.enabled === 1)) {
+    adminEmail = typeof mail.to === "string" && mail.to.trim() ? mail.to.trim() : "";
+  }
   return {
     schemaVersion: 2,
     bindConfigPath: bindPath,
     defaults,
     deployments,
+    notifications: { adminEmail },
   };
 }
 

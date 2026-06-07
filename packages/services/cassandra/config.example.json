@@ -39,7 +39,6 @@
       },
       "configure": {
         "ssh": {
-          "user": "root",
           "host": "192.0.2.20"
         }
       }
@@ -57,7 +56,6 @@
       },
       "configure": {
         "ssh": {
-          "user": "root",
           "host": "192.0.2.21"
         }
       }
@@ -75,7 +73,6 @@
       },
       "configure": {
         "ssh": {
-          "user": "root",
           "host": "192.0.2.22"
         }
       }

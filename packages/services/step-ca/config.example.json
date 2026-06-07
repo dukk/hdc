@@ -44,7 +44,6 @@
       },
       "configure": {
         "ssh": {
-          "user": "root",
           "host": "192.0.2.24"
         }
       }

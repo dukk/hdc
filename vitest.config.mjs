@@ -8,6 +8,7 @@ export default defineConfig({
       "packages/lib/**/*.test.mjs",
       "packages/clients/**/*.test.mjs",
       "packages/infrastructure/**/*.test.mjs",
+      "packages/services/**/*.test.mjs",
     ],
     coverage: {
       provider: "v8",

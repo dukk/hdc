@@ -25,6 +25,10 @@
           "domain": null,
           "apache_port": 11000
         }
+      },
+      "mail": {
+        "enabled": false,
+        "from": "noreply@example.invalid"
       }
     },
     "install": {

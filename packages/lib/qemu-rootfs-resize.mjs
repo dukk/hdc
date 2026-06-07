@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "./guest-ssh-resolve.mjs";
 import { authorizeProxmoxForHost } from "../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import {
   fetchClusterVmResources,
@@ -92,8 +93,10 @@ export function growRootFilesystemScript() {
     'ROOT_NUM=$(findmnt -n -o SOURCE / | grep -oE "[0-9]+$")',
     'if [ -n "$ROOT_PART" ] && [ -n "$ROOT_NUM" ]; then',
     "  export TMPDIR=/var/tmp",
-    '  growpart "$ROOT_PART" "$ROOT_NUM"',
-    '  resize2fs "$(findmnt -n -o SOURCE /)"',
+    '  if ! growpart "$ROOT_PART" "$ROOT_NUM" 2>/tmp/hdc-growpart.err; then',
+    "    grep -q 'NOCHANGE:' /tmp/hdc-growpart.err || { cat /tmp/hdc-growpart.err >&2; exit 1; }",
+    "  fi",
+    '  resize2fs "$(findmnt -n -o SOURCE /)" 2>/dev/null || true',
     "fi",
     'df -h / | tail -1',
   ].join("\n");
@@ -151,7 +154,7 @@ export function resolveGuestSshFromDeployment(deployment) {
   const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
   const q = isObject(px.qemu) ? px.qemu : {};
   const user =
-    typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+    resolveGuestSshUser(sshCfg.user);
   let host = "";
   if (typeof sshCfg.host === "string" && sshCfg.host.trim()) {
     host = sshCfg.host.trim().split("/")[0];

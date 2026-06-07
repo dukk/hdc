@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy Apache Kafka KRaft cluster on Proxmox QEMU VMs.
@@ -299,7 +300,7 @@ async function deployOne(deployment, flags, allDeployments, global, log) {
 function sshFromDeployment(deployment, ipCidr) {
   const cfg = isObject(deployment.configure) ? deployment.configure : {};
   const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host =
     typeof ssh.host === "string" && ssh.host.trim()
       ? ssh.host.trim()

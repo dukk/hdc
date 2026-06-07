@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy Apache Cassandra 3-node cluster on Proxmox QEMU or configure-only.
@@ -100,7 +101,7 @@ function existingGuestPolicy(flags) {
 function sshFromDeployment(deployment) {
   const cfg = deployment.configure;
   const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
-  const user = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "root";
+  const user = resolveGuestSshUser(ssh.user);
   const host =
     typeof ssh.host === "string" && ssh.host.trim()
       ? ssh.host.trim()

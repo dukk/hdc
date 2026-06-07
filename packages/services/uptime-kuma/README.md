@@ -32,6 +32,20 @@ node tools/hdc/cli.mjs run service uptime-kuma query --
 2. **Web UI:** `http://<guest-ip>:3001`
 3. **First run:** create the admin account in the browser (no vault secret for v1).
 
+## Email notifications (manual)
+
+Uptime Kuma stores SMTP settings in its SQLite database (Settings → Notifications → Email). hdc does not automate this in v1. Point notifications at the internal relay:
+
+| Field | Value |
+| --- | --- |
+| SMTP Host | `postfix-relay.hdc.dukk.org` (or `10.0.0.60`) |
+| SMTP Port | `25` |
+| Security | None / STARTTLS off |
+| Username / Password | leave empty (relay trusts LAN via `mynetworks`) |
+| From | `noreply@hdc.dukk.org` (or your configured `client_defaults.default_from`) |
+
+Ensure the Uptime Kuma LXC subnet is listed in [`postfix-relay` config](../postfix-relay/config.example.json) `postfix.mynetworks`. OS-level mail on the guest is configured automatically via guest baseline (`mail_relay` on maintain).
+
 ## Related
 
 - [AGENTS.md — Uptime Kuma](../../../AGENTS.md)

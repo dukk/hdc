@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain Pi-hole (gravity update, optional core update, optional network apply).
@@ -199,8 +200,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     configure,
     allowlist,
     ...result,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    ...guestBaselineResultFields(baseline),
     ok,
     network,
   };

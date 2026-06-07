@@ -65,6 +65,7 @@ Commands from [`tools/hdc/lib/cli-app.mjs`](tools/hdc/lib/cli-app.mjs):
 | `run <tier> <package> <platform> <verb> [-- <args>]` | When manifest lists `platforms` (legacy platform-routed layout) |
 | `secrets path \| init \| change-passphrase \| set \| list \| get \| dump \| delete` | Encrypted vault for `HDC_*` secrets; `get`/`dump` write plaintext to files (unlock required) |
 | `users bootstrap-hdc [--dry-run] [--sidecar <path> …]` | Ensure local `hdc` Linux user on bootstrap hosts |
+| `maintain daily [--dry-run] [--skip-clients] [--skip-upgrades] [--only <tier>/<id>] [--skip <tier>/<id>]` | Cross-package daily orchestrator (non-destructive recipe; aggregated report) |
 | `env` | Print `HDC_*` variables (sensitive values redacted) |
 
 Examples:
@@ -74,6 +75,33 @@ node tools/hdc/cli.mjs list
 node tools/hdc/cli.mjs run infrastructure proxmox query
 node tools/hdc/cli.mjs run service pi-hole deploy -- --help
 node tools/hdc/cli.mjs help run infrastructure proxmox maintain
+node tools/hdc/cli.mjs maintain daily --dry-run
+```
+
+## Daily maintain
+
+`node tools/hdc/cli.mjs maintain daily` runs a curated, **non-destructive** recipe across every package that has a resolved `config.json` (hdc-private or public). It skips prune operations, rolling restarts, and reboots; applies routine updates (Docker pull, guest apt, DSM packages) unless `--skip-upgrades` is set; runs **query only** on home clients (`windows`, `client-ubuntu`, `raspberrypi`).
+
+- Recipe: [`tools/hdc/lib/daily-maintain-recipe.mjs`](tools/hdc/lib/daily-maintain-recipe.mjs)
+- Orchestrator: [`tools/hdc/lib/daily-maintain.mjs`](tools/hdc/lib/daily-maintain.mjs)
+- Report: `tools/hdc/reports/daily-maintain-<timestamp>.md` (under hdc-private when present)
+- Continues on per-package failure; exit code `1` if any step failed
+
+Schedule on the operator workstation (Task Scheduler, cron, or automation agent), for example daily at 03:00:
+
+```bash
+# Windows Task Scheduler action (repo root):
+hdc.cmd maintain daily
+
+# Linux/macOS cron:
+0 3 * * * cd /path/to/hdc && ./hdc maintain daily >> ~/.hdc/daily-maintain.log 2>&1
+```
+
+Filter examples:
+
+```bash
+node tools/hdc/cli.mjs maintain daily -- --only infrastructure/proxmox
+node tools/hdc/cli.mjs maintain daily -- --skip service/trivy --skip-upgrades
 ```
 
 **Not implemented in the CLI today:** `docs lint`, `docs sync`, and `inventory apply` appear in [README.md](README.md) and some `.cursor/rules/` files — treat as planned workflow until wired in `cli-app.mjs`. Validate inventory JSON against schemas under [`tools/hdc/schema/`](tools/hdc/schema/) instead.
@@ -103,8 +131,8 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `audiobookshelf`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`, `twilio`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `openvas`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — shared [`packages/clients/config.json`](packages/clients/config.json). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -121,21 +149,47 @@ See [`.cursor/rules/hdc-automation-logging.mdc`](.cursor/rules/hdc-automation-lo
 
 After `deploy`, `maintain`, or `teardown`, packages write a markdown report under `packages/<package>/reports/<verb>-<timestamp>.md` in **hdc-private when that repo is available** (sibling `../hdc-private` or `HDC_PRIVATE_ROOT`), otherwise under the public hdc tree (gitignored in both repos). Shared helpers: [`packages/lib/operation-report.mjs`](packages/lib/operation-report.mjs). Skip with `--no-report`; override path with `--report <path>`. `query` does not write reports.
 
-### Guest baseline (local admin + ClamAV)
+### Guest baseline (hdc automation user, local admin + ClamAV)
 
 Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`packages/lib/guest-linux-baseline.mjs`](packages/lib/guest-linux-baseline.mjs):
 
-1. **Local sudo admin** — username from `HDC_ADMIN_USER` in repo `.env`; password in vault as `HDC_ADMIN_USER_PASSWORD` (prompted once per run, then reused). Helpers: [`packages/lib/admin-user-ensure.mjs`](packages/lib/admin-user-ensure.mjs), [`packages/lib/linux-local-admin-user.mjs`](packages/lib/linux-local-admin-user.mjs). Skip with `--skip-admin-user`.
-2. **ClamAV** — install/enable via [`packages/lib/clamav-ensure.mjs`](packages/lib/clamav-ensure.mjs). Skip with `--skip-clamav`.
+1. **`hdc` automation user** — fixed username `hdc`; per-system vault key `HDC_USER_HDC_PASSWORD_<SYSTEM_ID>` (auto-generated on first maintain when missing). Passwordless sudo via `/etc/sudoers.d/hdc-automation`. Operator `~/.ssh` public keys installed on `hdc`. Helpers: [`packages/lib/hdc-user-ensure.mjs`](packages/lib/hdc-user-ensure.mjs). Skip with `--skip-hdc-user` or `--skip-hdc-ssh-keys`.
+2. **Local sudo admin** — username from `HDC_ADMIN_USER` in repo `.env`; password in vault as `HDC_ADMIN_USER_PASSWORD`. Helpers: [`packages/lib/admin-user-ensure.mjs`](packages/lib/admin-user-ensure.mjs), [`packages/lib/linux-local-admin-user.mjs`](packages/lib/linux-local-admin-user.mjs). Skip with `--skip-admin-user`.
+3. **ClamAV** — install/enable via [`packages/lib/clamav-ensure.mjs`](packages/lib/clamav-ensure.mjs); daily staggered `clamscan` timer on `/home`, `/opt`, `/var` via [`packages/lib/clamav-scan-schedule.mjs`](packages/lib/clamav-scan-schedule.mjs). Skip with `--skip-clamav` or `--skip-clamav-scan`.
+4. **Unattended-upgrades** — apt security updates via [`packages/lib/unattended-upgrades-ensure.mjs`](packages/lib/unattended-upgrades-ensure.mjs) (no auto-reboot). Skip with `--skip-unattended-upgrades`.
+5. **Mail relay (Postfix satellite)** — forward local mail to the internal relay from [`packages/services/postfix-relay/config.json`](packages/services/postfix-relay/config.json) `client_defaults` (relay host `postfix-relay.hdc.dukk.org` / `10.0.0.60`, no per-guest SMTP2GO creds). Helpers: [`packages/lib/postfix-satellite-ensure.mjs`](packages/lib/postfix-satellite-ensure.mjs), [`packages/lib/mail-relay-config.mjs`](packages/lib/mail-relay-config.mjs). Skip with `--skip-mail-relay`. Auto-skipped on `postfix-relay-a` (the relay host itself).
+6. **CrowdSec agent** — enroll to central LAPI from [`packages/infrastructure/proxmox/config.json`](packages/infrastructure/proxmox/config.json) `provision.guest_agents.crowdsec` + vault `HDC_CROWDSEC_ENROLL_KEY`. Skip with `--skip-crowdsec-agent`.
+7. **Wazuh agent** — register to manager from `provision.guest_agents.wazuh` + vault `HDC_WAZUH_AGENT_PASSWORD`. Skip with `--skip-wazuh-agent`.
+8. **Root SSH disabled** — when both `hdc` and admin user are ensured, lock root password and set `PermitRootLogin no` ([`packages/lib/root-login-disable.mjs`](packages/lib/root-login-disable.mjs)). Skip with `--skip-disable-root`.
 
-Coexists with the per-host `hdc` automation user from `node tools/hdc/cli.mjs users bootstrap-hdc` (`HDC_USER_HDC_PASSWORD_*`).
+**Guest SSH:** QEMU configure paths default to user `hdc` ([`packages/lib/guest-ssh-resolve.mjs`](packages/lib/guest-ssh-resolve.mjs)); override with `configure.ssh.user` or `HDC_GUEST_SSH_USER`. [`packages/lib/guest-ssh-exec.mjs`](packages/lib/guest-ssh-exec.mjs) probes `hdc` then falls back to `root` during migration and wraps non-root commands with `sudo -n`.
 
-Maintain JSON payloads should include `admin_user` (and `clamav` when applicable) per instance. **Maintain operation reports** add a **Guest baseline** section automatically when those fields are present ([`packages/lib/guest-baseline-report.mjs`](packages/lib/guest-baseline-report.mjs)).
+Hypervisor bootstrap hosts still use `node tools/hdc/cli.mjs users bootstrap-hdc` ([`tools/hdc/lib/users-bootstrap-hdc.mjs`](tools/hdc/lib/users-bootstrap-hdc.mjs)) — same vault key pattern and shared bash helpers.
 
-- **Out of scope:** Proxmox hypervisors (`proxmox maintain`), Synology NAS (`synology-nas`), home clients (`packages/clients/*`), `ubuntu maintain` (bootstrap `hdc` only), **Home Assistant** (HAOS), and **Windows** guests. **Nagios** LXC guests get the local admin user only (no ClamAV).
+Maintain JSON payloads should include `hdc_user`, `admin_user`, `clamav`, `clamav_scan_schedule`, `unattended_upgrades`, `crowdsec_agent`, `wazuh_agent`, `mail_relay` (when applicable), and `root_login_disabled` per instance via [`guestBaselineResultFields`](packages/lib/guest-baseline-report.mjs). **Maintain operation reports** add a **Guest baseline** section automatically when those fields are present.
+
+- **Out of scope (guest baseline):** Proxmox hypervisors (mail relay via `proxmox maintain`), Synology NAS (`synology-nas`), home clients (mail relay via `client-* maintain`), `ubuntu maintain` (bootstrap `hdc` only), **Home Assistant** (HAOS), and **Windows** guests. **Nagios** LXC guests get the local admin user only (skips ClamAV, scan schedule, CrowdSec/Wazuh agents).
 - **Stub services** (`minecraft`, `jenkins`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
 
 Example: set `HDC_ADMIN_USER` in `.env`, then `node tools/hdc/cli.mjs run service postgresql maintain --`
+
+## Asterisk in this repo
+
+- **Config:** [`packages/services/asterisk/config.json`](packages/services/asterisk/config.json) (copy from [`config.example.json`](packages/services/asterisk/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/asterisk-a.json`](inventory/manual/systems/asterisk-a.json) (LXC), [`vm-asterisk-a.json`](inventory/manual/systems/vm-asterisk-a.json) (QEMU); service sidecar [`inventory/manual/services/asterisk.json`](inventory/manual/services/asterisk.json).
+- **Schema:** [`tools/hdc/schema/asterisk.config.schema.json`](tools/hdc/schema/asterisk.config.schema.json).
+- **Twilio examples:** [`packages/services/asterisk/examples/twilio/`](packages/services/asterisk/examples/twilio/).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC, QEMU, or configure-only: apt Asterisk (PJSIP), render Twilio trunk + dialplan (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision`) |
+| `maintain` | Re-push `pjsip.d` / `extensions.d` / `rtp.d` includes; optional apt upgrade (`--skip-package-upgrade`); guest Linux baseline |
+| `query` | Config summary; `--live` for `systemctl` + `pjsip show endpoints` preview |
+| `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Set `asterisk.twilio.termination_domain` from Twilio Elastic SIP Trunk; vault `HDC_TWILIO_SIP_USERNAME` / `HDC_TWILIO_SIP_PASSWORD`. Configure `asterisk.nat.external_*` to your WAN IP when behind NAT. Forward SIP (5060) and RTP (10000–20000) on the edge firewall — not via nginx-waf. Default outbound prefix: `9` + E.164.
+
+Example: `node tools/hdc/cli.mjs run service asterisk deploy -- --instance a`
 
 ## Pi-hole in this repo
 
@@ -448,6 +502,24 @@ Vault: `HDC_IMMICH_DB_PASSWORD` (required for deploy/maintain).
 
 Example: `node tools/hdc/cli.mjs run service immich deploy -- --instance a`
 
+## Plex in this repo
+
+- **Config:** [`packages/services/plex/config.json`](packages/services/plex/config.json) (copy from [`config.example.json`](packages/services/plex/config.example.json); keep local config out of git).
+- **Mode:** `synology-package` only — native DSM **PlexMediaServer** on [`nas-a`](inventory/manual/systems/nas-a.json) via `synology.instance` `a` (SSH through [`synology-nas`](packages/infrastructure/synology-nas/)).
+- **Inventory:** [`inventory/manual/systems/plex-a.json`](inventory/manual/systems/plex-a.json); service sidecar [`inventory/manual/services/plex.json`](inventory/manual/services/plex.json); host [`nas-a.json`](inventory/manual/systems/nas-a.json) lists `services: [{ "id": "plex" }]`.
+- **Schema:** [`tools/hdc/schema/plex.config.schema.json`](tools/hdc/schema/plex.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Adopt existing package: verify `PlexMediaServer` installed, start if stopped, HTTP probe on `:32400/identity` (`install.enabled: false` skips SPK install) |
+| `maintain` | `synopkg upgrade PlexMediaServer`; `--skip-upgrade` for health check only |
+| `query` | Config summary; `--live` for synopkg status + HTTP probe |
+| `teardown` | `synopkg stop` only (`--yes`; package stays installed) |
+
+First install remains manual in DSM (Package Center or `.spk` from Plex.tv). LAN UI: `http://10.0.0.9:32400/web`. No vault secrets for v1.
+
+Example: `node tools/hdc/cli.mjs run service plex query -- --live`
+
 ## Gatus in this repo
 
 - **Config:** [`packages/services/gatus/config.json`](packages/services/gatus/config.json) (copy from [`config.example.json`](packages/services/gatus/config.example.json); keep local config out of git).
@@ -464,6 +536,111 @@ Example: `node tools/hdc/cli.mjs run service immich deploy -- --instance a`
 Set `gatus.version` (e.g. `v5.36.0`) and `gatus.endpoints[]` in config. Alerting secrets may use `${ENV}` in `config_yaml_extra` (store values in vault; no `env_required` for v1).
 
 Example: `node tools/hdc/cli.mjs run service gatus deploy --`
+
+## CrowdSec in this repo
+
+- **Config:** [`packages/services/crowdsec/config.json`](packages/services/crowdsec/config.json) (copy from [`config.example.json`](packages/services/crowdsec/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/crowdsec-a.json`](inventory/manual/systems/crowdsec-a.json); service sidecar [`inventory/manual/services/crowdsec.json`](inventory/manual/services/crowdsec.json).
+- **Proxmox:** set `provision.guest_agents.crowdsec.lapi_url` to the CT IP + `crowdsec.lapi_port`; vault `HDC_CROWDSEC_ENROLL_KEY`.
+- **Schema:** [`tools/hdc/schema/crowdsec.config.schema.json`](tools/hdc/schema/crowdsec.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | LXC + CrowdSec LAPI (`deployments[]`; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Refresh collections; `--sync-bouncers` pushes nginx bouncer to `crowdsec.bouncers[]` systems |
+| `query` | Config summary; `--live` for LAPI health |
+| `teardown` | Destroy LXC (`--dry-run`, `--yes`, `--instance`) |
+
+Vault: `HDC_CROWDSEC_ENROLL_KEY` (agent enrollment); `HDC_CROWDSEC_BOUNCER_KEY` (nginx bouncer).
+
+Example: `node tools/hdc/cli.mjs run service crowdsec deploy -- --instance a`
+
+## Wazuh in this repo
+
+- **Config:** [`packages/services/wazuh/config.json`](packages/services/wazuh/config.json) (copy from [`config.example.json`](packages/services/wazuh/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/wazuh-a.json`](inventory/manual/systems/wazuh-a.json); service sidecar [`inventory/manual/services/wazuh.json`](inventory/manual/services/wazuh.json).
+- **Proxmox:** `provision.guest_agents.wazuh.manager_host` → CT IP; vault `HDC_WAZUH_AGENT_PASSWORD`.
+- **Schema:** [`tools/hdc/schema/wazuh.config.schema.json`](tools/hdc/schema/wazuh.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Privileged LXC + Docker Compose Wazuh stack (`deployments[]`; `--instance a`) |
+| `maintain` | `docker compose pull` + `up -d`; guest Linux baseline |
+| `query` | Config summary; `--live` for compose + dashboard probe |
+| `teardown` | Optional compose down then destroy LXC |
+
+Vault: `HDC_WAZUH_API_PASSWORD`, `HDC_WAZUH_AGENT_PASSWORD`.
+
+Example: `node tools/hdc/cli.mjs run service wazuh deploy --`
+
+## Trivy in this repo
+
+- **Config:** [`packages/services/trivy/config.json`](packages/services/trivy/config.json) (copy from [`config.example.json`](packages/services/trivy/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/trivy-a.json`](inventory/manual/systems/trivy-a.json); service sidecar [`inventory/manual/services/trivy.json`](inventory/manual/services/trivy.json).
+- **Schema:** [`tools/hdc/schema/trivy.config.schema.json`](tools/hdc/schema/trivy.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | LXC + Trivy binary from GitHub release (`deployments[]`; `--instance a`) |
+| `maintain` | Run `trivy` scans for `trivy.scan_targets[]` (SSH paths / docker compose dirs) |
+| `query` | Config summary; `--live` for installed version |
+| `teardown` | Destroy LXC |
+
+No vault secrets for v1.
+
+Example: `node tools/hdc/cli.mjs run service trivy maintain --`
+
+## WireGuard in this repo
+
+- **Config:** [`packages/services/wireguard/config.json`](packages/services/wireguard/config.json) (copy from [`config.example.json`](packages/services/wireguard/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/wireguard-a.json`](inventory/manual/systems/wireguard-a.json); service sidecar [`inventory/manual/services/wireguard.json`](inventory/manual/services/wireguard.json).
+- **Schema:** [`tools/hdc/schema/wireguard.config.schema.json`](tools/hdc/schema/wireguard.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Privileged LXC hub + `wg0` from `wireguard.peers[]` |
+| `maintain` | Re-push `/etc/wireguard/wg0.conf`; guest baseline |
+| `query` | Config summary; `--live` for `wg show` |
+| `teardown` | Destroy LXC |
+
+Vault: `HDC_WIREGUARD_PRIVATE_KEY`; per-peer `HDC_WIREGUARD_PEER_*` keys from config. Publish UniFi UDP forward for `listen_port` (default 51820).
+
+Example: `node tools/hdc/cli.mjs run service wireguard deploy --`
+
+## Keycloak in this repo
+
+- **Config:** [`packages/services/keycloak/config.json`](packages/services/keycloak/config.json) (copy from [`config.example.json`](packages/services/keycloak/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/keycloak-a.json`](inventory/manual/systems/keycloak-a.json); service sidecar [`inventory/manual/services/keycloak.json`](inventory/manual/services/keycloak.json).
+- **Database:** `keycloak.database.mode`: `bundled` (Postgres in Compose) or `external` (shared [`postgresql`](packages/services/postgresql/) VM).
+- **Schema:** [`tools/hdc/schema/keycloak.config.schema.json`](tools/hdc/schema/keycloak.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | LXC + Docker Compose Keycloak (+ bundled Postgres when `database.mode` is `bundled`) |
+| `maintain` | Re-push compose env; `docker compose pull` + `up -d`; guest baseline |
+| `query` | Config summary; `--live` for HTTP health on `host_port` |
+| `teardown` | Optional compose down then destroy LXC |
+
+Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external). Set `keycloak.external_url` before nginx-waf forward-auth wiring.
+
+Example: `node tools/hdc/cli.mjs run service keycloak deploy --`
+
+## OpenVAS in this repo
+
+- **Config:** [`packages/services/openvas/config.json`](packages/services/openvas/config.json) (copy from [`config.example.json`](packages/services/openvas/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/openvas-a.json`](inventory/manual/systems/openvas-a.json); service sidecar [`inventory/manual/services/openvas.json`](inventory/manual/services/openvas.json).
+- **Schema:** [`tools/hdc/schema/openvas.config.schema.json`](tools/hdc/schema/openvas.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Privileged LXC (8 GiB+ RAM) + Greenbone Community Edition Compose |
+| `maintain` | `docker compose pull` + `up -d`; guest baseline |
+| `query` | Config summary; `--live` for compose + HTTPS admin probe |
+| `teardown` | Optional compose down then destroy LXC |
+
+Vault: `HDC_OPENVAS_ADMIN_PASSWORD`. First bootstrap may take a long time for NVT feed sync.
+
+Example: `node tools/hdc/cli.mjs run service openvas deploy --`
 
 ## Nagios in this repo
 
@@ -517,6 +694,27 @@ Vault: `HDC_VAULTWARDEN_ADMIN_TOKEN` (required for deploy/maintain; stays in **l
 **hdc secret backend:** When `HDC_VAULTWARDEN_URL` and `HDC_VAULTWARDEN_EMAIL` are set, `HDC_SECRET_BACKEND=auto` (default) routes `getSecret` / `secrets set` through **Bitwarden CLI (`bw`)** against Vaultwarden. Login items are named exactly like env keys (`HDC_PROXMOX_API_TOKEN`, …). Bootstrap keys stay local only: `HDC_VAULTWARDEN_MASTER_PASSWORD`, `HDC_VAULTWARDEN_ADMIN_TOKEN`. Unlock: masked master-password prompt, or `secrets unlock`; opt-in save master password to local vault. See [`docs/manually-deployed/bitwarden-cli.md`](docs/manually-deployed/bitwarden-cli.md).
 
 Example: `node tools/hdc/cli.mjs run service vaultwarden deploy -- --instance a`
+
+## Mailcow in this repo
+
+- **Config:** [`packages/services/mailcow/config.json`](packages/services/mailcow/config.json) (copy from [`config.example.json`](packages/services/mailcow/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/mailcow-a.json`](inventory/manual/systems/mailcow-a.json) (LXC), [`vm-mailcow-a.json`](inventory/manual/systems/vm-mailcow-a.json) (QEMU); service sidecar [`inventory/manual/services/mailcow.json`](inventory/manual/services/mailcow.json).
+- **Schema:** [`tools/hdc/schema/mailcow.config.schema.json`](tools/hdc/schema/mailcow.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC or QEMU: mailcow-dockerized clone + `generate_config.sh` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` for QEMU) |
+| `maintain` | `docker compose pull` + `up -d`; reconcile `domains[]` + DKIM + per-domain relay via Mailcow API (`--skip-domains`, `--skip-upgrade`); guest baseline with `--skip-mail-relay` |
+| `query` | Config summary; `--live` for Docker/admin probe, API domain counts, DNS checklist (MX/SPF/DKIM/DMARC) |
+| `teardown` | Optional compose down then destroy LXC or QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+QEMU: set `mode: proxmox-qemu`, `system_id: vm-mailcow-a`, `proxmox.qemu` (`template_vmid`, `ip`, `vmid`, optional `data_disk_gb` + `data_disk_storage`), `configure.ssh.host`. Data disk mounts at `/data/mailcow`; Docker data-root on the data mount when `data_disk_gb` > 0.
+
+Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN) and `mailcow.domains[]` with `outbound.mode`: `direct` (mailcow sends) or `postfix-relay` (internal smarthost from [`postfix-relay` config](packages/services/postfix-relay/config.json) `client_defaults`). DNS templates in config are documented only — publish manually to BIND or Cloudflare from `query --live` output.
+
+Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for domain maintain).
+
+Example: `node tools/hdc/cli.mjs run service mailcow deploy -- --instance a --destroy-existing`
 
 ## n8n in this repo
 
@@ -640,6 +838,23 @@ Example: `node tools/hdc/cli.mjs run service lms deploy -- --instance a`
 Set `server.model` or `server.hf_model` in config to enable and start the unit at deploy; otherwise install leaves the service disabled until a model is configured.
 
 Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --destroy-existing`
+
+## HDC Runner in this repo
+
+- **Config:** [`packages/services/hdc-runner/config.json`](packages/services/hdc-runner/config.json) (copy from [`config.example.json`](packages/services/hdc-runner/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/hdc-runner-a.json`](inventory/manual/systems/hdc-runner-a.json); service sidecar [`inventory/manual/services/hdc-runner.json`](inventory/manual/services/hdc-runner.json).
+- **Schema:** [`tools/hdc/schema/hdc-runner.config.schema.json`](tools/hdc/schema/hdc-runner.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI, rsync hdc + hdc-private from operator, cron schedules, guest baseline (mail relay; skips ClamAV) |
+| `maintain` | Rsync operator trees to guest; refresh `.env` (Vaultwarden master password from operator vault), cron, job wrapper; `--skip-sync`, `--prune`, `--dry-run` |
+| `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs |
+| `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail`. Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay.
+
+Example: `node tools/hdc/cli.mjs run service hdc-runner maintain --`
 
 ## Home clients in this repo
 
@@ -786,6 +1001,27 @@ Examples:
 ```bash
 node tools/hdc/cli.mjs run infrastructure synology-nas query --
 node tools/hdc/cli.mjs run infrastructure synology-nas maintain --
+```
+
+## Twilio in this repo
+
+- **Config:** [`packages/infrastructure/twilio/config.json`](packages/infrastructure/twilio/config.json) (copy from [`config.example.json`](packages/infrastructure/twilio/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/twilio.config.schema.json`](tools/hdc/schema/twilio.config.schema.json).
+- **Docs:** [`docs/manually-deployed/twilio.md`](docs/manually-deployed/twilio.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff Elastic SIP trunks and Incoming Phone Numbers vs config; `--import --yes` writes live snapshot to hdc-private config (JSON on stdout) |
+
+Vault: `HDC_TWILIO_ACCOUNT_SID`, `HDC_TWILIO_AUTH_TOKEN` (API). Asterisk SIP Credential List uses separate `HDC_TWILIO_SIP_USERNAME` / `HDC_TWILIO_SIP_PASSWORD` in the **asterisk** package.
+
+**Bootstrap:** `query -- --import --yes` replaces `sip_trunks[]` and `phone_numbers[]`.
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure twilio query --
+node tools/hdc/cli.mjs run infrastructure twilio query -- --import --yes
 ```
 
 ## External reference: Proxmox VE Helper-Scripts

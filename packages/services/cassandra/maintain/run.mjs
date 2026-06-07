@@ -1,3 +1,5 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Re-apply Cassandra config; optional rolling restart.
@@ -73,7 +75,7 @@ async function main() {
 
   for (const d of deployments) {
     const ssh = isObject(d.configure) && isObject(d.configure.ssh) ? d.configure.ssh : {};
-    const user = typeof ssh.user === "string" ? ssh.user : "root";
+    const user = resolveGuestSshUser(ssh.user);
     const host = typeof ssh.host === "string" ? ssh.host : d.listenIp;
     errout.write(`[hdc] ${target} ${verb}: ${d.systemId} at ${user}@${host} …\n`);
     try {
@@ -108,8 +110,7 @@ async function main() {
         ok: ready.ok && clamav.ok,
         rolling_restart: rolling,
         ready,
-        admin_user: baseline.admin_user,
-        clamav: baseline.clamav,
+        ...guestBaselineResultFields(baseline),
       });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

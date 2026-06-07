@@ -35,7 +35,12 @@
           "conditions": ["[CONNECTED] == true"]
         }
       ],
-      "config_yaml_extra": null
+      "config_yaml_extra": null,
+      "mail": {
+        "enabled": false,
+        "to": "ops@example.invalid",
+        "from": "noreply@example.invalid"
+      }
     },
     "install": {
       "enabled": true

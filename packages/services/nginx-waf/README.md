@@ -45,6 +45,20 @@ When `proxy_headers` is true (default), hdc sets on requests to backends:
 
 Set `proxy_headers: false` on a location to omit these headers.
 
+## WebSockets
+
+Apps that use WebSockets (Audiobookshelf, Home Assistant, Vaultwarden live notifications, Immich, etc.) need Upgrade proxying on the relevant location(s). Set `"websocket": true` on each location that should pass WebSocket handshakes:
+
+```json
+{
+  "path": "/",
+  "proxy_headers": true,
+  "websocket": true
+}
+```
+
+When any site has a websocket location, hdc adds a single `map $http_upgrade $connection_upgrade` block to `/etc/nginx/hdc/waf-global.conf` (not per-site vhosts). Partial `maintain -- --site <id>` still refreshes the global map from the full `sites[]` list in config.
+
 **Per-location** `access` (only on paths you want restricted):
 
 ```json

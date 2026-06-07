@@ -1,3 +1,5 @@
+import { n8nMailEnvLines } from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -127,6 +129,9 @@ export function renderN8nEnv(n8n, encryptionKey, ctIp = null) {
     `GENERIC_TIMEZONE=${tz}`,
     "N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true",
   ];
+  for (const line of n8nMailEnvLines(n8n)) {
+    lines.push(line);
+  }
   return `${lines.join("\n")}\n`;
 }
 

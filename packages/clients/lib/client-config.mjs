@@ -207,3 +207,22 @@ export function hostWolEnabled(host, defaults) {
   if (wol.enabled === false || wol.enabled === 0) return false;
   return defaults.enabled;
 }
+
+/**
+ * @param {Record<string, unknown>} cfg
+ */
+export function mailRelayDefaultsFromConfig(cfg) {
+  const mr = isObject(cfg.mail_relay) ? cfg.mail_relay : {};
+  return { enabled: mr.enabled !== false && mr.enabled !== 0 };
+}
+
+/**
+ * @param {Record<string, unknown>} host
+ * @param {ReturnType<typeof mailRelayDefaultsFromConfig>} defaults
+ */
+export function hostMailRelayEnabled(host, defaults) {
+  const mr = isObject(host.mail_relay) ? host.mail_relay : {};
+  if (mr.enabled === false || mr.enabled === 0) return false;
+  if (mr.enabled === true || mr.enabled === 1) return true;
+  return defaults.enabled;
+}

@@ -1,3 +1,4 @@
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain SolidTime (upgrade to configured or latest release).
@@ -17,9 +18,10 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolveSolidtimeDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/solidtime-install.mjs";
-import { maintainSolidtimeInCt } from "../lib/solidtime-maintain.mjs";
+import { maintainSolidtimeInCt, applySolidtimeMailInCt } from "../lib/solidtime-maintain.mjs";
 import { solidtimeReportExtraSections } from "../lib/solidtime-report.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +78,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     checkLatest,
     versionOverride: versionOverride || undefined,
   });
+  const mail = applySolidtimeMailInCt(pveSsh.user, pveSsh.host, vmid, solidtimeCfg);
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
     user: pveSsh.user,
@@ -89,9 +92,9 @@ async function maintainOne(deployment, flags, vaultAccess) {
     host_id: hostId,
     vmid,
     ...result,
-    ok: result.ok && baseline.ok,
-    admin_user: baseline.admin_user,
-    clamav: baseline.clamav,
+    mail,
+    ok: result.ok && baseline.ok && mail.ok !== false,
+    ...guestBaselineResultFields(baseline),
   };
 }
 

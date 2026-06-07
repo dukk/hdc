@@ -1,3 +1,4 @@
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
 /**
  * Deploy LM Studio (llmster) on Proxmox QEMU (Ubuntu).
@@ -331,7 +332,7 @@ async function deployOne(deployment, flags, log) {
   }
 
   const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
-  const sshUser = typeof sshCfg.user === "string" && sshCfg.user.trim() ? sshCfg.user.trim() : "root";
+  const sshUser = resolveGuestSshUser(sshCfg.user);
   const sshHost =
     typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
 

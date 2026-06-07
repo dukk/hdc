@@ -23,7 +23,12 @@
       "signups_allowed": false,
       "invitations_allowed": false,
       "websocket_enabled": true,
-      "admin_token_vault_key": "HDC_VAULTWARDEN_ADMIN_TOKEN"
+      "admin_token_vault_key": "HDC_VAULTWARDEN_ADMIN_TOKEN",
+      "mail": {
+        "enabled": false,
+        "to": "ops@example.invalid",
+        "from": "noreply@example.invalid"
+      }
     },
     "install": {
       "enabled": true,

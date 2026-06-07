@@ -1,0 +1,82 @@
+{
+  "schema_version": 2,
+  "defaults": {
+    "mode": "proxmox-lxc",
+    "proxmox": {
+      "lxc": {
+        "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+        "storage": "local-lvm",
+        "rootfs_gb": 32,
+        "memory_mb": 2048,
+        "cores": 2,
+        "bridge": "vmbr0",
+        "ip_config": "dhcp",
+        "unprivileged": 1,
+        "onboot": 1
+      },
+      "qemu": {
+        "template_vmid": 9000,
+        "rootfs_gb": 32,
+        "memory_mb": 2048,
+        "cores": 2
+      }
+    },
+    "hdc_runner": {
+      "install_root": "/opt/hdc",
+      "private_root": "/opt/hdc-private",
+      "meta_root": "/opt/hdc-runner",
+      "node_version": "22",
+      "bw_version": "2025.11.0",
+      "env": {
+        "HDC_SECRET_BACKEND": "vaultwarden",
+        "HDC_VAULTWARDEN_URL": "https://vault.example.invalid",
+        "HDC_VAULTWARDEN_EMAIL": "you@example.invalid"
+      },
+      "mail": {
+        "enabled": true,
+        "to": "ops@example.invalid",
+        "from": "noreply@example.invalid",
+        "subject_prefix": "[HDC]",
+        "on_failure_only": false
+      },
+      "schedules": [
+        {
+          "id": "daily-maintain",
+          "cron": "0 3 * * *",
+          "cli": ["maintain", "daily"],
+          "cli_args": ["--skip-clients"],
+          "mail": { "enabled": true, "on_failure_only": false }
+        },
+        {
+          "id": "bind-maintain-weekly",
+          "cron": "30 4 * * 0",
+          "cli": ["run", "service", "bind", "maintain"],
+          "cli_args": ["--no-reboot", "--skip-resources"]
+        }
+      ],
+      "sync": {
+        "exclude": [".git", "node_modules", "**/reports"]
+      }
+    },
+    "install": {
+      "enabled": true
+    }
+  },
+  "deployments": [
+    {
+      "system_id": "hdc-runner-a",
+      "proxmox": {
+        "host_id": "hypervisor-a",
+        "lxc": {
+          "vmid": 590,
+          "hostname": "hdc-runner-a"
+        }
+      },
+      "configure": {
+        "ssh": {
+          "host": ""
+        }
+      }
+    }
+  ]
+}
