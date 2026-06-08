@@ -30,7 +30,10 @@
       "env": {
         "HDC_SECRET_BACKEND": "vaultwarden",
         "HDC_VAULTWARDEN_URL": "https://vault.example.invalid",
-        "HDC_VAULTWARDEN_EMAIL": "you@example.invalid"
+        "HDC_VAULTWARDEN_EMAIL": "you@example.invalid",
+        "HDC_VAULTWARDEN_ORGANIZATION_ID": "",
+        "HDC_VAULTWARDEN_ORGANIZATION_NAME": "HDC",
+        "HDC_VAULTWARDEN_COLLECTION_ID": ""
       },
       "mail": {
         "enabled": true,

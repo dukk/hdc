@@ -41,3 +41,4 @@ node tools/hdc/cli.mjs run service n8n maintain --
 
 - [AGENTS.md — n8n](../../../AGENTS.md)
 - Schema: [`tools/hdc/schema/n8n.config.schema.json`](../../../tools/hdc/schema/n8n.config.schema.json)
+- **Operator workflows** (hdc-private): `packages/services/n8n/workflows/` — e.g. `humble-bundle-ebooks/` for weekly Humble Bundle → NAS → Audiobookshelf sync

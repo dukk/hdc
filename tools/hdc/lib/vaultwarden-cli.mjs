@@ -1,14 +1,27 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  vaultwardenCollectionIdFromEnv,
+  vaultwardenOrganizationIdFromEnv,
+  vaultwardenOrganizationNameFromEnv,
+} from "./secret-backend.mjs";
 
 /** Process-wide Bitwarden session cache (one unlock per hdc command). */
 /** @type {string | null} */
 let processBwSession = null;
 
+/** @type {string | null} */
+let processBwOrganizationId = null;
+
+/** @type {string | null} */
+let processBwCollectionId = null;
+
 /** @internal Test helper */
 export function clearBwSessionProcessCache() {
   processBwSession = null;
+  processBwOrganizationId = null;
+  processBwCollectionId = null;
 }
 
 /**
@@ -102,7 +115,7 @@ export function resolveBwExecutable(deps) {
 /**
  * @param {VaultwardenCliDeps} deps
  * @param {string[]} args
- * @param {{ capture?: boolean; session?: string; password?: string; allowMissing?: boolean }} [opts]
+ * @param {{ capture?: boolean; session?: string; password?: string; allowMissing?: boolean; stdin?: string }} [opts]
  */
 function spawnBw(deps, bwArgs, opts = {}) {
   const { command, prefixArgs } = resolveBwCommand(deps);
@@ -115,7 +128,12 @@ function spawnBw(deps, bwArgs, opts = {}) {
     encoding: "utf8",
     env,
     shell: false,
-    stdio: opts.capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    input: opts.stdin,
+    stdio: opts.stdin
+      ? ["pipe", opts.capture ? "pipe" : "inherit", opts.capture ? "pipe" : "inherit"]
+      : opts.capture
+        ? ["ignore", "pipe", "pipe"]
+        : "inherit",
   });
   const stdout = typeof r.stdout === "string" ? r.stdout.trim() : "";
   const stderr = typeof r.stderr === "string" ? r.stderr.trim() : "";
@@ -129,14 +147,33 @@ function spawnBw(deps, bwArgs, opts = {}) {
 
 /**
  * @param {VaultwardenCliDeps} deps
+ * @param {unknown} value
+ * @returns {string}
+ */
+function bwEncodeJson(deps, value) {
+  const r = spawnBw(deps, ["encode"], { capture: true, stdin: JSON.stringify(value) });
+  if (!r.ok || !r.stdout) {
+    throw new Error(`bw encode failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+  return r.stdout;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
  * @param {string} url
  */
 export function ensureBwConfigured(deps, url) {
-  deps.log(`[hdc] vaultwarden: configuring bw server ${url}`);
-  const r = spawnBw(deps, ["config", "server", url], { capture: true });
-  if (!r.ok) {
-    throw new Error(`bw config server failed: ${r.stderr || r.stdout || "unknown error"}`);
+  const r = spawnBw(deps, ["config", "server", url], { capture: true, allowMissing: true });
+  if (r.ok) {
+    deps.log(`[hdc] vaultwarden: configuring bw server ${url}`);
+    return;
   }
+  const msg = (r.stderr || r.stdout || "").toLowerCase();
+  if (msg.includes("logout required") && bwLoginCheck(deps).ok) {
+    deps.log(`[hdc] vaultwarden: bw already logged in (server config unchanged)`);
+    return;
+  }
+  throw new Error(`bw config server failed: ${r.stderr || r.stdout || "unknown error"}`);
 }
 
 /**
@@ -173,6 +210,104 @@ function bwUnlockRaw(deps, masterPassword) {
     throw new Error(`bw unlock failed: ${r.stderr || r.stdout || "invalid master password"}`);
   }
   return r.stdout.trim();
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @returns {string}
+ */
+export function resolveBwOrganizationId(deps, session) {
+  if (processBwOrganizationId) return processBwOrganizationId;
+
+  const fromEnv = vaultwardenOrganizationIdFromEnv(deps.env);
+  if (fromEnv) {
+    processBwOrganizationId = fromEnv;
+    return fromEnv;
+  }
+
+  const name = vaultwardenOrganizationNameFromEnv(deps.env);
+  const r = spawnBw(deps, ["list", "organizations"], { capture: true, session });
+  if (!r.ok || !r.stdout) {
+    throw new Error(
+      `bw list organizations failed: ${r.stderr || r.stdout || "unknown error"}; set HDC_VAULTWARDEN_ORGANIZATION_ID in .env`,
+    );
+  }
+  let orgs;
+  try {
+    orgs = JSON.parse(r.stdout);
+  } catch {
+    throw new Error("bw list organizations returned invalid JSON");
+  }
+  if (!Array.isArray(orgs)) {
+    throw new Error("bw list organizations returned unexpected data");
+  }
+  const match = orgs.find((o) => o && typeof o === "object" && o.name === name && typeof o.id === "string");
+  if (!match) {
+    const names = orgs
+      .map((o) => (o && typeof o === "object" && typeof o.name === "string" ? o.name : null))
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `Vaultwarden organization ${JSON.stringify(name)} not found (available: ${names || "none"}); set HDC_VAULTWARDEN_ORGANIZATION_ID in .env`,
+    );
+  }
+  processBwOrganizationId = match.id;
+  return match.id;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} orgId
+ * @returns {string}
+ */
+export function resolveBwCollectionId(deps, session, orgId) {
+  if (processBwCollectionId) return processBwCollectionId;
+
+  const fromEnv = vaultwardenCollectionIdFromEnv(deps.env);
+  if (!fromEnv) {
+    throw new Error(
+      "HDC_VAULTWARDEN_COLLECTION_ID must be set in .env for the vaultwarden secret backend (bw list org-collections --organizationid <orgId>)",
+    );
+  }
+
+  const r = spawnBw(deps, ["list", "org-collections", "--organizationid", orgId], { capture: true, session });
+  if (!r.ok || !r.stdout) {
+    throw new Error(`bw list org-collections failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+  let collections;
+  try {
+    collections = JSON.parse(r.stdout);
+  } catch {
+    throw new Error("bw list org-collections returned invalid JSON");
+  }
+  if (!Array.isArray(collections)) {
+    throw new Error("bw list org-collections returned unexpected data");
+  }
+  const match = collections.find((c) => c && typeof c === "object" && c.id === fromEnv);
+  if (!match) {
+    const names = collections
+      .map((c) => (c && typeof c === "object" && typeof c.name === "string" ? `${c.name} (${c.id})` : null))
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `HDC_VAULTWARDEN_COLLECTION_ID ${JSON.stringify(fromEnv)} not found in organization (available: ${names || "none"})`,
+    );
+  }
+  processBwCollectionId = fromEnv;
+  return fromEnv;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @returns {{ organizationId: string; collectionId: string }}
+ */
+export function resolveBwOrgContext(deps, session) {
+  const organizationId = resolveBwOrganizationId(deps, session);
+  const collectionId = resolveBwCollectionId(deps, session, organizationId);
+  return { organizationId, collectionId };
 }
 
 /**
@@ -254,11 +389,89 @@ export async function ensureBwUnlocked(deps, readLocalSecret, writeLocalSecret) 
 /**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
+ * @param {string} stdout
+ * @returns {Array<Record<string, unknown>>}
+ */
+function parseBwItemList(stdout) {
+  if (!stdout) return [];
+  try {
+    const items = JSON.parse(stdout);
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemName
+ * @param {string | null} organizationId null = personal vault only
+ */
+function bwFindItemId(deps, session, itemName, organizationId) {
+  /** @type {string[]} */
+  const args = ["list", "items", "--search", itemName];
+  if (organizationId) {
+    args.push("--organizationid", organizationId);
+  }
+  const r = spawnBw(deps, args, { capture: true, session });
+  if (!r.ok) return null;
+  const items = parseBwItemList(r.stdout);
+  const exact = items.find((it) => {
+    if (!it || typeof it !== "object" || it.name !== itemName || typeof it.id !== "string") return false;
+    if (organizationId) {
+      return it.organizationId === organizationId;
+    }
+    return !it.organizationId;
+  });
+  return exact && typeof exact.id === "string" ? exact.id : null;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemId
+ * @param {string} organizationId
+ * @param {string} collectionId
+ */
+function bwAssignItemToCollection(deps, session, itemId, organizationId, collectionId) {
+  const encoded = bwEncodeJson(deps, [collectionId]);
+  const r = spawnBw(
+    deps,
+    ["edit", "item-collections", itemId, encoded, "--organizationid", organizationId],
+    { capture: true, session },
+  );
+  if (!r.ok) {
+    throw new Error(`bw edit item-collections failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemId
+ * @param {string} organizationId
+ * @param {string} collectionId
+ */
+function bwMoveItemToOrg(deps, session, itemId, organizationId, collectionId) {
+  const encoded = bwEncodeJson(deps, [collectionId]);
+  const r = spawnBw(deps, ["move", itemId, organizationId, encoded], { capture: true, session });
+  if (!r.ok) {
+    throw new Error(`bw move failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
  * @param {string} itemName
  * @returns {string | null}
  */
 export function bwGetPassword(deps, session, itemName) {
-  const r = spawnBw(deps, ["get", "password", itemName], { capture: true, session });
+  const { organizationId } = resolveBwOrgContext(deps, session);
+  const itemId = bwFindItemId(deps, session, itemName, organizationId);
+  if (!itemId) return null;
+  const r = spawnBw(deps, ["get", "password", itemId], { capture: true, session });
   if (!r.ok) {
     const msg = (r.stderr || r.stdout || "").toLowerCase();
     if (msg.includes("not found") || msg.includes("multiple objects")) return null;
@@ -271,18 +484,11 @@ export function bwGetPassword(deps, session, itemName) {
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
  * @param {string} itemName
+ * @returns {boolean}
  */
-function bwFindItemId(deps, session, itemName) {
-  const r = spawnBw(deps, ["list", "items", "--search", itemName], { capture: true, session });
-  if (!r.ok || !r.stdout) return null;
-  try {
-    const items = JSON.parse(r.stdout);
-    if (!Array.isArray(items)) return null;
-    const exact = items.find((it) => it && typeof it === "object" && it.name === itemName);
-    return exact && typeof exact.id === "string" ? exact.id : null;
-  } catch {
-    return null;
-  }
+export function bwItemExistsInOrg(deps, session, itemName) {
+  const { organizationId } = resolveBwOrgContext(deps, session);
+  return Boolean(bwFindItemId(deps, session, itemName, organizationId));
 }
 
 /**
@@ -292,25 +498,63 @@ function bwFindItemId(deps, session, itemName) {
  * @param {string} value
  */
 export function bwSetPassword(deps, session, itemName, value) {
-  const existingId = bwFindItemId(deps, session, itemName);
-  if (existingId) {
-    const r = spawnBw(
-      deps,
-      ["edit", "item", existingId, "--password", value],
-      { capture: true, session },
-    );
+  const { organizationId, collectionId } = resolveBwOrgContext(deps, session);
+
+  const orgItemId = bwFindItemId(deps, session, itemName, organizationId);
+  if (orgItemId) {
+    const r = spawnBw(deps, ["edit", "item", orgItemId, "--password", value], { capture: true, session });
+    if (!r.ok) {
+      throw new Error(`bw edit item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
+    }
+    bwAssignItemToCollection(deps, session, orgItemId, organizationId, collectionId);
+    return;
+  }
+
+  const personalItemId = bwFindItemId(deps, session, itemName, null);
+  if (personalItemId) {
+    bwMoveItemToOrg(deps, session, personalItemId, organizationId, collectionId);
+    const r = spawnBw(deps, ["edit", "item", personalItemId, "--password", value], { capture: true, session });
     if (!r.ok) {
       throw new Error(`bw edit item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
     }
     return;
   }
+
   const r = spawnBw(
     deps,
-    ["create", "item", "login", "--name", itemName, "--username", itemName, "--password", value],
+    [
+      "create",
+      "item",
+      "login",
+      "--name",
+      itemName,
+      "--username",
+      itemName,
+      "--password",
+      value,
+      "--organizationid",
+      organizationId,
+    ],
     { capture: true, session },
   );
   if (!r.ok) {
     throw new Error(`bw create item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+
+  let createdId = null;
+  try {
+    const created = JSON.parse(r.stdout);
+    if (created && typeof created === "object" && typeof created.id === "string") {
+      createdId = created.id;
+    }
+  } catch {
+    // fall through to search
+  }
+  if (!createdId) {
+    createdId = bwFindItemId(deps, session, itemName, organizationId);
+  }
+  if (createdId) {
+    bwAssignItemToCollection(deps, session, createdId, organizationId, collectionId);
   }
 }
 
@@ -320,18 +564,14 @@ export function bwSetPassword(deps, session, itemName, value) {
  * @returns {string[]}
  */
 export function bwListItemNames(deps, session) {
-  const r = spawnBw(deps, ["list", "items"], { capture: true, session });
+  const { organizationId } = resolveBwOrgContext(deps, session);
+  const r = spawnBw(deps, ["list", "items", "--organizationid", organizationId], { capture: true, session });
   if (!r.ok || !r.stdout) return [];
-  try {
-    const items = JSON.parse(r.stdout);
-    if (!Array.isArray(items)) return [];
-    return items
-      .map((it) => (it && typeof it === "object" && typeof it.name === "string" ? it.name : null))
-      .filter((n) => typeof n === "string" && n.length > 0)
-      .sort();
-  } catch {
-    return [];
-  }
+  const items = parseBwItemList(r.stdout);
+  return items
+    .map((it) => (it && typeof it === "object" && typeof it.name === "string" ? it.name : null))
+    .filter((n) => typeof n === "string" && n.length > 0)
+    .sort();
 }
 
 /**
@@ -340,7 +580,8 @@ export function bwListItemNames(deps, session) {
  * @param {string} itemName
  */
 export function bwDeleteItem(deps, session, itemName) {
-  const id = bwFindItemId(deps, session, itemName);
+  const { organizationId } = resolveBwOrgContext(deps, session);
+  const id = bwFindItemId(deps, session, itemName, organizationId);
   if (!id) return false;
   const r = spawnBw(deps, ["delete", "item", id], { capture: true, session });
   if (!r.ok) {

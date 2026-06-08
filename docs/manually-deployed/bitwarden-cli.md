@@ -25,7 +25,18 @@ In repo `.env` (see [`.env.example`](../../.env.example)):
 HDC_SECRET_BACKEND=auto
 HDC_VAULTWARDEN_URL=https://vault.dukk.org
 HDC_VAULTWARDEN_EMAIL=you@example.com
+HDC_VAULTWARDEN_ORGANIZATION_ID=<uuid>   # optional when org name resolves (default: HDC)
+HDC_VAULTWARDEN_COLLECTION_ID=<uuid>     # required
 ```
+
+Resolve IDs after `secrets unlock`:
+
+```powershell
+bw list organizations
+bw list org-collections --organizationid <orgId>
+```
+
+Set `HDC_VAULTWARDEN_ORGANIZATION_NAME=HDC` (default) to auto-resolve the organization when `HDC_VAULTWARDEN_ORGANIZATION_ID` is unset.
 
 Both `https://vault.dukk.org` and `https://vault.hdc.dukk.org` reach the same Vaultwarden instance; prefer `vault.dukk.org` for new setups.
 
@@ -56,9 +67,18 @@ After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
 
 ## How secrets map to Vaultwarden
 
-- Each hdc secret is a **Login** item in Vaultwarden.
+- Each hdc secret is a **Login** item in the **HDC organization** (collection from `HDC_VAULTWARDEN_COLLECTION_ID`).
 - The **item name** must equal the env key exactly, e.g. `HDC_PROXMOX_API_TOKEN`.
 - The **password** field holds the secret value (username is set to the same key name for consistency).
+
+Migrate existing local vault secrets in one step:
+
+```powershell
+node tools/hdc/cli.mjs secrets push -- --dry-run
+node tools/hdc/cli.mjs secrets push -- --force
+```
+
+`--force` overwrites organization items; default `--skip-existing` is safe for re-runs. Bootstrap keys are never pushed.
 
 Store a secret:
 
@@ -95,7 +115,7 @@ The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still prote
 
 ## hdc-runner scheduled host
 
-The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault). Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`packages/services/hdc-runner/README.md`](../packages/services/hdc-runner/README.md).
+The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault), plus org/collection IDs from `hdc_runner.env`. Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`packages/services/hdc-runner/README.md`](../packages/services/hdc-runner/README.md).
 
 ## Troubleshooting
 

@@ -3,7 +3,10 @@ import {
   isAutoSecretBackend,
   isLocalOnlyVaultKey,
   resolveSecretBackendMode,
+  vaultwardenCollectionIdFromEnv,
   vaultwardenConfigured,
+  vaultwardenOrganizationIdFromEnv,
+  vaultwardenOrganizationNameFromEnv,
 } from "./secret-backend.mjs";
 
 describe("secret-backend", () => {
@@ -24,5 +27,18 @@ describe("secret-backend", () => {
   it("isLocalOnlyVaultKey identifies bootstrap keys", () => {
     expect(isLocalOnlyVaultKey("HDC_VAULTWARDEN_ADMIN_TOKEN")).toBe(true);
     expect(isLocalOnlyVaultKey("HDC_PROXMOX_API_TOKEN")).toBe(false);
+  });
+
+  it("vaultwarden org/collection env helpers", () => {
+    const env = {
+      HDC_VAULTWARDEN_ORGANIZATION_ID: "org-uuid",
+      HDC_VAULTWARDEN_COLLECTION_ID: "coll-uuid",
+      HDC_VAULTWARDEN_ORGANIZATION_NAME: "MyOrg",
+    };
+    expect(vaultwardenOrganizationIdFromEnv(env)).toBe("org-uuid");
+    expect(vaultwardenCollectionIdFromEnv(env)).toBe("coll-uuid");
+    expect(vaultwardenOrganizationNameFromEnv(env)).toBe("MyOrg");
+    expect(vaultwardenOrganizationNameFromEnv({})).toBe("HDC");
+    expect(vaultwardenOrganizationIdFromEnv({})).toBeNull();
   });
 });

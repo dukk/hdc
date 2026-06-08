@@ -35,6 +35,8 @@ import {
   parseSecretsExportArgv,
   writeSecretExport,
 } from "./secrets-export.mjs";
+import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultwarden-sync.mjs";
+import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
 
 /**
@@ -106,6 +108,7 @@ Usage:
   ${c} secrets get <ENV_NAME> --out <path>
   ${c} secrets dump --out-dir <dir> [--format files|env|json]
   ${c} secrets unlock   # pre-unlock Vaultwarden when HDC_SECRET_BACKEND uses it
+  ${c} secrets push [--dry-run] [--skip-existing] [--force]   # local vault -> Vaultwarden HDC org
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
   ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades] [--only <tier>/<id>] [--skip <tier>/<id>] [--no-report] [--report <path>]
   ${c} env              # HDC_* variables (secrets redacted)
@@ -449,11 +452,13 @@ Subcommands:
   dump    Export secrets to a directory (per-key files, or --format env|json).
   delete  Remove a key.
   unlock  Unlock Vaultwarden vault (bw session) when HDC_SECRET_BACKEND is vaultwarden or auto.
+  push    Copy local vault secrets into the Vaultwarden HDC organization collection.
 
 Examples:
   ${c} secrets path
   ${c} help secrets dump
   ${c} help secrets set
+  ${c} help secrets push
 `);
       return;
     }
@@ -517,6 +522,28 @@ Vaultwarden master password unless HDC_VAULTWARDEN_MASTER_PASSWORD is in the loc
 
 Example:
   ${c} secrets unlock
+`);
+      return;
+    }
+    if (sub === "push") {
+      const c = helpExe(deps);
+      deps.log(`secrets push — copy local vault secrets into Vaultwarden HDC organization
+
+Requires Bitwarden CLI (bw), HDC_VAULTWARDEN_URL, HDC_VAULTWARDEN_EMAIL, and
+HDC_VAULTWARDEN_COLLECTION_ID. Organization: HDC_VAULTWARDEN_ORGANIZATION_ID or auto-resolve by
+HDC_VAULTWARDEN_ORGANIZATION_NAME (default HDC). Bootstrap keys (HDC_VAULTWARDEN_MASTER_PASSWORD,
+HDC_VAULTWARDEN_ADMIN_TOKEN) stay in the local vault only.
+
+Usage:
+  ${c} secrets push [--dry-run] [--skip-existing] [--force]
+
+  --dry-run         List keys that would be pushed; no bw writes.
+  --skip-existing   Skip keys already in the organization (default when --force is omitted).
+  --force           Overwrite organization items even when present.
+
+Examples:
+  ${c} secrets push --dry-run
+  ${c} secrets push --force
 `);
       return;
     }
@@ -590,7 +617,7 @@ Examples:
     }
     die(
       deps,
-      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, get, dump, delete, unlock)`,
+      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, get, dump, delete, unlock, push)`,
     );
   }
 
@@ -839,6 +866,26 @@ async function cmdSecrets(deps, argv) {
   }
   if (sub === "unlock") {
     await access.unlockVaultwarden();
+    return;
+  }
+  if (sub === "push") {
+    const parsed = parseSecretsPushArgv(argv.slice(1));
+    const vwCli = vaultwardenCliDepsFromCli(deps, deps.spawnSync);
+    const result = await pushLocalSecretsToVaultwarden(access, vwCli, parsed);
+    const total = result.pushed + result.updated;
+    if (result.errorKeys.length > 0) {
+      die(
+        deps,
+        `secrets push: ${result.errorKeys.length} key(s) failed (${result.errorKeys.join(", ")})`,
+      );
+    }
+    if (parsed.dryRun) {
+      deps.log(`[dry-run] would push ${total} secret(s)`);
+    } else {
+      deps.log(
+        `secrets push: ${result.pushed} created, ${result.updated} updated, ${result.skipped} skipped`,
+      );
+    }
     return;
   }
   if (sub === "get" || sub === "dump") {

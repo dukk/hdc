@@ -39,3 +39,30 @@ export function vaultwardenConfigured(env) {
 export function isLocalOnlyVaultKey(key) {
   return LOCAL_ONLY_VAULT_KEYS.has(key);
 }
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null}
+ */
+export function vaultwardenOrganizationIdFromEnv(env) {
+  const id = String(env.HDC_VAULTWARDEN_ORGANIZATION_ID ?? "").trim();
+  return id.length > 0 ? id : null;
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string}
+ */
+export function vaultwardenOrganizationNameFromEnv(env) {
+  const name = String(env.HDC_VAULTWARDEN_ORGANIZATION_NAME ?? "").trim();
+  return name.length > 0 ? name : "HDC";
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null}
+ */
+export function vaultwardenCollectionIdFromEnv(env) {
+  const id = String(env.HDC_VAULTWARDEN_COLLECTION_ID ?? "").trim();
+  return id.length > 0 ? id : null;
+}

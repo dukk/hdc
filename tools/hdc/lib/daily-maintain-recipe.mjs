@@ -49,6 +49,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "vikunja",
   "wallos",
   "wazuh",
+  "zabbix",
   "yacy",
   "postiz",
   "rackula",

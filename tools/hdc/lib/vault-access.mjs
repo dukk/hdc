@@ -467,6 +467,7 @@ export function createVaultAccess(deps) {
 
   return {
     unlock,
+    readLocalSecrets,
     readSecrets,
     writeSecrets,
     getSecret,

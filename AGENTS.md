@@ -692,7 +692,7 @@ Example: `node tools/hdc/cli.mjs run service open-webui deploy --`
 
 Vault: `HDC_VAULTWARDEN_ADMIN_TOKEN` (required for deploy/maintain; stays in **local** hdc vault). After deploy, add BIND A record and nginx-waf `sites[]` upstream to the CT IP (port 80). Does not configure nginx-waf automatically.
 
-**hdc secret backend:** When `HDC_VAULTWARDEN_URL` and `HDC_VAULTWARDEN_EMAIL` are set, `HDC_SECRET_BACKEND=auto` (default) routes `getSecret` / `secrets set` through **Bitwarden CLI (`bw`)** against Vaultwarden. Login items are named exactly like env keys (`HDC_PROXMOX_API_TOKEN`, …). Bootstrap keys stay local only: `HDC_VAULTWARDEN_MASTER_PASSWORD`, `HDC_VAULTWARDEN_ADMIN_TOKEN`. Unlock: masked master-password prompt, or `secrets unlock`; opt-in save master password to local vault. See [`docs/manually-deployed/bitwarden-cli.md`](docs/manually-deployed/bitwarden-cli.md).
+**hdc secret backend:** When `HDC_VAULTWARDEN_URL` and `HDC_VAULTWARDEN_EMAIL` are set, `HDC_SECRET_BACKEND=auto` (default) routes `getSecret` / `secrets set` through **Bitwarden CLI (`bw`)** against Vaultwarden. Login items live in the **HDC organization** (`HDC_VAULTWARDEN_ORGANIZATION_ID` or name `HDC`) and **collection** (`HDC_VAULTWARDEN_COLLECTION_ID`); item names match env keys (`HDC_PROXMOX_API_TOKEN`, …). Bootstrap keys stay local only: `HDC_VAULTWARDEN_MASTER_PASSWORD`, `HDC_VAULTWARDEN_ADMIN_TOKEN`. Bulk migrate: `secrets push --force`. Unlock: masked master-password prompt, or `secrets unlock`. See [`docs/manually-deployed/bitwarden-cli.md`](docs/manually-deployed/bitwarden-cli.md).
 
 Example: `node tools/hdc/cli.mjs run service vaultwarden deploy -- --instance a`
 

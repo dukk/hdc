@@ -496,6 +496,56 @@ describe("runCli", () => {
     expect(await runCli(["secrets", "nope"], deps)).toBe(1);
   });
 
+  it("secrets push dry-run reports keys to migrate", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    const vaultPath = join(root, "vault.enc");
+    const ORG_ID = "org-1111-aaaa-bbbb-cccc";
+    const COLL_ID = "coll-2222-dddd-eeee-ffff";
+    writeVault(vaultPath, "pw", {
+      HDC_PUSH_ME: "secret",
+      HDC_VAULTWARDEN_MASTER_PASSWORD: "boot",
+    });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const spawnSync = vi.fn((exe, args) => {
+      const key = args.join(" ");
+      const responses = {
+        "--version": { status: 0, stdout: "2024.1.0" },
+        "bw:--version": { status: 0, stdout: "2024.1.0" },
+        "config server https://vault.example.test": { status: 0 },
+        "login --check": { status: 0 },
+        "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key" },
+        [`list org-collections --organizationid ${ORG_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
+        },
+        [`list items --search HDC_PUSH_ME --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
+      };
+      const hit = responses[key];
+      if (hit) {
+        return { status: hit.status, stdout: hit.stdout ?? "", stderr: hit.stderr ?? "" };
+      }
+      return { status: 1, stdout: "", stderr: `unexpected: ${key}` };
+    });
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      defaultVaultPath: () => vaultPath,
+      spawnSync,
+      envVars: {
+        HDC_VAULT_PASSPHRASE: "pw",
+        HDC_SECRET_BACKEND: "vaultwarden",
+        HDC_VAULTWARDEN_URL: "https://vault.example.test",
+        HDC_VAULTWARDEN_EMAIL: "ops@example.test",
+        HDC_VAULTWARDEN_ORGANIZATION_ID: ORG_ID,
+        HDC_VAULTWARDEN_COLLECTION_ID: COLL_ID,
+        HDC_VAULTWARDEN_MASTER_PASSWORD: "boot",
+      },
+    });
+    expect(await runCli(["secrets", "push", "--dry-run"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/\[dry-run\] would push 1 secret/);
+    expect(capture.logLines.join("\n")).toMatch(/HDC_PUSH_ME/);
+  });
+
   it("secrets get and dump export to filesystem", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     const vaultPath = join(root, "vault.enc");

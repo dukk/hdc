@@ -12,7 +12,7 @@ Key blocks:
 | --- | --- |
 | `hdc_runner.install_root` | Public hdc tree on guest (default `/opt/hdc`) |
 | `hdc_runner.private_root` | hdc-private mirror (default `/opt/hdc-private`) |
-| `hdc_runner.env` | Non-secret env vars (`HDC_SECRET_BACKEND`, `HDC_VAULTWARDEN_*`) |
+| `hdc_runner.env` | Non-secret env vars (`HDC_SECRET_BACKEND`, `HDC_VAULTWARDEN_*`, org/collection IDs) |
 | `hdc_runner.schedules[]` | Cron + hdc CLI argv + optional mail overrides |
 | `hdc_runner.mail` | Default email recipient and subject prefix |
 | `configure.ssh.host` | Guest IP for operator rsync (set after first deploy) |
@@ -34,7 +34,7 @@ node tools/hdc/cli.mjs run service hdc-runner maintain --
 ```
 
 - Rsync `--delete` from operator `hdc` + `hdc-private` to the guest (requires `rsync` on the operator and SSH to the guest as `hdc`)
-- Refreshes `/opt/hdc-runner/.env` including `HDC_VAULTWARDEN_MASTER_PASSWORD` from the operator vault
+- Refreshes `/opt/hdc-runner/.env` including `HDC_VAULTWARDEN_MASTER_PASSWORD` from the operator vault and `HDC_VAULTWARDEN_ORGANIZATION_ID` / `HDC_VAULTWARDEN_COLLECTION_ID` from `hdc_runner.env`
 - Regenerates `/etc/cron.d/hdc-runner-*` (use `--prune` to remove stale schedules)
 
 Flags: `--dry-run`, `--skip-sync`, `--skip-clamav`, `--prune`
