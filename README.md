@@ -32,7 +32,7 @@ Package `config.json` files and inventory JSON (except [`inventory/manual/system
 | Path | Role |
 | --- | --- |
 | [`tools/hdc/`](tools/hdc/) | Node.js CLI (`cli.mjs`) and helpers |
-| [`packages/<package>/`](packages/) | `manifest.json`, optional `inventory.json` (query snapshot), plus `deploy/`, `maintain/`, `query/` (`run.mjs`). *Service* packages deploy apps; *infrastructure* packages expose shared capabilities (e.g. VM/CT provisioning) for other packages. |
+| [`packages/`](packages/README.md) | HDC plugins: see [`packages/README.md`](packages/README.md) for links to every package README, config, and access endpoints. Each package has `manifest.json`, optional `config.json`, plus `deploy/`, `maintain/`, `query/` (`run.mjs`). *Service* packages deploy apps; *infrastructure* packages expose shared capabilities (e.g. VM/CT provisioning). |
 | [`inventory/manual/`](inventory/manual/) | Operator sidecars in **hdc-private**; public repo keeps `_example.json` only |
 | [`inventory/automated/`](inventory/automated/) | Operator overlay in **hdc-private** (UniFi/Proxmox query snapshots) |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Markdown notes for manually operated gear (structured inventory lives under `inventory/manual/`) |

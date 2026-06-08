@@ -2,7 +2,12 @@ import { stderr as errout } from "node:process";
 
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { writeResolvedRepoJson } from "../../../../tools/hdc/lib/private-repo.mjs";
-import { liveDomainToConfig } from "./smtp2go-config.mjs";
+import {
+  liveDomainToConfig,
+} from "./smtp2go-config.mjs";
+import { liveStateToRestrictions } from "./smtp2go-import-restrictions.mjs";
+
+export { liveStateToRestrictions } from "./smtp2go-import-restrictions.mjs";
 
 export const SMTP2GO_COMPACT_ARRAY_KEYS = ["sender_domains"];
 
@@ -30,7 +35,7 @@ export function liveStateToSenderDomains(live, existingByFqdn) {
 /**
  * @param {object} opts
  * @param {string} opts.packageRoot
- * @param {{ senderDomains: import('./smtp2go-api.mjs').Smtp2goSenderDomainRow[] }} opts.live
+ * @param {{ senderDomains: import('./smtp2go-api.mjs').Smtp2goSenderDomainRow[]; ipAllowList?: import('./smtp2go-api.mjs').Smtp2goIpAllowListState; allowedSenders?: import('./smtp2go-api.mjs').Smtp2goAllowedSendersState }} opts.live
  * @param {(line: string) => void} [opts.log]
  */
 export function importSmtp2goToConfig(opts) {
@@ -50,10 +55,13 @@ export function importSmtp2goToConfig(opts) {
   );
 
   const sender_domains = liveStateToSenderDomains(opts.live, existingByFqdn);
+  const restrictions = liveStateToRestrictions(opts.live, cfgRaw);
 
   const next = {
     ...cfgRaw,
     sender_domains,
+    ip_allow_list: restrictions.ip_allow_list,
+    allowed_senders: restrictions.allowed_senders,
   };
 
   writeResolvedRepoJson(resolved, next, { compactArrayKeys: SMTP2GO_COMPACT_ARRAY_KEYS });

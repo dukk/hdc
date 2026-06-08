@@ -1,20 +1,13 @@
 import { buildDnsChecklist, domainVerificationSummary } from "./smtp2go-dns-checklist.mjs";
 import { domainPresenceDrift, domainSettingsDrift, liveDomainToConfig } from "./smtp2go-config.mjs";
+import { collectRestrictionsState } from "./smtp2go-restrictions-collect.mjs";
 
-/**
- * @param {ReturnType<import('./smtp2go-api.mjs').createSmtp2goClient>} api
- * @param {(line: string) => void} [log]
- */
-export async function fetchLiveSmtp2goState(api, log = () => {}) {
-  log("fetching sender domains");
-  const rows = await api.listSenderDomains();
-  return { senderDomains: rows };
-}
+export { fetchLiveSmtp2goState } from "./smtp2go-restrictions-collect.mjs";
 
 /**
  * @param {object} opts
  * @param {ReturnType<import('./smtp2go-config.mjs').normalizeSmtp2goConfig>} opts.config
- * @param {{ senderDomains: import('./smtp2go-api.mjs').Smtp2goSenderDomainRow[] }} opts.live
+ * @param {{ senderDomains: import('./smtp2go-api.mjs').Smtp2goSenderDomainRow[]; ipAllowList?: import('./smtp2go-api.mjs').Smtp2goIpAllowListState; allowedSenders?: import('./smtp2go-api.mjs').Smtp2goAllowedSendersState }} opts.live
  * @param {string | undefined} [opts.domainIdFilter]
  * @param {string | undefined} [opts.domainFilter]
  */
@@ -114,10 +107,16 @@ export function collectSmtp2goState(opts) {
     });
   }
 
+  const restrictions = collectRestrictionsState({ config, live });
+  if (restrictions.has_restrictions_drift) hasDrift = true;
+
   return {
     sender_domains,
     extra_in_live,
+    ip_allow_list: restrictions.ip_allow_list,
+    allowed_senders: restrictions.allowed_senders,
     has_drift: hasDrift,
+    has_restrictions_drift: restrictions.has_restrictions_drift,
     live_sender_domain_count: live.senderDomains.length,
     configured_sender_domain_count: config.senderDomains.length,
     domain_id_filter: onlyId,

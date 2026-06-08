@@ -4,6 +4,7 @@
  *
  * Usage: hdc run infrastructure smtp2go maintain --
  *   [--domain-id <id>] [--domain <fqdn>] [--dry-run] [--skip-verify]
+ *   [--skip-ip-allow-list] [--skip-allowed-senders] [--prune]
  *   [--no-report] [--report <path>]
  */
 import { basename, dirname, join } from "node:path";
@@ -25,6 +26,12 @@ import { createSmtp2goClient } from "../lib/smtp2go-api.mjs";
 import { normalizeSmtp2goConfig } from "../lib/smtp2go-config.mjs";
 import { collectSmtp2goState, fetchLiveSmtp2goState } from "../lib/smtp2go-collect.mjs";
 import { applyDomainSync, planDomainSync } from "../lib/smtp2go-sync.mjs";
+import {
+  applyAllowedSendersSync,
+  applyIpAllowListSync,
+  planAllowedSendersSync,
+  planIpAllowListSync,
+} from "../lib/smtp2go-restrictions-sync.mjs";
 import { createSmtp2goVaultAccess, resolveSmtp2goApiKey } from "../lib/vault-deps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,7 +40,7 @@ const packageRoot = join(here, "..");
 const PACKAGE_CONFIG_EXAMPLE = "packages/infrastructure/smtp2go/config.example.json";
 
 const MANIFEST_NEXT_STEPS = [
-  "Run `hdc run infrastructure smtp2go query --` to verify sender domains and DNS checklists.",
+  "Run `hdc run infrastructure smtp2go query --` to verify sender domains, IP allowlist, and allowed senders.",
   "Apply dns_checklist rows via Cloudflare or BIND, then re-run query until verified.",
 ];
 
@@ -50,6 +57,9 @@ async function main() {
   const domainId = flagGet(flags, "domain-id");
   const domainFqdn = flagGet(flags, "domain");
   const skipVerify = flags["skip-verify"] === "1";
+  const skipIpAllowList = flags["skip-ip-allow-list"] === "1";
+  const skipAllowedSenders = flags["skip-allowed-senders"] === "1";
+  const prune = flags.prune === "1";
 
   const reportCtx = createOperationReportContext({
     packageId: "smtp2go",
@@ -57,11 +67,11 @@ async function main() {
     verb,
     argv,
     manifestNextSteps: MANIFEST_NEXT_STEPS,
-    extraFlags: { skipVerify },
+    extraFlags: { skipVerify, skipIpAllowList, skipAllowedSenders, prune },
   });
 
   log(
-    `${verb}: starting${reportCtx.dryRun ? " (dry-run)" : ""}${skipVerify ? " (skip-verify)" : ""}`
+    `${verb}: starting${reportCtx.dryRun ? " (dry-run)" : ""}${skipVerify ? " (skip-verify)" : ""}${prune ? " (prune)" : ""}`
   );
 
   const { data: cfgRaw, source } = loadPackageConfigFromPackageRoot(packageRoot, {
@@ -145,6 +155,75 @@ async function main() {
     if (!applyResult.ok) overallOk = false;
   }
 
+  if (!skipIpAllowList) {
+    const ipPlan = planIpAllowListSync({
+      config: config.ipAllowList,
+      live: live.ipAllowList ?? null,
+      prune,
+    });
+    log(`IP allowlist: plan action=${ipPlan.action}`);
+    const ipResult = await applyIpAllowListSync(api, ipPlan, {
+      dryRun: reportCtx.dryRun,
+      log,
+    });
+    recordStep(reportCtx, {
+      id: "ip-allow-list",
+      title: "Maintain: IP allowlist",
+      ran: ipPlan.action !== "skip" && ipPlan.action !== "unchanged",
+      skipReason:
+        ipPlan.action === "skip"
+          ? ipPlan.reason
+          : ipPlan.action === "unchanged"
+            ? "unchanged"
+            : undefined,
+      ok: ipResult.ok,
+      notes: ipResult.error ? [ipResult.error] : [],
+    });
+    if (!ipResult.ok) overallOk = false;
+  } else {
+    log("skip IP allowlist (--skip-ip-allow-list)");
+  }
+
+  if (!skipAllowedSenders) {
+    if (
+      config.allowedSenders.managed &&
+      (config.allowedSenders.mode === "whitelist" ||
+        config.allowedSenders.mode === "blacklist") &&
+      config.senderDomains.some((d) => d.managed)
+    ) {
+      pushWarning(
+        reportCtx,
+        "allowed_senders managed with whitelist/blacklist mode disables SMTP2GO Sender Domains — review config before applying"
+      );
+    }
+
+    const sendersPlan = planAllowedSendersSync({
+      config: config.allowedSenders,
+      live: live.allowedSenders ?? null,
+    });
+    log(`allowed senders: plan action=${sendersPlan.action}`);
+    const sendersResult = await applyAllowedSendersSync(api, sendersPlan, {
+      dryRun: reportCtx.dryRun,
+      log,
+    });
+    recordStep(reportCtx, {
+      id: "allowed-senders",
+      title: "Maintain: allowed senders",
+      ran: sendersPlan.action !== "skip" && sendersPlan.action !== "unchanged",
+      skipReason:
+        sendersPlan.action === "skip"
+          ? sendersPlan.reason
+          : sendersPlan.action === "unchanged"
+            ? "unchanged"
+            : undefined,
+      ok: sendersResult.ok,
+      notes: sendersResult.error ? [sendersResult.error] : [],
+    });
+    if (!sendersResult.ok) overallOk = false;
+  } else {
+    log("skip allowed senders (--skip-allowed-senders)");
+  }
+
   live = await fetchLiveSmtp2goState(api, log);
 
   const snapshot = collectSmtp2goState({
@@ -178,8 +257,11 @@ async function main() {
     config_source: source,
     sender_domains: snapshot.sender_domains,
     extra_in_live: snapshot.extra_in_live,
+    ip_allow_list: snapshot.ip_allow_list,
+    allowed_senders: snapshot.allowed_senders,
     unverified_dns: unverifiedDns,
     has_drift: snapshot.has_drift,
+    has_restrictions_drift: snapshot.has_restrictions_drift,
   });
 
   await runOperationReportTail({

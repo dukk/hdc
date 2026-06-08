@@ -14,6 +14,14 @@ import { SMTP2GO_API_KEY_VAULT_KEY } from "./vault-deps.mjs";
  * }} ConfigSenderDomain
  */
 
+/** @typedef {{ ip_address: string; description: string | null }} ConfigIpAllowListEntry */
+
+/** @typedef {{ managed: boolean; enabled: boolean; entries: ConfigIpAllowListEntry[] }} ConfigIpAllowList */
+
+/** @typedef {"whitelist" | "blacklist" | "disabled"} AllowedSendersMode */
+
+/** @typedef {{ managed: boolean; mode: AllowedSendersMode; senders: string[] }} ConfigAllowedSenders */
+
 /**
  * @param {unknown} v
  */
@@ -38,6 +46,180 @@ export function slugifyId(value) {
  */
 export function domainIdFromFqdn(fqdn) {
   return slugifyId(fqdn.replace(/\./g, "-"));
+}
+
+/**
+ * Normalize IP for comparison (strip trailing /32).
+ * @param {string} ip
+ */
+export function normalizeIpAddress(ip) {
+  const s = String(ip ?? "").trim();
+  if (!s) return "";
+  return s.replace(/\/32$/, "");
+}
+
+/**
+ * @param {string} sender
+ */
+export function normalizeAllowedSender(sender) {
+  return String(sender ?? "").trim().toLowerCase();
+}
+
+/**
+ * @param {import('./smtp2go-api.mjs').Smtp2goIpAllowListState} live
+ * @param {ConfigIpAllowList | null} [existing]
+ */
+export function liveIpAllowListToConfig(live, existing = null) {
+  const liveEntries = Array.isArray(live.ip_addresses) ? live.ip_addresses : [];
+  const existingByIp = new Map(
+    (existing?.entries ?? [])
+      .filter((e) => e && typeof e.ip_address === "string")
+      .map((e) => [normalizeIpAddress(e.ip_address), e])
+  );
+
+  /** @type {ConfigIpAllowListEntry[]} */
+  const entries = liveEntries
+    .map((row) => {
+      const ip =
+        typeof row.ip_address === "string" ? normalizeIpAddress(row.ip_address) : "";
+      if (!ip) return null;
+      const prev = existingByIp.get(ip);
+      const liveDesc =
+        typeof row.description === "string" ? row.description.trim() || null : null;
+      return {
+        ip_address: ip,
+        description: prev?.description ?? liveDesc,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.ip_address.localeCompare(b.ip_address));
+
+  return {
+    managed: existing?.managed ?? false,
+    enabled: live.enabled === true,
+    entries,
+  };
+}
+
+/**
+ * @param {import('./smtp2go-api.mjs').Smtp2goAllowedSendersState} live
+ * @param {ConfigAllowedSenders | null} [existing]
+ */
+export function liveAllowedSendersToConfig(live, existing = null) {
+  const mode =
+    live.mode === "whitelist" || live.mode === "blacklist" ? live.mode : "disabled";
+  const senders = Array.isArray(live.allowed_senders)
+    ? [...live.allowed_senders]
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean)
+        .sort((a, b) => normalizeAllowedSender(a).localeCompare(normalizeAllowedSender(b)))
+    : [];
+
+  return {
+    managed: existing?.managed ?? false,
+    mode,
+    senders,
+  };
+}
+
+/**
+ * @param {ConfigIpAllowList} config
+ * @param {import('./smtp2go-api.mjs').Smtp2goIpAllowListState | null} live
+ */
+export function ipAllowListDrift(config, live) {
+  if (!live) {
+    return {
+      has_drift: config.entries.length > 0 || config.enabled,
+      enabled_drift: config.enabled,
+      missing_in_live: config.entries.map((e) => e.ip_address),
+      extra_in_live: [],
+      description_drift: [],
+    };
+  }
+
+  const liveByIp = new Map(
+    (Array.isArray(live.ip_addresses) ? live.ip_addresses : [])
+      .map((row) => {
+        const ip =
+          typeof row.ip_address === "string" ? normalizeIpAddress(row.ip_address) : "";
+        return ip ? [ip, row] : null;
+      })
+      .filter(Boolean)
+  );
+
+  const configIps = new Set(config.entries.map((e) => normalizeIpAddress(e.ip_address)));
+
+  /** @type {string[]} */
+  const missing_in_live = [];
+  /** @type {{ ip_address: string; description: string | null }[]} */
+  const description_drift = [];
+
+  for (const entry of config.entries) {
+    const ip = normalizeIpAddress(entry.ip_address);
+    const liveRow = liveByIp.get(ip);
+    if (!liveRow) {
+      missing_in_live.push(ip);
+      continue;
+    }
+    const liveDesc =
+      typeof liveRow.description === "string" ? liveRow.description.trim() || null : null;
+    const configDesc = entry.description ?? null;
+    if (configDesc !== liveDesc) {
+      description_drift.push({ ip_address: ip, description: configDesc });
+    }
+  }
+
+  /** @type {string[]} */
+  const extra_in_live = [];
+  for (const ip of liveByIp.keys()) {
+    if (!configIps.has(ip)) extra_in_live.push(ip);
+  }
+
+  const enabled_drift = config.enabled !== (live.enabled === true);
+  const has_drift =
+    enabled_drift ||
+    missing_in_live.length > 0 ||
+    extra_in_live.length > 0 ||
+    description_drift.length > 0;
+
+  return { has_drift, enabled_drift, missing_in_live, extra_in_live, description_drift };
+}
+
+/**
+ * @param {ConfigAllowedSenders} config
+ * @param {import('./smtp2go-api.mjs').Smtp2goAllowedSendersState | null} live
+ */
+export function allowedSendersDrift(config, live) {
+  if (!live) {
+    return {
+      has_drift: config.senders.length > 0 || config.mode !== "disabled",
+      mode_drift: config.mode !== "disabled",
+      missing_in_live: [...config.senders],
+      extra_in_live: [],
+    };
+  }
+
+  const configSet = new Set(config.senders.map(normalizeAllowedSender));
+  const liveSet = new Set(
+    (Array.isArray(live.allowed_senders) ? live.allowed_senders : []).map(normalizeAllowedSender)
+  );
+
+  /** @type {string[]} */
+  const missing_in_live = [];
+  for (const sender of config.senders) {
+    if (!liveSet.has(normalizeAllowedSender(sender))) missing_in_live.push(sender);
+  }
+
+  /** @type {string[]} */
+  const extra_in_live = [];
+  for (const sender of live.allowed_senders ?? []) {
+    if (!configSet.has(normalizeAllowedSender(sender))) extra_in_live.push(sender);
+  }
+
+  const mode_drift = config.mode !== live.mode;
+  const has_drift = mode_drift || missing_in_live.length > 0 || extra_in_live.length > 0;
+
+  return { has_drift, mode_drift, missing_in_live, extra_in_live };
 }
 
 /**
@@ -129,6 +311,52 @@ export function normalizeSmtp2goConfig(cfg) {
   const domainsById = new Map(senderDomains.map((d) => [d.id, d]));
   const domainsByFqdn = new Map(senderDomains.map((d) => [d.domain, d]));
 
+  const ipAllowRaw = isObject(cfg.ip_allow_list) ? cfg.ip_allow_list : {};
+  /** @type {ConfigIpAllowListEntry[]} */
+  const ipEntries = [];
+  const ipList = Array.isArray(ipAllowRaw.entries) ? ipAllowRaw.entries : [];
+  for (const raw of ipList) {
+    if (!isObject(raw)) continue;
+    const ip =
+      typeof raw.ip_address === "string" ? normalizeIpAddress(raw.ip_address) : "";
+    if (!ip) continue;
+    ipEntries.push({
+      ip_address: ip,
+      description:
+        typeof raw.description === "string" ? raw.description.trim() || null : null,
+    });
+  }
+  ipEntries.sort((a, b) => a.ip_address.localeCompare(b.ip_address));
+
+  const ipAllowList = {
+    managed: ipAllowRaw.managed === true,
+    enabled: ipAllowRaw.enabled === true,
+    entries: ipEntries,
+  };
+
+  const allowedRaw = isObject(cfg.allowed_senders) ? cfg.allowed_senders : {};
+  const allowedMode =
+    allowedRaw.mode === "whitelist" || allowedRaw.mode === "blacklist"
+      ? allowedRaw.mode
+      : "disabled";
+  /** @type {string[]} */
+  const allowedSendersList = [];
+  const sendersRaw = Array.isArray(allowedRaw.senders) ? allowedRaw.senders : [];
+  for (const raw of sendersRaw) {
+    if (typeof raw !== "string") continue;
+    const s = raw.trim();
+    if (s) allowedSendersList.push(s);
+  }
+  allowedSendersList.sort((a, b) =>
+    normalizeAllowedSender(a).localeCompare(normalizeAllowedSender(b))
+  );
+
+  const allowedSenders = {
+    managed: allowedRaw.managed === true,
+    mode: /** @type {AllowedSendersMode} */ (allowedMode),
+    senders: allowedSendersList,
+  };
+
   return {
     apiBase,
     apiKeyVaultKey,
@@ -140,6 +368,8 @@ export function normalizeSmtp2goConfig(cfg) {
     senderDomains,
     domainsById,
     domainsByFqdn,
+    ipAllowList,
+    allowedSenders,
   };
 }
 

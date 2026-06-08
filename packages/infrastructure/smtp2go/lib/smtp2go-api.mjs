@@ -30,6 +30,18 @@
  *   from_master?: boolean;
  * }} Smtp2goSenderDomainRow */
 
+/** @typedef {{ ip_address?: string; description?: string }} Smtp2goIpAllowListEntry */
+
+/** @typedef {{
+ *   enabled?: boolean;
+ *   ip_addresses?: Smtp2goIpAllowListEntry[];
+ * }} Smtp2goIpAllowListState */
+
+/** @typedef {{
+ *   mode?: "whitelist" | "blacklist" | "disabled";
+ *   allowed_senders?: string[];
+ * }} Smtp2goAllowedSendersState */
+
 /**
  * @param {unknown} body
  * @returns {string}
@@ -143,6 +155,103 @@ export function createSmtp2goClient(opts) {
       const res = await post("/domain/verify", { domain: domain.trim() });
       const rows = res?.data?.domains;
       return Array.isArray(rows) ? rows : [];
+    },
+
+    /**
+     * @returns {Promise<Smtp2goIpAllowListState>}
+     */
+    async viewIpAllowList() {
+      const res = await post("/ip_allow_list/view", {});
+      const data = res?.data;
+      if (!data || typeof data !== "object") {
+        return { enabled: false, ip_addresses: [] };
+      }
+      return /** @type {Smtp2goIpAllowListState} */ (data);
+    },
+
+    /**
+     * @param {boolean} enabled
+     * @returns {Promise<Smtp2goIpAllowListState>}
+     */
+    async setIpAllowListEnabled(enabled) {
+      const res = await post("/ip_allow_list", { enabled: enabled === true });
+      const data = res?.data;
+      if (!data || typeof data !== "object") {
+        return { enabled: enabled === true, ip_addresses: [] };
+      }
+      return /** @type {Smtp2goIpAllowListState} */ (data);
+    },
+
+    /**
+     * @param {object} opts
+     * @param {string} opts.ip_address
+     * @param {string} [opts.description]
+     */
+    async addIpAllowListEntry(opts) {
+      /** @type {Record<string, string>} */
+      const body = { ip_address: opts.ip_address.trim() };
+      if (opts.description && opts.description.trim()) {
+        body.description = opts.description.trim();
+      }
+      const res = await post("/ip_allow_list/add", body);
+      return res?.data ?? null;
+    },
+
+    /**
+     * @param {object} opts
+     * @param {string} opts.ip_address
+     * @param {string} [opts.new_ip_address]
+     * @param {string} [opts.description]
+     */
+    async editIpAllowListEntry(opts) {
+      /** @type {Record<string, string>} */
+      const body = { ip_address: opts.ip_address.trim() };
+      if (opts.new_ip_address && opts.new_ip_address.trim()) {
+        body.new_ip_address = opts.new_ip_address.trim();
+      }
+      if (opts.description !== undefined) {
+        body.description = opts.description.trim();
+      }
+      const res = await post("/ip_allow_list/edit", body);
+      return res?.data ?? null;
+    },
+
+    /**
+     * @param {string} ip_address
+     */
+    async removeIpAllowListEntry(ip_address) {
+      const res = await post("/ip_allow_list/remove", { ip_address: ip_address.trim() });
+      return res?.data ?? null;
+    },
+
+    /**
+     * @returns {Promise<Smtp2goAllowedSendersState>}
+     */
+    async viewAllowedSenders() {
+      const res = await post("/allowed_senders/view", {});
+      const data = res?.data;
+      if (!data || typeof data !== "object") {
+        return { mode: "disabled", allowed_senders: [] };
+      }
+      return /** @type {Smtp2goAllowedSendersState} */ (data);
+    },
+
+    /**
+     * @param {object} opts
+     * @param {"whitelist" | "blacklist" | "disabled"} opts.mode
+     * @param {string[]} opts.allowed_senders
+     * @returns {Promise<Smtp2goAllowedSendersState>}
+     */
+    async updateAllowedSenders(opts) {
+      const res = await post("/allowed_senders/update", {
+        mode: opts.mode,
+        allowed_senders: opts.allowed_senders,
+      });
+      const data = res?.data;
+      if (!data || typeof data !== "object") {
+        return { mode: opts.mode, allowed_senders: opts.allowed_senders };
+      }
+      return /** @type {Smtp2goAllowedSendersState} */ (data);
     },
   };
 }

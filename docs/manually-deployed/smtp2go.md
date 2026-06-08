@@ -1,12 +1,12 @@
 # SMTP2GO (hdc)
 
-Sender domain inventory and verification for your SMTP2GO account is managed with the **smtp2go** infrastructure package (`packages/infrastructure/smtp2go/`). Outbound SMTP relay credentials for the internal **postfix-relay** service remain separate.
+Sender domains, IP allowlist, and Restrict Senders for your SMTP2GO account are managed with the **smtp2go** infrastructure package (`packages/infrastructure/smtp2go/`). Outbound SMTP relay credentials for the internal **postfix-relay** service remain separate.
 
 ## API key vs SMTP relay credentials
 
 | Purpose | Vault / env | Used by |
 | --- | --- | --- |
-| SMTP2GO API (sender domains) | `HDC_SMTP2GO_API_KEY` | `hdc run infrastructure smtp2go` |
+| SMTP2GO API | `HDC_SMTP2GO_API_KEY` | `hdc run infrastructure smtp2go` |
 | SMTP submission to SMTP2GO | `HDC_POSTFIX_RELAY_SMTP_USER`, `HDC_POSTFIX_RELAY_SMTP_PASSWORD` | `packages/services/postfix-relay` |
 
 Do not confuse the API key with the SMTP username/password on the postfix-relay host.
@@ -14,7 +14,10 @@ Do not confuse the API key with the SMTP username/password on the postfix-relay 
 ## API key
 
 1. Open [SMTP2GO](https://www.smtp2go.com/) → **Sending → API Keys**.
-2. Create a key with permissions for **sender domain** endpoints (`/domain/view`, `/domain/add`, `/domain/verify`).
+2. Create a key with permissions for:
+   - **Sender domains:** `/domain/view`, `/domain/add`, `/domain/verify`
+   - **IP allowlist:** `/ip_allow_list`, `/ip_allow_list/view`, `/ip_allow_list/add`, `/ip_allow_list/edit`, `/ip_allow_list/remove`
+   - **Restrict Senders:** `/allowed_senders/view`, `/allowed_senders/update` (and optionally `/add`, `/remove`)
 3. Store it in the hdc vault (never commit):
 
 ```bash
@@ -31,7 +34,26 @@ Copy `packages/infrastructure/smtp2go/config.example.json` to **hdc-private** as
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```
 
-Set `managed: true` on `sender_domains[]` entries you want `maintain` to add or verify.
+Set `managed: true` on resources you want `maintain` to enforce:
+
+- Per-domain `managed` on `sender_domains[]` entries
+- Section `managed` on `ip_allow_list` and `allowed_senders`
+
+## Import behavior (sender domains)
+
+`query -- --import --yes` replaces `sender_domains[]`, `ip_allow_list`, and `allowed_senders` from live API data.
+
+**From SMTP2GO API:** domain FQDN, tracking/return-path subdomains, IP allowlist entries, allowed-senders list and mode.
+
+**Not imported (HDC-local metadata on sender domains):** `notes`, `spf`, `dmarc`, `spf_variant`. These are operator-authored reminders for DNS checklists and documentation. On first bootstrap they default to `null`. On re-import they are preserved only when the same FQDN already existed in config.
+
+Published SPF/DMARC/DKIM records live in **cloudflare** or **bind** config — not in smtp2go config. Query builds a runtime `dns_checklist[]` from API verification data plus your optional `spf`/`dmarc` overrides.
+
+## Restrict Senders vs sender domains
+
+SMTP2GO **Restrict Senders** (`allowed_senders.mode` of `whitelist` or `blacklist`) **disables Sender Domains and Single Sender Emails** in the console. If you rely on verified sender domains (`dukk.org`, etc.), keep `allowed_senders.mode` at **`disabled`** unless you intentionally switch to address/domain allowlisting instead.
+
+IP allowlist is independent: when `ip_allow_list.enabled` is true, only listed **public egress IPs** may submit mail or call the API. List the WAN egress IP of your postfix-relay (as seen by SMTP2GO), not RFC1918 LAN addresses.
 
 ## Query and import
 
@@ -39,16 +61,16 @@ Set `managed: true` on `sender_domains[]` entries you want `maintain` to add or 
 # Diff live account vs config (JSON on stdout)
 node tools/hdc/cli.mjs run infrastructure smtp2go query --
 
-# Limit to one domain
+# Limit to one sender domain
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.dukk.org
 
 # Refresh hdc-private config from live API
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```
 
-Import replaces `sender_domains[]` from live data. Existing entries keep their `managed` flag; new domains import with `managed: false`.
+Import preserves section-level `managed` flags and sender-domain metadata (`notes`, `spf`, `dmarc`) when FQDNs match. New domains import with `managed: false`.
 
-Query JSON includes `dns_checklist[]` per domain (SPF, DKIM, return-path, tracking CNAMEs). Apply those records manually via **cloudflare** or **bind** packages — smtp2go does not publish DNS.
+Query JSON includes `dns_checklist[]` per sender domain (SPF template, DKIM, return-path, tracking CNAMEs). Apply those records manually via **cloudflare** or **bind** packages — smtp2go does not publish DNS.
 
 ## Maintain
 
@@ -56,9 +78,17 @@ Query JSON includes `dns_checklist[]` per domain (SPF, DKIM, return-path, tracki
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --dry-run
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-dukk-org
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
 ```
 
-For each `managed: true` domain, maintain adds the domain when missing and calls verify when DKIM or return-path is not yet verified. Re-run `query` after updating DNS until verification succeeds.
+For each `managed: true` sender domain, maintain adds the domain when missing and calls verify when DKIM or return-path is not yet verified.
+
+When `ip_allow_list.managed` is true, maintain syncs `enabled`, adds missing IPs, updates descriptions, and with `--prune` removes live IPs not in config.
+
+When `allowed_senders.managed` is true, maintain replaces the live list and mode via `/allowed_senders/update`.
+
+Re-run `query` after updating DNS until sender-domain verification succeeds.
 
 ## Postfix relay
 

@@ -98,4 +98,63 @@ describe("smtp2go-api", () => {
     const api = createSmtp2goClient({ apiKey: "api-test-key" });
     await expect(api.verifySenderDomain("bad.example")).rejects.toThrow(/invalid domain/);
   });
+
+  it("viewIpAllowList posts to /ip_allow_list/view", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: {
+            enabled: true,
+            ip_addresses: [{ ip_address: "203.0.113.10/32", description: "relay" }],
+          },
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = createSmtp2goClient({ apiKey: "api-test-key" });
+    const state = await api.viewIpAllowList();
+
+    expect(state.enabled).toBe(true);
+    expect(state.ip_addresses).toHaveLength(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/ip_allow_list/view");
+  });
+
+  it("setIpAllowListEnabled posts enabled flag", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ data: { enabled: false } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = createSmtp2goClient({ apiKey: "api-test-key" });
+    await api.setIpAllowListEnabled(false);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.enabled).toBe(false);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/ip_allow_list");
+  });
+
+  it("updateAllowedSenders replaces list and mode", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: { mode: "disabled", allowed_senders: ["noreply@example.com"] },
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = createSmtp2goClient({ apiKey: "api-test-key" });
+    const state = await api.updateAllowedSenders({
+      mode: "disabled",
+      allowed_senders: ["noreply@example.com"],
+    });
+
+    expect(state.mode).toBe("disabled");
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.mode).toBe("disabled");
+    expect(body.allowed_senders).toEqual(["noreply@example.com"]);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/allowed_senders/update");
+  });
 });

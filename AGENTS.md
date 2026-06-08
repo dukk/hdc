@@ -1031,12 +1031,18 @@ node tools/hdc/cli.mjs run infrastructure synology-nas maintain --
 
 | Verb | Summary |
 | --- | --- |
-| `query` | Diff sender domains vs config; DNS checklists on stdout; `--import --yes` writes live snapshot to hdc-private config |
-| `maintain` | Add missing managed sender domains; trigger `/domain/verify` when DKIM or return-path unverified |
+| `query` | Diff sender domains, IP allowlist, and allowed senders vs config; DNS checklists on stdout; `--import --yes` writes live snapshot to hdc-private config |
+| `maintain` | Add missing managed sender domains; trigger `/domain/verify` when DKIM or return-path unverified; sync managed `ip_allow_list` and `allowed_senders` |
 
 Vault: `HDC_SMTP2GO_API_KEY` (API). Postfix relay SMTP user/password remain in **postfix-relay** (`HDC_POSTFIX_RELAY_SMTP_*`). This package does not publish DNS — apply `dns_checklist` via cloudflare or bind manually.
 
-**Bootstrap:** `query -- --import --yes` replaces `sender_domains[]`; set `managed: true` before `maintain`.
+**Import:** `--import --yes` replaces `sender_domains[]`, `ip_allow_list`, and `allowed_senders` from live API data. HDC-local sender-domain fields (`notes`, `spf`, `dmarc`, `spf_variant`) are not pulled from SMTP2GO; re-import preserves them when the FQDN already existed in config.
+
+**Restrict Senders:** `allowed_senders.mode` of `whitelist` or `blacklist` disables SMTP2GO Sender Domains. Default to `disabled` when using verified sender domains.
+
+**API key permissions:** sender domain (`/domain/*`), IP allowlist (`/ip_allow_list*`), allowed senders (`/allowed_senders/*`).
+
+**Bootstrap:** `query -- --import --yes` replaces live sections; set `managed: true` on sender domains and restriction sections before `maintain`.
 
 Examples:
 
@@ -1044,6 +1050,8 @@ Examples:
 node tools/hdc/cli.mjs run infrastructure smtp2go query --
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list
 ```
 
 ## Twilio in this repo

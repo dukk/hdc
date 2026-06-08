@@ -19,5 +19,20 @@
       "tracking_subdomain": "link",
       "notes": "Set managed true after import to allow maintain add/verify."
     }
-  ]
+  ],
+  "ip_allow_list": {
+    "managed": false,
+    "enabled": false,
+    "entries": [
+      {
+        "ip_address": "203.0.113.10",
+        "description": "postfix-relay WAN egress"
+      }
+    ]
+  },
+  "allowed_senders": {
+    "managed": false,
+    "mode": "disabled",
+    "senders": ["noreply@example.com"]
+  }
 }
