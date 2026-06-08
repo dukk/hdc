@@ -23,9 +23,11 @@ In repo `.env` (see [`.env.example`](../../.env.example)):
 
 ```env
 HDC_SECRET_BACKEND=auto
-HDC_VAULTWARDEN_URL=https://vault.hdc.dukk.org
+HDC_VAULTWARDEN_URL=https://vault.dukk.org
 HDC_VAULTWARDEN_EMAIL=you@example.com
 ```
+
+Both `https://vault.dukk.org` and `https://vault.hdc.dukk.org` reach the same Vaultwarden instance; prefer `vault.dukk.org` for new setups.
 
 | Mode | Behavior |
 | --- | --- |
@@ -37,11 +39,11 @@ HDC_VAULTWARDEN_EMAIL=you@example.com
 
 After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
 
-1. Open `https://vault.hdc.dukk.org/admin` and create your account (or use an invitation).
+1. Open `https://vault.dukk.org/admin` and create your account (or use an invitation).
 2. Point `bw` at your server:
 
    ```powershell
-   bw config server https://vault.hdc.dukk.org
+   bw config server https://vault.dukk.org
    ```
 
 3. Run any hdc command that needs secrets, or:
@@ -87,7 +89,7 @@ These never sync to Vaultwarden:
 | Key | Purpose |
 | --- | --- |
 | `HDC_VAULTWARDEN_MASTER_PASSWORD` | Optional stored master password for non-interactive unlock |
-| `HDC_VAULTWARDEN_ADMIN_TOKEN` | Vaultwarden admin panel (deploy/maintain) |
+| `HDC_VAULTWARDEN_ADMIN_TOKEN` | Plain Vaultwarden **admin panel** password (hdc hashes to Argon2 for `ADMIN_TOKEN` on deploy/maintain) |
 
 The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still protects `~/.hdc/vault.enc` when reading bootstrap keys.
 

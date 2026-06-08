@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query PostgreSQL service health on configured nodes.
  *
@@ -10,7 +10,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
-import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 import {
   normalizePostgresqlConfig,
@@ -23,6 +24,7 @@ import {
   queryRecoveryStatus,
   queryReplicationLag,
 } from "../lib/postgresql-query-remote.mjs";
+import { createConfigureExec } from "../lib/postgresql-configure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -80,10 +82,11 @@ async function main() {
 
     errout.write(`[hdc] ${target} ${verb}: checking ${d.systemId} (${d.role}) at ${user}@${host} …\n`);
 
-    const service = queryPostgresqlActive(user, host);
-    const ready = queryPgIsready(user, host);
-    const version = queryPostgresqlVersion(user, host);
-    const recovery = queryRecoveryStatus(user, host);
+    const exec = createConfigureExec("ssh", { user, host });
+    const service = queryPostgresqlActive(exec);
+    const ready = queryPgIsready(exec);
+    const version = queryPostgresqlVersion(exec);
+    const recovery = queryRecoveryStatus(exec);
 
     /** @type {Record<string, unknown>} */
     const node = {
@@ -98,7 +101,7 @@ async function main() {
     };
 
     if (d.role === "standby" && recovery.in_recovery) {
-      const lag = queryReplicationLag(user, host);
+      const lag = queryReplicationLag(exec);
       node.replication_lag = lag;
       node.ok = node.ok && lag.ok;
     }
@@ -130,3 +133,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

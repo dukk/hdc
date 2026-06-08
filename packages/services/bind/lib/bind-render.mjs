@@ -46,13 +46,22 @@ export function renderSoaLine(opts) {
  * @param {{ type: string; name: string; data: string; ttl: number }[]} records
  * @param {string} zone
  */
+/**
+ * @param {{ type: string; data: string }} rec
+ */
+function formatZoneRdata(rec) {
+  const type = rec.type.toUpperCase();
+  if (type === "A" || type === "AAAA" || type === "TXT" || type === "MX") {
+    return rec.data;
+  }
+  return rec.data.endsWith(".") ? rec.data : `${rec.data}.`;
+}
+
 export function renderZoneRecords(records, zone) {
   const lines = [];
   for (const rec of records) {
     const owner = zoneOwnerLabel(rec.name, zone);
-    const data = rec.data.endsWith(".") || rec.type === "A" ? rec.data : `${rec.data}.`;
-    const rdata = rec.type === "A" || rec.type === "AAAA" ? rec.data : data;
-    lines.push(`${owner}\t${rec.ttl}\tIN\t${rec.type}\t${rdata}`);
+    lines.push(`${owner}\t${rec.ttl}\tIN\t${rec.type}\t${formatZoneRdata(rec)}`);
   }
   return `${lines.join("\n")}\n`;
 }

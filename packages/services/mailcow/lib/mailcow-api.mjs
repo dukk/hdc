@@ -209,12 +209,15 @@ export async function ensureRelayhostId(client, hostname) {
 /**
  * @param {import("./mailcow-dns.mjs").MailcowDomainConfig[]} domains
  * @param {MailcowApiClient} client
+ * @param {{ log?: (line: string) => void }} [opts]
  */
-export async function reconcileMailcowDomains(domains, client) {
+export async function reconcileMailcowDomains(domains, client, opts = {}) {
+  const log = opts.log ?? (() => {});
   const relayDefaults = loadMailRelayClientDefaults();
   const relayHostname = `${relayDefaults.relay_hostname}:${relayDefaults.relay_port}`;
 
   const existing = await listDomains(client);
+  const liveCountBefore = existing.length;
   const byName = new Map(
     existing.map((d) => [
       typeof d.domain_name === "string" ? d.domain_name.trim() : "",
@@ -227,13 +230,18 @@ export async function reconcileMailcowDomains(domains, client) {
 
   /** @type {Record<string, unknown>[]} */
   const results = [];
+  let addedCount = 0;
+  let failedCount = 0;
 
   for (const domain of domains) {
+    const wantDescription = domain.description || `hdc mailcow ${domain.name}`;
+
     /** @type {Record<string, unknown>} */
     const row = {
       domain: domain.name,
       outbound_mode: domain.outbound_mode,
       domain_added: false,
+      description_updated: false,
       dkim_generated: false,
       relayhost_id: null,
       ok: true,
@@ -241,17 +249,27 @@ export async function reconcileMailcowDomains(domains, client) {
     };
 
     try {
-      if (!byName.has(domain.name)) {
-        await addDomain(client, domain.name, {
-          description: domain.description || `hdc mailcow ${domain.name}`,
-        });
+      const live = byName.get(domain.name);
+      if (!live) {
+        log(`add domain ${domain.name}`);
+        await addDomain(client, domain.name, { description: wantDescription });
         row.domain_added = true;
-        byName.set(domain.name, { domain_name: domain.name });
+        addedCount += 1;
+        byName.set(domain.name, { domain_name: domain.name, description: wantDescription });
+      } else {
+        const liveDesc =
+          typeof live.description === "string" ? live.description.trim() : "";
+        if (liveDesc !== wantDescription) {
+          log(`update description for ${domain.name}`);
+          await editDomain(client, domain.name, { description: wantDescription });
+          row.description_updated = true;
+        }
       }
 
       let dkim = await getDkim(client, domain.name);
       const dkimTxt = isObject(dkim) && typeof dkim.dkim_txt === "string" ? dkim.dkim_txt.trim() : "";
       if (!dkimTxt) {
+        log(`generate DKIM for ${domain.name} (selector ${domain.dkim_selector})`);
         await generateDkim(client, domain.name, domain.dkim_selector, domain.dkim_key_size);
         row.dkim_generated = true;
         dkim = await getDkim(client, domain.name);
@@ -268,19 +286,32 @@ export async function reconcileMailcowDomains(domains, client) {
         if (!relayIdCache) {
           throw new Error(`failed to ensure relayhost ${relayHostname}`);
         }
+        log(`set relayhost ${relayIdCache} on ${domain.name}`);
         await editDomain(client, domain.name, { relayhost: relayIdCache });
         row.relayhost_id = relayIdCache;
       } else {
+        log(`set direct outbound on ${domain.name}`);
         await editDomain(client, domain.name, { relayhost: "0" });
         row.relayhost_id = "0";
       }
+      log(`${domain.name}: ok`);
     } catch (e) {
       row.ok = false;
       row.message = String(/** @type {Error} */ (e).message || e);
+      failedCount += 1;
+      log(`${domain.name}: failed — ${row.message}`);
     }
 
     results.push(row);
   }
 
-  return results;
+  return {
+    domain_results: results,
+    summary: {
+      configured_count: domains.length,
+      live_count_before: liveCountBefore,
+      added_count: addedCount,
+      failed_count: failedCount,
+    },
+  };
 }

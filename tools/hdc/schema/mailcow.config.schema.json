@@ -38,7 +38,14 @@
               "hostname": { "type": "string", "minLength": 3 },
               "timezone": { "type": "string" },
               "admin_url": { "type": "string" },
+              "api_url": { "type": "string" },
               "api_key_vault_key": { "type": "string" },
+              "dns_publish": {
+                "type": "object",
+                "properties": {
+                  "cloudflare_dkim": { "type": "boolean" }
+                }
+              },
               "skip_clamd": { "type": "boolean" },
               "skip_solr": { "type": "boolean" },
               "domains": {

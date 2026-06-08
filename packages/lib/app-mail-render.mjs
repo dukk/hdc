@@ -43,6 +43,27 @@ export function n8nMailEnvLines(n8n) {
 }
 
 /**
+ * SMTP env lines for Listmonk docker .env when mail.enabled.
+ * @param {Record<string, unknown>} listmonk
+ */
+export function listmonkMailEnvLines(listmonk) {
+  const mail = mailBlockFromService(listmonk);
+  const relay = loadMailRelayAppSettings();
+  const recipients = resolveMailRecipients(mail, { from: relay.from });
+  if (!recipients) return [];
+
+  return [
+    "LISTMONK_smtp__main__enabled=true",
+    `LISTMONK_smtp__main__host=${relay.host}`,
+    `LISTMONK_smtp__main__port=${relay.port}`,
+    "LISTMONK_smtp__main__auth_protocol=plain",
+    "LISTMONK_smtp__main__username=",
+    "LISTMONK_smtp__main__password=",
+    `LISTMONK_app__from_email=${recipients.from}`,
+  ];
+}
+
+/**
  * SMTP env lines for Vaultwarden docker .env when mail.enabled.
  * @param {Record<string, unknown>} vaultwarden
  */
@@ -52,13 +73,13 @@ export function vaultwardenMailEnvLines(vaultwarden) {
   const recipients = resolveMailRecipients(mail, { from: relay.from });
   if (!recipients) return [];
 
+  // Internal relay trusts LAN (mynetworks); omit SMTP_USERNAME/PASSWORD so Vaultwarden
+  // does not attempt AUTH (empty strings still trigger auth and fail on port 25).
   return [
     `SMTP_HOST=${relay.host}`,
     `SMTP_PORT=${relay.port}`,
     `SMTP_FROM=${recipients.from}`,
     "SMTP_SECURITY=off",
-    "SMTP_USERNAME=",
-    "SMTP_PASSWORD=",
   ];
 }
 

@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query Kafka broker health on configured nodes.
  */
@@ -14,7 +14,9 @@ import {
   normalizeKafkaConfig,
   resolveKafkaDeployments,
 } from "../lib/deployments.mjs";
-import { queryBrokerApiVersions, queryKafkaServiceActive } from "../lib/kafka-query-remote.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { queryBrokerApiVersions, queryKafkaServiceActive } from "../lib/kafka-query-remote.mjs";
+import { createConfigureExec } from "../lib/kafka-configure.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -71,8 +73,9 @@ async function main() {
     const host = d.sshHost;
     errout.write(`[hdc] ${target} ${verb}: checking ${d.systemId} node ${d.nodeId} at ${user}@${host} …\n`);
 
-    const service = queryKafkaServiceActive(user, host);
-    const api = queryBrokerApiVersions(user, host, global.listenerPort);
+    const exec = createConfigureExec("ssh", { user, host });
+    const service = queryKafkaServiceActive(exec);
+    const api = queryBrokerApiVersions(exec, global.listenerPort);
     nodes.push({
       system_id: d.systemId,
       node_id: d.nodeId,
@@ -108,3 +111,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

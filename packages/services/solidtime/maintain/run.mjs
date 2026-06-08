@@ -1,10 +1,10 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
 /**
  * Maintain SolidTime (upgrade to configured or latest release).
  *
  * Usage: hdc run service solidtime maintain -- [--instance a] [--skip-upgrade] [--check-latest] [--version v0.12.2] [--skip-clamav]
  */
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

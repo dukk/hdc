@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "azure_entra": {
+  "azure": {
     "graph_base_url": "https://graph.microsoft.com/v1.0"
   },
   "application_filter": {

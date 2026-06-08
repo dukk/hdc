@@ -22,6 +22,37 @@ import {
 export { resolvePveSshForHost };
 
 /**
+ * @param {(script: string) => { status: number }} runScript
+ * @param {Record<string, unknown>} mailcow
+ * @param {Record<string, unknown>} install
+ * @param {string} label
+ */
+function applyReverseProxyConf(runScript, mailcow, install, label) {
+  const dir = installDir(install);
+  const reverseProxy = buildReverseProxyConfScript(dir, mailcow);
+  if (!reverseProxy) return { ok: true, skipped: true };
+
+  errout.write(`[hdc] mailcow ${label}: applying reverse-proxy settings in mailcow.conf …\n`);
+  const rpResult = runScript(reverseProxy);
+  if (rpResult.status !== 0) {
+    return {
+      ok: false,
+      message: `reverse-proxy mailcow.conf update failed (exit ${rpResult.status})`,
+    };
+  }
+
+  const escapedDir = dir.replace(/'/g, `'\\''`);
+  const restart = runScript(`set -euo pipefail\ncd '${escapedDir}'\ndocker compose up -d`);
+  if (restart.status !== 0) {
+    return {
+      ok: false,
+      message: `reverse-proxy compose restart failed (exit ${restart.status})`,
+    };
+  }
+  return { ok: true, skipped: false };
+}
+
+/**
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
@@ -59,6 +90,15 @@ export async function installMailcowOnHost(exec, mailcow, install, secrets, data
       method: "mailcow-dockerized",
       message: `install failed (exit ${r.status})`,
       detail: `${r.stderr}${r.stdout}`.trim() || null,
+    };
+  }
+
+  const rp = applyReverseProxyConf((script) => exec.run(script), mailcow, install, "install");
+  if (!rp.ok) {
+    return {
+      ok: false,
+      method: "mailcow-dockerized",
+      message: rp.message || "reverse-proxy apply failed",
     };
   }
 
@@ -104,6 +144,20 @@ export async function installMailcowInCt(user, pveHost, vmid, mailcow, install, 
     };
   }
 
+  const rp = applyReverseProxyConf(
+    (script) => pctExec(user, pveHost, vmid, script),
+    mailcow,
+    install,
+    "install",
+  );
+  if (!rp.ok) {
+    return {
+      ok: false,
+      method: "mailcow-dockerized",
+      message: rp.message || "reverse-proxy apply failed",
+    };
+  }
+
   const ip = readCtPrimaryIp(user, pveHost, vmid);
   errout.write(`[hdc] mailcow install: completed on CT ${vmid}.\n`);
   return {
@@ -126,16 +180,9 @@ export async function maintainMailcowStackOnHost(exec, mailcow, install, opts = 
   errout.write(`[hdc] mailcow maintain: refreshing stack via ${exec.label} …\n`);
 
   const dir = installDir(install);
-  const reverseProxy = buildReverseProxyConfScript(dir, mailcow);
-  if (reverseProxy) {
-    errout.write(`[hdc] mailcow maintain: applying reverse-proxy settings in mailcow.conf …\n`);
-    const rpResult = exec.run(reverseProxy);
-    if (rpResult.status !== 0) {
-      return {
-        ok: false,
-        message: `reverse-proxy mailcow.conf update failed (exit ${rpResult.status})`,
-      };
-    }
+  const rp = applyReverseProxyConf((script) => exec.run(script), mailcow, install, "maintain");
+  if (!rp.ok) {
+    return { ok: false, message: rp.message || "reverse-proxy apply failed" };
   }
   const inner = buildMaintainScript(dir, opts);
   const r = exec.run(inner);
@@ -170,6 +217,15 @@ export async function maintainMailcowStackInCt(user, pveHost, vmid, mailcow, ins
   }
 
   const dir = installDir(install);
+  const rp = applyReverseProxyConf(
+    (script) => pctExec(user, pveHost, vmid, script),
+    mailcow,
+    install,
+    "maintain",
+  );
+  if (!rp.ok) {
+    return { ok: false, message: rp.message || "reverse-proxy apply failed" };
+  }
   const inner = buildMaintainScript(dir, opts);
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {

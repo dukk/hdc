@@ -6,16 +6,16 @@ import {
   findConfigForLiveApp,
   liveAppToNormalized,
   suggestedConfigEntry,
-} from "./azure-entra-config.mjs";
-import { planAppSync } from "./azure-entra-sync.mjs";
+} from "./azure-config.mjs";
+import { planAppSync } from "./azure-sync.mjs";
 
 /**
  * @param {object} opts
- * @param {ReturnType<import('./azure-entra-config.mjs').normalizeAzureEntraConfig>} opts.config
+ * @param {ReturnType<import('./azure-config.mjs').normalizeAzureConfig>} opts.config
  * @param {ReturnType<typeof createAzureGraphClient>} opts.api
  * @param {string | undefined} [opts.appFilterId]
  */
-export async function collectAzureEntraState(opts) {
+export async function collectAzureState(opts) {
   const { config, api, appFilterId } = opts;
   const onlyApp = appFilterId ? config.applicationsById.get(appFilterId) : null;
   if (appFilterId && !onlyApp) {
@@ -38,7 +38,7 @@ export async function collectAzureEntraState(opts) {
   }
 
   /**
-   * @param {import('./azure-entra-config.mjs').ConfigApplication} cfgApp
+   * @param {import('./azure-config.mjs').ConfigApplication} cfgApp
    * @returns {import('./azure-graph-api.mjs').GraphApplication | null}
    */
   function findLiveForConfig(cfgApp) {
@@ -130,3 +130,6 @@ export async function collectAzureEntraState(opts) {
     managed_count: config.managedApplications.length,
   };
 }
+
+/** @deprecated Use collectAzureState */
+export const collectAzureEntraState = collectAzureState;

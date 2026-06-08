@@ -5,6 +5,7 @@ import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import {
   composeDir,
+  isArgon2PhcAdminToken,
   renderComposeYaml,
   renderVaultwardenEnv,
   resolveAdminUrl,
@@ -99,6 +100,60 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
 }
 
 /**
+ * Shell script (stdout = Argon2 PHC) to hash a plain admin password with Bitwarden defaults.
+ * @param {string} plainTokenB64 base64-encoded UTF-8 password
+ */
+export function buildHashAdminTokenScript(plainTokenB64) {
+  const b64 = plainTokenB64.replace(/'/g, `'\\''`);
+  return [
+    "set -euo pipefail",
+    "export DEBIAN_FRONTEND=noninteractive",
+    "command -v argon2 >/dev/null 2>&1 || apt-get install -y -qq argon2 openssl",
+    `PLAIN=$(echo '${b64}' | base64 -d)`,
+    'echo -n "$PLAIN" | argon2 "$(openssl rand -base64 32)" -e -id -k 65540 -t 3 -p 4',
+  ].join("\n");
+}
+
+/**
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {string} plainToken
+ */
+export function hashAdminTokenInCt(user, pveHost, vmid, plainToken) {
+  const b64 = Buffer.from(plainToken, "utf8").toString("base64");
+  const inner = buildHashAdminTokenScript(b64);
+  const r = pctExec(user, pveHost, vmid, inner, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    throw new Error(`admin token Argon2 hash failed: ${detail.split("\n")[0]}`);
+  }
+  const hash = r.stdout.trim().split("\n").pop()?.trim() ?? "";
+  if (!isArgon2PhcAdminToken(hash)) {
+    throw new Error("admin token Argon2 hash failed: unexpected output");
+  }
+  return hash;
+}
+
+/**
+ * Vault stores the plain admin password; ADMIN_TOKEN in .env must be an Argon2 PHC string.
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {string} adminToken plain password or existing PHC hash
+ */
+export function resolveAdminTokenForEnv(user, pveHost, vmid, adminToken) {
+  const token = String(adminToken).trim();
+  if (!token) throw new Error("admin token required");
+  if (isArgon2PhcAdminToken(token)) {
+    errout.write("[hdc] vaultwarden: admin token already Argon2 PHC\n");
+    return token;
+  }
+  errout.write("[hdc] vaultwarden: hashing plain admin token to Argon2 PHC …\n");
+  return hashAdminTokenInCt(user, pveHost, vmid, token);
+}
+
+/**
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
@@ -114,7 +169,8 @@ export async function installVaultwardenInCt(user, pveHost, vmid, vaultwarden, i
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderVaultwardenEnv(vaultwarden, adminToken);
+  const adminTokenEnv = resolveAdminTokenForEnv(user, pveHost, vmid, adminToken);
+  const envContent = renderVaultwardenEnv(vaultwarden, adminTokenEnv);
   const composeYaml = renderComposeYaml();
   const dir = composeDir(install);
   const inner = buildInstallScript(dir, composeYaml, envContent);
@@ -158,7 +214,8 @@ export async function maintainVaultwardenInCt(user, pveHost, vmid, vaultwarden, 
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderVaultwardenEnv(vaultwarden, adminToken);
+  const adminTokenEnv = resolveAdminTokenForEnv(user, pveHost, vmid, adminToken);
+  const envContent = renderVaultwardenEnv(vaultwarden, adminTokenEnv);
   const dir = composeDir(install);
   const inner = buildMaintainScript(dir, envContent, opts);
   const r = pctExec(user, pveHost, vmid, inner);

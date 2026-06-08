@@ -158,8 +158,12 @@ export function configAppToDesired(app) {
 /**
  * @param {Record<string, unknown>} cfg
  */
-export function normalizeAzureEntraConfig(cfg) {
-  const ae = isObject(cfg.azure_entra) ? cfg.azure_entra : {};
+export function normalizeAzureConfig(cfg) {
+  const ae = isObject(cfg.azure)
+    ? cfg.azure
+    : isObject(cfg.azure_entra)
+      ? cfg.azure_entra
+      : {};
   const graphBase =
     typeof ae.graph_base_url === "string" && ae.graph_base_url.trim()
       ? ae.graph_base_url.trim().replace(/\/$/, "")
@@ -366,3 +370,6 @@ export function patchBodyForDrift(desired, live) {
   }
   return body;
 }
+
+/** @deprecated Use normalizeAzureConfig */
+export const normalizeAzureEntraConfig = normalizeAzureConfig;

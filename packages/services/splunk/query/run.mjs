@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query Splunk Free standalone health.
  *
@@ -10,7 +10,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
-import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 import {
   normalizeSplunkConfig,
@@ -23,6 +24,7 @@ import {
   querySplunkVersion,
   queryTcpPort,
 } from "../lib/splunk-query-remote.mjs";
+import { createConfigureExec } from "../lib/splunk-configure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -82,11 +84,12 @@ async function main() {
 
     errout.write(`[hdc] ${target} ${verb}: checking ${d.systemId} at ${user}@${host} …\n`);
 
-    const status = querySplunkStatus(user, host, global.splunkHome);
-    const version = querySplunkVersion(user, host, global.splunkHome);
-    const http = queryTcpPort(user, host, global.httpPort);
-    const mgmt = queryTcpPort(user, host, global.mgmtPort);
-    const disk = querySplunkVarDisk(user, host, global.varMount);
+    const exec = createConfigureExec("ssh", { user, host });
+    const status = querySplunkStatus(exec, global.splunkHome);
+    const version = querySplunkVersion(exec, global.splunkHome);
+    const http = queryTcpPort(exec, global.httpPort);
+    const mgmt = queryTcpPort(exec, global.mgmtPort);
+    const disk = querySplunkVarDisk(exec, global.varMount);
 
     const nodeOk = status.running && http.ok && mgmt.ok;
     nodes.push({
@@ -119,3 +122,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

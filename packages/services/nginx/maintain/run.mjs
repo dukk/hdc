@@ -28,6 +28,7 @@ import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs"
 import { tlsDomainsFromSites } from "../lib/nginx-render.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -266,20 +267,24 @@ async function main() {
   }
 
   const ok = results.length === 0 || results.every((r) => r.ok !== false);
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        ok,
-        target,
-        verb,
-        results,
-        certificates: certStatus,
-        generated_at: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const payload = {
+    ok,
+    target,
+    verb,
+    results,
+    certificates: certStatus,
+    generated_at: new Date().toISOString(),
+  };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 

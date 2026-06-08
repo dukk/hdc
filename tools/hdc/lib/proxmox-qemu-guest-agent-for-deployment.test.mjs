@@ -24,7 +24,7 @@ describe("proxmox-qemu-guest-agent-for-deployment", () => {
   });
 
   describe("sshTargetForGuestAgentDeployment", () => {
-    it("uses configure.ssh when set", () => {
+    it("uses configure.ssh when set (legacy root maps to hdc)", () => {
       expect(
         sshTargetForGuestAgentDeployment(
           {
@@ -33,7 +33,7 @@ describe("proxmox-qemu-guest-agent-for-deployment", () => {
           },
           "192.0.2.2",
         ),
-      ).toEqual({ user: "root", host: "10.0.0.2" });
+      ).toEqual({ user: "hdc", host: "10.0.0.2" });
     });
 
     it("falls back to defaultSshHost", () => {

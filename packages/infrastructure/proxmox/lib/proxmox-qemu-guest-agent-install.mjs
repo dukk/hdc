@@ -4,7 +4,7 @@ import {
   pingQemuGuestAgent,
   qemuAgentEnabledFromConfig,
 } from "./proxmox-qemu-guest-agent.mjs";
-import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { createGuestSshExec } from "../../../lib/guest-ssh-exec.mjs";
 
 const PING_POLL_MS = 5_000;
 const PING_TIMEOUT_MS = 120_000;
@@ -64,16 +64,19 @@ export async function enableQemuAgentInConfig(opts) {
  * @param {(line: string) => void} [log]
  */
 export async function installQemuGuestAgentViaSsh(user, host, log) {
-  log?.(`Installing qemu-guest-agent on ${user}@${host} …`);
-  const script = qemuGuestAgentAptInstallScript();
-  const escaped = script.replace(/'/g, `'\\''`);
-  const r = sshRemote(user, host, `bash -lc '${escaped}'`, { capture: true });
+  const exec = createGuestSshExec({
+    host,
+    configuredUser: user,
+    log,
+  });
+  log?.(`Installing qemu-guest-agent on ${exec.label} …`);
+  const r = exec.run(qemuGuestAgentAptInstallScript(), { capture: true });
   if (r.status !== 0) {
     throw new Error(
-      `qemu-guest-agent install failed on ${user}@${host} (exit ${r.status})${r.stderr ? `: ${r.stderr.trim()}` : ""}`,
+      `qemu-guest-agent install failed on ${exec.label} (exit ${r.status})${r.stderr ? `: ${r.stderr.trim()}` : ""}`,
     );
   }
-  log?.(`qemu-guest-agent installed on ${user}@${host}.`);
+  log?.(`qemu-guest-agent installed on ${exec.label}.`);
 }
 
 /**

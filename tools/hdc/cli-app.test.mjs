@@ -228,7 +228,7 @@ describe("runCli", () => {
     });
     expect(await runCli(["run", "infrastructure", "tgt", "query"], deps)).toBe(0);
     expect(await runCli(["run", "infra", "tgt", "query"], deps)).toBe(0);
-    expect(capture.warnLines.join("\n")).toContain("HDC_MISSING_FOR_TEST");
+    expect(capture.warnLines.join("\n")).not.toContain("HDC_MISSING_FOR_TEST");
     expect((capture.stdoutChunks ?? []).join("")).toContain('"from":"query"');
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
 

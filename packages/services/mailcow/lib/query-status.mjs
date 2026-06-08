@@ -15,6 +15,27 @@ function isObject(v) {
 }
 
 /**
+ * @param {import("./mailcow-dns.mjs").MailcowDomainConfig[]} configuredDomains
+ * @param {unknown[]} apiDomains
+ */
+function buildDomainDriftFields(configuredDomains, apiDomains) {
+  const configuredNames = configuredDomains.map((d) => d.name);
+  const liveNames = Array.isArray(apiDomains)
+    ? apiDomains
+        .map((d) => (isObject(d) && typeof d.domain_name === "string" ? d.domain_name.trim() : ""))
+        .filter(Boolean)
+    : [];
+  const configuredSet = new Set(configuredNames);
+  const liveSet = new Set(liveNames);
+  return {
+    configured_domains: configuredNames,
+    live_domain_names: liveNames,
+    missing_domains: configuredNames.filter((name) => !liveSet.has(name)),
+    extra_domains: liveNames.filter((name) => !configuredSet.has(name)),
+  };
+}
+
+/**
  * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {Record<string, unknown>} mailcow
  * @param {Record<string, unknown>} install
@@ -79,6 +100,7 @@ export async function queryMailcowOnHost(exec, mailcow, install, apiKey) {
   }
 
   const dnsChecklists = buildAllDnsChecklists(configuredDomains, hostname, liveByDomain);
+  const drift = buildDomainDriftFields(configuredDomains, apiDomains);
 
   return {
     docker_active: docker.stdout.trim(),
@@ -93,6 +115,7 @@ export async function queryMailcowOnHost(exec, mailcow, install, apiKey) {
     api_error: apiError,
     api_domain_count: Array.isArray(apiDomains) ? apiDomains.length : 0,
     configured_domain_count: configuredDomains.length,
+    ...drift,
     dns_checklists: dnsChecklists,
     dns_checklist_markdown: dnsChecklists
       .map((c) => `### ${c.domain} (${c.outbound_mode})\n\n${formatDnsChecklistMarkdown(c.records)}`)
@@ -177,6 +200,7 @@ export async function queryMailcowInCt(user, pveHost, vmid, mailcow, install, ap
   }
 
   const dnsChecklists = buildAllDnsChecklists(configuredDomains, hostname, liveByDomain);
+  const drift = buildDomainDriftFields(configuredDomains, apiDomains);
 
   return {
     vmid,
@@ -191,6 +215,7 @@ export async function queryMailcowInCt(user, pveHost, vmid, mailcow, install, ap
     api_error: apiError,
     api_domain_count: Array.isArray(apiDomains) ? apiDomains.length : 0,
     configured_domain_count: configuredDomains.length,
+    ...drift,
     dns_checklists: dnsChecklists,
     dns_checklist_markdown: dnsChecklists
       .map((c) => `### ${c.domain} (${c.outbound_mode})\n\n${formatDnsChecklistMarkdown(c.records)}`)

@@ -4,14 +4,14 @@ import {
   applicationPassesFilter,
   appsNeedUpdate,
   liveAppToNormalized,
-  normalizeAzureEntraConfig,
+  normalizeAzureConfig,
   normalizeRedirectUris,
   normalizeRequiredResourceAccess,
   resourceAccessEqual,
   suggestedConfigEntry,
-} from "./azure-entra-config.mjs";
+} from "./azure-config.mjs";
 
-describe("azure-entra-config", () => {
+describe("azure-config", () => {
   it("normalizes redirect URIs sorted and deduped", () => {
     expect(normalizeRedirectUris(["https://b/", "https://a", "https://a"])).toEqual([
       "https://a",
@@ -40,7 +40,7 @@ describe("azure-entra-config", () => {
   });
 
   it("parses managed applications from config", () => {
-    const cfg = normalizeAzureEntraConfig({
+    const cfg = normalizeAzureConfig({
       schema_version: 1,
       applications: [
         {
@@ -63,6 +63,15 @@ describe("azure-entra-config", () => {
     });
     expect(cfg.managedApplications).toHaveLength(1);
     expect(cfg.managedApplications[0].id).toBe("app-a");
+  });
+
+  it("accepts legacy azure_entra config key", () => {
+    const cfg = normalizeAzureConfig({
+      schema_version: 1,
+      azure_entra: { graph_base_url: "https://graph.microsoft.com/v1.0" },
+      applications: [],
+    });
+    expect(cfg.graphBase).toBe("https://graph.microsoft.com/v1.0");
   });
 
   it("detects drift on redirect URIs", () => {

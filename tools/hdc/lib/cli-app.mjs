@@ -943,10 +943,7 @@ function cmdList(deps, root) {
   deps.log("\nOptional per-package config (packages/<tier-dir>/<id>/config.json; see config.example.json):");
   for (const m of manifests) {
     const tier = manifestRunTier(m) ?? "?";
-    const rel =
-      tier === "client"
-        ? "packages/clients/config.json"
-        : deps.relative(root, deps.join(m.dir, "config.json")).replace(/\\/g, "/");
+    const rel = deps.relative(root, deps.join(m.dir, "config.json")).replace(/\\/g, "/");
     const resolved = resolveRepoFile(root, rel);
     let state = "(optional)";
     if (resolved.source === "public") state = "exists (hdc)";
@@ -971,9 +968,11 @@ function cmdRun(deps, root, argv) {
   const inv = resolveRunInvocation(forward.slice(1), m);
   if ("error" in inv) die(deps, `run: ${inv.error}`);
   const { packageId, platform, verb } = inv;
-  for (const key of envRequired(m)) {
-    if (!deps.env[key]) {
-      deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
+  if (verb !== "query") {
+    for (const key of envRequired(m)) {
+      if (!deps.env[key]) {
+        deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
+      }
     }
   }
   const spec = verbSpec(m, verb);

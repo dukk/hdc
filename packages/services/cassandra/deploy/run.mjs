@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy Apache Cassandra 3-node cluster on Proxmox QEMU or configure-only.
  *
@@ -135,7 +135,7 @@ function runConfigure(deployment, global, log, skipInstall = false) {
     passwordAuthEnabled: global.passwordAuthEnabled,
     skipInstall,
   });
-  return { user, host };
+  return { user, host, exec };
 }
 
 /**
@@ -150,10 +150,9 @@ async function deployOne(deployment, flags, global, log) {
 
   if (skipProvision(flags) || deployment.mode === "configure-only") {
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} configure-only …\n`);
-    const { user, host } = runConfigure(deployment, global, log);
+    const { host, exec } = runConfigure(deployment, global, log);
     const ready = await waitForCassandraReady({
-      user,
-      host,
+      exec,
       listenIp: deployment.listenIp || host,
       onProgress: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
     });
@@ -226,10 +225,9 @@ async function deployOne(deployment, flags, global, log) {
       errout.write(
         `[hdc] ${target} ${verb}: guest exists — configure only (use --destroy-existing to rebuild).\n`,
       );
-      const { user, host } = runConfigure(deployment, global, log, true);
+      const { host, exec } = runConfigure(deployment, global, log, true);
       const ready = await waitForCassandraReady({
-        user,
-        host,
+        exec,
         listenIp: deployment.listenIp || host,
         onProgress: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
       });
@@ -296,7 +294,10 @@ async function deployOne(deployment, flags, global, log) {
   });
 
   const sshHost = ip.split("/")[0];
-  let sshUser = "root";
+  const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh)
+    ? deployment.configure.ssh
+    : {};
+  let sshUser = resolveGuestSshUser(sshCfg.user);
 
   const sshWait = await waitForQemuGuestSshAfterBoot({
     user: sshUser,
@@ -329,10 +330,9 @@ async function deployOne(deployment, flags, global, log) {
     listenIp: sshHost,
     configure: { ssh: { user: sshUser, host: sshHost } },
   };
-  const { user, host } = runConfigure(depWithSsh, global, log);
+  const { host, exec } = runConfigure(depWithSsh, global, log);
   const ready = await waitForCassandraReady({
-    user,
-    host,
+    exec,
     listenIp: depWithSsh.listenIp || host,
     onProgress: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
   });
@@ -427,11 +427,11 @@ async function main() {
   if (allProvisioned && global.passwordAuthEnabled && superuserPassword) {
     const seedDep = deployments.find((d) => d.seed) ?? deployments[0];
     const { user, host } = sshFromDeployment(seedDep);
+    const exec = createConfigureExec("ssh", { user, host });
     errout.write(`[hdc] ${target} ${verb}: setting cassandra superuser password on seed ${host} …\n`);
     try {
       const authResult = setupSuperuserPassword({
-        user,
-        host,
+        exec,
         password: superuserPassword,
         log: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
       });
@@ -473,3 +473,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

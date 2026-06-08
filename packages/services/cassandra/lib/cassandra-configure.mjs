@@ -124,36 +124,31 @@ export function configureCassandra(opts) {
 
 /**
  * @param {object} opts
- * @param {string} opts.user
- * @param {string} opts.host
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
  * @param {string} opts.listenIp
  * @param {(msg: string) => void} [opts.onProgress]
  */
 export async function waitForCassandraReady(opts) {
-  return waitForNodeUn(opts.user, opts.host, opts.listenIp, 600_000, opts.onProgress);
+  return waitForNodeUn(opts.exec, opts.listenIp, 600_000, opts.onProgress);
 }
 
 /**
  * @param {object} opts
- * @param {string} opts.user
- * @param {string} opts.host
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
  * @param {string} opts.password
  * @param {(msg: string) => void} [opts.log]
  */
 export function setupSuperuserPassword(opts) {
-  const { user, host, password, log } = opts;
+  const { exec, password, log } = opts;
   const escaped = password.replace(/'/g, "''");
-  const check = queryNodetoolStatus(user, host);
+  const check = queryNodetoolStatus(exec);
   if (!check.ok) {
     throw new Error("nodetool status failed before superuser setup");
   }
   const cql = `ALTER ROLE cassandra WITH PASSWORD = '${escaped}' AND SUPERUSER = true AND LOGIN = true;`;
-  const r = createConfigureExec("ssh", { user, host }).run(
-    `cqlsh -e ${shellQuote(cql)} 2>/dev/null`,
-    { capture: true },
-  );
+  const r = exec.run(`cqlsh -e ${shellQuote(cql)} 2>/dev/null`, { capture: true });
   if (r.status !== 0) {
-    const withAuth = createConfigureExec("ssh", { user, host }).run(
+    const withAuth = exec.run(
       `cqlsh -u cassandra -p cassandra -e ${shellQuote(cql)} 2>/dev/null`,
       { capture: true },
     );

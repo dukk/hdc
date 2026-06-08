@@ -4,10 +4,10 @@ import {
   liveAppToNormalized,
   normalizedToGraphBody,
   patchBodyForDrift,
-} from "./azure-entra-config.mjs";
+} from "./azure-config.mjs";
 
 /**
- * @typedef {import('./azure-entra-config.mjs').ConfigApplication} ConfigApplication
+ * @typedef {import('./azure-config.mjs').ConfigApplication} ConfigApplication
  * @typedef {import('./azure-graph-api.mjs').GraphApplication} GraphApplication
  */
 

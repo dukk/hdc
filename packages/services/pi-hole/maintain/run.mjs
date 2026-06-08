@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Pi-hole (gravity update, optional core update, optional network apply).
  *
@@ -269,3 +269,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

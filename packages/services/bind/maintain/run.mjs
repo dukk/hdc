@@ -225,13 +225,13 @@ async function main() {
     const zone = global.zoneIds[0];
     const { user: pUser, host: pHost } = sshTarget(primary, global.primaryIp);
     const { user: sUser, host: sHost } = sshTarget(secondary, global.secondaryIp);
+    const primaryExec = createConfigureExec("ssh", { user: pUser, host: pHost });
+    const secondaryExec = createConfigureExec("ssh", { user: sUser, host: sHost });
     errout.write(`[hdc] ${target} ${verb}: verifying SOA serial for ${zone} …\n`);
     const soaCheck = await waitForSoaSerialMatch({
       zone,
-      primaryUser: pUser,
-      primaryHost: pHost,
-      secondaryUser: sUser,
-      secondaryHost: sHost,
+      primaryExec,
+      secondaryExec,
       log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
     });
     results.push({

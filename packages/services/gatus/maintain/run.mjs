@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Gatus: re-push config and optional binary upgrade.
  *
@@ -149,3 +149,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

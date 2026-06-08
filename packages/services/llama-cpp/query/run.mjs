@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query llama-cpp deployments (config summary + optional live status).
  *
@@ -184,3 +184,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

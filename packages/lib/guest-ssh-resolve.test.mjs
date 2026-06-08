@@ -8,8 +8,13 @@ import {
 
 describe("guest-ssh-resolve", () => {
   it("resolveGuestSshUser prefers configure.ssh.user", () => {
-    expect(resolveGuestSshUser("root")).toBe("root");
     expect(resolveGuestSshUser("  hdc  ")).toBe("hdc");
+    expect(resolveGuestSshUser("admin")).toBe("admin");
+  });
+
+  it('resolveGuestSshUser treats legacy "root" as unset (defaults to hdc)', () => {
+    expect(resolveGuestSshUser("root")).toBe(DEFAULT_GUEST_SSH_USER);
+    expect(resolveGuestSshUser("  root  ")).toBe(DEFAULT_GUEST_SSH_USER);
   });
 
   it("resolveGuestSshUser reads HDC_GUEST_SSH_USER", () => {

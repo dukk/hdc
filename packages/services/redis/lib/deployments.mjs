@@ -1,5 +1,6 @@
 import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 
 const REDIS_ROLE = "redis";
 
@@ -195,13 +196,24 @@ export function sshHostFromDeployment(deployment) {
 }
 
 /**
+ * SSH target from deployment configure block.
  * @param {ReturnType<typeof finalizeDeployment>} deployment
+ * @param {string} [defaultHost] Used when configure.ssh.host is omitted.
  */
-export function sshUserFromDeployment(deployment) {
+export function sshTargetFromDeployment(deployment, defaultHost = "") {
   const cfg = deployment.configure;
-  if (!isObject(cfg) || !isObject(cfg.ssh)) return "root";
-  const user = typeof cfg.ssh.user === "string" ? cfg.ssh.user.trim() : "";
-  return user || "root";
+  const ssh = isObject(cfg) && isObject(cfg.ssh) ? cfg.ssh : {};
+  const user = resolveGuestSshUser(ssh.user);
+  const host =
+    typeof ssh.host === "string" && ssh.host.trim()
+      ? ssh.host.trim()
+      : typeof defaultHost === "string"
+        ? defaultHost.trim()
+        : "";
+  if (!host) {
+    throw new Error(`${deployment.systemId}: configure.ssh.host required`);
+  }
+  return { user, host };
 }
 
 /**
@@ -210,10 +222,13 @@ export function sshUserFromDeployment(deployment) {
  * @returns {{ host: string; port: number; user: string; systemId: string }[]}
  */
 export function clusterEndpointsFromDeployments(deployments, global) {
-  return deployments.map((d) => ({
-    systemId: d.systemId,
-    user: sshUserFromDeployment(d),
-    host: sshHostFromDeployment(d),
-    port: global.port,
-  }));
+  return deployments.map((d) => {
+    const { user, host } = sshTargetFromDeployment(d);
+    return {
+      systemId: d.systemId,
+      user,
+      host,
+      port: global.port,
+    };
+  });
 }

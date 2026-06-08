@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeAzureEntraConfig } from "./azure-entra-config.mjs";
-import { planAppSync } from "./azure-entra-sync.mjs";
+import { normalizeAzureConfig } from "./azure-config.mjs";
+import { planAppSync } from "./azure-sync.mjs";
 
 describe("planAppSync", () => {
-  const cfg = normalizeAzureEntraConfig({
+  const cfg = normalizeAzureConfig({
     schema_version: 1,
     applications: [
       {

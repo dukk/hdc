@@ -20,6 +20,7 @@ import {
   resolveStepCaDeployments,
   stepCaGlobalSettings,
 } from "../lib/deployments.mjs";
+import { stepCaPayloadMeta, stepCaReportExtraSections } from "../lib/step-ca-report.mjs";
 import { caPasswordVaultKey, instanceLetterFromSystemId } from "../lib/inventory.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
@@ -27,6 +28,7 @@ import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -149,6 +151,7 @@ async function main() {
         ok: baseline.ok,
         system_id: deployment.systemId,
         role: deployment.role,
+        host,
         ...(diskResize ? { disk_resize: diskResize } : {}),
         configure,
         ...guestBaselineResultFields(baseline),
@@ -161,9 +164,25 @@ async function main() {
   }
 
   const ok = results.length > 0 && results.every((r) => r.ok);
-  process.stdout.write(
-    `${JSON.stringify({ ok, target, verb, results, generated_at: new Date().toISOString() }, null, 2)}\n`,
-  );
+  const payload = {
+    ok,
+    target,
+    verb,
+    step_ca: stepCaPayloadMeta(global),
+    results,
+    generated_at: new Date().toISOString(),
+  };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    extraSections: stepCaReportExtraSections,
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 

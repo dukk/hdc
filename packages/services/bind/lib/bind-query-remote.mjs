@@ -1,21 +1,8 @@
-import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
-
 /**
- * @param {string} user
- * @param {string} host
- * @param {string} innerCommand
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  */
-export function sshCapture(user, host, innerCommand) {
-  const escaped = innerCommand.replace(/'/g, `'\\''`);
-  return sshRemote(user, host, `bash -lc '${escaped}'`, { capture: true });
-}
-
-/**
- * @param {string} user
- * @param {string} host
- */
-export function queryNamedActive(user, host) {
-  const r = sshCapture(user, host, "systemctl is-active named 2>/dev/null || echo inactive");
+export function queryNamedActive(exec) {
+  const r = exec.run("systemctl is-active named 2>/dev/null || echo inactive", { capture: true });
   return {
     ok: r.status === 0,
     active: r.stdout.trim() === "active",
@@ -24,14 +11,13 @@ export function queryNamedActive(user, host) {
 }
 
 /**
- * @param {string} user
- * @param {string} host
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {string} zone
- * @param {string} [server] dig @server; defaults to host.
+ * @param {string} [server] dig @server; defaults to querying via exec host.
  */
-export function querySoa(user, host, zone, server) {
-  const at = server ? `@${server}` : `@${host}`;
-  const r = sshCapture(user, host, `dig +short SOA ${zone} ${at} 2>/dev/null | head -1`);
+export function querySoa(exec, zone, server) {
+  const at = server ? `@${server}` : "@127.0.0.1";
+  const r = exec.run(`dig +short SOA ${zone} ${at} 2>/dev/null | head -1`, { capture: true });
   const line = r.stdout.trim();
   const serial = line ? line.split(/\s+/)[2] ?? "" : "";
   return { ok: r.status === 0 && Boolean(line), soa: line, serial };
@@ -48,10 +34,8 @@ function sleep(ms) {
  * Wait for slave SOA serial to match master after a primary zone push (NOTIFY / IXFR).
  * @param {object} opts
  * @param {string} opts.zone
- * @param {string} opts.primaryUser
- * @param {string} opts.primaryHost
- * @param {string} opts.secondaryUser
- * @param {string} opts.secondaryHost
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} opts.primaryExec
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} opts.secondaryExec
  * @param {(line: string) => void} [opts.log]
  * @param {number} [opts.maxAttempts]
  * @param {number} [opts.intervalMs]
@@ -65,8 +49,8 @@ export async function waitForSoaSerialMatch(opts) {
   let last = { primary_serial: "", secondary_serial: "" };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const primarySoa = querySoa(opts.primaryUser, opts.primaryHost, opts.zone);
-    const secondarySoa = querySoa(opts.secondaryUser, opts.secondaryHost, opts.zone);
+    const primarySoa = querySoa(opts.primaryExec, opts.zone);
+    const secondarySoa = querySoa(opts.secondaryExec, opts.zone);
     last = { primary_serial: primarySoa.serial, secondary_serial: secondarySoa.serial };
     const serialMatch =
       primarySoa.ok &&
@@ -87,7 +71,7 @@ export async function waitForSoaSerialMatch(opts) {
       log(
         `SOA mismatch for ${opts.zone} (primary ${primarySoa.serial} vs secondary ${secondarySoa.serial}); rndc retransfer on secondary`,
       );
-      sshCapture(opts.secondaryUser, opts.secondaryHost, `rndc retransfer ${opts.zone} 2>/dev/null || true`);
+      opts.secondaryExec.run(`rndc retransfer ${opts.zone} 2>/dev/null || true`, { capture: true });
     } else {
       log(`waiting for SOA sync (${attempt}/${maxAttempts})`);
     }

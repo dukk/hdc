@@ -3,7 +3,10 @@ import {
   hostsForPlatform,
   normalizeMac,
   resolveHostMac,
+  resolveWinrmPasswordVaultKey,
+  resolveWinrmUser,
   vaultKeyForWinrmPassword,
+  WINRM_USER_PASSWORD_VAULT_KEY,
   wolDefaultsFromConfig,
 } from "../../../packages/clients/lib/client-config.mjs";
 
@@ -34,6 +37,26 @@ describe("client-config", () => {
 
   it("vaultKeyForWinrmPassword uses suffix", () => {
     expect(vaultKeyForWinrmPassword("pc-example")).toBe("HDC_WINRM_PASSWORD_PC_EXAMPLE");
+  });
+
+  it("resolveWinrmPasswordVaultKey defaults to shared key", () => {
+    expect(resolveWinrmPasswordVaultKey({})).toBe(WINRM_USER_PASSWORD_VAULT_KEY);
+    expect(resolveWinrmPasswordVaultKey({ winrm_password_vault_suffix: "LAN_1" })).toBe(
+      "HDC_WINRM_PASSWORD_LAN_1",
+    );
+  });
+
+  it("resolveWinrmUser prefers auth.winrm_user over env", () => {
+    expect(
+      resolveWinrmUser({ winrm_user: ".\\local-admin" }, { HDC_WINRM_USER: "MicrosoftAccount\\a@b.com" }),
+    ).toBe(".\\local-admin");
+    expect(resolveWinrmUser({}, { HDC_WINRM_USER: "MicrosoftAccount\\a@b.com" })).toBe(
+      "MicrosoftAccount\\a@b.com",
+    );
+    expect(resolveWinrmUser({ winrm_user_env: "HDC_WINRM_USER_LAN_4" }, { HDC_WINRM_USER_LAN_4: ".\\other" })).toBe(
+      ".\\other",
+    );
+    expect(resolveWinrmUser({}, {})).toBeNull();
   });
 
   it("resolveHostMac prefers wol.mac", () => {

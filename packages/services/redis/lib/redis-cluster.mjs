@@ -1,20 +1,16 @@
-import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+/**
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
+ * @param {string} innerCommand
+ */
+function execCapture(exec, innerCommand) {
+  return exec.run(innerCommand, { capture: true });
+}
 
 /**
  * @param {string} password
  */
 function shellQuotePassword(password) {
   return `'${password.replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * @param {string} user
- * @param {string} host
- * @param {string} innerCommand
- */
-export function sshCapture(user, host, innerCommand) {
-  const escaped = innerCommand.replace(/'/g, `'\\''`);
-  return sshRemote(user, host, `bash -lc '${escaped}'`, { capture: true });
 }
 
 /**
@@ -50,18 +46,13 @@ export function parseClusterSlotsAssigned(clusterInfoStdout) {
 }
 
 /**
- * @param {string} user
- * @param {string} host
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {number} port
  * @param {string} password
  */
-export function queryClusterInfo(user, host, port, password) {
+export function queryClusterInfo(exec, port, password) {
   const pw = shellQuotePassword(password);
-  const r = sshCapture(
-    user,
-    host,
-    `redis-cli -a ${pw} -p ${port} CLUSTER INFO 2>/dev/null`,
-  );
+  const r = execCapture(exec, `redis-cli -a ${pw} -p ${port} CLUSTER INFO 2>/dev/null`);
   const state = parseClusterState(r.stdout);
   const slotsAssigned = parseClusterSlotsAssigned(r.stdout);
   return {
@@ -74,29 +65,27 @@ export function queryClusterInfo(user, host, port, password) {
 }
 
 /**
- * @param {string} user
- * @param {string} host
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {number} port
  * @param {string} password
  */
-export function queryRedisPing(user, host, port, password) {
+export function queryRedisPing(exec, port, password) {
   const pw = shellQuotePassword(password);
-  const r = sshCapture(user, host, `redis-cli -a ${pw} -p ${port} ping 2>/dev/null`);
+  const r = execCapture(exec, `redis-cli -a ${pw} -p ${port} ping 2>/dev/null`);
   const pong = r.stdout.trim() === "PONG";
   return { ok: r.status === 0 && pong, pong: r.stdout.trim() };
 }
 
 /**
- * @param {string} user
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {string} host
  * @param {number} port
  * @param {string} password
  */
-export function runClusterCheck(user, host, port, password) {
+export function runClusterCheck(exec, host, port, password) {
   const pw = shellQuotePassword(password);
-  const r = sshCapture(
-    user,
-    host,
+  const r = execCapture(
+    exec,
     `redis-cli -a ${pw} -p ${port} --cluster check ${host}:${port} 2>&1`,
   );
   const out = `${r.stdout}${r.stderr}`.trim();
@@ -106,7 +95,7 @@ export function runClusterCheck(user, host, port, password) {
 
 /**
  * @param {object} opts
- * @param {string} opts.user
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} opts.exec
  * @param {string} opts.host
  * @param {number} opts.port
  * @param {string} opts.password
@@ -114,12 +103,12 @@ export function runClusterCheck(user, host, port, password) {
  * @param {number} opts.replicas
  */
 export function bootstrapRedisCluster(opts) {
-  const { user, host, port, password, endpoints, replicas } = opts;
+  const { exec, host, port, password, endpoints, replicas } = opts;
   const pw = shellQuotePassword(password);
   const nodes = formatClusterCreateArgs(endpoints);
   const cmd =
     `redis-cli -a ${pw} --cluster create ${nodes} --cluster-replicas ${replicas} --cluster-yes 2>&1`;
-  const r = sshCapture(user, host, cmd);
+  const r = execCapture(exec, cmd);
   const out = `${r.stdout}${r.stderr}`.trim();
   const ok =
     r.status === 0 &&
@@ -129,12 +118,11 @@ export function bootstrapRedisCluster(opts) {
 
 /**
  * Returns true when cluster is already formed.
- * @param {string} user
- * @param {string} host
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
  * @param {number} port
  * @param {string} password
  */
-export function clusterAlreadyInitialized(user, host, port, password) {
-  const info = queryClusterInfo(user, host, port, password);
+export function clusterAlreadyInitialized(exec, port, password) {
+  const info = queryClusterInfo(exec, port, password);
   return info.cluster_ok && info.cluster_slots_assigned >= 16384;
 }

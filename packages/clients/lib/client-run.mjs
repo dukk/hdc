@@ -14,8 +14,7 @@ import {
   hostUpdatesEnabled,
   hostWolEnabled,
   hostsForPlatform,
-  clientsConfigPath,
-  loadClientConfig,
+  loadClientConfigFromPackageRoot,
   primaryNodeFromHost,
   resolveHostMac,
   wolDefaultsFromConfig,
@@ -41,7 +40,6 @@ const SERVICE_PORT = { windows: 5986, ubuntu: 22, raspberrypi: 22 };
 export async function runClientVerb(opts) {
   const { platform, verb, packageRoot, argv } = opts;
   const root = repoRoot();
-  const cfgPath = clientsConfigPath(packageRoot);
   const flags = parseArgvFlags(argv);
   const hostIdFilter = flags["host-id"];
   const dryRun = flags["dry-run"] !== undefined;
@@ -60,7 +58,7 @@ export async function runClientVerb(opts) {
   let ok = true;
 
   try {
-    const cfg = loadClientConfig(cfgPath);
+    const cfg = loadClientConfigFromPackageRoot(packageRoot);
     const wolDefaults = wolDefaultsFromConfig(cfg);
     const mailRelayDefaults = mailRelayDefaultsFromConfig(cfg);
     const winrmBootstrapDefaults = winrmBootstrapDefaultsFromConfig(cfg);

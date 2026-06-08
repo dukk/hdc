@@ -33,7 +33,7 @@ describe("hdc-user-ensure", () => {
     const setSecret = vi.fn().mockResolvedValue(undefined);
     const vault = {
       unlock: vi.fn().mockResolvedValue(undefined),
-      getSecret: vi.fn().mockRejectedValue(new Error("missing")),
+      readSecrets: vi.fn().mockResolvedValue({}),
       setSecret,
     };
     const pw = await resolveHdcPasswordForSystem("vm-bind-a", vault, { autoGenerate: true });
@@ -45,7 +45,9 @@ describe("hdc-user-ensure", () => {
     const setSecret = vi.fn();
     const vault = {
       unlock: vi.fn().mockResolvedValue(undefined),
-      getSecret: vi.fn().mockResolvedValue("existing-pw"),
+      readSecrets: vi.fn().mockResolvedValue({
+        HDC_USER_HDC_PASSWORD_VM_BIND_A: "existing-pw",
+      }),
       setSecret,
     };
     const pw = await resolveHdcPasswordForSystem("vm-bind-a", vault, { autoGenerate: true });
@@ -82,7 +84,9 @@ describe("hdc-user-ensure", () => {
     const run = vi.fn().mockReturnValue({ status: 0, stdout: "", stderr: "" });
     const vault = {
       unlock: vi.fn().mockResolvedValue(undefined),
-      getSecret: vi.fn().mockResolvedValue("pw"),
+      readSecrets: vi.fn().mockResolvedValue({
+        HDC_USER_HDC_PASSWORD_VM_BIND_A: "pw",
+      }),
       setSecret: vi.fn(),
     };
     const result = await ensureHdcUser({

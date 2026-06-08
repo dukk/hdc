@@ -1,12 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hdc.local/schema/azure-entra.config.schema.json",
-  "title": "HDC azure-entra infrastructure package config",
+  "$id": "https://hdc.local/schema/azure.config.schema.json",
+  "title": "HDC azure infrastructure package config",
   "type": "object",
   "additionalProperties": true,
   "required": ["schema_version", "applications"],
   "properties": {
     "schema_version": { "type": "integer", "minimum": 1 },
+    "azure": {
+      "type": "object",
+      "properties": {
+        "graph_base_url": { "type": "string", "format": "uri" }
+      }
+    },
     "azure_entra": {
       "type": "object",
       "properties": {

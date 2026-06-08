@@ -1,10 +1,10 @@
 # Raspberry Pi clients (`raspberrypi`)
 
-Same as **client-ubuntu**: SSH disk checks and `apt` maintenance for Pis (or any Debian-based host) in [`packages/clients/config.json`](../config.json).
+Same as **client-ubuntu**: SSH disk checks and `apt` maintenance for Pis (or any Debian-based host) in [`config.json`](config.json).
 
 ## Prerequisites
 
-- **Config:** [`packages/clients/config.json`](../config.json).
+- **Config:** [`config.json`](config.json) from [`config.example.json`](config.example.json).
 - **Inventory:** client system sidecars with SSH access.
 - **Env:** `HDC_CLIENT_SSH_USER`.
 

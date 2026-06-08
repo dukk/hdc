@@ -11,7 +11,11 @@ export const GUEST_SSH_USER_ENV = "HDC_GUEST_SSH_USER";
  */
 export function resolveGuestSshUser(configuredUser, env = processEnv) {
   if (typeof configuredUser === "string" && configuredUser.trim()) {
-    return configuredUser.trim();
+    const trimmed = configuredUser.trim();
+    // Legacy configure.ssh.user "root" — prefer hdc; createGuestSshExec falls back to root.
+    if (trimmed !== FALLBACK_BOOTSTRAP_SSH_USER) {
+      return trimmed;
+    }
   }
   const fromEnv = env[GUEST_SSH_USER_ENV];
   if (typeof fromEnv === "string" && fromEnv.trim()) {

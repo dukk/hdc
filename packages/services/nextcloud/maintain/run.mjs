@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Nextcloud AIO: re-push compose.yaml, refresh mastercontainer image.
  *
@@ -161,3 +161,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

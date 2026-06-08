@@ -27,6 +27,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "gitlab",
   "immich",
   "keycloak",
+  "listmonk",
   "mailcow",
   "n8n",
   "nextcloud",
@@ -161,7 +162,7 @@ export function dailyRecipeSteps() {
     note: "DSM and package upgrades",
   });
 
-  for (const id of ["cloudflare", "unifi-network", "azure-entra", "gcp-oauth"]) {
+  for (const id of ["cloudflare", "unifi-network", "azure", "gcp-oauth"]) {
     steps.push({
       tier: "infrastructure",
       id,

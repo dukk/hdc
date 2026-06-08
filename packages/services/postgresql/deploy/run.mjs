@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy PostgreSQL on Proxmox QEMU (standalone, primary, or standby).
  *
@@ -535,3 +535,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

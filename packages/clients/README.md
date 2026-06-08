@@ -2,9 +2,15 @@
 
 HDC packages for **physical workstations** and Pis: disk checks and OS updates over WinRM (Windows) or SSH (Linux). Not for Proxmox guests or NAS appliances.
 
-## Shared config
+## Per-package config
 
-Copy [`config.example.json`](config.example.json) to `config.json` (gitignored). Each host entry in `hosts[]` references inventory `system_id` and `access.nodes[]` (IP, MAC, `winrm` or `ssh`).
+Each client package has its own `config.json` (gitignored; copy from `config.example.json` in the same directory). Each host entry in `hosts[]` references inventory `system_id` and `access.nodes[]` (IP, MAC, `winrm` or `ssh`).
+
+| CLI id | Config |
+|--------|--------|
+| `windows` | [`windows/config.json`](windows/config.json) |
+| `client-ubuntu` | [`ubuntu/config.json`](ubuntu/config.json) |
+| `raspberrypi` | [`raspberrypi/config.json`](raspberrypi/config.json) |
 
 ## Packages
 

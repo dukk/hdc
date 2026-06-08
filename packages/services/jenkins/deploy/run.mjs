@@ -1,12 +1,39 @@
-import { basename, dirname } from "node:path";
+#!/usr/bin/env node
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stderr as errout } from "node:process";
+
 import { deployTargetInventory, logDeployInventoryStatus } from "../../../lib/deploy-inventory.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const packageRoot = join(here, "..");
 const target = basename(dirname(here));
 const verb = basename(here);
-const inv = deployTargetInventory(repoRoot(), target);
+const root = repoRoot();
+
+const inv = deployTargetInventory(root, target);
 logDeployInventoryStatus(target, verb, inv);
-process.stderr.write(`[hdc] ${target} ${verb}: stub — add real steps (Ansible, SSH, etc.).\n`);
-process.exit(0);
+errout.write(`[hdc] ${target} ${verb}: stub — add real steps (Ansible, SSH, etc.).\n`);
+
+const ok = true;
+const payload = {
+  ok,
+  target,
+  verb,
+  stub: true,
+  message: "stub — add real deploy steps",
+  generated_at: new Date().toISOString(),
+};
+runOperationReportTail({
+  packageRoot,
+  repoRoot: root,
+  verb,
+  argv: process.argv.slice(2),
+  payload,
+  ok,
+  log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+});
+process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+process.exitCode = ok ? 0 : 1;

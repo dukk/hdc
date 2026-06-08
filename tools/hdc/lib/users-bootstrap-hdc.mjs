@@ -145,35 +145,33 @@ export function bootstrapHostDocsFromInfrastructureConfigs(root, deps) {
     { tier: "infrastructure", pkg: "ubuntu" },
     { tier: "infrastructure", pkg: "proxmox" },
   ];
-  const clientResolved = resolveRepoFile(root, "packages/clients/config.json");
-  if (clientResolved.found) {
+  for (const pkg of ["windows", "ubuntu", "raspberrypi"]) {
+    const rel = `packages/clients/${pkg}/config.json`;
+    const clientResolved = resolveRepoFile(root, rel);
+    if (!clientResolved.found) continue;
     /** @type {unknown} */
     let j;
     try {
       j = readResolvedPackageConfigJson(clientResolved, { publicRoot: root });
     } catch {
-      j = null;
+      continue;
     }
-    if (j && typeof j === "object" && !Array.isArray(j)) {
-      const hosts = /** @type {Record<string, unknown>} */ (j).bootstrap_hosts;
-      if (Array.isArray(hosts)) {
-        let idx = 0;
-        for (const h of hosts) {
-          idx += 1;
-          if (!h || typeof h !== "object" || Array.isArray(h)) continue;
-          const rec = /** @type {Record<string, unknown>} */ (h);
-          if (!sidecarMatchesBootstrapTags(tagsFromSidecar(rec))) continue;
-          const id = typeof rec.id === "string" ? rec.id.trim() : "";
-          const src =
-            clientResolved.source === "private"
-              ? `packages/clients/config.json (hdc-private)`
-              : "packages/clients/config.json";
-          out.push({
-            label: `${src}#${id || `bootstrap_hosts[${idx}]`}`,
-            data: rec,
-          });
-        }
-      }
+    if (!j || typeof j !== "object" || Array.isArray(j)) continue;
+    const hosts = /** @type {Record<string, unknown>} */ (j).bootstrap_hosts;
+    if (!Array.isArray(hosts)) continue;
+    let idx = 0;
+    for (const h of hosts) {
+      idx += 1;
+      if (!h || typeof h !== "object" || Array.isArray(h)) continue;
+      const rec = /** @type {Record<string, unknown>} */ (h);
+      if (!sidecarMatchesBootstrapTags(tagsFromSidecar(rec))) continue;
+      const id = typeof rec.id === "string" ? rec.id.trim() : "";
+      const src =
+        clientResolved.source === "private" ? `${rel} (hdc-private)` : rel;
+      out.push({
+        label: `${src}#${id || `bootstrap_hosts[${idx}]`}`,
+        data: rec,
+      });
     }
   }
 
@@ -249,7 +247,7 @@ export async function runUsersBootstrapHdc(argv, deps, options = {}) {
 
   if (work.length === 0) {
     deps.warn(
-      "users bootstrap-hdc: no bootstrap_hosts in packages/infrastructure/{ubuntu,proxmox} or packages/clients/config.json (or pass --sidecar).",
+      "users bootstrap-hdc: no bootstrap_hosts in packages/infrastructure/{ubuntu,proxmox} or packages/clients/<id>/config.json (or pass --sidecar).",
     );
     return;
   }

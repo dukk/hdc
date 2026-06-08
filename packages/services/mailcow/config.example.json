@@ -21,7 +21,11 @@
       "hostname": "mail.example.invalid",
       "timezone": "America/Chicago",
       "admin_url": "https://mail.example.invalid",
+      "api_url": "https://mail.example.invalid",
       "api_key_vault_key": "HDC_MAILCOW_API_KEY",
+      "dns_publish": {
+        "cloudflare_dkim": true
+      },
       "dbpass_vault_key": "HDC_MAILCOW_DBPASS",
       "dbroot_vault_key": "HDC_MAILCOW_DBROOT",
       "redispass_vault_key": "HDC_MAILCOW_REDISPASS",

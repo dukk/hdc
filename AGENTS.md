@@ -131,9 +131,9 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure-entra`, `gcp-oauth`, `twilio`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `openvas`.
-- **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — shared [`packages/clients/config.json`](packages/clients/config.json). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `openvas`.
+- **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
 
@@ -703,16 +703,16 @@ Example: `node tools/hdc/cli.mjs run service vaultwarden deploy -- --instance a`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC or QEMU: mailcow-dockerized clone + `generate_config.sh` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` for QEMU) |
-| `maintain` | `docker compose pull` + `up -d`; reconcile `domains[]` + DKIM + per-domain relay via Mailcow API (`--skip-domains`, `--skip-upgrade`); guest baseline with `--skip-mail-relay` |
-| `query` | Config summary; `--live` for Docker/admin probe, API domain counts, DNS checklist (MX/SPF/DKIM/DMARC) |
+| `deploy` | Proxmox LXC or QEMU: mailcow-dockerized clone + `generate_config.sh`; reconcile `domains[]` + DKIM + relay via Mailcow API; publish DKIM TXT to Cloudflare when token present (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` for QEMU, `--skip-domains`, `--skip-cloudflare-dkim`) |
+| `maintain` | `docker compose pull` + `up -d`; reconcile `domains[]` + DKIM + per-domain relay via Mailcow API; publish DKIM TXT to Cloudflare (`--skip-domains`, `--skip-cloudflare-dkim`, `--skip-upgrade`); guest baseline with `--skip-mail-relay` |
+| `query` | Config summary; `--live` for Docker/admin probe, API domain drift (`missing_domains` / `extra_domains`), DNS checklist (MX/SPF/DKIM/DMARC) |
 | `teardown` | Optional compose down then destroy LXC or QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
 QEMU: set `mode: proxmox-qemu`, `system_id: vm-mailcow-a`, `proxmox.qemu` (`template_vmid`, `ip`, `vmid`, optional `data_disk_gb` + `data_disk_storage`), `configure.ssh.host`. Data disk mounts at `/data/mailcow`; Docker data-root on the data mount when `data_disk_gb` > 0.
 
-Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN) and `mailcow.domains[]` with `outbound.mode`: `direct` (mailcow sends) or `postfix-relay` (internal smarthost from [`postfix-relay` config](packages/services/postfix-relay/config.json) `client_defaults`). DNS templates in config are documented only — publish manually to BIND or Cloudflare from `query --live` output.
+Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN), optional `mailcow.api_url` (defaults to `https://{hostname}`; `admin_url` is for browser UI via nginx-waf), and `mailcow.domains[]` with `outbound.mode`: `direct` (mailcow sends) or `postfix-relay` (internal smarthost from [`postfix-relay` config](packages/services/postfix-relay/config.json) `client_defaults`). MX/SPF/DMARC: publish via BIND or [`cloudflare`](packages/infrastructure/cloudflare/) config. DKIM TXT: auto-published to Cloudflare when `HDC_CLOUDFLARE_API_TOKEN` is set and `mailcow.dns_publish.cloudflare_dkim` is not false.
 
-Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for domain maintain).
+Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for domain reconciliation on deploy/maintain).
 
 Example: `node tools/hdc/cli.mjs run service mailcow deploy -- --instance a --destroy-existing`
 
@@ -732,6 +732,23 @@ Example: `node tools/hdc/cli.mjs run service mailcow deploy -- --instance a --de
 Set `n8n.public_url` (`https://…`) when using nginx-waf for webhooks and UI; omit for HTTP on the CT IP only. Vault: `HDC_N8N_ENCRYPTION_KEY` (required for credential encryption; auto-generated on first deploy if missing). After deploy, add BIND A record and nginx-waf `sites[]` upstream to `http://<ct-ip>:5678` when using a public hostname.
 
 Example: `node tools/hdc/cli.mjs run service n8n deploy -- --instance a`
+
+## Listmonk in this repo
+
+- **Config:** [`packages/services/listmonk/config.json`](packages/services/listmonk/config.json) (copy from [`config.example.json`](packages/services/listmonk/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/listmonk-a.json`](inventory/manual/systems/listmonk-a.json); service sidecar [`inventory/manual/services/listmonk.json`](inventory/manual/services/listmonk.json).
+- **Schema:** [`tools/hdc/schema/listmonk.config.schema.json`](tools/hdc/schema/listmonk.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 20 GiB rootfs) + Docker Listmonk + PostgreSQL (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/api/health` on port 9000 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `listmonk.public_url` (`https://…`) when using nginx-waf; omit for HTTP on the CT IP only. Vault: `HDC_LISTMONK_ADMIN_PASSWORD` (required before deploy; creates super-admin on first `compose up`); `HDC_LISTMONK_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `listmonk.mail.enabled` maps internal postfix-relay to `LISTMONK_smtp__main__*` env vars; otherwise configure SMTP in the Listmonk UI. After deploy, add BIND A record and nginx-waf `sites[]` upstream to `http://<ct-ip>:9000` when using a public hostname.
+
+Example: `node tools/hdc/cli.mjs run service listmonk deploy -- --instance a`
 
 ## Home Assistant in this repo
 
@@ -858,7 +875,7 @@ Example: `node tools/hdc/cli.mjs run service hdc-runner maintain --`
 
 ## Home clients in this repo
 
-- **Config:** [`packages/clients/config.json`](packages/clients/config.json) (copy from [`config.example.json`](packages/clients/config.example.json); keep local config out of git).
+- **Config:** per-package `config.json` under `packages/clients/{windows,ubuntu,raspberrypi}/` (copy from each `config.example.json`; keep local config out of git).
 - **Packages:** [`packages/clients/windows/`](packages/clients/windows/), [`packages/clients/ubuntu/`](packages/clients/ubuntu/) (manifest id `client-ubuntu`), [`packages/clients/raspberrypi/`](packages/clients/raspberrypi/).
 - **Inventory:** manual `inventory/manual/systems/*.json` with `automation_targets: ["client"]`, `access.nodes[]` with `ip`, `mac`, and `ssh` or `winrm` as needed.
 - **Schema:** [`tools/hdc/schema/client.config.schema.json`](tools/hdc/schema/client.config.schema.json).
@@ -875,9 +892,9 @@ Example: `node tools/hdc/cli.mjs run service hdc-runner maintain --`
 
 Flags (after `--`): `--host-id`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-winrm-bootstrap`, `--no-report`, `--report`.
 
-**WinRM bootstrap:** When port 5986 is not open, `maintain`/`query` can run Sysinternals **PsExec** on the operator Windows host (current logon must be remote admin) to enable WinRM + HTTPS listener. Config: `winrm_bootstrap` in [`packages/clients/config.json`](packages/clients/config.json); env `HDC_PSEXEC_PATH`. See [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md).
+**WinRM bootstrap:** When port 5986 is not open, `maintain`/`query` can run Sysinternals **PsExec** on the operator Windows host (current logon must be remote admin) to enable WinRM + HTTPS listener. Config: `winrm_bootstrap` in [`packages/clients/windows/config.json`](packages/clients/windows/config.json); env `HDC_PSEXEC_PATH`. See [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md).
 
-Vault: `HDC_WINRM_PASSWORD_<SUFFIX>` per Windows host (`winrm_password_vault_suffix` in config). Env: `HDC_WINRM_USER`, `HDC_CLIENT_SSH_USER`.
+Vault: `HDC_WINRM_USER_PASSWORD` (shared WinRM password); optional per-host `HDC_WINRM_PASSWORD_<SUFFIX>` via `winrm_password_vault_suffix`. Env: `HDC_WINRM_USER` (MSA: `MicrosoftAccount\email@domain.com`; local: `.\user`; Entra: `AzureAD\UPN`). Per-host username override: `auth.winrm_user` or `auth.winrm_user_env`. Env: `HDC_CLIENT_SSH_USER`.
 
 Examples:
 
@@ -910,11 +927,11 @@ Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructur
 
 **Resource planning** (CPU, RAM, storage, bridges): follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](.cursor/skills/proxmox-resource-planning/SKILL.md) and [`.cursor/rules/proxmox-resource-planning.mdc`](.cursor/rules/proxmox-resource-planning.mdc).
 
-## Azure Entra app registrations in this repo
+## Azure app registrations in this repo
 
-- **Config:** [`packages/infrastructure/azure-entra/config.json`](packages/infrastructure/azure-entra/config.json) (copy from [`config.example.json`](packages/infrastructure/azure-entra/config.example.json); keep local config in hdc-private).
-- **Schema:** [`tools/hdc/schema/azure-entra.config.schema.json`](tools/hdc/schema/azure-entra.config.schema.json).
-- **Docs:** [`docs/manually-deployed/azure-entra.md`](docs/manually-deployed/azure-entra.md).
+- **Config:** [`packages/infrastructure/azure/config.json`](packages/infrastructure/azure/config.json) (copy from [`config.example.json`](packages/infrastructure/azure/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/azure.config.schema.json`](tools/hdc/schema/azure.config.schema.json).
+- **Docs:** [`docs/manually-deployed/azure.md`](docs/manually-deployed/azure.md).
 
 | Verb | Summary |
 | --- | --- |
@@ -927,9 +944,10 @@ Env: `HDC_AZURE_TENANT_ID`, `HDC_AZURE_CLIENT_ID`. Vault: `HDC_AZURE_CLIENT_SECR
 Examples:
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure azure-entra query --
-node tools/hdc/cli.mjs run infrastructure azure-entra deploy -- --dry-run
-node tools/hdc/cli.mjs run infrastructure azure-entra maintain --
+node tools/hdc/cli.mjs run infrastructure azure query --
+node tools/hdc/cli.mjs run infrastructure azure query -- --import --yes
+node tools/hdc/cli.mjs run infrastructure azure deploy -- --dry-run
+node tools/hdc/cli.mjs run infrastructure azure maintain --
 ```
 
 ## GCP OAuth (Google Auth Platform) in this repo
@@ -1003,6 +1021,29 @@ Examples:
 ```bash
 node tools/hdc/cli.mjs run infrastructure synology-nas query --
 node tools/hdc/cli.mjs run infrastructure synology-nas maintain --
+```
+
+## SMTP2GO in this repo
+
+- **Config:** [`packages/infrastructure/smtp2go/config.json`](packages/infrastructure/smtp2go/config.json) (copy from [`config.example.json`](packages/infrastructure/smtp2go/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/smtp2go.config.schema.json`](tools/hdc/schema/smtp2go.config.schema.json).
+- **Docs:** [`docs/manually-deployed/smtp2go.md`](docs/manually-deployed/smtp2go.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff sender domains vs config; DNS checklists on stdout; `--import --yes` writes live snapshot to hdc-private config |
+| `maintain` | Add missing managed sender domains; trigger `/domain/verify` when DKIM or return-path unverified |
+
+Vault: `HDC_SMTP2GO_API_KEY` (API). Postfix relay SMTP user/password remain in **postfix-relay** (`HDC_POSTFIX_RELAY_SMTP_*`). This package does not publish DNS — apply `dns_checklist` via cloudflare or bind manually.
+
+**Bootstrap:** `query -- --import --yes` replaces `sender_domains[]`; set `managed: true` before `maintain`.
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure smtp2go query --
+node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
 ```
 
 ## Twilio in this repo

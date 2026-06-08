@@ -97,7 +97,8 @@ export function syncPrimaryZoneFiles(opts) {
     log.info(`${exec.label}: zone ${zoneId} — ${bundle?.records.length ?? 0} records, serial ${serial}`);
   }
 
-  runChecked(exec, "rndc reload 2>/dev/null || systemctl reload named", log);
+  // Full restart: rndc reload leaves stale in-memory zone data when allow-update is set.
+  runChecked(exec, "systemctl restart named", log);
 
   return {
     ok: true,

@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Uptime Kuma (upgrade or restart).
  *
@@ -149,3 +149,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

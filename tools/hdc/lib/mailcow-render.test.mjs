@@ -5,11 +5,28 @@ import {
   buildInstallScript,
   normalizeDomainList,
   normalizeHostname,
+  resolveApiBaseUrl,
   shellExportEnv,
 } from "../../../packages/services/mailcow/lib/mailcow-render.mjs";
 import { normalizeMailcowConfig } from "../../../packages/services/mailcow/lib/deployments.mjs";
 
 describe("mailcow-render", () => {
+  it("resolveApiBaseUrl prefers api_url then hostname over admin_url", () => {
+    expect(
+      resolveApiBaseUrl({
+        hostname: "mail.example.invalid",
+        admin_url: "https://mail-web.example.invalid",
+        api_url: "https://api.example.invalid",
+      }),
+    ).toBe("https://api.example.invalid");
+    expect(
+      resolveApiBaseUrl({
+        hostname: "mail.example.invalid",
+        admin_url: "https://mail-web.example.invalid",
+      }),
+    ).toBe("https://mail.example.invalid");
+  });
+
   it("normalizeHostname requires FQDN", () => {
     expect(() => normalizeHostname({})).toThrow(/hostname/);
     expect(normalizeHostname({ hostname: "mail.example.invalid" })).toBe("mail.example.invalid");

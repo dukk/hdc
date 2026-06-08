@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain n8n: re-push .env from config, refresh Docker images, ClamAV baseline.
  *
@@ -173,3 +173,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

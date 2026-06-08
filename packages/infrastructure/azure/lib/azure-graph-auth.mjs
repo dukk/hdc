@@ -54,7 +54,11 @@ export function createAzureGraphTokenProvider(opts) {
 
       if (!res.ok || !json.access_token) {
         const detail = json.error_description || json.error || `HTTP ${res.status}`;
-        throw new Error(`Azure token request failed: ${detail}`);
+        const hint =
+          String(detail).includes("AADSTS700016")
+            ? " Check HDC_AZURE_CLIENT_ID in repo .env (Application/client ID from Entra app registration Overview) and HDC_AZURE_TENANT_ID (Directory tenant ID). Save .env if you edited it in the IDE; hdc does not reload unsaved buffers."
+            : "";
+        throw new Error(`Azure token request failed: ${detail}${hint}`);
       }
 
       const expiresIn =

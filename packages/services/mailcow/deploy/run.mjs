@@ -4,7 +4,7 @@
  *
  * Usage: hdc run service mailcow deploy -- [--instance a | --system-id vm-mailcow-a] [--skip-install]
  *        hdc run service mailcow deploy -- [--skip-existing | --redeploy-existing | --destroy-existing]
- *        hdc run service mailcow deploy -- [--skip-provision]
+ *        hdc run service mailcow deploy -- [--skip-provision] [--skip-domains] [--skip-cloudflare-dkim]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { lxcHostnameFromSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
@@ -42,6 +42,7 @@ import {
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/mailcow-install.mjs";
+import { reconcileMailcowDomainsForConfig } from "../lib/mailcow-domains.mjs";
 import { resolveAdminUrl } from "../lib/mailcow-render.mjs";
 import { attachQemuDataDisk } from "../lib/proxmox-data-disk.mjs";
 import {
@@ -563,17 +564,69 @@ async function deployQemuOne(deployment, flags, log, dbSecrets) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  * @param {{ ctPasswordCache?: { value: string | null }; dbSecrets: { dbpass: string; dbroot: string; redispass: string } }} runOpts
  */
+/**
+ * @param {Record<string, unknown>} result
+ * @param {ReturnType<typeof resolveMailcowDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {ReturnType<typeof createMailcowVaultAccess>} vault
+ */
+async function applyDomainReconciliationAfterDeploy(result, deployment, flags, vault) {
+  if (result.ok === false) return result;
+
+  const skipDomains = flagGet(flags, "skip-domains", "skip_domains") !== undefined;
+  const skipCloudflareDkim =
+    flagGet(flags, "skip-cloudflare-dkim", "skip_cloudflare_dkim") !== undefined;
+  const mailcowCfg = isObject(deployment.mailcow) ? deployment.mailcow : {};
+
+  const domainReconcile = await reconcileMailcowDomainsForConfig(mailcowCfg, vault, {
+    skipDomains,
+    skipCloudflareDkim,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  const domainResults = domainReconcile.domain_results;
+  const domainsOk = domainReconcile.domains_skipped
+    ? true
+    : domainReconcile.api_ok === false
+      ? false
+      : domainResults.every((r) => r.ok !== false);
+  const cloudflareDkimOk =
+    !domainReconcile.cloudflare_dkim ||
+    domainReconcile.cloudflare_dkim.skipped === true ||
+    domainReconcile.cloudflare_dkim.ok !== false;
+
+  return {
+    ...result,
+    ok: result.ok !== false && domainsOk && cloudflareDkimOk,
+    skip_domains: skipDomains,
+    skip_cloudflare_dkim: skipCloudflareDkim,
+    domains_skipped: domainReconcile.domains_skipped,
+    configured_domain_count: domainReconcile.configured_domain_count,
+    api_ok: domainReconcile.api_ok,
+    api_error: domainReconcile.api_error,
+    reconcile_summary: domainReconcile.reconcile_summary,
+    cloudflare_dkim: domainReconcile.cloudflare_dkim,
+    domain_results: domainResults,
+    dns_checklists: domainReconcile.dns_checklists,
+  };
+}
+
 async function deployOne(deployment, flags, log, runOpts) {
   const inv = deployTargetInventory(root, target, { systemIdOverride: deployment.systemId });
   logDeployInventoryStatus(target, verb, inv);
 
+  const vault = createMailcowVaultAccess();
+  /** @type {Record<string, unknown>} */
+  let result;
   if (deployment.mode === "proxmox-qemu" || deployment.mode === "configure-only") {
-    return deployQemuOne(deployment, flags, log, runOpts.dbSecrets);
+    result = await deployQemuOne(deployment, flags, log, runOpts.dbSecrets);
+  } else if (deployment.mode === "proxmox-lxc") {
+    result = await deployLxcOne(deployment, flags, log, runOpts);
+  } else {
+    return { ok: false, system_id: deployment.systemId, message: `unsupported mode ${deployment.mode}` };
   }
-  if (deployment.mode === "proxmox-lxc") {
-    return deployLxcOne(deployment, flags, log, runOpts);
-  }
-  return { ok: false, system_id: deployment.systemId, message: `unsupported mode ${deployment.mode}` };
+
+  return applyDomainReconciliationAfterDeploy(result, deployment, flags, vault);
 }
 
 async function main() {

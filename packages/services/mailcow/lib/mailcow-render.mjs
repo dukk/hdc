@@ -102,7 +102,25 @@ export function resolveAdminUrl(mailcow) {
  * @param {Record<string, unknown>} mailcow
  */
 export function resolveApiBaseUrl(mailcow) {
-  return resolveAdminUrl(mailcow);
+  const explicit =
+    typeof mailcow.api_url === "string" && mailcow.api_url.trim()
+      ? mailcow.api_url.trim().replace(/\/+$/, "")
+      : "";
+  if (explicit) return explicit;
+  try {
+    return `https://${normalizeHostname(mailcow)}`;
+  } catch {
+    return resolveAdminUrl(mailcow);
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} mailcow
+ */
+export function cloudflareDkimPublishEnabled(mailcow) {
+  const dnsPublish = isObject(mailcow.dns_publish) ? mailcow.dns_publish : {};
+  if (dnsPublish.cloudflare_dkim === false) return false;
+  return true;
 }
 
 /**

@@ -1,6 +1,6 @@
+#!/usr/bin/env node
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
-#!/usr/bin/env node
 /**
  * Re-apply Splunk configuration; optional package upgrade.
  *
@@ -35,6 +35,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
 const packageRoot = join(here, "..");
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 const PACKAGE_CONFIG_EXAMPLE = "packages/services/splunk/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
@@ -50,8 +52,6 @@ function readCfg() {
 function tryCfg() {
   return tryLoadPackageConfigFromPackageRoot(packageRoot, { exampleRel: PACKAGE_CONFIG_EXAMPLE });
 }
-
-const root = repoRoot();
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -168,3 +168,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

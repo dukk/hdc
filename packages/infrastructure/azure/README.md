@@ -1,4 +1,4 @@
-# Azure Entra app registrations (`azure-entra`)
+# Azure app registrations (`azure`)
 
 Discover Microsoft Entra application registrations, curate them in package config, then deploy missing apps and maintain redirect URIs and API permissions. Client IDs only — no application secrets or certificates.
 
@@ -8,7 +8,7 @@ Discover Microsoft Entra application registrations, curate them in package confi
 - **Env:** `HDC_AZURE_TENANT_ID`, `HDC_AZURE_CLIENT_ID` in `.env` (automation app).
 - **Vault:** `HDC_AZURE_CLIENT_SECRET` — automation app client secret.
 
-See [`docs/manually-deployed/azure-entra.md`](../../../docs/manually-deployed/azure-entra.md) for bootstrap and Graph permissions.
+See [`docs/manually-deployed/azure.md`](../../../docs/manually-deployed/azure.md) for bootstrap and Graph permissions.
 
 ## Commands
 
@@ -19,20 +19,28 @@ See [`docs/manually-deployed/azure-entra.md`](../../../docs/manually-deployed/az
 | `maintain` | Patch managed apps when config drifts from live |
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure azure-entra query --
-node tools/hdc/cli.mjs run infrastructure azure-entra deploy -- --dry-run
-node tools/hdc/cli.mjs run infrastructure azure-entra maintain --
+node tools/hdc/cli.mjs run infrastructure azure query --
+node tools/hdc/cli.mjs run infrastructure azure query -- --import --yes
+node tools/hdc/cli.mjs run infrastructure azure deploy -- --dry-run
+node tools/hdc/cli.mjs run infrastructure azure maintain --
 ```
 
 ## Config
 
+- **`azure`:** optional `graph_base_url` (legacy `azure_entra` key still accepted).
 - **`application_filter`:** `all`, `include`, or `exclude` by `display_name_prefixes`.
 - **`applications[]`:** only entries with `"managed": true` are created or updated.
 - **`match.client_id`:** preferred binding after first `query`; fallback is `match.display_name`.
 
 ## hdc-private after merge
 
-Copy `config.example.json` to `packages/infrastructure/azure-entra/config.json` and add `inventory/manual/targets/azure-entra.json` (`kind: target`, `automation_target: azure-entra`).
+Copy `config.example.json` to `packages/infrastructure/azure/config.json` and add `inventory/manual/targets/azure.json` (`kind: target`, `automation_target: azure`).
+
+Bootstrap from live tenant:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure azure query -- --import --yes
+```
 
 ## Related
 

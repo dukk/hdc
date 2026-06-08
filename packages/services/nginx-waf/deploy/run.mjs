@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy nginx WAF nodes: optional Proxmox QEMU provision, base install, sites, certs, peer sync.
  *
@@ -673,3 +673,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

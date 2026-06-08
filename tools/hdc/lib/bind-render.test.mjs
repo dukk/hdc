@@ -95,4 +95,33 @@ describe("bind-render", () => {
     expect(text).toContain(`key "${TSIG_KEY_NAME}"`);
     expect(text).toContain("hmac-sha256");
   });
+
+  it("renders TXT and CNAME without mangling TXT rdata", () => {
+    const text = renderMasterZoneFile({
+      zone: "hdc.dukk.org",
+      serial: "2026060801",
+      primaryNs: "bind-a.hdc.dukk.org.",
+      secondaryNs: "bind-b.hdc.dukk.org.",
+      primaryIp: "10.0.0.2",
+      secondaryIp: "10.0.0.3",
+      hostmaster: "hostmaster.hdc.dukk.org",
+      records: [
+        {
+          type: "TXT",
+          name: "@",
+          data: "\"v=spf1 include:spf.smtp2go.com ~all\"",
+          ttl: 3600,
+        },
+        {
+          type: "CNAME",
+          name: "s1160987._domainkey",
+          data: "dkim.smtp2go.net.",
+          ttl: 3600,
+        },
+      ],
+    });
+    expect(text).toContain('IN\tTXT\t"v=spf1 include:spf.smtp2go.com ~all"');
+    expect(text).not.toContain("~all\".");
+    expect(text).toContain("s1160987._domainkey\t3600\tIN\tCNAME\tdkim.smtp2go.net.");
+  });
 });

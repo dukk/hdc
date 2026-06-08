@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query Cassandra cluster health on configured nodes.
  */
@@ -14,7 +14,9 @@ import {
   normalizeCassandraConfig,
   resolveCassandraDeployments,
 } from "../lib/deployments.mjs";
-import { queryCassandraActive, queryNodetoolStatus } from "../lib/cassandra-query-remote.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { queryCassandraActive, queryNodetoolStatus } from "../lib/cassandra-query-remote.mjs";
+import { createConfigureExec } from "../lib/cassandra-configure.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -61,8 +63,9 @@ async function main() {
     const host = typeof ssh.host === "string" ? ssh.host : d.listenIp;
     errout.write(`[hdc] ${target} ${verb}: checking ${d.systemId} at ${user}@${host} …\n`);
 
-    const service = queryCassandraActive(user, host);
-    const nodetool = queryNodetoolStatus(user, host);
+    const exec = createConfigureExec("ssh", { user, host });
+    const service = queryCassandraActive(exec);
+    const nodetool = queryNodetoolStatus(exec);
     const selfNode = nodetool.nodes.find(
       (n) => n.address === d.listenIp || n.address === host || n.address.startsWith(d.listenIp),
     );
@@ -103,3 +106,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

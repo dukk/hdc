@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy nginx web nodes: optional Proxmox QEMU provision, base install, sites, per-node certs.
  *
@@ -48,6 +48,7 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -557,9 +558,17 @@ async function main() {
   }
 
   const ok = results.every((r) => r.ok === true);
-  process.stdout.write(
-    `${JSON.stringify({ ok, target, verb, count: results.length, results }, null, 2)}\n`,
-  );
+  const payload = { ok, target, verb, count: results.length, results };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 
@@ -570,3 +579,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

@@ -22,3 +22,4 @@ Narrative-only system pages may remain here; structured inventory for systems is
 
 - [Bitwarden CLI (`bw`) for hdc secrets](bitwarden-cli.md) — Vaultwarden unlock and secret storage when `HDC_SECRET_BACKEND` is `vaultwarden` or `auto`.
 - [Cloudflare DNS](cloudflare.md) — API token and public zone management via `hdc run infrastructure cloudflare`.
+- [SMTP2GO sender domains](smtp2go.md) — API key and verified sender domain inventory via `hdc run infrastructure smtp2go`.

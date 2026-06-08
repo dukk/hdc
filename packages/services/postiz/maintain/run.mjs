@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Postiz: upgrade, rebuild, or restart services + ClamAV baseline.
  *
@@ -181,3 +181,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy Ollama on Proxmox (LXC or QEMU clone) or as Docker on an Ubuntu SSH host.
  * Multi-instance: deployments[] in config.json. With no selector, deploys all entries.
@@ -635,3 +635,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

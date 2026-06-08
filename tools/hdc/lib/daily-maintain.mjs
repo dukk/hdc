@@ -56,12 +56,12 @@ import {
  * @returns {string}
  */
 function configPackageRoot(deps, root, tier, id) {
-  if (tier === "client") {
-    return join(deps.packagesDir(root), "clients");
-  }
   const manifests = discoverManifests(deps.packagesDir(root));
   const m = manifestByTierAndId(manifests, tier, id);
-  return m ? m.dir : join(deps.packagesDir(root), tier === "infrastructure" ? "infrastructure" : "services", id);
+  if (m) return m.dir;
+  const tierDir =
+    tier === "client" ? "clients" : tier === "infrastructure" ? "infrastructure" : "services";
+  return join(deps.packagesDir(root), tierDir, id);
 }
 
 /**

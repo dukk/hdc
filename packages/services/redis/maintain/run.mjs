@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Redis Cluster nodes: re-apply config, optional apt upgrade, cluster check.
  *
@@ -16,8 +16,7 @@ import {
   normalizeRedisConfig,
   redisGlobalSettings,
   resolveRedisDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { configureRedis, createConfigureExec } from "../lib/redis-configure.mjs";
 import { aptUpgradeRedisCommand } from "../lib/redis-install.mjs";
@@ -25,11 +24,16 @@ import { runClusterCheck } from "../lib/redis-cluster.mjs";
 import { createRedisVaultAccess } from "../lib/vault-deps.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
-import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { repoRoot } from "../../../../tools/hdc/paths.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 const PACKAGE_CONFIG_EXAMPLE = "packages/services/redis/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
@@ -106,8 +110,7 @@ async function main() {
   const nodes = [];
 
   for (const deployment of deployments) {
-    const host = sshHostFromDeployment(deployment);
-    const user = sshUserFromDeployment(deployment);
+    const { user, host } = sshTargetFromDeployment(deployment);
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
     try {
       const exec = createConfigureExec("ssh", { user, host });
@@ -146,27 +149,31 @@ async function main() {
     const endpoints = clusterEndpointsFromDeployments(deployments, global);
     const first = endpoints[0];
     errout.write(`[hdc] ${target} ${verb}: cluster check via ${first.host}:${first.port} …\n`);
-    clusterCheck = runClusterCheck(first.user, first.host, first.port, password);
+    const exec = createConfigureExec("ssh", { user: first.user, host: first.host });
+    clusterCheck = runClusterCheck(exec, first.host, first.port, password);
   }
 
   const nodesOk = nodes.length > 0 && nodes.every((n) => n.ok);
   const clusterOk = clusterCheck === null || clusterCheck.ok;
   const ok = nodesOk && clusterOk;
-
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        ok,
-        target,
-        verb,
-        nodes,
-        cluster_check: clusterCheck,
-        generated_at: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const payload = {
+    ok,
+    target,
+    verb,
+    nodes,
+    cluster_check: clusterCheck,
+    generated_at: new Date().toISOString(),
+  };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 
@@ -177,3 +184,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

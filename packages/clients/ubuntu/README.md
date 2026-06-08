@@ -1,12 +1,12 @@
 # Home Ubuntu clients (`client-ubuntu`)
 
-SSH disk checks and `apt` dist-upgrade for Linux workstations in [`packages/clients/config.json`](../config.json).
+SSH disk checks and `apt` dist-upgrade for Linux workstations in [`config.json`](config.json).
 
 **CLI id:** `client-ubuntu` (not infrastructure `ubuntu`).
 
 ## Prerequisites
 
-- **Config:** [`packages/clients/config.json`](../config.json) from [`config.example.json`](../config.example.json).
+- **Config:** [`config.json`](config.json) from [`config.example.json`](config.example.json).
 - **Inventory:** client systems with `access.nodes[].ssh` or IP for SSH.
 - **Env:** `HDC_CLIENT_SSH_USER` (optional; default often your SSH user).
 

@@ -1,21 +1,21 @@
 import { createAzureGraphTokenProvider } from "./azure-graph-auth.mjs";
 import { createAzureGraphClient } from "./azure-graph-api.mjs";
-import { normalizeAzureEntraConfig } from "./azure-entra-config.mjs";
+import { normalizeAzureConfig } from "./azure-config.mjs";
 import {
-  createAzureEntraVaultAccess,
+  createAzureVaultAccess,
   resolveAzureClientId,
   resolveAzureClientSecret,
   resolveAzureTenantId,
 } from "./vault-deps.mjs";
 
-export const PACKAGE_CONFIG_EXAMPLE = "packages/infrastructure/azure-entra/config.example.json";
+export const PACKAGE_CONFIG_EXAMPLE = "packages/infrastructure/azure/config.example.json";
 
 /**
  * @param {unknown} cfgRaw
  */
-export async function createAzureEntraRunContext(cfgRaw) {
-  const config = normalizeAzureEntraConfig(cfgRaw);
-  const vault = createAzureEntraVaultAccess();
+export async function createAzureRunContext(cfgRaw) {
+  const config = normalizeAzureConfig(cfgRaw);
+  const vault = createAzureVaultAccess();
   const tenantId = resolveAzureTenantId();
   const clientId = resolveAzureClientId();
   const clientSecret = await resolveAzureClientSecret(vault);
@@ -24,11 +24,14 @@ export async function createAzureEntraRunContext(cfgRaw) {
     baseUrl: config.graphBase,
     getAccessToken: () => tokenProvider.getAccessToken(),
   });
-  return { config, api, tenantId };
+  return { config, api, tenantId, clientId };
 }
 
+/** @deprecated Use createAzureRunContext */
+export const createAzureEntraRunContext = createAzureRunContext;
+
 /**
- * @param {import('./azure-entra-config.mjs').ConfigApplication} cfgApp
+ * @param {import('./azure-config.mjs').ConfigApplication} cfgApp
  * @param {import('./azure-graph-api.mjs').GraphApplication[]} allLive
  * @returns {import('./azure-graph-api.mjs').GraphApplication | null}
  */

@@ -3,7 +3,7 @@
  * Maintain Mailcow: refresh stack, reconcile domains/DKIM/relay via API, guest baseline.
  *
  * Usage: hdc run service mailcow maintain -- [--instance a | --system-id vm-mailcow-a]
- *        hdc run service mailcow maintain -- [--skip-upgrade] [--skip-domains] [--skip-clamav]
+ *        hdc run service mailcow maintain -- [--skip-upgrade] [--skip-domains] [--skip-cloudflare-dkim] [--skip-clamav]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
@@ -22,20 +22,13 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 import { resolveMailcowDeployments } from "../lib/deployments.mjs";
-import { createMailcowApiClient, reconcileMailcowDomains } from "../lib/mailcow-api.mjs";
-import { buildAllDnsChecklists, formatDnsChecklistMarkdown } from "../lib/mailcow-dns.mjs";
+import { reconcileMailcowDomainsForConfig } from "../lib/mailcow-domains.mjs";
 import {
   maintainMailcowStackInCt,
   maintainMailcowStackOnHost,
   resolvePveSshForHost,
 } from "../lib/mailcow-install.mjs";
-import {
-  normalizeDomainList,
-  normalizeHostname,
-  resolveApiBaseUrl,
-} from "../lib/mailcow-render.mjs";
 import { createMailcowVaultAccess } from "../lib/vault-deps.mjs";
-import { resolveMailcowApiKey } from "../lib/vault-secrets.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -73,6 +66,8 @@ async function maintainOne(deployment, flags, vault) {
   const { systemId, mode, proxmox: px, mailcow, install, configure } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
   const skipDomains = flagGet(flags, "skip-domains", "skip_domains") !== undefined;
+  const skipCloudflareDkim =
+    flagGet(flags, "skip-cloudflare-dkim", "skip_cloudflare_dkim") !== undefined;
   const skipBaseline = flagGet(flags, "skip-baseline", "skip_baseline") !== undefined;
 
   if (!isObject(px)) {
@@ -120,47 +115,14 @@ async function maintainOne(deployment, flags, vault) {
     );
   }
 
-  /** @type {Record<string, unknown>[]} */
-  let domainResults = [];
-  /** @type {unknown[]} */
-  let dnsChecklists = [];
-  let domainsSkipped = false;
-
-  if (!skipDomains) {
-    const apiKey = await resolveMailcowApiKey(vault, mailcowCfg, { required: false });
-    const configuredDomains = normalizeDomainList(mailcowCfg);
-    const hostname = normalizeHostname(mailcowCfg);
-
-    if (apiKey) {
-      errout.write(`[hdc] ${target} ${verb}: reconciling ${configuredDomains.length} domain(s) via API …\n`);
-      const client = createMailcowApiClient(resolveApiBaseUrl(mailcowCfg), apiKey);
-      domainResults = await reconcileMailcowDomains(configuredDomains, client);
-
-      /** @type {Record<string, { dkim_txt?: string | null; dkim_selector?: string | null }>} */
-      const liveByDomain = {};
-      for (const row of domainResults) {
-        const name = typeof row.domain === "string" ? row.domain : "";
-        if (!name) continue;
-        liveByDomain[name] = {
-          dkim_txt: typeof row.dkim_txt === "string" ? row.dkim_txt : null,
-          dkim_selector: typeof row.dkim_selector === "string" ? row.dkim_selector : null,
-        };
-      }
-      dnsChecklists = buildAllDnsChecklists(configuredDomains, hostname, liveByDomain);
-      for (const checklist of dnsChecklists) {
-        errout.write(
-          `[hdc] ${target} ${verb}: DNS checklist for ${checklist.domain} (${checklist.outbound_mode}):\n`,
-        );
-        errout.write(`${formatDnsChecklistMarkdown(checklist.records)}\n`);
-      }
-    } else {
-      domainsSkipped = true;
-      dnsChecklists = buildAllDnsChecklists(configuredDomains, hostname, {});
-    }
-  } else {
-    domainsSkipped = true;
-    errout.write(`[hdc] ${target} ${verb}: --skip-domains — API reconciliation skipped.\n`);
-  }
+  const domainReconcile = await reconcileMailcowDomainsForConfig(mailcowCfg, vault, {
+    skipDomains,
+    skipCloudflareDkim,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  const domainResults = domainReconcile.domain_results;
+  const dnsChecklists = domainReconcile.dns_checklists;
+  const domainsSkipped = domainReconcile.domains_skipped;
 
   let baseline = { ok: true, skipped: true, message: "skipped" };
   if (!skipBaseline) {
@@ -203,7 +165,15 @@ async function maintainOne(deployment, flags, vault) {
     }
   }
 
-  const domainsOk = domainResults.length === 0 || domainResults.every((r) => r.ok !== false);
+  const domainsOk = domainsSkipped
+    ? true
+    : domainReconcile.api_ok === false
+      ? false
+      : domainResults.every((r) => r.ok !== false);
+  const cloudflareDkimOk =
+    !domainReconcile.cloudflare_dkim ||
+    domainReconcile.cloudflare_dkim.skipped === true ||
+    domainReconcile.cloudflare_dkim.ok !== false;
   const vmidRaw =
     mode === "proxmox-qemu" || mode === "configure-only"
       ? isObject(px.qemu)
@@ -218,14 +188,20 @@ async function maintainOne(deployment, flags, vault) {
         : null;
 
   return {
-    ok: stackResult.ok && domainsOk && baseline.ok,
+    ok: stackResult.ok && domainsOk && cloudflareDkimOk && baseline.ok,
     system_id: systemId,
     host_id: hostId,
     mode,
     vmid: Number.isFinite(vmidRaw) ? vmidRaw : null,
     skip_upgrade: skipUpgrade,
     skip_domains: skipDomains,
+    skip_cloudflare_dkim: skipCloudflareDkim,
     domains_skipped: domainsSkipped,
+    configured_domain_count: domainReconcile.configured_domain_count,
+    api_ok: domainReconcile.api_ok,
+    api_error: domainReconcile.api_error,
+    reconcile_summary: domainReconcile.reconcile_summary,
+    cloudflare_dkim: domainReconcile.cloudflare_dkim,
     domain_results: domainResults,
     dns_checklists: dnsChecklists,
     admin_url: stackResult.admin_url ?? null,

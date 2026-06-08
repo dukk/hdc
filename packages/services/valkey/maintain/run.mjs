@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain Valkey Cluster nodes: re-apply config, optional apt upgrade, cluster check.
  *
@@ -16,8 +16,7 @@ import {
   normalizeValkeyConfig,
   valkeyGlobalSettings,
   resolveValkeyDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { configureValkey, createConfigureExec } from "../lib/valkey-configure.mjs";
 import { aptUpgradeValkeyCommand } from "../lib/valkey-install.mjs";
@@ -31,6 +30,8 @@ import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-confi
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
+const root = repoRoot();
+const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 const PACKAGE_CONFIG_EXAMPLE = "packages/services/valkey/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
@@ -46,7 +47,6 @@ function readCfg() {
 
 const target = basename(dirname(here));
 const verb = basename(here);
-const root = repoRoot();
 
 /**
  * @param {ReturnType<typeof createConfigureExec>} exec
@@ -105,8 +105,7 @@ async function main() {
   const nodes = [];
 
   for (const deployment of deployments) {
-    const host = sshHostFromDeployment(deployment);
-    const user = sshUserFromDeployment(deployment);
+    const { user, host } = sshTargetFromDeployment(deployment);
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
     try {
       const exec = createConfigureExec("ssh", { user, host });
@@ -145,7 +144,8 @@ async function main() {
     const endpoints = clusterEndpointsFromDeployments(deployments, global);
     const first = endpoints[0];
     errout.write(`[hdc] ${target} ${verb}: cluster check via ${first.host}:${first.port} …\n`);
-    clusterCheck = runClusterCheck(first.user, first.host, first.port, password);
+    const exec = createConfigureExec("ssh", { user: first.user, host: first.host });
+    clusterCheck = runClusterCheck(exec, first.host, first.port, password);
   }
 
   const nodesOk = nodes.length > 0 && nodes.every((n) => n.ok);
@@ -180,3 +180,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

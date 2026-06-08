@@ -6,7 +6,7 @@ Bitwarden-compatible password manager on Proxmox LXC (Docker Compose). Public HT
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json` — set `vaultwarden.domain` (`https://…`), `proxmox.host_id`, `proxmox.lxc.vmid`
 - **Inventory:** [`inventory/manual/systems/vaultwarden-a.json`](../../../inventory/manual/systems/vaultwarden-a.json); [`inventory/manual/services/vaultwarden.json`](../../../inventory/manual/services/vaultwarden.json)
-- **Vault:** `HDC_VAULTWARDEN_ADMIN_TOKEN` (required)
+- **Vault:** `HDC_VAULTWARDEN_ADMIN_TOKEN` (required) — store the **plain** admin password; deploy/maintain hash it to Argon2 PHC for `ADMIN_TOKEN` in `.env`
 - **nginx-waf:** reverse-proxy site pointing at `http://<ct-ip>:80` after deploy
 
 ## Commands
@@ -35,7 +35,7 @@ node tools/hdc/cli.mjs run vaultwarden maintain --
 2. **Inventory:** set `access.nodes[0].ip` on `vaultwarden-a.json`.
 3. **BIND:** forward A record for the hostname in `vaultwarden.domain`.
 4. **nginx-waf:** add a site with upstream to the CT IP; set `"websocket": true` on locations that need WebSockets (e.g. `/` and `/notifications/hub` for Vaultwarden).
-5. **Admin:** open `{domain}/admin` and sign in with `HDC_VAULTWARDEN_ADMIN_TOKEN`.
+5. **Admin:** open `{domain}/admin` (LAN only via nginx-waf) and sign in with the plain password from `HDC_VAULTWARDEN_ADMIN_TOKEN` (not the Argon2 hash in the container `.env`).
 6. **hdc secrets:** set `HDC_VAULTWARDEN_URL`, `HDC_VAULTWARDEN_EMAIL` in `.env`; install [Bitwarden CLI](../../../docs/manually-deployed/bitwarden-cli.md); create your Vaultwarden user account.
 7. **Nagios:** `node tools/hdc/cli.mjs run service nagios maintain --` after BIND A record exists.
 

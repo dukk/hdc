@@ -22,8 +22,7 @@ import {
   normalizeRedisConfig,
   redisGlobalSettings,
   resolveRedisDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { configureRedis, createConfigureExec } from "../lib/redis-configure.mjs";
 import {
@@ -43,6 +42,7 @@ import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/li
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -109,11 +109,7 @@ function existingGuestPolicy(flags) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  */
 function runConfigure(deployment, global, password, log) {
-  const host = sshHostFromDeployment(deployment);
-  const user = sshUserFromDeployment(deployment);
-  if (!host) {
-    throw new Error(`${deployment.systemId}: configure.ssh.host required`);
-  }
+  const { user, host } = sshTargetFromDeployment(deployment);
   const exec = createConfigureExec("ssh", { user, host });
   return configureRedis({
     exec,
@@ -271,9 +267,9 @@ async function deployOne(deployment, flags, global, password, log) {
     log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   });
 
-  const sshHost =
-    sshHostFromDeployment(deployment) || (typeof ip === "string" ? ip.split("/")[0] : "");
-  let sshUser = sshUserFromDeployment(deployment);
+  const defaultHost = typeof ip === "string" ? ip.split("/")[0] : "";
+  const { user: preferredUser, host: sshHost } = sshTargetFromDeployment(deployment, defaultHost);
+  let sshUser = preferredUser;
 
   const sshWait = await waitForQemuGuestSshAfterBoot({
     user: sshUser,
@@ -399,17 +395,17 @@ async function main() {
       port: e.port,
     }));
     const first = deployments[0];
-    const user = sshUserFromDeployment(first);
-    const host = sshHostFromDeployment(first);
-    errout.write(`[hdc] ${target} ${verb}: cluster bootstrap check on ${user}@${host} …\n`);
+    const { user, host } = sshTargetFromDeployment(first);
+    const exec = createConfigureExec("ssh", { user, host });
+    errout.write(`[hdc] ${target} ${verb}: cluster bootstrap check on ${exec.label} …\n`);
 
-    if (clusterAlreadyInitialized(user, host, global.port, password)) {
+    if (clusterAlreadyInitialized(exec, global.port, password)) {
       errout.write(`[hdc] ${target} ${verb}: cluster already initialized — skipping create.\n`);
       cluster = { bootstrapped: false, skipped: true, reason: "already_initialized" };
     } else {
       errout.write(`[hdc] ${target} ${verb}: creating Redis cluster (${endpoints.length} masters) …\n`);
       const boot = bootstrapRedisCluster({
-        user,
+        exec,
         host,
         port: global.port,
         password,
@@ -430,9 +426,17 @@ async function main() {
   const nodesOk = results.every((r) => r.ok);
   const clusterOk = cluster === null || cluster.skipped === true || cluster.ok === true;
   const ok = nodesOk && clusterOk;
-  process.stdout.write(
-    `${JSON.stringify({ ok, target, verb, count: results.length, results, cluster }, null, 2)}\n`,
-  );
+  const payload = { ok, target, verb, count: results.length, results, cluster };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 

@@ -23,7 +23,10 @@ Copy [`config.example.json`](config.example.json) to hdc-private `packages/servi
 Key blocks:
 
 - `mailcow.hostname` — `MAILCOW_HOSTNAME` FQDN (e.g. `mailcow-a.hdc.dukk.org`), **not** a mail domain
+- `mailcow.admin_url` — browser UI URL (often nginx-waf front door)
+- `mailcow.api_url` — optional Mailcow API base (defaults to `https://{hostname}` before `admin_url`)
 - `mailcow.domains[]` — domains to add in Mailcow; each has `outbound.mode` and `dns` templates
+- `mailcow.dns_publish.cloudflare_dkim` — when true (default), publish DKIM TXT to Cloudflare after reconcile
 - `install.install_dir` — default `/opt/mailcow-dockerized` (LXC); use `/data/mailcow/mailcow-dockerized` on QEMU with a data disk
 
 LXC defaults: 6 GiB RAM, 4 vCPU, 40 GiB rootfs (privileged LXC + Docker nesting).
@@ -37,7 +40,8 @@ QEMU defaults (typical): 8 GiB RAM, 4 vCPU, 32 GiB rootfs + optional `data_disk_
 | `HDC_MAILCOW_DBPASS` | Auto-generated on first deploy if missing |
 | `HDC_MAILCOW_DBROOT` | Auto-generated on first deploy if missing |
 | `HDC_MAILCOW_REDISPASS` | Auto-generated on first deploy if missing |
-| `HDC_MAILCOW_API_KEY` | Required for `maintain` domain reconciliation (create in Mailcow UI after deploy) |
+| `HDC_MAILCOW_API_KEY` | Required for domain reconciliation on `deploy` / `maintain` (create in Mailcow UI after first boot) |
+| `HDC_CLOUDFLARE_API_TOKEN` | Required for automatic DKIM TXT publish (repo `.env` or vault; same token as cloudflare package) |
 
 ```bash
 node tools/hdc/cli.mjs secrets set HDC_MAILCOW_API_KEY
@@ -57,18 +61,20 @@ node tools/hdc/cli.mjs run service mailcow teardown -- --dry-run
 
 | Verb | Flags |
 | --- | --- |
-| `deploy` | `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` (QEMU) |
-| `maintain` | `--skip-upgrade`, `--skip-domains`, `--skip-baseline`, `--skip-clamav`, … |
-| `query` | `--live` |
+| `deploy` | `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` (QEMU), `--skip-domains`, `--skip-cloudflare-dkim` |
+| `maintain` | `--skip-upgrade`, `--skip-domains`, `--skip-cloudflare-dkim`, `--skip-baseline`, `--skip-clamav`, … |
+| `query` | `--live` (reports `missing_domains` / `extra_domains` vs config) |
 | `teardown` | `--dry-run`, `--yes`, `--skip-compose-down` |
 
-## DNS (v1)
+## DNS
 
-HDC **does not** push DNS to BIND or Cloudflare. `maintain` and `query --live` print a checklist:
+`deploy` and `maintain` reconcile domains on the Mailcow server (add domain, DKIM, relayhost). When `HDC_CLOUDFLARE_API_TOKEN` is available and `mailcow.dns_publish.cloudflare_dkim` is not false, hdc **publishes DKIM TXT** to each matching Cloudflare zone automatically.
+
+MX, SPF, and DMARC remain manual via BIND or [`cloudflare`](../infrastructure/cloudflare/) config. `maintain` and `query --live` also print a checklist:
 
 - **MX** → `mailcow.hostname`
 - **SPF** / **DMARC** — from `domains[].dns` in config
-- **DKIM** — fetched live from Mailcow API after key generation
+- **DKIM** — live from Mailcow API; auto-published to Cloudflare when enabled
 - **Autodiscover** CNAME (optional)
 
 For `postfix-relay` outbound domains, SPF in the example uses SMTP2GO-style includes; add provider DKIM CNAMEs per your relay upstream (see existing `dukk.org` Cloudflare records when using SMTP2GO).

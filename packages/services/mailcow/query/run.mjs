@@ -119,6 +119,16 @@ async function main() {
             if (status.dns_checklist_markdown) {
               errout.write(`[hdc] ${target} ${verb}: DNS checklists:\n${status.dns_checklist_markdown}\n`);
             }
+            if (Array.isArray(status.missing_domains) && status.missing_domains.length) {
+              errout.write(
+                `[hdc] ${target} ${verb}: missing on Mailcow: ${status.missing_domains.join(", ")}\n`,
+              );
+            }
+            if (Array.isArray(status.extra_domains) && status.extra_domains.length) {
+              errout.write(
+                `[hdc] ${target} ${verb}: extra on Mailcow (not in config): ${status.extra_domains.join(", ")}\n`,
+              );
+            }
             liveResults.push({ system_id: d.systemId, ok: true, ...status });
           } catch (e) {
             liveResults.push({
@@ -153,6 +163,16 @@ async function main() {
           );
           if (status.dns_checklist_markdown) {
             errout.write(`[hdc] ${target} ${verb}: DNS checklists:\n${status.dns_checklist_markdown}\n`);
+          }
+          if (Array.isArray(status.missing_domains) && status.missing_domains.length) {
+            errout.write(
+              `[hdc] ${target} ${verb}: missing on Mailcow: ${status.missing_domains.join(", ")}\n`,
+            );
+          }
+          if (Array.isArray(status.extra_domains) && status.extra_domains.length) {
+            errout.write(
+              `[hdc] ${target} ${verb}: extra on Mailcow (not in config): ${status.extra_domains.join(", ")}\n`,
+            );
           }
           liveResults.push({ system_id: d.systemId, ok: true, ...status });
         } catch (e) {

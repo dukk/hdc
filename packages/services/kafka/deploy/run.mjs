@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy Apache Kafka KRaft cluster on Proxmox QEMU VMs.
  *
@@ -392,3 +392,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

@@ -25,8 +25,10 @@ import { configureStepCaServer, createConfigureExec } from "../lib/step-ca-confi
 import {
   normalizeStepCaConfig,
   resolveStepCaDeployments,
+  sshHostFromDeployment,
   stepCaGlobalSettings,
 } from "../lib/deployments.mjs";
+import { stepCaPayloadMeta, stepCaReportExtraSections } from "../lib/step-ca-report.mjs";
 import { caPasswordVaultKey, instanceLetterFromSystemId } from "../lib/inventory.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import {
@@ -39,6 +41,7 @@ import {
 } from "../lib/proxmox-qemu-redeploy.mjs";
 import { createStepCaVaultAccess } from "../lib/vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import {
   growRootFilesystemInGuest,
   resizeQemuScsi0OnHypervisor,
@@ -410,9 +413,31 @@ async function main() {
   }
 
   const ok = results.every((r) => r.ok !== false);
-  process.stdout.write(
-    `${JSON.stringify({ ok, target, verb, count: results.length, results }, null, 2)}\n`,
-  );
+  const hostBySystem = new Map(toDeploy.map((d) => [d.systemId, sshHostFromDeployment(d)]));
+  const resultsWithHosts = results.map((r) => {
+    const sid = typeof r.system_id === "string" ? r.system_id : "";
+    const host = sid ? hostBySystem.get(sid) : "";
+    return host ? { ...r, host } : r;
+  });
+  const payload = {
+    ok,
+    target,
+    verb,
+    count: resultsWithHosts.length,
+    step_ca: stepCaPayloadMeta(global),
+    results: resultsWithHosts,
+  };
+  runOperationReportTail({
+    packageRoot,
+    repoRoot: root,
+    verb,
+    argv: process.argv.slice(2),
+    payload,
+    ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    extraSections: stepCaReportExtraSections,
+  });
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = ok ? 0 : 1;
 }
 

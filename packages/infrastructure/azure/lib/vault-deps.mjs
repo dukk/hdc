@@ -1,16 +1,21 @@
-import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
+import { env } from "node:process";
+
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 
 export const AZURE_CLIENT_SECRET_VAULT_KEY = "HDC_AZURE_CLIENT_SECRET";
 
 /**
- * @returns {ReturnType<typeof createVaultAccess>}
+ * @returns {ReturnType<typeof createPackageVaultAccess>}
  */
-export function createAzureEntraVaultAccess() {
-  return createVaultAccess(vaultDepsFromCli());
+export function createAzureVaultAccess() {
+  return createPackageVaultAccess();
 }
 
+/** @deprecated Use createAzureVaultAccess */
+export const createAzureEntraVaultAccess = createAzureVaultAccess;
+
 /**
- * @param {ReturnType<typeof createVaultAccess>} vault
+ * @param {ReturnType<typeof createPackageVaultAccess>} vault
  */
 export async function resolveAzureClientSecret(vault) {
   await vault.unlock({});
@@ -28,7 +33,7 @@ export async function resolveAzureClientSecret(vault) {
  */
 export function resolveAzureTenantId() {
   const v =
-    typeof process.env.HDC_AZURE_TENANT_ID === "string" ? process.env.HDC_AZURE_TENANT_ID.trim() : "";
+    typeof env.HDC_AZURE_TENANT_ID === "string" ? env.HDC_AZURE_TENANT_ID.trim() : "";
   if (!v) {
     throw new Error("HDC_AZURE_TENANT_ID is not set in .env");
   }
@@ -40,7 +45,7 @@ export function resolveAzureTenantId() {
  */
 export function resolveAzureClientId() {
   const v =
-    typeof process.env.HDC_AZURE_CLIENT_ID === "string" ? process.env.HDC_AZURE_CLIENT_ID.trim() : "";
+    typeof env.HDC_AZURE_CLIENT_ID === "string" ? env.HDC_AZURE_CLIENT_ID.trim() : "";
   if (!v) {
     throw new Error("HDC_AZURE_CLIENT_ID is not set in .env");
   }

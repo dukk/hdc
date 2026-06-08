@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Azure Entra maintain: reconcile managed app registrations with config.
+ * Azure maintain: reconcile managed app registrations with config.
  *
- * Usage: hdc run infrastructure azure-entra maintain --
+ * Usage: hdc run infrastructure azure maintain --
  *   [--app <config-id>] [--dry-run] [--no-report] [--report <path>]
  */
 import { basename, dirname, join } from "node:path";
@@ -20,17 +20,17 @@ import {
   pushWarning,
 } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
-import { applicationPassesFilter } from "../lib/azure-entra-config.mjs";
-import { collectAzureEntraState } from "../lib/azure-entra-collect.mjs";
-import { createAzureEntraRunContext, findLiveGraphAppForConfig, PACKAGE_CONFIG_EXAMPLE } from "../lib/azure-entra-run-context.mjs";
-import { applyAppSync, planAppSync } from "../lib/azure-entra-sync.mjs";
+import { applicationPassesFilter } from "../lib/azure-config.mjs";
+import { collectAzureState } from "../lib/azure-collect.mjs";
+import { createAzureRunContext, findLiveGraphAppForConfig, PACKAGE_CONFIG_EXAMPLE } from "../lib/azure-run-context.mjs";
+import { applyAppSync, planAppSync } from "../lib/azure-sync.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verb = basename(here);
 const packageRoot = join(here, "..");
 
 const MANIFEST_NEXT_STEPS = [
-  "Run `hdc run infrastructure azure-entra query --` to verify diffs after maintain.",
+  "Run `hdc run infrastructure azure query --` to verify diffs after maintain.",
   "Grant admin consent in Entra portal when API permissions change.",
 ];
 
@@ -38,7 +38,7 @@ const MANIFEST_NEXT_STEPS = [
  * @param {string} line
  */
 function log(line) {
-  errout.write(`[azure-entra] ${line}\n`);
+  errout.write(`[azure] ${line}\n`);
 }
 
 async function main() {
@@ -47,8 +47,8 @@ async function main() {
   const appFilter = flagGet(flags, "app");
 
   const reportCtx = createOperationReportContext({
-    packageId: "azure-entra",
-    packageTitle: "Azure Entra app registrations",
+    packageId: "azure",
+    packageTitle: "Azure app registrations",
     verb,
     argv,
     manifestNextSteps: MANIFEST_NEXT_STEPS,
@@ -62,7 +62,7 @@ async function main() {
   });
   log(`config loaded (${source})`);
 
-  const { config, api } = await createAzureEntraRunContext(cfgRaw);
+  const { config, api } = await createAzureRunContext(cfgRaw);
   log("vault: HDC_AZURE_CLIENT_SECRET loaded");
 
   const allLive = await api.listApplications();
@@ -142,7 +142,7 @@ async function main() {
     if (!applyResult.ok) overallOk = false;
   }
 
-  const snapshot = await collectAzureEntraState({
+  const snapshot = await collectAzureState({
     config,
     api,
     appFilterId: appFilter,

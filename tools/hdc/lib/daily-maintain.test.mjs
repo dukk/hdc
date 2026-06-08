@@ -151,6 +151,38 @@ describe("runDailyMaintain", () => {
     expect(capture.logLines.join("\n")).toMatch(/no config\.json/);
   });
 
+  it("client steps use per-package config.json not parent clients dir", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    writeTree(root, {
+      "packages/clients/windows/manifest.json": miniManifest("windows", "clients"),
+      "packages/clients/windows/config.json": JSON.stringify({ schema_version: 1, hosts: [] }),
+      "packages/clients/windows/query/run.mjs": "process.exit(0)\n",
+      "packages/clients/config.json": JSON.stringify({ schema_version: 1, hosts: [] }),
+    });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({ root, capture });
+
+    const code = await runDailyMaintain(deps, root, ["--dry-run", "--only", "client/windows"]);
+    expect(code).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/run client windows query/);
+    expect(capture.logLines.join("\n")).not.toMatch(/no config\.json/);
+  });
+
+  it("skips client package when only parent clients config exists", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    writeTree(root, {
+      "packages/clients/windows/manifest.json": miniManifest("windows", "clients"),
+      "packages/clients/windows/query/run.mjs": "process.exit(0)\n",
+      "packages/clients/config.json": JSON.stringify({ schema_version: 1, hosts: [] }),
+    });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({ root, capture });
+
+    const code = await runDailyMaintain(deps, root, ["--dry-run", "--only", "client/windows"]);
+    expect(code).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/no config\.json/);
+  });
+
   it("continues after a failure and exits non-zero", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
     const vaultPath = join(root, "vault.enc");

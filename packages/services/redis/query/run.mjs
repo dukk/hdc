@@ -13,11 +13,12 @@ import {
   normalizeRedisConfig,
   redisGlobalSettings,
   resolveRedisDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { queryClusterInfo, queryRedisPing, runClusterCheck } from "../lib/redis-query-remote.mjs";
-import { createRedisVaultAccess } from "../lib/vault-deps.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { createConfigureExec } from "../lib/redis-configure.mjs";
+import { createRedisVaultAccess } from "../lib/vault-deps.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -79,12 +80,12 @@ async function main() {
   const nodes = [];
 
   for (const deployment of deployments) {
-    const host = sshHostFromDeployment(deployment);
-    const user = sshUserFromDeployment(deployment);
+    const { user, host } = sshTargetFromDeployment(deployment);
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
 
-    const ping = queryRedisPing(user, host, global.port, password);
-    const cluster = queryClusterInfo(user, host, global.port, password);
+    const exec = createConfigureExec("ssh", { user, host });
+    const ping = queryRedisPing(exec, global.port, password);
+    const cluster = queryClusterInfo(exec, global.port, password);
     nodes.push({
       system_id: deployment.systemId,
       host,
@@ -99,7 +100,8 @@ async function main() {
   if (deployments.length === global.minMasters && nodes.every((n) => n.ok)) {
     const endpoints = clusterEndpointsFromDeployments(deployments, global);
     const first = endpoints[0];
-    clusterCheck = runClusterCheck(first.user, first.host, first.port, password);
+    const exec = createConfigureExec("ssh", { user: first.user, host: first.host });
+    clusterCheck = runClusterCheck(exec, first.host, first.port, password);
   }
 
   const nodesOk = nodes.length > 0 && nodes.every((n) => n.ok);

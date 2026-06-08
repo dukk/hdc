@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Maintain LMS: re-install/upgrade llmster, sync models, guest Linux baseline.
  *
@@ -218,3 +218,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

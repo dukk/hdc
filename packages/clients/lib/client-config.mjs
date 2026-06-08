@@ -8,25 +8,54 @@ import {
   sshUserFromAuthEnv,
 } from "../../../tools/hdc/lib/users-bootstrap-hdc.mjs";
 
-/** Shared config for all client platform packages. */
-export const CLIENTS_CONFIG_REL = "packages/clients/config.json";
-
 /**
  * @param {string} packageRoot e.g. packages/clients/windows
  */
 export function clientsConfigPath(packageRoot) {
-  return join(packageRoot, "..", "config.json");
+  return join(packageRoot, "config.json");
 }
 
 export const CLIENT_PLATFORMS = ["windows", "ubuntu", "raspberrypi"];
 
 const WINRM_PASSWORD_PREFIX = "HDC_WINRM_PASSWORD";
 
+/** Shared WinRM password when `auth.winrm_password_vault_suffix` is omitted. */
+export const WINRM_USER_PASSWORD_VAULT_KEY = "HDC_WINRM_USER_PASSWORD";
+
 /**
  * @param {string} suffix
  */
 export function vaultKeyForWinrmPassword(suffix) {
   return `${WINRM_PASSWORD_PREFIX}_${inventoryIdToVaultSuffix(suffix)}`;
+}
+
+/**
+ * Vault key for WinRM password: default `HDC_WINRM_USER_PASSWORD`; per-host via `auth.winrm_password_vault_suffix`.
+ * @param {Record<string, unknown>} auth
+ */
+export function resolveWinrmPasswordVaultKey(auth) {
+  const suffix =
+    typeof auth.winrm_password_vault_suffix === "string" && auth.winrm_password_vault_suffix.trim()
+      ? auth.winrm_password_vault_suffix.trim()
+      : null;
+  if (suffix) return vaultKeyForWinrmPassword(suffix);
+  return WINRM_USER_PASSWORD_VAULT_KEY;
+}
+
+/**
+ * WinRM username: per-host `auth.winrm_user` overrides env from `auth.winrm_user_env` (default `HDC_WINRM_USER`).
+ * @param {Record<string, unknown>} auth
+ * @param {NodeJS.ProcessEnv} env
+ */
+export function resolveWinrmUser(auth, env) {
+  if (typeof auth.winrm_user === "string" && auth.winrm_user.trim()) {
+    return auth.winrm_user.trim();
+  }
+  const winrmUserEnv =
+    typeof auth.winrm_user_env === "string" && auth.winrm_user_env.trim()
+      ? auth.winrm_user_env.trim()
+      : "HDC_WINRM_USER";
+  return typeof env[winrmUserEnv] === "string" && env[winrmUserEnv].trim() ? env[winrmUserEnv].trim() : null;
 }
 
 /**
@@ -37,20 +66,17 @@ function isObject(v) {
 }
 
 /**
- * @param {string} configPath Absolute path (legacy) or use loadClientConfigFromPackageRoot.
+ * @param {string} configPath Absolute path to packages/clients/<platform>/config.json
  */
 export function loadClientConfig(configPath) {
-  const packageRoot = join(configPath, "..");
-  return loadClientConfigFromPackageRoot(packageRoot);
+  return loadClientConfigFromPackageRoot(join(configPath, ".."));
 }
 
 /**
  * @param {string} packageRoot packages/clients/<platform>
  */
 export function loadClientConfigFromPackageRoot(packageRoot) {
-  const { data } = loadPackageConfigFromPackageRoot(packageRoot, {
-    exampleRel: "packages/clients/config.example.json",
-  });
+  const { data } = loadPackageConfigFromPackageRoot(packageRoot);
   return data;
 }
 
@@ -141,18 +167,7 @@ export function primaryNodeFromHost(host, env) {
 
   const winrm = isObject(row.winrm) ? row.winrm : {};
   const winrmPort = typeof winrm.port === "number" && winrm.port > 0 ? winrm.port : 5986;
-  const winrmUserEnv =
-    typeof auth.winrm_user_env === "string" && auth.winrm_user_env.trim()
-      ? auth.winrm_user_env.trim()
-      : "HDC_WINRM_USER";
-  const winrmUser =
-    typeof env[winrmUserEnv] === "string" && env[winrmUserEnv].trim() ? env[winrmUserEnv].trim() : null;
-  const vaultSuffix =
-    typeof auth.winrm_password_vault_suffix === "string" && auth.winrm_password_vault_suffix.trim()
-      ? auth.winrm_password_vault_suffix.trim()
-      : typeof host.id === "string"
-        ? host.id
-        : "";
+  const winrmUser = resolveWinrmUser(auth, env);
 
   return {
     name: typeof row.name === "string" ? row.name : "primary",
@@ -164,7 +179,7 @@ export function primaryNodeFromHost(host, env) {
       skipCaCheck: winrm.skip_ca_check === true || winrm.skip_ca_check === 1,
     },
     winrmUser,
-    winrmVaultKey: vaultKeyForWinrmPassword(vaultSuffix),
+    winrmVaultKey: resolveWinrmPasswordVaultKey(auth),
   };
 }
 

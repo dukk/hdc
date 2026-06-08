@@ -1,5 +1,5 @@
-import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 #!/usr/bin/env node
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Teardown Immich (Synology compose down or destroy Proxmox QEMU).
  *
@@ -296,3 +296,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

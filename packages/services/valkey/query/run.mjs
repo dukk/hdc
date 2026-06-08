@@ -12,10 +12,10 @@ import {
   normalizeValkeyConfig,
   valkeyGlobalSettings,
   resolveValkeyDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { queryClusterInfo, queryValkeyPing, runClusterCheck } from "../lib/valkey-query-remote.mjs";
+import { createConfigureExec } from "../lib/valkey-configure.mjs";
 import { createValkeyVaultAccess } from "../lib/vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -75,12 +75,12 @@ async function main() {
   const nodes = [];
 
   for (const deployment of deployments) {
-    const host = sshHostFromDeployment(deployment);
-    const user = sshUserFromDeployment(deployment);
+    const { user, host } = sshTargetFromDeployment(deployment);
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} at ${user}@${host} …\n`);
 
-    const ping = queryValkeyPing(user, host, global.port, password);
-    const cluster = queryClusterInfo(user, host, global.port, password);
+    const exec = createConfigureExec("ssh", { user, host });
+    const ping = queryValkeyPing(exec, global.port, password);
+    const cluster = queryClusterInfo(exec, global.port, password);
     nodes.push({
       system_id: deployment.systemId,
       host,
@@ -95,7 +95,8 @@ async function main() {
   if (deployments.length === global.minMasters && nodes.every((n) => n.ok)) {
     const endpoints = clusterEndpointsFromDeployments(deployments, global);
     const first = endpoints[0];
-    clusterCheck = runClusterCheck(first.user, first.host, first.port, password);
+    const exec = createConfigureExec("ssh", { user: first.user, host: first.host });
+    clusterCheck = runClusterCheck(exec, first.host, first.port, password);
   }
 
   const nodesOk = nodes.length > 0 && nodes.every((n) => n.ok);

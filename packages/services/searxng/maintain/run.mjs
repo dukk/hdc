@@ -1,5 +1,5 @@
-import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 #!/usr/bin/env node
+import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
  * Maintain SearXNG: refresh Docker images and recreate containers.
  *
@@ -185,3 +185,4 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
+

@@ -22,8 +22,7 @@ import {
   normalizeValkeyConfig,
   valkeyGlobalSettings,
   resolveValkeyDeployments,
-  sshHostFromDeployment,
-  sshUserFromDeployment,
+  sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { configureValkey, createConfigureExec } from "../lib/valkey-configure.mjs";
 import {
@@ -109,11 +108,7 @@ function existingGuestPolicy(flags) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  */
 function runConfigure(deployment, global, password, log) {
-  const host = sshHostFromDeployment(deployment);
-  const user = sshUserFromDeployment(deployment);
-  if (!host) {
-    throw new Error(`${deployment.systemId}: configure.ssh.host required`);
-  }
+  const { user, host } = sshTargetFromDeployment(deployment);
   const exec = createConfigureExec("ssh", { user, host });
   return configureValkey({
     exec,
@@ -271,9 +266,9 @@ async function deployOne(deployment, flags, global, password, log) {
     log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   });
 
-  const sshHost =
-    sshHostFromDeployment(deployment) || (typeof ip === "string" ? ip.split("/")[0] : "");
-  let sshUser = sshUserFromDeployment(deployment);
+  const defaultHost = typeof ip === "string" ? ip.split("/")[0] : "";
+  const { user: preferredUser, host: sshHost } = sshTargetFromDeployment(deployment, defaultHost);
+  let sshUser = preferredUser;
 
   const sshWait = await waitForQemuGuestSshAfterBoot({
     user: sshUser,
@@ -399,17 +394,17 @@ async function main() {
       port: e.port,
     }));
     const first = deployments[0];
-    const user = sshUserFromDeployment(first);
-    const host = sshHostFromDeployment(first);
-    errout.write(`[hdc] ${target} ${verb}: cluster bootstrap check on ${user}@${host} …\n`);
+    const { user, host } = sshTargetFromDeployment(first);
+    const exec = createConfigureExec("ssh", { user, host });
+    errout.write(`[hdc] ${target} ${verb}: cluster bootstrap check on ${exec.label} …\n`);
 
-    if (clusterAlreadyInitialized(user, host, global.port, password)) {
+    if (clusterAlreadyInitialized(exec, global.port, password)) {
       errout.write(`[hdc] ${target} ${verb}: cluster already initialized — skipping create.\n`);
       cluster = { bootstrapped: false, skipped: true, reason: "already_initialized" };
     } else {
       errout.write(`[hdc] ${target} ${verb}: creating Valkey cluster (${endpoints.length} masters) …\n`);
       const boot = bootstrapValkeyCluster({
-        user,
+        exec,
         host,
         port: global.port,
         password,

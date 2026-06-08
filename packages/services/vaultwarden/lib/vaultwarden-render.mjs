@@ -57,9 +57,19 @@ export function adminTokenVaultKey(vaultwarden) {
   return key;
 }
 
+/** @param {string} token */
+export function isArgon2PhcAdminToken(token) {
+  return /^\$argon2(?:id|i|d)?\$/.test(String(token).trim());
+}
+
+/** Docker Compose `.env` treats `$` as interpolation; literal hashes need `$$`. */
+export function escapeDockerComposeEnvValue(value) {
+  return String(value).replace(/\$/g, "$$$$");
+}
+
 /**
  * @param {Record<string, unknown>} vaultwarden
- * @param {string} adminToken
+ * @param {string} adminToken Argon2 PHC string for ADMIN_TOKEN (not the plain login password).
  */
 export function renderVaultwardenEnv(vaultwarden, adminToken) {
   const domain = normalizeDomain(vaultwarden);
@@ -74,7 +84,7 @@ export function renderVaultwardenEnv(vaultwarden, adminToken) {
     `VAULTWARDEN_IMAGE_TAG=${tag}`,
     `VAULTWARDEN_HOST_PORT=${port}`,
     `DOMAIN=${domain}`,
-    `ADMIN_TOKEN=${adminToken}`,
+    `ADMIN_TOKEN=${escapeDockerComposeEnvValue(adminToken)}`,
     `SIGNUPS_ALLOWED=${signups ? "true" : "false"}`,
     `INVITATIONS_ALLOWED=${invitations ? "true" : "false"}`,
     `WEBSOCKET_ENABLED=${websocket ? "true" : "false"}`,
