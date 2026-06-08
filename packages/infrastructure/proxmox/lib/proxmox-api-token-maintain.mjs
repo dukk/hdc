@@ -184,6 +184,14 @@ export function pveumEnsureTokenAclCommand(tokenAcl, role) {
 }
 
 /**
+ * @param {string} userid e.g. homepage@pam
+ * @param {string} role
+ */
+export function pveumEnsureUserAclCommand(userid, role) {
+  return `pveum acl modify / -user ${shellSingleQuote(userid)} -role ${shellSingleQuote(role)} -propagate 1`;
+}
+
+/**
  * @param {object} opts
  * @param {{ user: string; host: string; id: string }} opts.target
  * @param {string} opts.tokenAcl

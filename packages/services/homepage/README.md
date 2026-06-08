@@ -41,7 +41,7 @@ Trivy and WireGuard have no browser UI in this deployment; omit them from the da
 
 ## Proxmox widget
 
-Read-only hypervisor metrics use a dedicated Proxmox service account (not the hdc operator token):
+Read-only hypervisor metrics use a dedicated Proxmox service account (not the hdc operator token). The account needs **PVEAuditor** on `/` for both the **user** and the **API token** (privilege separation enabled); hdc `proxmox maintain` ensures both.
 
 1. Add `provision.service_accounts[]` with `id: homepage` in [`packages/infrastructure/proxmox/config.json`](../../infrastructure/proxmox/config.example.json) (see proxmox README).
 2. Enable `homepage.proxmox_widget` in homepage config (`service_account_id`, `hosts[]`).

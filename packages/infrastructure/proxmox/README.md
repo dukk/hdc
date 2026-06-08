@@ -182,7 +182,8 @@ Declarative Proxmox **users** and **API tokens** for third-party consumers (sepa
 
 1. Creates the PVE user when missing (`pveum user add`) and stores the password in vault (`password_vault_key`).
 2. Creates the API token when missing (`pveum user token add --privsep 1`) and stores `user@realm!tokenid=secret` in vault (`token_vault_key`).
-3. Ensures token ACL at `/` with the configured role (default built-in **PVEAuditor** for read-only widgets).
+3. Ensures **user and token** ACL at `/` with the configured role (default built-in **PVEAuditor** for read-only widgets), both with propagate. Privilege-separated tokens need the owning user permission as well; token-only ACL returns a stripped `GET /cluster/resources` payload (no VM/LXC counts or node CPU/RAM), which breaks gethomepage Proxmox widgets.
+4. Verifies the token against `GET /cluster/resources` and checks the response includes online nodes with `maxmem`/`maxcpu` and at least one non-template QEMU guest.
 
 Example (see [`config.example.json`](config.example.json)):
 

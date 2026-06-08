@@ -25,6 +25,7 @@ import {
   pveumCreateOrRegenerateTokenScript,
   pveumEnsureRoleAndAclScript,
   pveumEnsureTokenAclCommand,
+  pveumEnsureUserAclCommand,
 } from "./proxmox-api-token-maintain.mjs";
 import { pveProfileForMajor, resolveClusterPveProfile } from "./pve-version.mjs";
 
@@ -216,11 +217,66 @@ export function pveumCreateTokenIfMissingScript(userid, tokenid) {
  */
 export function pveumEnsureServiceAccountAclScript(account, privileges = []) {
   const tokenAcl = `${account.userid}!${account.tokenid}`;
+  const userAcl = pveumEnsureUserAclCommand(account.userid, account.role);
+  let tokenAclScript;
   if (account.privileges?.length || (!PVE_BUILTIN_ROLES.has(account.role) && privileges.length)) {
     const privs = account.privileges?.length ? account.privileges : privileges;
-    return pveumEnsureRoleAndAclScript(account.role, privs, tokenAcl);
+    tokenAclScript = pveumEnsureRoleAndAclScript(account.role, privs, tokenAcl);
+  } else {
+    tokenAclScript = pveumEnsureTokenAclCommand(tokenAcl, account.role);
   }
-  return pveumEnsureTokenAclCommand(tokenAcl, account.role);
+  // Privilege-separated tokens need both user and token ACL at / (token-only yields stripped cluster/resources).
+  return `${userAcl}; ${tokenAclScript}`;
+}
+
+/**
+ * Validate cluster/resources payload for gethomepage-style read-only widgets.
+ * @param {unknown} body
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function validateServiceAccountClusterResources(body) {
+  if (!body || typeof body !== "object") {
+    return { ok: false, message: "cluster/resources response is not an object" };
+  }
+  const data = /** @type {{ data?: unknown }} */ (body).data;
+  if (!Array.isArray(data)) {
+    return { ok: false, message: "cluster/resources response missing data array" };
+  }
+
+  const nodes = data.filter(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      /** @type {{ type?: string; status?: string }} */ (item).type === "node" &&
+      /** @type {{ type?: string; status?: string }} */ (item).status === "online",
+  );
+  const vms = data.filter(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      /** @type {{ type?: string; template?: number }} */ (item).type === "qemu" &&
+      /** @type {{ type?: string; template?: number }} */ (item).template === 0,
+  );
+
+  if (!nodes.length) {
+    return { ok: false, message: "cluster/resources has no online nodes" };
+  }
+  if (!vms.length) {
+    return {
+      ok: false,
+      message: "cluster/resources has no qemu guests (ensure user + token ACL at / with propagate)",
+    };
+  }
+
+  const node = /** @type {{ maxmem?: number; maxcpu?: number }} */ (nodes[0]);
+  if (node.maxmem == null || node.maxcpu == null) {
+    return {
+      ok: false,
+      message: "cluster/resources node entries lack maxmem/maxcpu (ensure user + token ACL at / with propagate)",
+    };
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -264,10 +320,14 @@ function runSshScript(opts) {
  * @param {string} [opts.verifyPath]
  */
 async function verifyServiceToken(opts) {
-  const { baseUrl, tokenRaw, env: processEnv, verifyPath = "/cluster/resources?type=vm" } = opts;
+  const { baseUrl, tokenRaw, env: processEnv, verifyPath = "/cluster/resources" } = opts;
   const rejectUnauthorized = hdcTlsRejectUnauthorized(processEnv, "HDC_PROXMOX_TLS_INSECURE");
   const authorization = normalizePveAuthorization(tokenRaw);
-  await pveJsonRequest("GET", baseUrl, verifyPath, authorization, rejectUnauthorized, undefined);
+  const body = await pveJsonRequest("GET", baseUrl, verifyPath, authorization, rejectUnauthorized, undefined);
+  const check = validateServiceAccountClusterResources(body);
+  if (!check.ok) {
+    throw new Error(check.message);
+  }
 }
 
 /**

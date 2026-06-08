@@ -10,8 +10,12 @@ import {
   pveumEnsureUserScript,
   pveumSetUserPasswordScript,
   serviceAccountsFromConfig,
+  validateServiceAccountClusterResources,
 } from "../../../packages/infrastructure/proxmox/lib/proxmox-service-account-maintain.mjs";
-import { pveumEnsureTokenAclCommand } from "../../../packages/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
+import {
+  pveumEnsureTokenAclCommand,
+  pveumEnsureUserAclCommand,
+} from "../../../packages/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
 
 describe("proxmox service account maintain", () => {
   it("serviceAccountsFromConfig parses enabled accounts", () => {
@@ -65,7 +69,7 @@ describe("proxmox service account maintain", () => {
     expect(script).not.toContain("--regenerate");
   });
 
-  it("pveumEnsureServiceAccountAclScript uses built-in PVEAuditor role", () => {
+  it("pveumEnsureServiceAccountAclScript sets user and token ACL for privsep tokens", () => {
     const script = pveumEnsureServiceAccountAclScript({
       id: "homepage",
       userid: "homepage@pam",
@@ -74,8 +78,34 @@ describe("proxmox service account maintain", () => {
       password_vault_key: "A",
       token_vault_key: "B",
     });
-    expect(script).toBe(pveumEnsureTokenAclCommand("homepage@pam!homepage", "PVEAuditor"));
+    expect(script).toBe(
+      `${pveumEnsureUserAclCommand("homepage@pam", "PVEAuditor")}; ${pveumEnsureTokenAclCommand("homepage@pam!homepage", "PVEAuditor")}`,
+    );
     expect(PVE_BUILTIN_ROLES.has("PVEAuditor")).toBe(true);
+  });
+
+  it("validateServiceAccountClusterResources requires widget fields", () => {
+    expect(
+      validateServiceAccountClusterResources({
+        data: [{ type: "node", status: "online", node: "pve-a", maxmem: 1, maxcpu: 4 }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateServiceAccountClusterResources({
+        data: [
+          { type: "node", status: "online", node: "pve-a", maxmem: 1, maxcpu: 4 },
+          { type: "qemu", template: 0, vmid: 100, status: "running" },
+        ],
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateServiceAccountClusterResources({
+        data: [
+          { type: "node", status: "online", node: "pve-a" },
+          { type: "qemu", template: 0, vmid: 100, status: "running" },
+        ],
+      }).message,
+    ).toContain("maxmem");
   });
 
   it("parsePveApiTokenSecret and proxmoxWidgetUsernameFromToken", () => {

@@ -77,15 +77,17 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string }} configFiles
  * @param {{ skipUpgrade?: boolean }} [opts]
  */
-export function buildMaintainScript(composeDirPath, envContent, configFiles, opts = {}) {
+export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   const lines = [
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
-    `test -f '${dir}/docker-compose.yml'`,
     ...writeConfigFileHerdoc(dir, "config/services.yaml", configFiles.servicesYaml),
     ...writeConfigFileHerdoc(dir, "config/settings.yaml", configFiles.settingsYaml),
     ...writeConfigFileHerdoc(dir, "config/bookmarks.yaml", configFiles.bookmarksYaml),
+    `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
+    composeYaml.trimEnd(),
+    "HDCOMPOSE",
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
@@ -94,7 +96,7 @@ export function buildMaintainScript(composeDirPath, envContent, configFiles, opt
   if (!opts.skipUpgrade) {
     lines.push("docker compose pull");
   }
-  lines.push("docker compose up -d", "docker compose ps");
+  lines.push("docker compose up -d --force-recreate", "docker compose ps");
   return lines.join("\n");
 }
 
@@ -188,7 +190,8 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
   const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, envContent, configFiles, opts);
+  const composeYaml = renderComposeYaml();
+  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, opts);
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, message: `maintain failed (exit ${r.status})` };

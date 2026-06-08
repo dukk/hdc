@@ -158,7 +158,7 @@
         "role": "PVEAuditor",
         "password_vault_key": "HDC_PROXMOX_USER_HOMEPAGE_PASSWORD",
         "token_vault_key": "HDC_HOMEPAGE_PROXMOX_API_TOKEN",
-        "comment": "gethomepage Proxmox widget (read-only)"
+        "comment": "gethomepage Proxmox widget (read-only; maintain ensures user + token PVEAuditor ACL at /)"
       }
     ],
     "ssh_keys": {
