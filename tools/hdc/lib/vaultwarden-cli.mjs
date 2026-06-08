@@ -22,13 +22,33 @@ export function clearBwSessionProcessCache() {
  */
 
 /**
+ * When HDC_BW_EXECUTABLE points at an npm shim (.cmd/.ps1), run node + bw.js instead.
+ * @param {string} override
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {{ command: string; prefixArgs: string[] } | null}
+ */
+function resolveBwFromExecutableOverride(override, env) {
+  if (process.platform !== "win32") return null;
+  if (!/\.(cmd|bat|ps1)$/i.test(override)) return null;
+  const npmDir = join(override, "..");
+  const bwJs = join(npmDir, "node_modules/@bitwarden/cli/build/bw.js");
+  if (!existsSync(bwJs)) return null;
+  const node = typeof env.NODE === "string" && env.NODE.trim() ? env.NODE.trim() : process.execPath;
+  return { command: node, prefixArgs: [bwJs] };
+}
+
+/**
  * Resolve how to invoke `bw` without a shell (npm shims on Windows need node + bw.js).
  * @param {VaultwardenCliDeps} deps
  * @returns {{ command: string; prefixArgs: string[] }}
  */
 export function resolveBwCommand(deps) {
   const override = String(deps.env.HDC_BW_EXECUTABLE ?? "").trim();
-  if (override) return { command: override, prefixArgs: [] };
+  if (override) {
+    const shim = resolveBwFromExecutableOverride(override, deps.env);
+    if (shim) return shim;
+    return { command: override, prefixArgs: [] };
+  }
 
   const spawn = deps.spawnSync ?? spawnSync;
 

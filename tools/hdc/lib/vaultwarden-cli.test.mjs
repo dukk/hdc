@@ -18,8 +18,8 @@ describe("vaultwarden-cli", () => {
     /** @type {Record<string, { status: number; stdout?: string; stderr?: string }>} */
     const responses = o.responses ?? {};
     const spawnSync = vi.fn((exe, args) => {
-      const key = `${exe}:${args.join(" ")}`;
-      const hit = responses[key];
+      const key = args.join(" ");
+      const hit = responses[key] ?? responses[`bw:${key}`] ?? responses[`${exe}:${key}`];
       if (hit) {
         return {
           status: hit.status,
@@ -47,6 +47,7 @@ describe("vaultwarden-cli", () => {
   it("resolveBwExecutable finds bw via --version", () => {
     const deps = makeDeps({
       responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
         "bw:--version": { status: 0, stdout: "2024.1.0" },
       },
     });
@@ -56,10 +57,11 @@ describe("vaultwarden-cli", () => {
   it("ensureBwUnlocked uses stored master password and caches session", async () => {
     const deps = makeDeps({
       responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
         "bw:--version": { status: 0, stdout: "2024.1.0" },
-        "bw:config server https://vault.example.test": { status: 0 },
-        "bw:login --check": { status: 0 },
-        "bw:unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key-1" },
+        "config server https://vault.example.test": { status: 0 },
+        "login --check": { status: 0 },
+        "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key-1" },
       },
     });
     const readLocal = vi.fn(async () => "master-pass");
@@ -78,11 +80,12 @@ describe("vaultwarden-cli", () => {
     const deps = makeDeps({
       readLineQuestion: q,
       responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
         "bw:--version": { status: 0, stdout: "2024.1.0" },
-        "bw:config server https://vault.example.test": { status: 0 },
-        "bw:login --check": { status: 1 },
-        "bw:login ops@example.test typed-master --raw": { status: 0 },
-        "bw:unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key-2" },
+        "config server https://vault.example.test": { status: 0 },
+        "login --check": { status: 1 },
+        "login ops@example.test typed-master --raw": { status: 0 },
+        "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key-2" },
       },
     });
     const readLocal = vi.fn(async () => null);
@@ -95,8 +98,9 @@ describe("vaultwarden-cli", () => {
   it("bwGetPassword returns value on success", () => {
     const deps = makeDeps({
       responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
         "bw:--version": { status: 0, stdout: "2024.1.0" },
-        "bw:get password HDC_X": { status: 0, stdout: "secret-value" },
+        "get password HDC_X": { status: 0, stdout: "secret-value" },
       },
     });
     expect(bwGetPassword(deps, "sess", "HDC_X")).toBe("secret-value");
@@ -105,9 +109,10 @@ describe("vaultwarden-cli", () => {
   it("bwSetPassword creates login item when missing", () => {
     const deps = makeDeps({
       responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
         "bw:--version": { status: 0, stdout: "2024.1.0" },
-        "bw:list items --search HDC_Y": { status: 0, stdout: "[]" },
-        "bw:create item login --name HDC_Y --username HDC_Y --password new-secret": { status: 0 },
+        "list items --search HDC_Y": { status: 0, stdout: "[]" },
+        "create item login --name HDC_Y --username HDC_Y --password new-secret": { status: 0 },
       },
     });
     bwSetPassword(deps, "sess", "HDC_Y", "new-secret");

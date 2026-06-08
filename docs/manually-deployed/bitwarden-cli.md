@@ -11,7 +11,7 @@ hdc can store automation secrets in **Vaultwarden** (Bitwarden-compatible) inste
    bw --version
    ```
 
-3. If `bw` is not on `PATH`, set in repo `.env`:
+3. If `bw` is not on `PATH`, set in repo `.env` only when you have a real binary (not an npm `.cmd` shim on Windows — hdc auto-detects `@bitwarden/cli`):
 
    ```env
    HDC_BW_EXECUTABLE=C:/path/to/bw.exe
@@ -99,6 +99,7 @@ The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on th
 
 ## Troubleshooting
 
-- **`bw not found`** — Install CLI or set `HDC_BW_EXECUTABLE`.
+- **`bw not found`** — Install CLI or set `HDC_BW_EXECUTABLE`. On Windows, npm installs `@bitwarden/cli` as a PowerShell/cmd shim; hdc invokes `node …/bw.js` directly so `shell: false` spawn works.
 - **Unlock fails** — Verify URL, email, and master password; run `bw config server …` and `bw login` manually once.
+- **`bw login` returns `{"statusCode":404}`** — Bitwarden CLI 2026.x calls `POST /identity/accounts/prelogin/password`, which requires **Vaultwarden ≥ 1.36.0**. Upgrade with `node tools/hdc/cli.mjs run service vaultwarden maintain --` (bump `vaultwarden.image_tag` in config first if pinned below 1.36.0).
 - **Item not found** — Create with `secrets set <ENV_NAME>`; name must match exactly.
