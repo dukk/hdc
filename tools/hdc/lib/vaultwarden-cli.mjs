@@ -215,18 +215,9 @@ function bwUnlockRaw(deps, masterPassword) {
 /**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
- * @returns {string}
+ * @returns {Array<{ id: string; name: string }>}
  */
-export function resolveBwOrganizationId(deps, session) {
-  if (processBwOrganizationId) return processBwOrganizationId;
-
-  const fromEnv = vaultwardenOrganizationIdFromEnv(deps.env);
-  if (fromEnv) {
-    processBwOrganizationId = fromEnv;
-    return fromEnv;
-  }
-
-  const name = vaultwardenOrganizationNameFromEnv(deps.env);
+function bwListOrganizations(deps, session) {
   const r = spawnBw(deps, ["list", "organizations"], { capture: true, session });
   if (!r.ok || !r.stdout) {
     throw new Error(
@@ -242,18 +233,72 @@ export function resolveBwOrganizationId(deps, session) {
   if (!Array.isArray(orgs)) {
     throw new Error("bw list organizations returned unexpected data");
   }
-  const match = orgs.find((o) => o && typeof o === "object" && o.name === name && typeof o.id === "string");
-  if (!match) {
-    const names = orgs
-      .map((o) => (o && typeof o === "object" && typeof o.name === "string" ? o.name : null))
-      .filter(Boolean)
-      .join(", ");
-    throw new Error(
-      `Vaultwarden organization ${JSON.stringify(name)} not found (available: ${names || "none"}); set HDC_VAULTWARDEN_ORGANIZATION_ID in .env`,
+  return orgs
+    .map((o) =>
+      o && typeof o === "object" && typeof o.id === "string" && typeof o.name === "string"
+        ? { id: o.id, name: o.name }
+        : null,
+    )
+    .filter((o) => o !== null);
+}
+
+/**
+ * @param {Array<{ id: string; name: string }>} orgs
+ */
+function formatOrganizationChoices(orgs) {
+  if (orgs.length === 0) return "none";
+  return orgs.map((o) => `${o.name} (${o.id})`).join(", ");
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @returns {string}
+ */
+export function resolveBwOrganizationId(deps, session) {
+  if (processBwOrganizationId) return processBwOrganizationId;
+
+  const orgs = bwListOrganizations(deps, session);
+  const fromEnv = vaultwardenOrganizationIdFromEnv(deps.env);
+  if (fromEnv) {
+    const envMatch = orgs.find((o) => o.id === fromEnv);
+    if (envMatch) {
+      processBwOrganizationId = fromEnv;
+      return fromEnv;
+    }
+    deps.warn(
+      `[hdc] vaultwarden: HDC_VAULTWARDEN_ORGANIZATION_ID ${fromEnv} is not in your organizations; trying name lookup`,
     );
   }
-  processBwOrganizationId = match.id;
-  return match.id;
+
+  const name = vaultwardenOrganizationNameFromEnv(deps.env);
+  const byName = orgs.find((o) => o.name === name);
+  if (byName) {
+    processBwOrganizationId = byName.id;
+    return byName.id;
+  }
+
+  const email = String(deps.env.HDC_VAULTWARDEN_EMAIL ?? "").trim() || "your account";
+  if (fromEnv && orgs.length === 0) {
+    throw new Error(
+      `HDC_VAULTWARDEN_ORGANIZATION_ID is set but ${email} has no Vaultwarden organizations (bw list organizations returned none). ` +
+        "Create or join organization " +
+        JSON.stringify(name) +
+        " in the Vaultwarden web UI, accept any invitation, run bw sync, then set HDC_VAULTWARDEN_ORGANIZATION_ID to the id from bw list organizations. " +
+        "Remove the current value if it was copied from the Vaultwarden admin panel.",
+    );
+  }
+  if (fromEnv) {
+    throw new Error(
+      `HDC_VAULTWARDEN_ORGANIZATION_ID ${JSON.stringify(fromEnv)} is not accessible to ${email}. ` +
+        `Available organizations: ${formatOrganizationChoices(orgs)}. ` +
+        "Update .env with an id from bw list organizations.",
+    );
+  }
+  throw new Error(
+    `Vaultwarden organization ${JSON.stringify(name)} not found for ${email} (available: ${formatOrganizationChoices(orgs)}). ` +
+      "Create the organization in the Vaultwarden web UI or set HDC_VAULTWARDEN_ORGANIZATION_ID in .env.",
+  );
 }
 
 /**
@@ -274,7 +319,14 @@ export function resolveBwCollectionId(deps, session, orgId) {
 
   const r = spawnBw(deps, ["list", "org-collections", "--organizationid", orgId], { capture: true, session });
   if (!r.ok || !r.stdout) {
-    throw new Error(`bw list org-collections failed: ${r.stderr || r.stdout || "unknown error"}`);
+    const msg = r.stderr || r.stdout || "unknown error";
+    if (String(msg).toLowerCase().includes("organization not found")) {
+      throw new Error(
+        `bw list org-collections failed: organization ${JSON.stringify(orgId)} not found. ` +
+          "Run bw list organizations and set HDC_VAULTWARDEN_ORGANIZATION_ID to an id your account can access.",
+      );
+    }
+    throw new Error(`bw list org-collections failed: ${msg}`);
   }
   let collections;
   try {
@@ -335,6 +387,10 @@ export async function ensureBwUnlocked(deps, readLocalSecret, writeLocalSecret) 
   const stored = await readLocalSecret("HDC_VAULTWARDEN_MASTER_PASSWORD");
   if (typeof stored === "string" && stored.length > 0) {
     masterPassword = stored;
+  }
+  if (!masterPassword) {
+    const fromEnv = String(deps.env.HDC_VAULTWARDEN_MASTER_PASSWORD ?? "").trim();
+    if (fromEnv) masterPassword = fromEnv;
   }
 
   if (!masterPassword) {

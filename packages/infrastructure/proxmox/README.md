@@ -71,7 +71,32 @@ Opt out with `"backup": { "enabled": false }`. Jobs are named `hdc-backup-<syste
 4. Run `node tools/hdc/cli.mjs run infrastructure proxmox maintain -- --dry-run`, then without `--dry-run`.
 5. Verify jobs in Proxmox UI under Datacenter → Backup.
 
-Flags: `--skip-backups`, `--dry-run`, `--no-prune` (skip deleting stale `hdc-backup-*` jobs).
+Flags: `--skip-backups`, `--skip-notifications`, `--dry-run`, `--no-prune` (skip deleting stale `hdc-backup-*` jobs).
+
+### Backup failure notifications only
+
+When `provision.notifications` is set in [`config.json`](config.json) (see [`config.example.json`](config.example.json)), `proxmox maintain`:
+
+1. Ensures a **Sendmail** notification target and a **matcher** that routes only `vzdump` **error** events (failed backups).
+2. Disables other matchers that would notify on successful backups (`vzdump` **info**), including catch-all matchers with no severity filter.
+3. Sets each hdc-managed backup job to **`notification-mode: notification-system`** and clears legacy `mailto` fields.
+
+Successful scheduled backups no longer email; failures still do. Requires outbound mail on hypervisors (Postfix satellite via `provision.host_os.mail_relay`).
+
+Optional overrides:
+
+```json
+"notifications": {
+  "enabled": true,
+  "mailto": "dukk@dukk.org",
+  "sendmail_target": "hdc-mail",
+  "backup_failure_matcher": "hdc-backup-failures",
+  "disable_matchers": ["default"],
+  "disable_legacy_backup_success_matchers": true
+}
+```
+
+Flags: `--skip-notifications` (skip target/matcher ensure; backup jobs keep prior notification settings unless also skipped).
 
 ## Storage replication
 

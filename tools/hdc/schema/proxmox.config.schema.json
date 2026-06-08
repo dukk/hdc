@@ -108,6 +108,7 @@
         "oem_windows_license": { "$ref": "#/$defs/provision_oem_windows_license" },
         "storage": { "$ref": "#/$defs/provision_storage" },
         "backups": { "$ref": "#/$defs/provision_backups" },
+        "notifications": { "$ref": "#/$defs/provision_notifications" },
         "replication": { "$ref": "#/$defs/provision_replication" },
         "ha": { "$ref": "#/$defs/provision_ha" },
         "startup": { "$ref": "#/$defs/provision_startup" },
@@ -642,6 +643,40 @@
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/provision_backup_profile" },
           "description": "Named backup schedules and retention policies."
+        }
+      }
+    },
+    "provision_notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips notification target/matcher ensure and does not set backup job notification-mode (default true when mailto is set)."
+        },
+        "mailto": {
+          "type": "string",
+          "format": "email",
+          "description": "Operator email for backup failure notifications (Sendmail target)."
+        },
+        "sendmail_target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox sendmail notification target id (default hdc-mail)."
+        },
+        "backup_failure_matcher": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Matcher id routing vzdump error events to sendmail_target (default hdc-backup-failures)."
+        },
+        "disable_matchers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Additional matcher ids to disable (e.g. default catch-all matchers)."
+        },
+        "disable_legacy_backup_success_matchers": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), disable matchers that would notify on successful backup (vzdump info) events."
         }
       }
     },

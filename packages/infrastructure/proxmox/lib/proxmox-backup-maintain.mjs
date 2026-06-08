@@ -20,6 +20,7 @@ import { loadProxmoxMaintainConfig } from "./proxmox-package-config.mjs";
 import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
 import { fetchPveStorageList } from "./proxmox-storage-maintain.mjs";
 import { pveFormBody, pveJsonRequest, pveDataArray } from "./pve-http.mjs";
+import { notificationsMaintainEnabledFromConfig } from "./proxmox-notifications-maintain.mjs";
 
 /** @typedef {{ schedule: string; prune_backups: string; mode: string; compress: string; storage?: string }} BackupProfileSpec */
 
@@ -48,7 +49,17 @@ const DEFAULT_JOB_ID_PREFIX = "hdc-backup";
 const DEFAULT_DEFAULT_PROFILE = "weekly";
 const DEFAULT_DEFAULT_STORAGE = "nas-a";
 
-const BACKUP_COMPARE_KEYS = ["enabled", "storage", "schedule", "vmid", "mode", "compress", "prune-backups", "comment"];
+const BACKUP_COMPARE_KEYS = [
+  "enabled",
+  "storage",
+  "schedule",
+  "vmid",
+  "mode",
+  "compress",
+  "prune-backups",
+  "comment",
+  "notification-mode",
+];
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -338,10 +349,12 @@ export function locateGuestByNameInCluster(resources, name) {
  * @param {object} target
  * @param {ReturnType<typeof resolveBackupSpec>} spec
  * @param {string} jobIdPrefix
+ * @param {unknown} [cfg]
  */
-export function buildBackupJobBody(target, spec, jobIdPrefix = DEFAULT_JOB_ID_PREFIX) {
+export function buildBackupJobBody(target, spec, jobIdPrefix = DEFAULT_JOB_ID_PREFIX, cfg) {
   const id = backupJobIdForSystem(target.systemId, jobIdPrefix);
-  return {
+  /** @type {Record<string, string | number>} */
+  const body = {
     id,
     enabled: 1,
     storage: spec.storage,
@@ -352,6 +365,38 @@ export function buildBackupJobBody(target, spec, jobIdPrefix = DEFAULT_JOB_ID_PR
     "prune-backups": spec.prune_backups,
     comment: `hdc-managed: ${target.systemId}`,
   };
+  if (cfg && notificationsMaintainEnabledFromConfig(cfg)) {
+    body["notification-mode"] = "notification-system";
+  }
+  return body;
+}
+
+/**
+ * @param {Record<string, unknown>} desired
+ * @param {Record<string, unknown>} live
+ */
+export function backupJobLegacyMailFields(live) {
+  /** @type {string[]} */
+  const deleteKeys = [];
+  if (String(live.mailto ?? "").trim()) deleteKeys.push("mailto");
+  if (live.mailnotification !== undefined && live.mailnotification !== null && String(live.mailnotification).trim()) {
+    deleteKeys.push("mailnotification");
+  }
+  return deleteKeys;
+}
+
+/**
+ * @param {Record<string, unknown>} desired
+ * @param {Record<string, unknown>} live
+ */
+export function buildBackupJobPutForm(desired, live) {
+  const deleteKeys = backupJobLegacyMailFields(live);
+  const digest = typeof live.digest === "string" ? live.digest : undefined;
+  return pveFormBody({
+    ...desired,
+    ...(deleteKeys.length ? { delete: deleteKeys } : {}),
+    ...(digest ? { digest } : {}),
+  });
 }
 
 /**
@@ -376,8 +421,15 @@ export function backupJobsMatch(desired, live) {
       if (normalizePruneBackups(dVal) !== normalizePruneBackups(lVal)) return false;
       continue;
     }
+    if (key === "notification-mode") {
+      const d = String(dVal ?? "").trim() || "auto";
+      const l = String(lVal ?? "").trim() || "auto";
+      if (d !== l) return false;
+      continue;
+    }
     if (String(dVal ?? "").trim() !== String(lVal ?? "").trim()) return false;
   }
+  if (backupJobLegacyMailFields(live).length) return false;
   return true;
 }
 
@@ -606,7 +658,7 @@ export async function runProxmoxBackupMaintain(opts) {
       }
 
       const resolvedTarget = { ...target, vmid };
-      const desired = buildBackupJobBody(resolvedTarget, target.backup, jobIdPrefix);
+      const desired = buildBackupJobBody(resolvedTarget, target.backup, jobIdPrefix, cfg);
       const jobId = String(desired.id);
       desiredJobIds.add(jobId);
       row.id = jobId;
@@ -635,7 +687,7 @@ export async function runProxmoxBackupMaintain(opts) {
       }
 
       try {
-        const form = pveFormBody(desired);
+        const form = live ? buildBackupJobPutForm(desired, live) : pveFormBody(desired);
         if (live) {
           await pveJsonRequest(
             "PUT",

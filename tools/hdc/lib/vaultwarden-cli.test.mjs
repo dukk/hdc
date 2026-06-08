@@ -25,6 +25,10 @@ describe("vaultwarden-cli", () => {
     const responses = {
       "--version": { status: 0, stdout: "2024.1.0" },
       "bw:--version": { status: 0, stdout: "2024.1.0" },
+      "list organizations": {
+        status: 0,
+        stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
+      },
       [`list org-collections --organizationid ${ORG_ID}`]: {
         status: 0,
         stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
@@ -71,10 +75,26 @@ describe("vaultwarden-cli", () => {
     expect(resolveBwExecutable(deps)).toBe("bw");
   });
 
-  it("resolveBwOrganizationId uses env when set", () => {
+  it("resolveBwOrganizationId uses env when it matches bw list organizations", () => {
     const deps = makeDeps();
     expect(resolveBwOrganizationId(deps, "sess")).toBe(ORG_ID);
-    expect(deps.spawnSync).not.toHaveBeenCalled();
+  });
+
+  it("resolveBwOrganizationId falls back to name when env id is stale", () => {
+    const deps = makeDeps({
+      envVars: {
+        HDC_VAULTWARDEN_ORGANIZATION_ID: "stale-org-id",
+        HDC_VAULTWARDEN_ORGANIZATION_NAME: "HDC",
+      },
+      responses: {
+        "list organizations": {
+          status: 0,
+          stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
+        },
+      },
+    });
+    expect(resolveBwOrganizationId(deps, "sess")).toBe(ORG_ID);
+    expect(deps._capture.warn.some((m) => m.includes("stale-org-id"))).toBe(true);
   });
 
   it("resolveBwOrganizationId resolves by name when env unset", () => {

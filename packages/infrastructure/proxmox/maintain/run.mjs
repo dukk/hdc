@@ -5,14 +5,15 @@
  * 2. Ensure hdc API token role/ACL (VM.Audit, Datastore.Audit, …) via pveum over SSH.
  * 3. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
  * 4. Ensure NAS storage connections (nas-a, nas-b by default) on each cluster/standalone group.
- * 5. Ensure scheduled backup jobs for managed guests (provision.backups).
- * 6. Ensure storage replication jobs for managed guests (provision.replication).
- * 7. Ensure HA groups and resources for managed guests (provision.ha).
- * 8. Ensure guest startup order for priority services (provision.startup).
- * 9. Extend local-lvm and ensure extra-disk LVM-thin pools (provision.local_lvm).
- * 10. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
- * 11. Report configured CPU/RAM/disk load per hypervisor (% of node capacity from API).
- * 12. Write markdown report under packages/infrastructure/proxmox/reports/ in hdc-private when present (unless --no-report).
+ * 5. Ensure backup failure notification targets/matchers (provision.notifications).
+ * 6. Ensure scheduled backup jobs for managed guests (provision.backups).
+ * 7. Ensure storage replication jobs for managed guests (provision.replication).
+ * 8. Ensure HA groups and resources for managed guests (provision.ha).
+ * 9. Ensure guest startup order for priority services (provision.startup).
+ * 10. Extend local-lvm and ensure extra-disk LVM-thin pools (provision.local_lvm).
+ * 11. apt update/dist-upgrade on each hypervisor via SSH public-key auth; sequential reboot if required.
+ * 12. Report configured CPU/RAM/disk load per hypervisor (% of node capacity from API).
+ * 13. Write markdown report under packages/infrastructure/proxmox/reports/ in hdc-private when present (unless --no-report).
  *
  * Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts via `ubuntu maintain` or `users bootstrap-hdc` — not from this script.
  *
@@ -23,6 +24,7 @@
  *   --no-prune             Do not remove unsupported Ubuntu LXC/QEMU templates
  *   --skip-storage           Skip NAS storage ensure (nas-a, nas-b)
  *   --skip-backups           Skip scheduled backup job ensure (provision.backups)
+ *   --skip-notifications     Skip notification target/matcher ensure (provision.notifications)
  *   --skip-replication       Skip storage replication job ensure (provision.replication)
  *   --skip-ha                Skip HA group/resource ensure (provision.ha)
  *   --skip-startup           Skip guest startup order ensure (provision.startup)
@@ -62,6 +64,7 @@ import { runProxmoxApiTokenMaintain } from "../lib/proxmox-api-token-maintain.mj
 import { runProxmoxServiceAccountMaintain } from "../lib/proxmox-service-account-maintain.mjs";
 import { runProxmoxStorageMaintain } from "../lib/proxmox-storage-maintain.mjs";
 import { runProxmoxBackupMaintain } from "../lib/proxmox-backup-maintain.mjs";
+import { runProxmoxNotificationsMaintain } from "../lib/proxmox-notifications-maintain.mjs";
 import { runProxmoxReplicationMaintain } from "../lib/proxmox-replication-maintain.mjs";
 import { runProxmoxHaMaintain } from "../lib/proxmox-ha-maintain.mjs";
 import { runProxmoxGuestStartupMaintain } from "../lib/proxmox-guest-startup-maintain.mjs";
@@ -157,6 +160,7 @@ async function main() {
   const skipTemplates = argv.includes("--skip-templates");
   const skipStorage = argv.includes("--skip-storage");
   const skipBackups = argv.includes("--skip-backups");
+  const skipNotifications = argv.includes("--skip-notifications");
   const skipReplication = argv.includes("--skip-replication");
   const skipHa = argv.includes("--skip-ha");
   const skipStartup = argv.includes("--skip-startup");
@@ -432,6 +436,56 @@ async function main() {
         title: "NAS storage ensure",
         ran: false,
         skipReason: "--skip-storage",
+      });
+    }
+
+    if (!skipNotifications) {
+      try {
+        const notificationsResult = await runProxmoxNotificationsMaintain({
+          packageRoot,
+          log,
+          warn,
+          dryRun,
+          vault,
+        });
+        if (!notificationsResult.ok) exitCode = 1;
+        /** @type {string[]} */
+        const notificationNotes = [];
+        for (const row of notificationsResult.results ?? []) {
+          const name = typeof row.name === "string" ? row.name : "?";
+          const kind = typeof row.kind === "string" ? row.kind : "item";
+          const action = typeof row.action === "string" ? row.action : "?";
+          const status = row.ok === false ? "failed" : action;
+          notificationNotes.push(`${kind}:${name} ${status}`);
+        }
+        recordStep(reportCtx, {
+          id: "notifications",
+          title: "Backup failure notifications",
+          ran: true,
+          ok: notificationsResult.ok !== false,
+          notes: notificationNotes.length ? notificationNotes : undefined,
+        });
+      } catch (e) {
+        if (e instanceof CliExit) {
+          exitCode = exitCode || e.code;
+        } else {
+          log(`notifications maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
+          exitCode = 1;
+        }
+        recordStep(reportCtx, {
+          id: "notifications",
+          title: "Backup failure notifications",
+          ran: true,
+          ok: false,
+          notes: [String(/** @type {Error} */ (e).message || e)],
+        });
+      }
+    } else {
+      recordStep(reportCtx, {
+        id: "notifications",
+        title: "Backup failure notifications",
+        ran: false,
+        skipReason: "--skip-notifications",
       });
     }
 

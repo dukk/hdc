@@ -100,12 +100,23 @@ export function pveDataArray(body) {
  * Proxmox form bodies must use encodeURIComponent (not URLSearchParams), so spaces
  * are %20 and '+' in SSH keys/base64 stay %2B — '+' as space breaks sshkeys validation.
  *
- * @param {Record<string, string | number | boolean>} fields
+ * @param {Record<string, string | number | boolean | (string | number | boolean)[]>} fields
  */
 export function pveFormBody(fields) {
-  return Object.entries(fields)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-    .join("&");
+  /** @type {string[]} */
+  const parts = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item === undefined || item === null) continue;
+        parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(item))}`);
+      }
+      continue;
+    }
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  }
+  return parts.join("&");
 }
 
 /**

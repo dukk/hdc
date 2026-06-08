@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   backupJobIdForSystem,
   backupJobIdPrefixFromConfig,
+  backupJobLegacyMailFields,
   backupJobsMatch,
   backupProfilesFromConfig,
   buildBackupJobBody,
+  buildBackupJobPutForm,
   collectBackupTargetsFromPackages,
   deploymentBackupRow,
   normalizePruneBackups,
@@ -21,6 +23,10 @@ const proxmoxCfg = {
         weekly: { schedule: "sun 03:00", prune_backups: "keep-last=3", mode: "snapshot", compress: "zstd" },
         hourly: { schedule: "hourly", prune_backups: "keep-daily=7,keep-last=3", mode: "snapshot", compress: "zstd" },
       },
+    },
+    notifications: {
+      enabled: true,
+      mailto: "ops@dukk.org",
     },
   },
 };
@@ -64,11 +70,32 @@ describe("proxmox backup maintain", () => {
     const body = buildBackupJobBody(
       { systemId: "vaultwarden-a", vmid: 488 },
       resolveBackupSpec(proxmoxCfg, { profile: "hourly" }),
+      "hdc-backup",
+      proxmoxCfg,
     );
     expect(body.id).toBe("hdc-backup-vaultwarden-a");
     expect(body.vmid).toBe("488");
     expect(body["prune-backups"]).toBe("keep-daily=7,keep-last=3");
     expect(body.comment).toBe("hdc-managed: vaultwarden-a");
+    expect(body["notification-mode"]).toBe("notification-system");
+  });
+
+  it("backupJobsMatch rejects legacy mailto on live jobs", () => {
+    const desired = {
+      enabled: 1,
+      storage: "nas-1",
+      schedule: "hourly",
+      vmid: "488",
+      mode: "snapshot",
+      compress: "zstd",
+      "prune-backups": "keep-daily=7,keep-last=3",
+      comment: "hdc-managed: vaultwarden-a",
+      "notification-mode": "notification-system",
+    };
+    const live = { ...desired, mailto: "ops@dukk.org", "notification-mode": "auto" };
+    expect(backupJobsMatch(desired, live)).toBe(false);
+    expect(backupJobLegacyMailFields(live)).toEqual(["mailto"]);
+    expect(buildBackupJobPutForm(desired, live)).toContain("delete=mailto");
   });
 
   it("backupJobsMatch compares normalized prune-backups", () => {

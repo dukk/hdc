@@ -51,6 +51,7 @@ export function createMaintainReportContext(argv) {
     skipTemplates: argv.includes("--skip-templates"),
     skipStorage: argv.includes("--skip-storage"),
     skipBackups: argv.includes("--skip-backups"),
+    skipNotifications: argv.includes("--skip-notifications"),
     skipReplication: argv.includes("--skip-replication"),
     skipHa: argv.includes("--skip-ha"),
     skipStartup: argv.includes("--skip-startup"),

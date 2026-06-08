@@ -41,6 +41,7 @@ export const HDC_PROXMOX_API_PRIVILEGES_PVE8 = [
   "VM.Replicate",
   "VM.Monitor",
   "VM.PowerMgmt",
+  "Mapping.Modify",
   "Sys.Modify",
 ];
 

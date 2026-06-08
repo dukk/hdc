@@ -190,7 +190,7 @@ function cmdHelp(deps, root, topics) {
   ${c} help help
   ${c} help list
   ${c} help run [ <tier> [ <package> [ <verb> ] ] ]
-  ${c} help secrets [ path | init | change-passphrase | set | list | get | dump | delete ]
+  ${c} help secrets [ path | init | change-passphrase | set | list | get | dump | delete | unlock | push ]
   ${c} help users [ bootstrap-hdc ]
   ${c} help maintain [ daily ]
   ${c} help env`);

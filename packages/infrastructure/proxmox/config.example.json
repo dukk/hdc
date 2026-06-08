@@ -106,6 +106,13 @@
         }
       }
     },
+    "notifications": {
+      "enabled": true,
+      "mailto": "ops@example.invalid",
+      "sendmail_target": "hdc-mail",
+      "backup_failure_matcher": "hdc-backup-failures",
+      "disable_legacy_backup_success_matchers": true
+    },
     "replication": {
       "enabled": true,
       "manage_from_deployments": true,
