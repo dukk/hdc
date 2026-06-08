@@ -1,5 +1,6 @@
 import { waitForPveTask } from "./pve-http.mjs";
 import { applyQemuGuestResources } from "./proxmox-guest-resources.mjs";
+import { applyGuestBootOptions } from "./proxmox-guest-startup.mjs";
 import { enableQemuAgentInConfig } from "./proxmox-qemu-guest-agent-install.mjs";
 import { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
 
@@ -63,16 +64,29 @@ export async function waitForCloneTaskAndEnableAgent(provisionResult, auth, vmid
     log(`QEMU ${guestVmid}: no Proxmox task UPID — skipping task wait.`);
   }
 
+  const statusOpts = {
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+  };
+
   if (resourceOpts) {
     await applyQemuGuestResources({
-      apiBase: auth.host.apiBase,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-      node: cloneNode,
-      vmid: guestVmid,
+      ...statusOpts,
       memoryMb: resourceOpts.memoryMb,
       cores: resourceOpts.cores,
       reboot: resourceOpts.reboot,
+      log,
+    });
+  }
+
+  if (resourceOpts?.boot?.startup) {
+    await applyGuestBootOptions({
+      guestType: "qemu",
+      ...statusOpts,
+      boot: resourceOpts.boot,
       log,
     });
   }

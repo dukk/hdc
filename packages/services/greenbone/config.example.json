@@ -19,25 +19,25 @@
         "onboot": 1
       }
     },
-    "openvas": {
+    "greenbone": {
       "image_tag": "stable",
       "host_port": 3000,
       "admin_user": "admin",
-      "admin_password_vault_key": "HDC_OPENVAS_ADMIN_PASSWORD"
+      "admin_password_vault_key": "HDC_GREENBONE_ADMIN_PASSWORD"
     },
     "install": {
       "enabled": true,
-      "compose_dir": "/opt/openvas"
+      "compose_dir": "/opt/greenbone"
     }
   },
   "deployments": [
     {
-      "system_id": "openvas-a",
+      "system_id": "greenbone-a",
       "proxmox": {
         "host_id": "REPLACE_PVE_NODE",
         "lxc": {
           "vmid": 0,
-          "hostname": "openvas-a"
+          "hostname": "greenbone-a"
         }
       }
     }

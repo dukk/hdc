@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 /**
- * Teardown Wazuh Proxmox LXC deployments.
+ * Teardown Wazuh Proxmox LXC or QEMU deployments.
  *
- * Usage: hdc run service wazuh teardown -- [--instance a | --system-id wazuh-a]
+ * Usage: hdc run service wazuh teardown -- [--instance a | --system-id vm-wazuh-a]
  *        hdc run service wazuh teardown -- [--dry-run] [--yes] [--skip-compose-down]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { stopAndDestroyLxc } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
 import { resolveWazuhDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
-import { composeDownInCt, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
+import { composeDownInCt, composeDownOnHost, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
+import { stopAndDestroyQemu } from "../lib/proxmox-qemu-redeploy.mjs";
 import { confirmTeardown, teardownDryRun } from "../../ollama/lib/teardown-confirm.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -48,51 +51,113 @@ function readCfg() {
  * @param {Record<string, string>} flags
  */
 async function teardownOne(deployment, flags) {
-  const { mode, systemId, proxmox: px, install } = deployment;
+  const { mode, systemId, proxmox: px, install, configure } = deployment;
   const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
   const dryRun = teardownDryRun(flags);
   const skipComposeDown = flagGet(flags, "skip-compose-down", "skip_compose_down") !== undefined;
-  if (mode !== "proxmox-lxc") return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
+
   if (!isObject(px)) return { ok: false, system_id: systemId, message: "bad proxmox config" };
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-  const lxc = isObject(px.lxc) ? px.lxc : {};
-  const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-  if (!hostId || !Number.isFinite(vmid) || vmid <= 0) return { ok: false, system_id: systemId, message: "missing host_id or vmid" };
+  if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
+
+  const isQemu = mode === "proxmox-qemu";
+  const vmid = isQemu
+    ? (() => {
+        const q = isObject(px.qemu) ? px.qemu : {};
+        return typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+      })()
+    : (() => {
+        const lxc = isObject(px.lxc) ? px.lxc : {};
+        return typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+      })();
+
+  if (!Number.isFinite(vmid) || vmid <= 0) {
+    return { ok: false, system_id: systemId, host_id: hostId, message: "invalid vmid" };
+  }
+
   const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
   const located = await findClusterGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
-  if (!located) return { ok: true, system_id: systemId, host_id: hostId, mode, skipped: true, message: "guest not found", vmid };
-  const detail = `vmid ${vmid} on ${located.node}${located.name ? ` (${located.name})` : ""}`;
-  if (dryRun) return { ok: true, system_id: systemId, host_id: hostId, mode, dry_run: true, vmid, node: located.node, message: "dry-run" };
-  const proceed = await confirmTeardown(systemId, detail, flags);
-  if (!proceed) return { ok: true, system_id: systemId, host_id: hostId, mode, skipped: true, message: "cancelled", vmid, node: located.node };
+  if (!located) {
+    return { ok: true, system_id: systemId, host_id: hostId, mode, skipped: true, message: "guest not found", vmid };
+  }
 
+  const detail = `vmid ${vmid} on ${located.node}${located.name ? ` (${located.name})` : ""}`;
+  if (dryRun) {
+    return { ok: true, system_id: systemId, host_id: hostId, mode, dry_run: true, vmid, node: located.node, message: "dry-run" };
+  }
+
+  const proceed = await confirmTeardown(systemId, detail, flags);
+  if (!proceed) {
+    return { ok: true, system_id: systemId, host_id: hostId, mode, skipped: true, message: "cancelled", vmid, node: located.node };
+  }
+
+  const installCfg = isObject(install) ? install : {};
   if (!skipComposeDown) {
     try {
-      const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-      const installCfg = isObject(install) ? install : {};
-      composeDownInCt(pveSsh.user, pveSsh.host, vmid, installCfg);
+      if (isQemu) {
+        const cfg = isObject(configure) ? configure : {};
+        const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
+        const user = resolveGuestSshUser(ssh.user);
+        const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
+        if (host) {
+          const exec = createConfigureExec("ssh", { user, host });
+          composeDownOnHost(exec, installCfg);
+        }
+      } else {
+        const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+        composeDownInCt(pveSsh.user, pveSsh.host, vmid, installCfg);
+      }
     } catch {
       // best-effort
     }
   }
 
   try {
-    await stopAndDestroyLxc({
-      apiBase: auth.host.apiBase,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-      node: located.node,
-      vmid,
-      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
-    });
+    if (isQemu) {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+      });
+    } else {
+      await stopAndDestroyLxc({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+      });
+    }
   } catch (e) {
-    return { ok: false, system_id: systemId, host_id: hostId, mode, vmid, node: located.node, message: String(/** @type {Error} */ (e).message || e) };
+    return {
+      ok: false,
+      system_id: systemId,
+      host_id: hostId,
+      mode,
+      vmid,
+      node: located.node,
+      message: String(/** @type {Error} */ (e).message || e),
+    };
   }
-  return { ok: true, system_id: systemId, host_id: hostId, mode, destroyed: true, vmid, node: located.node, message: `lxc ${vmid} destroyed` };
+
+  return {
+    ok: true,
+    system_id: systemId,
+    host_id: hostId,
+    mode,
+    destroyed: true,
+    vmid,
+    node: located.node,
+    message: isQemu ? `qemu ${vmid} destroyed` : `lxc ${vmid} destroyed`,
+  };
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: tear down Wazuh LXC (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: tear down Wazuh guests (stderr log; JSON on stdout).\n`);
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(`${JSON.stringify({ ok: false, target, verb, message: "package config missing - see stderr" }, null, 2)}\n`);
     process.exitCode = 1;

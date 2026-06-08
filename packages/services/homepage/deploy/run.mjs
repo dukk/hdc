@@ -35,6 +35,9 @@ import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
+import { resolveHomepageProxmoxWidgetEnv } from "../lib/homepage-proxmox-widget.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -82,7 +85,7 @@ function existingGuestPolicy(flags) {
  * @param {ReturnType<typeof resolveHomepageDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
- * @param {{ ctPasswordCache?: { value: string | null } }} runOpts
+ * @param {{ ctPasswordCache?: { value: string | null }; vaultAccess?: ReturnType<typeof createPackageVaultAccess>; cliDeps?: ReturnType<typeof createNodeCliDeps> }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, homepage, install } = deployment;
@@ -313,8 +316,40 @@ async function deployOne(deployment, flags, log, runOpts) {
   const homepageCfg = isObject(homepage) ? homepage : {};
   const installCfg = isObject(install) ? install : {};
 
+  /** @type {string[]} */
+  let widgetEnvLines = [];
+  if (runOpts.vaultAccess) {
+    try {
+      const widgetEnv = await resolveHomepageProxmoxWidgetEnv({
+        homepage: homepageCfg,
+        proxmoxPackageRoot: proxmoxRoot,
+        vaultAccess: runOpts.vaultAccess,
+        env: process.env,
+        spawnSync: (runOpts.cliDeps ?? createNodeCliDeps()).spawnSync,
+        readLineQuestion: (runOpts.cliDeps ?? createNodeCliDeps()).readLineQuestion,
+      });
+      if (widgetEnv) widgetEnvLines = widgetEnv.lines;
+    } catch (e) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        message: String(/** @type {Error} */ (e).message || e),
+      };
+    }
+  }
+
   if (shouldInstall(install)) {
-    installResult = await installHomepageInCt(pveSsh.user, pveSsh.host, guestVmid, homepageCfg, installCfg);
+    installResult = await installHomepageInCt(
+      pveSsh.user,
+      pveSsh.host,
+      guestVmid,
+      homepageCfg,
+      installCfg,
+      packageRoot,
+      { widgetEnvLines },
+    );
   } else {
     installResult = { ok: true, method: "skipped", message: "skipped" };
     errout.write(`[hdc] ${target} ${verb}: install skipped for ${systemId}.\n`);
@@ -380,11 +415,14 @@ async function main() {
   const log = provisionLogFromConsole(console);
   /** @type {{ value: string | null }} */
   const ctPasswordCache = { value: null };
+  const vaultAccess = createPackageVaultAccess();
+  await vaultAccess.unlock({});
+  const cliDeps = createNodeCliDeps();
   /** @type {Record<string, unknown>[]} */
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache }));
+      results.push(await deployOne(deployment, flags, log, { ctPasswordCache, vaultAccess, cliDeps }));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

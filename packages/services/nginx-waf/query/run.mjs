@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
-import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import {
   nginxWafGlobalSettings,
   normalizeNginxWafConfig,
@@ -15,7 +15,9 @@ import {
   sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { createConfigureExec } from "../lib/nginx-waf-configure.mjs";
-import { queryCertExpiry } from "../lib/letsencrypt.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { queryCertExpiry } from "../lib/letsencrypt.mjs";
+import { queryLiveVhostDrift } from "../lib/nginx-waf-vhost-drift.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 import {
   MODSECURITY_RULES_FILE,
@@ -146,6 +148,7 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const liveDrift = flagGet(flags, "live") !== undefined;
   const normalized = normalizeNginxWafConfig(cfg);
   const global = nginxWafGlobalSettings(normalized);
   const deployments = resolveNginxWafDeployments(cfg, flags);
@@ -182,6 +185,8 @@ async function main() {
       ...queryCertExpiry(exec, domain),
     }));
 
+    const vhostAudit = liveDrift ? queryLiveVhostDrift(exec, sites) : null;
+
     nodes.push({
       system_id: d.systemId,
       role: d.role,
@@ -192,7 +197,17 @@ async function main() {
       enabled_sites: enabledSites,
       site_probes: siteProbes,
       certificates: certs,
-      ok: nginx.active && configTest.ok && (modsec.ok !== false),
+      ...(vhostAudit
+        ? {
+            live_sites: vhostAudit.live_sites,
+            vhost_drift: vhostAudit.vhost_drift,
+          }
+        : {}),
+      ok:
+        nginx.active &&
+        configTest.ok &&
+        modsec.ok !== false &&
+        (vhostAudit ? vhostAudit.ok : true),
     });
   }
 

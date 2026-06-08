@@ -5,15 +5,17 @@
  * Usage: hdc run service wazuh query -- [--instance a]
  *        hdc run service wazuh query -- --live
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { listWazuhDeploymentSummaries, normalizeWazuhConfig, resolveWazuhDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/wazuh-install.mjs";
-import { queryWazuhInCt } from "../lib/query-status.mjs";
+import { queryWazuhInCt, queryWazuhOnHost } from "../lib/query-status.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,16 +78,32 @@ async function main() {
       for (const d of selected) {
         const px = isObject(d.proxmox) ? d.proxmox : {};
         const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-        const lxc = isObject(px.lxc) ? px.lxc : {};
-        const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-        if (!hostId || !Number.isFinite(vmid)) {
-          liveResults.push({ system_id: d.systemId, ok: false, message: "missing host_id or vmid" });
-          continue;
-        }
         try {
-          const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-          const status = queryWazuhInCt(pveSsh.user, pveSsh.host, vmid, d.wazuh, d.install);
-          liveResults.push({ system_id: d.systemId, ok: true, ...status });
+          if (d.mode === "proxmox-qemu") {
+            const cfgObj = isObject(d.configure) ? d.configure : {};
+            const ssh = isObject(cfgObj.ssh) ? cfgObj.ssh : {};
+            const user = resolveGuestSshUser(ssh.user);
+            const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
+            if (!host) {
+              liveResults.push({ system_id: d.systemId, ok: false, message: "configure.ssh.host required" });
+              continue;
+            }
+            const q = isObject(px.qemu) ? px.qemu : {};
+            const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+            const exec = createConfigureExec("ssh", { user, host });
+            const status = queryWazuhOnHost(exec, d.wazuh, d.install, Number.isFinite(vmid) ? vmid : null);
+            liveResults.push({ system_id: d.systemId, ok: true, ...status });
+          } else {
+            const lxc = isObject(px.lxc) ? px.lxc : {};
+            const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+            if (!hostId || !Number.isFinite(vmid)) {
+              liveResults.push({ system_id: d.systemId, ok: false, message: "missing host_id or vmid" });
+              continue;
+            }
+            const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+            const status = queryWazuhInCt(pveSsh.user, pveSsh.host, vmid, d.wazuh, d.install);
+            liveResults.push({ system_id: d.systemId, ok: true, ...status });
+          }
         } catch (e) {
           liveResults.push({ system_id: d.systemId, ok: false, message: String(/** @type {Error} */ (e).message || e) });
         }

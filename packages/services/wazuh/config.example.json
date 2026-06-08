@@ -17,7 +17,7 @@
       }
     },
     "wazuh": {
-      "release": "v4.9.0",
+      "release": "4.10.3",
       "dashboard_port": 443,
       "api_password_vault_key": "HDC_WAZUH_API_PASSWORD",
       "agent_password_vault_key": "HDC_WAZUH_AGENT_PASSWORD"

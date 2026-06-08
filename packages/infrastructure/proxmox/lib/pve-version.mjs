@@ -37,8 +37,11 @@ export const HDC_PROXMOX_API_PRIVILEGES_PVE8 = [
   "VM.Config.Memory",
   "VM.Config.Network",
   "VM.Config.Options",
+  "VM.Backup",
+  "VM.Replicate",
   "VM.Monitor",
   "VM.PowerMgmt",
+  "Sys.Modify",
 ];
 
 /** PVE 9.x: VM.Monitor removed; Sys.AccessNetwork required for download-url. */

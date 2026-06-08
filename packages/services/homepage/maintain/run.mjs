@@ -13,6 +13,8 @@ import { stderr as errout } from "node:process";
 
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
+import { resolveHomepageProxmoxWidgetEnv } from "../lib/homepage-proxmox-widget.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
@@ -52,8 +54,9 @@ function readCfg() {
  * @param {ReturnType<typeof resolveHomepageDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/package-vault-access.mjs").PackageVaultAccess} vaultAccess
+ * @param {ReturnType<typeof createNodeCliDeps>} cliDeps
  */
-async function maintainOne(deployment, flags, vaultAccess) {
+async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
   const { systemId, proxmox: px, homepage, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
 
@@ -75,8 +78,39 @@ async function maintainOne(deployment, flags, vaultAccess) {
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const homepageCfg = isObject(homepage) ? homepage : {};
   const installCfg = isObject(install) ? install : {};
-  const result = await maintainHomepageInCt(pveSsh.user, pveSsh.host, vmid, homepageCfg, installCfg, {
+
+  /** @type {string[]} */
+  let widgetEnvLines = [];
+  /** @type {Record<string, unknown>} */
+  let proxmoxWidgetMeta = {};
+  try {
+    const widgetEnv = await resolveHomepageProxmoxWidgetEnv({
+      homepage: homepageCfg,
+      proxmoxPackageRoot: proxmoxRoot,
+      vaultAccess,
+      env: process.env,
+      spawnSync: cliDeps.spawnSync,
+      readLineQuestion: cliDeps.readLineQuestion,
+    });
+    if (widgetEnv) {
+      widgetEnvLines = widgetEnv.lines;
+      proxmoxWidgetMeta = {
+        service_account_id: widgetEnv.service_account_id,
+        token_vault_key: widgetEnv.token_vault_key,
+      };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      system_id: systemId,
+      host_id: hostId,
+      message: String(/** @type {Error} */ (e).message || e),
+    };
+  }
+
+  const result = await maintainHomepageInCt(pveSsh.user, pveSsh.host, vmid, homepageCfg, installCfg, packageRoot, {
     skipUpgrade,
+    widgetEnvLines,
   });
 
   const log = provisionLogFromConsole(console);
@@ -103,6 +137,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
     skip_upgrade: skipUpgrade,
     web_url: result.web_url ?? null,
     upstream_url: result.upstream_url ?? null,
+    proxmox_widget: proxmoxWidgetMeta,
     message: result.message,
     ...guestBaselineResultFields(baseline),
   };
@@ -123,6 +158,7 @@ async function main() {
   const flags = parseArgvFlags(process.argv.slice(2));
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
+  const cliDeps = createNodeCliDeps();
   let deployments;
   try {
     deployments = resolveHomepageDeployments(cfg, flags);
@@ -138,7 +174,7 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await maintainOne(deployment, flags, vaultAccess));
+      results.push(await maintainOne(deployment, flags, vaultAccess, cliDeps));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

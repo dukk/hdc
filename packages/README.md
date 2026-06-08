@@ -81,7 +81,7 @@ Applications and workloads on Proxmox guests, Synology, or configure-only SSH ta
 | [nginx-waf](services/nginx-waf/README.md) | `nginx-waf` | Nginx WAF reverse proxy | [config.example.json](services/nginx-waf/config.example.json) | `https://<server-name-from-sites[]>` per published site |
 | [ollama](services/ollama/README.md) | `ollama` | Ollama LLM runtime | [config.example.json](services/ollama/config.example.json) | `http://<guest-ip>:11434` (Ollama API) |
 | [open-webui](services/open-webui/README.md) | `open-webui` | Open WebUI (Ollama chat) | [config.example.json](services/open-webui/config.example.json) | `http://<guest-ip>:3000` |
-| [openvas](services/openvas/README.md) | `openvas` | OpenVAS (Greenbone CE) | [config.example.json](services/openvas/config.example.json) | `http://<guest-ip>:3000` (Greenbone admin UI) |
+| [greenbone](services/greenbone/README.md) | `greenbone` | Greenbone Community Edition | [config.example.json](services/greenbone/config.example.json) | `http://<guest-ip>:3000` (Greenbone admin UI) |
 | [pi-hole](services/pi-hole/README.md) | `pi-hole` | Pi-hole DNS filtering | [config.example.json](services/pi-hole/config.example.json) | `http://<guest-ip>/admin`; DNS `:53` |
 | [plex](services/plex/README.md) | `plex` | Plex Media Server (Synology) | [config.example.json](services/plex/config.example.json) | `http://<nas-ip>:32400/web` |
 | [postfix-relay](services/postfix-relay/README.md) | `postfix-relay` | Postfix SMTP relay | [config.example.json](services/postfix-relay/config.example.json) | `smtp://<guest-ip>:25` (LAN relay) |

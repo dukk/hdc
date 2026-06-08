@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Deploy Wazuh on Proxmox LXC (Docker Compose).
+ * Deploy Wazuh on Proxmox LXC or QEMU (Docker Compose).
  *
- * Usage: hdc run service wazuh deploy -- [--instance a | --system-id wazuh-a] [--skip-install]
- *        hdc run service wazuh deploy -- [--skip-existing | --redeploy-existing]
+ * Usage: hdc run service wazuh deploy -- [--instance a | --system-id vm-wazuh-a] [--skip-install]
+ *        hdc run service wazuh deploy -- [--skip-existing | --redeploy-existing | --destroy-existing]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { lxcHostnameFromSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -21,14 +22,31 @@ import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/p
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
+import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
-import { installWazuhInCt, readCtPrimaryIp, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
+import {
+  installWazuhInCt,
+  installWazuhOnHost,
+  readCtPrimaryIp,
+  resolvePveSshForHost,
+} from "../lib/wazuh-install.mjs";
 import { ensureLxcDockerApparmorWorkaround, pctRestart, pctSetFeatures } from "../../../lib/pve-pct-remote.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { createWazuhVaultAccess } from "../lib/vault-deps.mjs";
+import {
+  applyQemuCloudInit,
+  cloneQemuGuest,
+  locateGuest,
+  startQemuGuest,
+  stopAndDestroyQemu,
+  waitForQemuGuestSshAfterBoot,
+} from "../lib/proxmox-qemu-redeploy.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -62,7 +80,45 @@ function shouldInstall(install) {
 function existingGuestPolicy(flags) {
   if (flagGet(flags, "skip-existing") !== undefined) return "skip";
   if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
+  if (flagGet(flags, "destroy-existing") !== undefined) return "destroy";
   return "prompt";
+}
+
+/**
+ * @param {ReturnType<typeof resolveWazuhDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {{ apiPassword: string; agentPassword: string }} runOpts
+ */
+async function runConfigure(deployment, flags, runOpts) {
+  const { systemId, mode, wazuh, install, configure } = deployment;
+  const wazuhCfg = isObject(wazuh) ? wazuh : {};
+  const installCfg = isObject(install) ? install : {};
+  if (!shouldInstall(installCfg)) {
+    return { ok: true, skipped: true, message: "install disabled" };
+  }
+  if (mode === "proxmox-lxc") {
+    const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
+    const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+    const lxc = isObject(px.lxc) ? px.lxc : {};
+    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    return installWazuhInCt(
+      pveSsh.user,
+      pveSsh.host,
+      vmid,
+      wazuhCfg,
+      installCfg,
+      runOpts.apiPassword,
+      runOpts.agentPassword,
+    );
+  }
+  const cfg = isObject(configure) ? configure : {};
+  const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
+  const user = resolveGuestSshUser(ssh.user);
+  const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
+  if (!host) throw new Error(`${systemId}: configure.ssh.host required`);
+  const exec = createConfigureExec("ssh", { user, host });
+  return installWazuhOnHost(exec, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword);
 }
 
 /**
@@ -71,16 +127,15 @@ function existingGuestPolicy(flags) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  * @param {{ ctPasswordCache?: { value: string | null }; apiPassword: string; agentPassword: string }} runOpts
  */
-async function deployOne(deployment, flags, log, runOpts) {
+async function deployLxcOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, wazuh, install } = deployment;
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
   logDeployInventoryStatus(target, verb, inv);
-  if (mode !== "proxmox-lxc") return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
   if (!isObject(px)) return { ok: false, system_id: systemId, message: "bad proxmox config" };
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
 
-  errout.write(`[hdc] ${target} ${verb}: ${JSON.stringify(systemId)} on ${JSON.stringify(hostId)} ...\n`);
+  errout.write(`[hdc] ${target} ${verb}: ${JSON.stringify(systemId)} on ${JSON.stringify(hostId)} (LXC) …\n`);
   const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
   const lxc = isObject(px.lxc) ? px.lxc : {};
   const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
@@ -179,10 +234,16 @@ async function deployOne(deployment, flags, log, runOpts) {
     });
   }
 
-  const wazuhCfg = isObject(wazuh) ? wazuh : {};
-  const installCfg = isObject(install) ? install : {};
   const installResult = shouldInstall(install)
-    ? await installWazuhInCt(pveSsh.user, pveSsh.host, guestVmid, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword)
+    ? await installWazuhInCt(
+        pveSsh.user,
+        pveSsh.host,
+        guestVmid,
+        isObject(wazuh) ? wazuh : {},
+        isObject(install) ? install : {},
+        runOpts.apiPassword,
+        runOpts.agentPassword,
+      )
     : { ok: true, method: "skipped", message: "skipped" };
   if (!installResult.ok) return { ok: false, system_id: systemId, host_id: hostId, mode, result: provisionResult, install: installResult };
   const ip = readCtPrimaryIp(pveSsh.user, pveSsh.host, guestVmid);
@@ -198,8 +259,204 @@ async function deployOne(deployment, flags, log, runOpts) {
   };
 }
 
+/**
+ * @param {ReturnType<typeof resolveWazuhDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ apiPassword: string; agentPassword: string }} runOpts
+ */
+async function deployQemuOne(deployment, flags, log, runOpts) {
+  const { systemId, proxmox: px, wazuh, install } = deployment;
+  const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
+  logDeployInventoryStatus(target, verb, inv);
+  if (!isObject(px)) return { ok: false, system_id: systemId, message: "missing proxmox config" };
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
+
+  const q = isObject(px.qemu) ? px.qemu : {};
+  const net = isObject(px.network) ? px.network : {};
+  const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+  const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+  const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+  const gateway =
+    typeof net.gateway === "string" && net.gateway.trim()
+      ? net.gateway.trim()
+      : typeof q.gateway === "string"
+        ? q.gateway.trim()
+        : "10.0.0.1";
+  const hostname =
+    deployment.hostname ||
+    (typeof q.name === "string" && q.name.trim() ? q.name.trim() : systemId.replace(/^vm-/, ""));
+  const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+
+  if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
+    return { ok: false, system_id: systemId, message: "invalid qemu vmid, template_vmid, or ip" };
+  }
+
+  errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} (QEMU) …\n`);
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+  const located = await locateGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
+  const policy = existingGuestPolicy(flags);
+
+  if (located) {
+    let action = policy;
+    if (policy === "prompt") {
+      action = await promptExistingGuestAction(systemId, vmid, located.node, located.name);
+    }
+    if (action === "skip") {
+      return { ok: true, system_id: systemId, skipped_provision: true, message: "guest already exists" };
+    }
+    if (action === "destroy" || policy === "destroy") {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    } else {
+      const configure = await runConfigure(deployment, flags, runOpts);
+      return {
+        ok: configure.ok !== false,
+        system_id: systemId,
+        skipped_provision: true,
+        configure,
+        ip: (() => {
+          const cfg = isObject(deployment.configure) ? deployment.configure : {};
+          const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
+          return typeof ssh.host === "string" ? ssh.host.trim() : ip.split("/")[0];
+        })(),
+      };
+    }
+  }
+
+  const prov = createProxmoxHostProvisioner({
+    apiBase: auth.host.apiBase,
+    pveNode: auth.host.pveNode,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+  });
+
+  const provisionResult = await cloneQemuGuest({
+    log,
+    provisioner: prov,
+    name: hostname,
+    vmid,
+    templateVmid,
+    parameters: { ...q, vmid, template_vmid: templateVmid },
+  });
+  if (!provisionResult.ok) {
+    return { ok: false, system_id: systemId, provision: provisionResult };
+  }
+
+  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+    provisionResult,
+    auth,
+    vmid,
+    (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    guestResourceOptsFromBlock(q, flags),
+  );
+
+  if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    errout.write(`[hdc] ${target} ${verb}: resizing scsi0 to ${rootfsGb}G on vmid ${guestVmid} …\n`);
+    const resize = sshRemote(pveSsh.user, pveSsh.host, `qm resize ${guestVmid} scsi0 ${rootfsGb}G`, { capture: true });
+    if (resize.status !== 0) {
+      const detail = `${resize.stderr}${resize.stdout}`.trim() || `exit ${resize.status}`;
+      throw new Error(`qm resize failed: ${detail}`);
+    }
+  }
+
+  await applyQemuCloudInit({
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    hostname,
+    ipCidr: ip,
+    gateway,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  await startQemuGuest({
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  const sshCfg = isObject(deployment.configure) && isObject(deployment.configure.ssh) ? deployment.configure.ssh : {};
+  let sshUser = resolveGuestSshUser(sshCfg.user);
+  const sshHost = typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+
+  const sshWait = await waitForQemuGuestSshAfterBoot({
+    user: sshUser,
+    host: sshHost,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: cloneNode,
+    vmid: guestVmid,
+    freshClone: true,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+  sshUser = sshWait.user;
+
+  await ensureQemuGuestAgentOnDeploy({
+    apiBase: auth.host.apiBase,
+    node: cloneNode,
+    vmid: guestVmid,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    sshUser,
+    sshHost,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  const configure = await runConfigure(
+    {
+      ...deployment,
+      configure: { ssh: { user: sshUser, host: sshHost } },
+    },
+    flags,
+    runOpts,
+  );
+
+  return {
+    ok: configure.ok !== false,
+    system_id: systemId,
+    mode: "proxmox-qemu",
+    ip: sshHost,
+    provision: provisionResult,
+    configure,
+    install: configure,
+  };
+}
+
+/**
+ * @param {ReturnType<typeof resolveWazuhDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ ctPasswordCache?: { value: string | null }; apiPassword: string; agentPassword: string }} runOpts
+ */
+async function deployOne(deployment, flags, log, runOpts) {
+  if (deployment.mode === "proxmox-qemu") {
+    return deployQemuOne(deployment, flags, log, runOpts);
+  }
+  if (deployment.mode === "proxmox-lxc") {
+    return deployLxcOne(deployment, flags, log, runOpts);
+  }
+  return { ok: false, system_id: deployment.systemId, message: `unsupported mode ${deployment.mode}` };
+}
+
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: Wazuh LXC via Proxmox (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: Wazuh via Proxmox (stderr log; JSON on stdout).\n`);
   if (!existsSync(ensurePackageConfig().path)) {
     const inv = deployTargetInventory(root, target);
     logDeployInventoryStatus(target, verb, inv);

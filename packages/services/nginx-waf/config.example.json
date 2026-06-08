@@ -55,7 +55,9 @@
         "full": 1,
         "cores": 2,
         "memory_mb": 2048,
-        "rootfs_gb": 32
+        "rootfs_gb": 32,
+        "onboot": 1,
+        "startup": { "order": 2 }
       },
       "network": {
         "bridge": "vmbr0",
@@ -77,7 +79,10 @@
       "proxy_read_timeout": "300s",
       "proxy_connect_timeout": "60s"
     },
-    "install": { "enabled": true }
+    "install": { "enabled": true },
+    "backup": {
+      "profile": "daily"
+    }
   },
   "deployments": [
     {

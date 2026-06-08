@@ -64,6 +64,29 @@ export function listmonkMailEnvLines(listmonk) {
 }
 
 /**
+ * SMTP env lines for Vikunja docker .env when mail.enabled.
+ * @param {Record<string, unknown>} vikunja
+ */
+export function vikunjaMailEnvLines(vikunja) {
+  const mail = mailBlockFromService(vikunja);
+  const relay = loadMailRelayAppSettings();
+  const recipients = resolveMailRecipients(mail, { from: relay.from });
+  if (!recipients) return [];
+
+  return [
+    "VIKUNJA_MAILER_ENABLED=true",
+    `VIKUNJA_MAILER_HOST=${relay.host}`,
+    `VIKUNJA_MAILER_PORT=${relay.port}`,
+    "VIKUNJA_MAILER_AUTHTYPE=plain",
+    "VIKUNJA_MAILER_USERNAME=",
+    "VIKUNJA_MAILER_PASSWORD=",
+    `VIKUNJA_MAILER_FROMEMAIL=${recipients.from}`,
+    "VIKUNJA_MAILER_FORCESSL=false",
+    "VIKUNJA_MAILER_SKIPTLSVERIFY=false",
+  ];
+}
+
+/**
  * SMTP env lines for Vaultwarden docker .env when mail.enabled.
  * @param {Record<string, unknown>} vaultwarden
  */

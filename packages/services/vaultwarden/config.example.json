@@ -33,6 +33,9 @@
     "install": {
       "enabled": true,
       "compose_dir": "/opt/vaultwarden"
+    },
+    "backup": {
+      "profile": "hourly"
     }
   },
   "deployments": [

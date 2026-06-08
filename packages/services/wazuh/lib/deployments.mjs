@@ -1,7 +1,12 @@
-import { deploymentSystemIdPattern, lxcSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import {
+  deploymentSystemIdPattern,
+  lxcSystemId,
+  vmSystemId,
+} from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const WAZUH_ROLE = "wazuh";
+const WAZUH_QEMU_SYSTEM_ID = /^vm-wazuh-[a-z]+$/;
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -93,13 +98,14 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!deploymentSystemIdPattern(WAZUH_ROLE).test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match wazuh-<letter>`);
-    }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
+
     if (mode === "proxmox-lxc" || mode === "" || !mode) {
+      if (!deploymentSystemIdPattern(WAZUH_ROLE).test(sid)) {
+        throw new Error(`system_id ${JSON.stringify(sid)} must match wazuh-<letter> for proxmox-lxc`);
+      }
       const px = isObject(d.proxmox) ? d.proxmox : {};
       const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
       if (!hostId) throw new Error(`${sid}: proxmox.host_id required for proxmox-lxc`);
@@ -108,6 +114,30 @@ function validateDeployments(deployments) {
       if (!Number.isFinite(vmid) || vmid <= 0) {
         throw new Error(`${sid}: proxmox.lxc.vmid must be a positive number`);
       }
+    } else if (mode === "proxmox-qemu") {
+      if (!WAZUH_QEMU_SYSTEM_ID.test(sid)) {
+        throw new Error(`system_id ${JSON.stringify(sid)} must match vm-wazuh-<letter> for proxmox-qemu`);
+      }
+      const px = isObject(d.proxmox) ? d.proxmox : {};
+      const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+      if (!hostId) throw new Error(`${sid}: proxmox.host_id required for proxmox-qemu`);
+      const q = isObject(px.qemu) ? px.qemu : {};
+      const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+      if (!Number.isFinite(vmid) || vmid <= 0) {
+        throw new Error(`${sid}: proxmox.qemu.vmid must be a positive number`);
+      }
+      const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+      if (!ip) throw new Error(`${sid}: proxmox.qemu.ip required (CIDR)`);
+      const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+      if (!Number.isFinite(templateVmid) || templateVmid <= 0) {
+        throw new Error(`${sid}: proxmox.qemu.template_vmid must be a positive number`);
+      }
+      const configure = isObject(d.configure) ? d.configure : {};
+      const ssh = isObject(configure.ssh) ? configure.ssh : {};
+      const sshHost = typeof ssh.host === "string" ? ssh.host.trim() : "";
+      if (!sshHost) throw new Error(`${sid}: configure.ssh.host required for proxmox-qemu`);
+    } else {
+      throw new Error(`${sid}: unsupported mode ${JSON.stringify(mode)}`);
     }
   }
 }
@@ -148,14 +178,25 @@ export function listWazuhDeploymentSummaries(cfg) {
     const px = isObject(d.proxmox) ? d.proxmox : {};
     const hostId = typeof px.host_id === "string" ? px.host_id : null;
     const lxc = isObject(px.lxc) ? px.lxc : {};
-    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const q = isObject(px.qemu) ? px.qemu : {};
+    const vmidRaw =
+      mode === "proxmox-qemu"
+        ? typeof q.vmid === "number"
+          ? q.vmid
+          : Number(q.vmid)
+        : typeof lxc.vmid === "number"
+          ? lxc.vmid
+          : Number(lxc.vmid);
     const install = isObject(d.install) ? d.install : {};
     const wazuh = isObject(d.wazuh) ? d.wazuh : {};
+    const configure = isObject(d.configure) ? d.configure : {};
+    const ssh = isObject(configure.ssh) ? configure.ssh : {};
     return {
       system_id: d.system_id,
       mode,
       host_id: hostId,
-      vmid: Number.isFinite(vmid) ? vmid : null,
+      vmid: Number.isFinite(vmidRaw) ? vmidRaw : null,
+      ssh_host: typeof ssh.host === "string" ? ssh.host : null,
       install_enabled: install.enabled !== false,
       release: typeof wazuh.release === "string" ? wazuh.release : "v4.9.0",
       dashboard_port: wazuhDashboardPort(wazuh),
@@ -165,12 +206,17 @@ export function listWazuhDeploymentSummaries(cfg) {
 
 /**
  * @param {string | undefined} instance
+ * @param {string} [defaultMode]
  */
-export function instanceFlagToSystemId(instance) {
+export function instanceFlagToSystemId(instance, defaultMode) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (deploymentSystemIdPattern(WAZUH_ROLE).test(t)) return t;
-  return lxcSystemId(WAZUH_ROLE, t);
+  if (deploymentSystemIdPattern(WAZUH_ROLE).test(t) || WAZUH_QEMU_SYSTEM_ID.test(t)) return t;
+  if (/^[a-z]+$/.test(t)) {
+    if (defaultMode === "proxmox-qemu") return vmSystemId(WAZUH_ROLE, t);
+    return lxcSystemId(WAZUH_ROLE, t);
+  }
+  return vmSystemId(WAZUH_ROLE, t);
 }
 
 /**
@@ -185,7 +231,9 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
   return {
     systemId: String(d.system_id),
     mode,
+    hostname: typeof d.hostname === "string" ? d.hostname.trim() : "",
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
+    configure: isObject(d.configure) ? d.configure : null,
     wazuh: isObject(d.wazuh) ? d.wazuh : {},
     install,
   };
@@ -197,11 +245,15 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
  * @param {{ skipInstall?: boolean }} [opts]
  */
 export function resolveWazuhDeployments(cfg, flags, opts = {}) {
-  const { deployments } = normalizeWazuhConfig(cfg);
+  const { defaults, deployments } = normalizeWazuhConfig(cfg);
   const skipInstallCli = flags["skip-install"] !== undefined;
+  const defaultMode =
+    isObject(defaults) && typeof defaults.mode === "string" && defaults.mode.trim()
+      ? defaults.mode.trim()
+      : "proxmox-lxc";
   let selectedId = flagGet(flags, "system-id", "system_id");
   const instance = flagGet(flags, "instance");
-  if (!selectedId && instance) selectedId = instanceFlagToSystemId(instance);
+  if (!selectedId && instance) selectedId = instanceFlagToSystemId(instance, defaultMode);
   if (deployments.length === 1) {
     const d = deployments[0];
     if (selectedId && selectedId !== d.system_id) {

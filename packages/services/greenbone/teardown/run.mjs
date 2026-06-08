@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Teardown OpenVAS Proxmox LXC deployments.
+ * Teardown Greenbone CE Proxmox LXC deployments.
  *
- * Usage: hdc run service openvas teardown -- [--instance a | --system-id openvas-a]
- *        hdc run service openvas teardown -- [--dry-run] [--yes] [--skip-compose-down]
+ * Usage: hdc run service greenbone teardown -- [--instance a | --system-id greenbone-a]
+ *        hdc run service greenbone teardown -- [--dry-run] [--yes] [--skip-compose-down]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -14,9 +14,9 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { stopAndDestroyLxc } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
-import { resolveOpenvasDeployments } from "../lib/deployments.mjs";
+import { resolveGreenboneDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
-import { composeDownInCt, resolvePveSshForHost } from "../lib/openvas-install.mjs";
+import { composeDownInCt, resolvePveSshForHost } from "../lib/greenbone-install.mjs";
 import { confirmTeardown, teardownDryRun } from "../../ollama/lib/teardown-confirm.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -25,7 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
 const packageRoot = join(here, "..");
-const PACKAGE_CONFIG_EXAMPLE = "packages/services/openvas/config.example.json";
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/greenbone/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
 function ensurePackageConfig() {
@@ -47,7 +47,7 @@ function readCfg() {
 }
 
 /**
- * @param {ReturnType<typeof resolveOpenvasDeployments>[number]} deployment
+ * @param {ReturnType<typeof resolveGreenboneDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  */
 async function teardownOne(deployment, flags) {
@@ -129,7 +129,7 @@ async function teardownOne(deployment, flags) {
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: tear down OpenVAS LXC (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: tear down Greenbone LXC (stderr log; JSON on stdout).\n`);
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(
       `${JSON.stringify({ ok: false, target, verb, message: "package config missing — see stderr" }, null, 2)}\n`,
@@ -142,7 +142,7 @@ async function main() {
   const flags = parseArgvFlags(process.argv.slice(2));
   let deployments;
   try {
-    deployments = resolveOpenvasDeployments(cfg, flags);
+    deployments = resolveGreenboneDeployments(cfg, flags);
   } catch (e) {
     errout.write(`[hdc] ${target} ${verb}: ${/** @type {Error} */ (e).message}\n`);
     process.stdout.write(

@@ -1,8 +1,8 @@
 import { deploymentSystemIdPattern, lxcSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
-import { adminPasswordVaultKey, hostPort, imageTag } from "./openvas-render.mjs";
+import { adminPasswordVaultKey, hostPort, imageTag } from "./greenbone-render.mjs";
 
-const ROLE = "openvas";
+const ROLE = "greenbone";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -54,7 +54,7 @@ function normalizeV1(cfg) {
   /** @type {Record<string, unknown>} */
   const defaults = { mode };
   if (isObject(cfg.proxmox)) defaults.proxmox = structuredClone(cfg.proxmox);
-  if (isObject(cfg.openvas)) defaults.openvas = structuredClone(cfg.openvas);
+  if (isObject(cfg.greenbone)) defaults.greenbone = structuredClone(cfg.greenbone);
   if (isObject(cfg.install)) defaults.install = structuredClone(cfg.install);
   return {
     schemaVersion: 1,
@@ -66,9 +66,9 @@ function normalizeV1(cfg) {
 /**
  * @param {Record<string, unknown>} cfg
  */
-export function normalizeOpenvasConfig(cfg) {
+export function normalizeGreenboneConfig(cfg) {
   if (!isObject(cfg)) {
-    throw new Error("openvas config must be a JSON object");
+    throw new Error("greenbone config must be a JSON object");
   }
   const version = typeof cfg.schema_version === "number" ? cfg.schema_version : 1;
   if (Array.isArray(cfg.deployments) && cfg.deployments.length > 0) {
@@ -85,7 +85,7 @@ export function normalizeOpenvasConfig(cfg) {
     validateDeployments(deployments);
     return { schemaVersion: 1, defaults: v1.defaults, deployments };
   }
-  throw new Error("openvas config needs deployments[] or legacy deploy + proxmox blocks");
+  throw new Error("greenbone config needs deployments[] or legacy deploy + proxmox blocks");
 }
 
 /**
@@ -97,7 +97,7 @@ function validateDeployments(deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
     if (!deploymentSystemIdPattern(ROLE).test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match openvas-<letter>`);
+      throw new Error(`system_id ${JSON.stringify(sid)} must match greenbone-<letter>`);
     }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
@@ -112,21 +112,21 @@ function validateDeployments(deployments) {
         throw new Error(`${sid}: proxmox.lxc.vmid must be a positive number`);
       }
       if (lxc.unprivileged !== undefined && Number(lxc.unprivileged) !== 0) {
-        throw new Error(`${sid}: proxmox.lxc.unprivileged must be 0 for openvas`);
+        throw new Error(`${sid}: proxmox.lxc.unprivileged must be 0 for greenbone`);
       }
     }
-    const openvas = isObject(d.openvas) ? d.openvas : {};
-    adminPasswordVaultKey(openvas);
-    hostPort(openvas);
-    imageTag(openvas);
+    const greenbone = isObject(d.greenbone) ? d.greenbone : {};
+    adminPasswordVaultKey(greenbone);
+    hostPort(greenbone);
+    imageTag(greenbone);
   }
 }
 
 /**
  * @param {Record<string, unknown>} cfg
  */
-export function listOpenvasDeploymentSummaries(cfg) {
-  const { deployments } = normalizeOpenvasConfig(cfg);
+export function listGreenboneDeploymentSummaries(cfg) {
+  const { deployments } = normalizeGreenboneConfig(cfg);
   return deployments.map((d) => {
     const mode = typeof d.mode === "string" ? d.mode : "proxmox-lxc";
     const px = isObject(d.proxmox) ? d.proxmox : {};
@@ -134,16 +134,16 @@ export function listOpenvasDeploymentSummaries(cfg) {
     const lxc = isObject(px.lxc) ? px.lxc : {};
     const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
     const install = isObject(d.install) ? d.install : {};
-    const openvas = isObject(d.openvas) ? d.openvas : {};
+    const greenbone = isObject(d.greenbone) ? d.greenbone : {};
     return {
       system_id: d.system_id,
       mode,
       host_id: hostId,
       vmid: Number.isFinite(vmid) ? vmid : null,
       install_enabled: install.enabled !== false,
-      image_tag: imageTag(openvas),
-      host_port: hostPort(openvas),
-      admin_password_vault_key: adminPasswordVaultKey(openvas),
+      image_tag: imageTag(greenbone),
+      host_port: hostPort(greenbone),
+      admin_password_vault_key: adminPasswordVaultKey(greenbone),
     };
   });
 }
@@ -173,7 +173,7 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
     systemId: String(d.system_id),
     mode,
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
-    openvas: isObject(d.openvas) ? d.openvas : {},
+    greenbone: isObject(d.greenbone) ? d.greenbone : {},
     install,
   };
 }
@@ -183,8 +183,8 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
  * @param {Record<string, string>} flags
  * @param {{ skipInstall?: boolean }} [opts]
  */
-export function resolveOpenvasDeployments(cfg, flags, opts = {}) {
-  const { deployments } = normalizeOpenvasConfig(cfg);
+export function resolveGreenboneDeployments(cfg, flags, opts = {}) {
+  const { deployments } = normalizeGreenboneConfig(cfg);
   const skipInstallCli = flags["skip-install"] !== undefined;
   let selectedId = flagGet(flags, "system-id", "system_id");
   const instance = flagGet(flags, "instance");

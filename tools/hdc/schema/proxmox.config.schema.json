@@ -107,7 +107,16 @@
         "host_os": { "$ref": "#/$defs/provision_host_os" },
         "oem_windows_license": { "$ref": "#/$defs/provision_oem_windows_license" },
         "storage": { "$ref": "#/$defs/provision_storage" },
+        "backups": { "$ref": "#/$defs/provision_backups" },
+        "replication": { "$ref": "#/$defs/provision_replication" },
+        "ha": { "$ref": "#/$defs/provision_ha" },
+        "startup": { "$ref": "#/$defs/provision_startup" },
         "api_token": { "$ref": "#/$defs/provision_api_token" },
+        "service_accounts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/provision_service_account" },
+          "description": "Declarative Proxmox users and API tokens for third-party consumers (e.g. homepage widget)."
+        },
         "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
         "host_firewall": { "$ref": "#/$defs/provision_host_firewall" },
         "guest_firewall": { "$ref": "#/$defs/provision_guest_firewall" },
@@ -245,6 +254,55 @@
         }
       }
     },
+    "provision_service_account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "userid", "tokenid", "password_vault_key", "token_vault_key"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable reference for other packages (e.g. homepage uses service_account_id: homepage)."
+        },
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips this account (default true)."
+        },
+        "userid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox user id (name@realm), created via pveum user add when missing."
+        },
+        "tokenid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "API token id under the user (privsep token)."
+        },
+        "role": {
+          "type": "string",
+          "description": "Proxmox role for token ACL at / (default PVEAuditor)."
+        },
+        "privileges": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Custom role privileges when role is not a built-in Proxmox role."
+        },
+        "password_vault_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Vault env var name for the user password (auto-generated on first maintain)."
+        },
+        "token_vault_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Vault env var name for the API token (user@realm!tokenid=secret)."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Optional pveum user comment."
+        }
+      }
+    },
     "provision_ssh_keys": {
       "type": "object",
       "additionalProperties": true,
@@ -375,6 +433,218 @@
         }
       }
     },
+    "provision_backup_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schedule": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proxmox calendar schedule (e.g. sun 03:00, daily, hourly)."
+        },
+        "prune_backups": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Retention string for API prune-backups (e.g. keep-last=3)."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["snapshot", "suspend", "stop"],
+          "description": "vzdump mode (default snapshot)."
+        },
+        "compress": {
+          "type": "string",
+          "enum": ["zstd", "lzo", "gzip", "none"],
+          "description": "Backup compression (default zstd)."
+        },
+        "storage": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional storage override for this profile."
+        }
+      }
+    },
+    "guest_startup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "number",
+          "description": "Proxmox startup order (lower starts first; same order starts together)."
+        },
+        "up": {
+          "type": "number",
+          "description": "Seconds to wait after this order group before starting the next (default from provision.startup.default_up)."
+        },
+        "down": {
+          "type": "number",
+          "description": "Optional shutdown order delay (Proxmox startup down=)."
+        }
+      }
+    },
+    "provision_replication_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schedule": {
+          "type": "string",
+          "minLength": 1,
+          "description": "systemd calendar schedule (e.g. */15, daily)."
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Optional replication rate limit in MB/s."
+        }
+      }
+    },
+    "provision_replication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips replication job ensure (default true)."
+        },
+        "default_profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Profile name for guests without a service replication override (default frequent)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), scan service deployments for replication targets."
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/provision_replication_profile" },
+          "description": "Named replication schedules."
+        }
+      }
+    },
+    "provision_ha_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Inventory hypervisor ids (host_id) allowed for this HA group."
+        },
+        "restricted": {
+          "type": ["boolean", "integer"],
+          "description": "When true, resources in this group may only run on listed nodes."
+        },
+        "nofailback": {
+          "type": ["boolean", "integer"],
+          "description": "When true, do not fail back to the original node after recovery."
+        },
+        "comment": { "type": "string" }
+      },
+      "required": ["nodes"]
+    },
+    "provision_ha_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "description": "HA resource state (default started)."
+        },
+        "max_restart": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max start failures before relocate (default 3)."
+        },
+        "max_relocate": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max relocate attempts (default 2)."
+        },
+        "group": {
+          "type": "string",
+          "description": "Default HA group id for managed resources."
+        }
+      }
+    },
+    "provision_ha": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips HA group/resource ensure (default true)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), scan service deployments for HA resources."
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/provision_ha_group" },
+          "description": "Named HA groups (id → nodes and options)."
+        },
+        "defaults": { "$ref": "#/$defs/provision_ha_defaults" }
+      }
+    },
+    "provision_startup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips guest startup order ensure (default true)."
+        },
+        "default_up": {
+          "type": "number",
+          "description": "Default up= delay in seconds between startup order groups (default 30)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), scan service deployments and apply startup order from priorities or per-guest startup."
+        },
+        "priorities": {
+          "type": "object",
+          "additionalProperties": { "type": "number" },
+          "description": "Package id to startup order map (e.g. bind: 1, nginx-waf: 2, postfix-relay: 3)."
+        }
+      }
+    },
+    "provision_backups": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips backup job ensure (default true)."
+        },
+        "default_storage": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Default backup destination storage id (e.g. nas-1)."
+        },
+        "default_profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Profile name for guests without a service backup override (default weekly)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), scan service deployments for backup targets."
+        },
+        "job_id_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prefix for hdc-managed backup job ids (default hdc-backup)."
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/provision_backup_profile" },
+          "description": "Named backup schedules and retention policies."
+        }
+      }
+    },
     "provision_host_os": {
       "type": "object",
       "additionalProperties": true,
@@ -431,6 +701,7 @@
         "ip_config": { "type": "string" },
         "unprivileged": { "type": ["integer", "boolean"] },
         "onboot": { "type": ["integer", "boolean"] },
+        "startup": { "$ref": "#/$defs/guest_startup" },
         "vmid": { "type": "number" }
       }
     },
@@ -461,6 +732,8 @@
         "memory_mb": { "type": "number" },
         "cores": { "type": "number" },
         "bridge": { "type": "string" },
+        "onboot": { "type": ["integer", "boolean"] },
+        "startup": { "$ref": "#/$defs/guest_startup" },
         "vmid": { "type": "number" },
         "first_boot": {
           "type": "object",

@@ -13,8 +13,8 @@ Nginx with ModSecurity (OWASP CRS), reverse proxy `sites[]`, and Let's Encrypt w
 | Verb | Purpose |
 |------|---------|
 | `deploy` | QEMU (optional) + nginx + ModSecurity + CRS; push sites; LE on cert-primary |
-| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push CRS and sites; `--renew-certs`; `--sync-certs`; `--site <id>` (that site only; other vhosts unchanged) |
-| `query` | nginx, ModSecurity, CRS rule count, certs, upstream probes |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push CRS and **all** sites from config; `--renew-certs`; `--sync-certs`; `--site <id>` (certificate scope only — vhosts still fully synced) |
+| `query` | nginx, ModSecurity, CRS rule count, certs, upstream probes; `--live` adds vhost drift audit vs config |
 
 ```bash
 node tools/hdc/cli.mjs run service nginx-waf maintain --
@@ -57,7 +57,7 @@ Apps that use WebSockets (Audiobookshelf, Home Assistant, Vaultwarden live notif
 }
 ```
 
-When any site has a websocket location, hdc adds a single `map $http_upgrade $connection_upgrade` block to `/etc/nginx/hdc/waf-global.conf` (not per-site vhosts). Partial `maintain -- --site <id>` still refreshes the global map from the full `sites[]` list in config.
+When any site has a websocket location, hdc adds a single `map $http_upgrade $connection_upgrade` block to `/etc/nginx/hdc/waf-global.conf` (not per-site vhosts). Partial `maintain -- --site <id>` still refreshes the global map from the full `sites[]` list in config and re-pushes **every** vhost from config (only certificate obtain/renew/status is scoped to `--site`).
 
 **Per-location** `access` (only on paths you want restricted):
 
@@ -75,7 +75,7 @@ When any site has a websocket location, hdc adds a single `map $http_upgrade $co
 
 **Hairpin NAT:** LAN clients using the **public** hostname may not appear as `10.x` on the WAF. Use split-horizon DNS to the WAF internal IP, or add your gateway/router CIDR to `trusted_cidrs`.
 
-Apply after editing: `node tools/hdc/cli.mjs run service nginx-waf maintain --` (all sites), or `maintain -- --site <id>` to update one site without touching other vhosts.
+Apply after editing: `node tools/hdc/cli.mjs run service nginx-waf maintain --` (all sites). Use `maintain -- --site <id>` when you only need to obtain or renew that site's certificate; vhosts are still synced from the full config. Run `query -- --live` to compare live nginx vhosts against config (`vhost_drift[]`).
 
 Run full `maintain` (no `--site`) after removing a site from `config.json` so stale `hdc-*.conf` files are pruned from the hosts.
 
@@ -85,7 +85,7 @@ Set `defaults.proxmox.qemu.rootfs_gb` (e.g. `32`) for QEMU guests. Maintain grow
 
 ## Common flags
 
-`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>` (partial update only), `--skip-disk-resize`, `--dry-run`.
+`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>` (cert scope only; all vhosts synced), `--skip-disk-resize`, `--dry-run`.
 
 ## After deploy
 

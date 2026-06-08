@@ -4,38 +4,38 @@ function isObject(v) {
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  */
-export function imageTag(openvas) {
-  const t = typeof openvas.image_tag === "string" ? openvas.image_tag.trim() : "";
+export function imageTag(greenbone) {
+  const t = typeof greenbone.image_tag === "string" ? greenbone.image_tag.trim() : "";
   return t || "stable";
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  */
-export function hostPort(openvas) {
-  const p = typeof openvas.host_port === "number" ? openvas.host_port : Number(openvas.host_port);
+export function hostPort(greenbone) {
+  const p = typeof greenbone.host_port === "number" ? greenbone.host_port : Number(greenbone.host_port);
   if (Number.isFinite(p) && p >= 1 && p <= 65535) return Math.floor(p);
   return 3000;
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  */
-export function adminUser(openvas) {
-  const user = typeof openvas.admin_user === "string" ? openvas.admin_user.trim() : "";
+export function adminUser(greenbone) {
+  const user = typeof greenbone.admin_user === "string" ? greenbone.admin_user.trim() : "";
   return user || "admin";
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  */
-export function adminPasswordVaultKey(openvas) {
+export function adminPasswordVaultKey(greenbone) {
   const key =
-    typeof openvas.admin_password_vault_key === "string" && openvas.admin_password_vault_key.trim()
-      ? openvas.admin_password_vault_key.trim()
-      : "HDC_OPENVAS_ADMIN_PASSWORD";
+    typeof greenbone.admin_password_vault_key === "string" && greenbone.admin_password_vault_key.trim()
+      ? greenbone.admin_password_vault_key.trim()
+      : "HDC_GREENBONE_ADMIN_PASSWORD";
   return key;
 }
 
@@ -45,41 +45,41 @@ export function adminPasswordVaultKey(openvas) {
 export function composeDir(install) {
   return typeof install.compose_dir === "string" && install.compose_dir.trim()
     ? install.compose_dir.trim()
-    : "/opt/openvas";
+    : "/opt/greenbone";
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  * @param {string} adminPassword
  */
-export function renderOpenvasEnv(openvas, adminPassword) {
+export function renderGreenboneEnv(greenbone, adminPassword) {
   const lines = [
     "# hdc-generated — docker compose",
-    `OPENVAS_IMAGE_TAG=${imageTag(openvas)}`,
-    `OPENVAS_HOST_PORT=${hostPort(openvas)}`,
-    `OPENVAS_ADMIN_USER=${adminUser(openvas)}`,
-    `OPENVAS_ADMIN_PASSWORD=${adminPassword}`,
+    `GREENBONE_IMAGE_TAG=${imageTag(greenbone)}`,
+    `GREENBONE_HOST_PORT=${hostPort(greenbone)}`,
+    `GREENBONE_ADMIN_USER=${adminUser(greenbone)}`,
+    `GREENBONE_ADMIN_PASSWORD=${adminPassword}`,
   ];
   return `${lines.join("\n")}\n`;
 }
 
 /**
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  */
-export function renderComposeYaml(openvas) {
-  const _cfg = isObject(openvas) ? openvas : {};
+export function renderComposeYaml(greenbone) {
+  const _cfg = isObject(greenbone) ? greenbone : {};
   return `services:
-  openvas:
-    image: greenbone/community-edition:\${OPENVAS_IMAGE_TAG}
+  greenbone:
+    image: greenbone/community-edition:\${GREENBONE_IMAGE_TAG}
     restart: unless-stopped
     ports:
-      - "\${OPENVAS_HOST_PORT}:3000"
+      - "\${GREENBONE_HOST_PORT}:3000"
     env_file:
       - .env
     volumes:
-      - openvas-data:/data
+      - greenbone-data:/data
 
 volumes:
-  openvas-data: {}
+  greenbone-data: {}
 `;
 }

@@ -6,7 +6,7 @@ import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/v
 import { readLineMasked } from "../../../../tools/hdc/lib/readline-masked.mjs";
 import { defaultVaultPath } from "../../../../tools/hdc/vault.mjs";
 
-export function createOpenvasVaultAccess() {
+export function createGreenboneVaultAccess() {
   return createVaultAccess(
     vaultDepsFromCli({
       env,

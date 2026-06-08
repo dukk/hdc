@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hdc.local/schema/openvas.config.schema.json",
-  "title": "HDC openvas service package config",
+  "$id": "https://hdc.local/schema/greenbone.config.schema.json",
+  "title": "HDC greenbone service package config",
   "type": "object",
   "additionalProperties": true,
   "required": ["schema_version", "deployments"],
@@ -15,10 +15,10 @@
         "type": "object",
         "required": ["system_id"],
         "properties": {
-          "system_id": { "type": "string", "pattern": "^openvas-[a-z]+$" },
+          "system_id": { "type": "string", "pattern": "^greenbone-[a-z]+$" },
           "mode": { "enum": ["proxmox-lxc"] },
           "proxmox": { "type": "object" },
-          "openvas": {
+          "greenbone": {
             "type": "object",
             "properties": {
               "image_tag": { "type": "string" },

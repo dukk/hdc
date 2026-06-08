@@ -2,8 +2,9 @@
 /**
  * Maintain Wazuh: refresh docker stack and guest baseline.
  *
- * Usage: hdc run service wazuh maintain -- [--instance a | --system-id wazuh-a] [--skip-upgrade] [--skip-clamav]
+ * Usage: hdc run service wazuh maintain -- [--instance a | --system-id vm-wazuh-a] [--skip-upgrade] [--skip-clamav]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,7 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
-import { maintainWazuhInCt, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
+import { maintainWazuhInCt, maintainWazuhOnHost, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
 import { createWazuhVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -51,37 +52,101 @@ function readCfg() {
  * @param {{ apiPassword: string; agentPassword: string }} passwords
  */
 async function maintainOne(deployment, flags, vaultAccess, passwords) {
-  const { systemId, proxmox: px, wazuh, install } = deployment;
+  const { systemId, mode, proxmox: px, wazuh, install, configure } = deployment;
   if (!isObject(px)) return { ok: false, system_id: systemId, message: "bad proxmox config" };
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-  const lxc = isObject(px.lxc) ? px.lxc : {};
-  const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-  if (!hostId || !Number.isFinite(vmid) || vmid <= 0) return { ok: false, system_id: systemId, message: "missing host_id or vmid" };
-  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+  if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
+
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
   const wazuhCfg = isObject(wazuh) ? wazuh : {};
   const installCfg = isObject(install) ? install : {};
-  const result = await maintainWazuhInCt(
-    pveSsh.user,
-    pveSsh.host,
-    vmid,
-    wazuhCfg,
-    installCfg,
-    passwords.apiPassword,
-    passwords.agentPassword,
-    { skipUpgrade },
-  );
+
+  /** @type {{ ok: boolean; message?: string }} */
+  let result;
+
+  if (mode === "proxmox-qemu") {
+    const cfg = isObject(configure) ? configure : {};
+    const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
+    const user = resolveGuestSshUser(ssh.user);
+    const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
+    if (!host) return { ok: false, system_id: systemId, message: "configure.ssh.host required" };
+    const q = isObject(px.qemu) ? px.qemu : {};
+    const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} (QEMU) …\n`);
+    const exec = createConfigureExec("ssh", { user, host });
+    result = await maintainWazuhOnHost(exec, wazuhCfg, installCfg, passwords.apiPassword, passwords.agentPassword, {
+      skipUpgrade,
+    });
+  } else {
+    const lxc = isObject(px.lxc) ? px.lxc : {};
+    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    if (!Number.isFinite(vmid) || vmid <= 0) return { ok: false, system_id: systemId, message: "missing vmid" };
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    result = await maintainWazuhInCt(
+      pveSsh.user,
+      pveSsh.host,
+      vmid,
+      wazuhCfg,
+      installCfg,
+      passwords.apiPassword,
+      passwords.agentPassword,
+      { skipUpgrade },
+    );
+  }
+
   const log = provisionLogFromConsole(console);
-  const exec = createConfigureExec("pct", { user: pveSsh.user, host: pveSsh.host, vmid, pveHost: pveSsh.host });
-  const baseline = await ensureGuestLinuxBaseline({
-    exec,
-    log,
-    flags,
-    vaultAccess,
-    deployment,
-    proxmoxPackageRoot: proxmoxRoot,
-  });
-  return { ok: result.ok && baseline.ok, system_id: systemId, host_id: hostId, vmid, ...result, ...guestBaselineResultFields(baseline) };
+  const baselineFlags = { ...flags, "skip-wazuh-agent": "1", "skip-crowdsec-agent": "1" };
+
+  let baseline;
+  if (mode === "proxmox-qemu") {
+    const cfg = isObject(configure) ? configure : {};
+    const ssh = isObject(cfg.ssh) ? cfg.ssh : {};
+    const user = resolveGuestSshUser(ssh.user);
+    const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
+    const exec = createConfigureExec("ssh", { user, host });
+    baseline = await ensureGuestLinuxBaseline({
+      exec,
+      log,
+      flags: baselineFlags,
+      vaultAccess,
+      deployment,
+      proxmoxPackageRoot: proxmoxRoot,
+    });
+  } else {
+    const lxc = isObject(px.lxc) ? px.lxc : {};
+    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+    const exec = createConfigureExec("pct", { user: pveSsh.user, host: pveSsh.host, vmid, pveHost: pveSsh.host });
+    baseline = await ensureGuestLinuxBaseline({
+      exec,
+      log,
+      flags: baselineFlags,
+      vaultAccess,
+      deployment,
+      proxmoxPackageRoot: proxmoxRoot,
+    });
+  }
+
+  const vmidRaw =
+    mode === "proxmox-qemu"
+      ? (() => {
+          const q = isObject(px.qemu) ? px.qemu : {};
+          return typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+        })()
+      : (() => {
+          const lxc = isObject(px.lxc) ? px.lxc : {};
+          return typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+        })();
+
+  return {
+    ok: result.ok && baseline.ok,
+    system_id: systemId,
+    host_id: hostId,
+    mode,
+    vmid: vmidRaw,
+    ...result,
+    ...guestBaselineResultFields(baseline),
+  };
 }
 
 async function main() {

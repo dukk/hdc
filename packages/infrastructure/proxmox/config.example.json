@@ -79,6 +79,59 @@
       "discover_from_host": "hypervisor-a",
       "targets": []
     },
+    "backups": {
+      "enabled": true,
+      "default_storage": "nas-a",
+      "default_profile": "weekly",
+      "manage_from_deployments": true,
+      "job_id_prefix": "hdc-backup",
+      "profiles": {
+        "weekly": {
+          "schedule": "sun 03:00",
+          "prune_backups": "keep-last=3",
+          "mode": "snapshot",
+          "compress": "zstd"
+        },
+        "daily": {
+          "schedule": "daily",
+          "prune_backups": "keep-last=7",
+          "mode": "snapshot",
+          "compress": "zstd"
+        },
+        "hourly": {
+          "schedule": "hourly",
+          "prune_backups": "keep-daily=7,keep-last=3",
+          "mode": "snapshot",
+          "compress": "zstd"
+        }
+      }
+    },
+    "replication": {
+      "enabled": true,
+      "manage_from_deployments": true,
+      "default_profile": "frequent",
+      "profiles": {
+        "frequent": { "schedule": "*/15" },
+        "hourly": { "schedule": "*/00" },
+        "daily": { "schedule": "daily" }
+      }
+    },
+    "ha": {
+      "enabled": true,
+      "manage_from_deployments": true,
+      "groups": {
+        "hdc-dns": {
+          "nodes": ["hypervisor-b", "hypervisor-c"],
+          "comment": "DNS guests (BIND, Pi-hole) on hypervisor-b/c"
+        }
+      },
+      "defaults": {
+        "group": "hdc-dns",
+        "max_restart": 3,
+        "max_relocate": 2,
+        "state": "started"
+      }
+    },
     "local_lvm": {
       "extend": {
         "enabled": true,
@@ -96,6 +149,18 @@
       "userid": "root@pam",
       "role": "HDCMaintain"
     },
+    "service_accounts": [
+      {
+        "id": "homepage",
+        "enabled": true,
+        "userid": "homepage@pam",
+        "tokenid": "homepage",
+        "role": "PVEAuditor",
+        "password_vault_key": "HDC_PROXMOX_USER_HOMEPAGE_PASSWORD",
+        "token_vault_key": "HDC_HOMEPAGE_PROXMOX_API_TOKEN",
+        "comment": "gethomepage Proxmox widget (read-only)"
+      }
+    ],
     "ssh_keys": {
       "enabled": true
     },
@@ -109,6 +174,16 @@
       "enabled": true,
       "allowed_source_cidrs": ["10.0.0.0/24", "192.168.0.0/16", "172.16.0.0/12"],
       "manage_from_deployments": true
+    },
+    "startup": {
+      "enabled": true,
+      "default_up": 30,
+      "manage_from_deployments": true,
+      "priorities": {
+        "bind": 1,
+        "nginx-waf": 2,
+        "postfix-relay": 3
+      }
     },
     "guest_agents": {
       "crowdsec": {

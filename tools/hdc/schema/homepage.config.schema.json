@@ -29,12 +29,34 @@
                 "items": { "type": "string" },
                 "minItems": 1
               },
-              "title": { "type": "string" },
-              "theme": { "type": "string" },
-              "service_groups": { "type": "array" },
-              "bookmarks": { "type": "array" }
+              "config_files": {
+                "type": "object",
+                "required": ["services", "settings", "bookmarks"],
+                "properties": {
+                  "services": { "type": "string", "minLength": 1 },
+                  "settings": { "type": "string", "minLength": 1 },
+                  "bookmarks": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              },
+              "proxmox_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "service_account_id": {
+                    "type": "string",
+                    "description": "References provision.service_accounts[].id in proxmox config."
+                  },
+                  "hosts": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Proxmox host ids for per-node widget URL env vars."
+                  }
+                },
+                "additionalProperties": false
+              }
             },
-            "required": ["allowed_hosts"]
+            "required": ["allowed_hosts", "config_files"]
           },
           "install": {
             "type": "object",

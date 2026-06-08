@@ -16,7 +16,7 @@
         "required": ["system_id"],
         "properties": {
           "system_id": { "type": "string", "pattern": "^wazuh-[a-z]+$" },
-          "mode": { "enum": ["proxmox-lxc"] },
+          "mode": { "enum": ["proxmox-lxc", "proxmox-qemu"] },
           "proxmox": { "type": "object" },
           "wazuh": {
             "type": "object",

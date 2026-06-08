@@ -32,6 +32,13 @@
     },
     "install": {
       "enabled": true
+    },
+    "replication": {
+      "enabled": true,
+      "profile": "frequent"
+    },
+    "ha": {
+      "enabled": true
     }
   },
   "deployments": [
@@ -44,6 +51,9 @@
           "hostname": "pi-hole-a",
           "ip_config": "10.0.0.4/24,gw=10.0.0.1"
         }
+      },
+      "replication": {
+        "target_host_id": "pve-c"
       }
     },
     {
@@ -55,6 +65,9 @@
           "hostname": "pi-hole-b",
           "ip_config": "10.0.0.5/24,gw=10.0.0.1"
         }
+      },
+      "replication": {
+        "target_host_id": "pve-b"
       }
     }
   ]

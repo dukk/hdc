@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Maintain OpenVAS: refresh compose stack + guest baseline.
+ * Maintain Greenbone CE: refresh compose stack + guest baseline.
  *
- * Usage: hdc run service openvas maintain -- [--instance a | --system-id openvas-a]
+ * Usage: hdc run service greenbone maintain -- [--instance a | --system-id greenbone-a]
  */
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { basename, dirname, join } from "node:path";
@@ -16,10 +16,10 @@ import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs"
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
-import { resolveOpenvasDeployments } from "../lib/deployments.mjs";
-import { maintainOpenvasInCt, resolvePveSshForHost } from "../lib/openvas-install.mjs";
-import { adminPasswordVaultKey } from "../lib/openvas-render.mjs";
-import { createOpenvasVaultAccess } from "../lib/vault-deps.mjs";
+import { resolveGreenboneDeployments } from "../lib/deployments.mjs";
+import { maintainGreenboneInCt, resolvePveSshForHost } from "../lib/greenbone-install.mjs";
+import { adminPasswordVaultKey } from "../lib/greenbone-render.mjs";
+import { createGreenboneVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
 const packageRoot = join(here, "..");
-const PACKAGE_CONFIG_EXAMPLE = "packages/services/openvas/config.example.json";
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/greenbone/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
 function ensurePackageConfig() {
@@ -50,11 +50,11 @@ function readCfg() {
 }
 
 /**
- * @param {ReturnType<typeof resolveOpenvasDeployments>[number]} deployment
+ * @param {ReturnType<typeof resolveGreenboneDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  */
 async function maintainOne(deployment, flags, vault, vaultAccess) {
-  const { systemId, proxmox: px, openvas, install } = deployment;
+  const { systemId, proxmox: px, greenbone, install } = deployment;
   if (!isObject(px)) return { ok: false, system_id: systemId, message: "bad proxmox config" };
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
@@ -64,19 +64,19 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
     return { ok: false, system_id: systemId, host_id: hostId, message: "invalid vmid" };
   }
 
-  const openvasCfg = isObject(openvas) ? openvas : {};
-  const adminKey = adminPasswordVaultKey(openvasCfg);
+  const greenboneCfg = isObject(greenbone) ? greenbone : {};
+  const adminKey = adminPasswordVaultKey(greenboneCfg);
   errout.write(`[hdc] ${target} ${verb}: loading vault ${adminKey} …\n`);
   const adminPassword = String(await vault.getSecret(adminKey, { promptLabel: `vault secret ${adminKey}` })).trim();
   if (!adminPassword) return { ok: false, system_id: systemId, host_id: hostId, message: `missing vault ${adminKey}` };
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-  const result = await maintainOpenvasInCt(
+  const result = await maintainGreenboneInCt(
     pveSsh.user,
     pveSsh.host,
     vmid,
-    openvasCfg,
+    greenboneCfg,
     isObject(install) ? install : {},
     adminPassword,
   );
@@ -100,7 +100,7 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: refresh OpenVAS Docker stack (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: refresh Greenbone Docker stack (stderr log; JSON on stdout).\n`);
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(
       `${JSON.stringify({ ok: false, target, verb, message: "package config missing — see stderr" }, null, 2)}\n`,
@@ -113,7 +113,7 @@ async function main() {
   const flags = parseArgvFlags(process.argv.slice(2));
   let deployments;
   try {
-    deployments = resolveOpenvasDeployments(cfg, flags);
+    deployments = resolveGreenboneDeployments(cfg, flags);
   } catch (e) {
     errout.write(`[hdc] ${target} ${verb}: ${/** @type {Error} */ (e).message}\n`);
     process.stdout.write(
@@ -123,7 +123,7 @@ async function main() {
     return;
   }
 
-  const vault = createOpenvasVaultAccess();
+  const vault = createGreenboneVaultAccess();
   await vault.unlock({});
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});

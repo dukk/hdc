@@ -283,7 +283,7 @@ export function renderHomepageConfigFiles(homepage) {
 /**
  * @param {Record<string, unknown>} homepage
  */
-export function renderHomepageEnv(homepage) {
+export function renderHomepageEnv(homepage, widgetLines = []) {
   const tag = normalizeImageTag(homepage);
   const port = hostPort(homepage);
   const hosts = allowedHosts(homepage);
@@ -293,6 +293,7 @@ export function renderHomepageEnv(homepage) {
     `HOMEPAGE_IMAGE_TAG=${tag}`,
     `HOMEPAGE_HOST_PORT=${port}`,
     `HOMEPAGE_ALLOWED_HOSTS=${hosts}`,
+    ...widgetLines,
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -305,6 +306,8 @@ export function renderComposeYaml() {
     restart: unless-stopped
     ports:
       - "\${HOMEPAGE_HOST_PORT}:3000"
+    env_file:
+      - .env
     volumes:
       - ./config:/app/config
     environment:

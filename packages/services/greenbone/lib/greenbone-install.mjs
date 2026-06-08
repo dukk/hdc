@@ -3,7 +3,7 @@ import { stderr as errout } from "node:process";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
-import { composeDir, renderComposeYaml, renderOpenvasEnv } from "./openvas-render.mjs";
+import { composeDir, renderComposeYaml, renderGreenboneEnv } from "./greenbone-render.mjs";
 
 export { resolvePveSshForHost };
 
@@ -56,14 +56,18 @@ function buildInstallScript(composeDirPath, composeYaml, envContent) {
 
 /**
  * @param {string} composeDirPath
+ * @param {string} composeYaml
  * @param {string} envContent
  */
-function buildMaintainScript(composeDirPath, envContent) {
+function buildMaintainScript(composeDirPath, composeYaml, envContent) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   return [
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
-    `test -f '${dir}/docker-compose.yml'`,
+    `test -f '${dir}/docker-compose.yml' || test -d '${dir}'`,
+    `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
+    composeYaml.trimEnd(),
+    "HDCOMPOSE",
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
@@ -91,18 +95,18 @@ function buildComposeDownScript(composeDirPath) {
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  * @param {Record<string, unknown>} install
  * @param {string} adminPassword
  */
-export async function installOpenvasInCt(user, pveHost, vmid, openvas, install, adminPassword) {
-  errout.write(`[hdc] openvas install: Docker Compose in CT ${vmid} …\n`);
-  const ready = await waitForCt(user, pveHost, vmid, 2000, "openvas install");
+export async function installGreenboneInCt(user, pveHost, vmid, greenbone, install, adminPassword) {
+  errout.write(`[hdc] greenbone install: Docker Compose in CT ${vmid} …\n`);
+  const ready = await waitForCt(user, pveHost, vmid, 2000, "greenbone install");
   if (!ready) {
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
-  const envContent = renderOpenvasEnv(openvas, adminPassword);
-  const composeYaml = renderComposeYaml(openvas);
+  const envContent = renderGreenboneEnv(greenbone, adminPassword);
+  const composeYaml = renderComposeYaml(greenbone);
   const dir = composeDir(install);
   const inner = buildInstallScript(dir, composeYaml, envContent);
   const r = pctExec(user, pveHost, vmid, inner);
@@ -116,19 +120,20 @@ export async function installOpenvasInCt(user, pveHost, vmid, openvas, install, 
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  * @param {Record<string, unknown>} install
  * @param {string} adminPassword
  */
-export async function maintainOpenvasInCt(user, pveHost, vmid, openvas, install, adminPassword) {
-  errout.write(`[hdc] openvas maintain: refreshing stack in CT ${vmid} …\n`);
-  const ready = await waitForCt(user, pveHost, vmid, 2000, "openvas maintain");
+export async function maintainGreenboneInCt(user, pveHost, vmid, greenbone, install, adminPassword) {
+  errout.write(`[hdc] greenbone maintain: refreshing stack in CT ${vmid} …\n`);
+  const ready = await waitForCt(user, pveHost, vmid, 2000, "greenbone maintain");
   if (!ready) {
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
-  const envContent = renderOpenvasEnv(openvas, adminPassword);
+  const envContent = renderGreenboneEnv(greenbone, adminPassword);
+  const composeYaml = renderComposeYaml(greenbone);
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, envContent);
+  const inner = buildMaintainScript(dir, composeYaml, envContent);
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) return { ok: false, message: `maintain failed (exit ${r.status})` };
   return { ok: true, message: "images refreshed" };

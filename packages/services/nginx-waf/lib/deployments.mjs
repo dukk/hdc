@@ -1,6 +1,7 @@
 import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
+import { serverNames } from "./nginx-waf-render.mjs";
 
 const NGINX_WAF_ROLE = "nginx-waf";
 
@@ -69,6 +70,7 @@ export function normalizeNginxWafConfig(cfg) {
     : Array.isArray(defaults.sites)
       ? defaults.sites.filter(isObject)
       : [];
+  validateSites(sites);
   const letsencrypt = isObject(cfg.letsencrypt)
     ? cfg.letsencrypt
     : isObject(defaults.letsencrypt)
@@ -87,6 +89,42 @@ export function normalizeNginxWafConfig(cfg) {
     letsencrypt,
     nginxWaf,
   };
+}
+
+/**
+ * @param {Record<string, unknown>[]} sites
+ */
+function validateSites(sites) {
+  /** @type {Map<string, string>} */
+  const hostnameOwner = new Map();
+  for (const site of sites) {
+    const id = typeof site.id === "string" ? site.id.trim() : "";
+    if (!id) throw new Error("site needs id");
+    for (const name of serverNames(site)) {
+      const prev = hostnameOwner.get(name);
+      if (prev && prev !== id) {
+        throw new Error(
+          `server_name ${JSON.stringify(name)} is listed on sites ${JSON.stringify(prev)} and ${JSON.stringify(id)}`,
+        );
+      }
+      hostnameOwner.set(name, id);
+    }
+  }
+}
+
+/**
+ * Full sites[] for vhost push; certSites scopes certificate obtain/renew/status when --site is set.
+ * @param {ReturnType<typeof nginxWafGlobalSettings>} global
+ * @param {Record<string, unknown>} cfg
+ * @param {string | undefined} siteFilter
+ */
+export function maintainSiteLists(global, cfg, siteFilter) {
+  const allSites = /** @type {Record<string, unknown>[]} */ (global.sites);
+  const partialSiteUpdate = Boolean(siteFilter);
+  const certSites = partialSiteUpdate
+    ? resolveSites(cfg, String(siteFilter).trim())
+    : allSites;
+  return { allSites, certSites, partialSiteUpdate };
 }
 
 /**

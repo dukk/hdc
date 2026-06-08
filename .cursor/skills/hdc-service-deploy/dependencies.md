@@ -9,7 +9,7 @@ Use this when filling **section 7** of [plan-template.md](plan-template.md). Def
 1. **synology-nas** `maintain` — required before `synology-docker` service deploy (Container Manager, SSH).
 2. **Service deploy** — the app package itself.
 3. **bind** `maintain` — internal authoritative A record (forward zone in bind config).
-4. **nginx-waf** or **nginx** `maintain` — reverse proxy site to guest upstream.
+4. **nginx-waf** or **nginx** `maintain` — reverse proxy site to guest upstream (nginx-waf always syncs all vhosts from config).
 5. **cloudflare** `maintain` — public DNS (often proxied A to WAF WAN IP).
 6. **nagios** `maintain` — regenerates checks from BIND A records (after BIND is updated).
 
@@ -19,7 +19,8 @@ Use this when filling **section 7** of [plan-template.md](plan-template.md). Def
 |---------|------|--------------|--------------|
 | `synology-nas` | infrastructure | `maintain` | SSH, Docker/Container Manager, DSM updates |
 | `bind` | service | `maintain` | Push zone files; forward A records for hostnames |
-| `nginx-waf` | service | `maintain` | Push `sites[]`, LE certs, ModSecurity; `--site <id>` for one vhost |
+| `nginx-waf` | service | `maintain` | Push full `sites[]` from config, LE certs, ModSecurity; `--site <id>` scopes certificate work only |
+| `nginx-waf` | service | `query --live` | Health plus live vhost drift audit (`vhost_drift[]`) vs config |
 | `nginx` | service | `maintain` | Push `sites[]` without WAF; `--site <id>` selective |
 | `cloudflare` | infrastructure | `maintain` | Apply `zones[]` DNS; `--zone <name>` selective; `--prune` only when intended |
 | `nagios` | service | `maintain` | Regenerate Nagios hosts from BIND forward A records |
@@ -79,6 +80,6 @@ See [vaultwarden README](../../../packages/services/vaultwarden/README.md) and [
 
 ## Selective maintain (do not over-touch)
 
-- **nginx-waf / nginx:** `--site <id>` updates one vhost; full maintain without `--site` may prune removed sites.
+- **nginx-waf / nginx:** `--site <id>` on nginx-waf scopes Let's Encrypt only; all vhosts are still pushed from config. Full maintain without `--site` may prune removed sites. Run `nginx-waf query -- --live` after proxy changes to catch vhost drift.
 - **cloudflare:** `--zone <name>`; use `--prune` only when removal is intended.
 - **unifi-network:** `--rule` filter — unrelated to most app deploys.

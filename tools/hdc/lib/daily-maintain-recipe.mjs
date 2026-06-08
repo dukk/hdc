@@ -32,12 +32,15 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "n8n",
   "nextcloud",
   "open-webui",
-  "openvas",
+  "greenbone",
+  "hermes",
   "scanopy",
   "searxng",
   "solidtime",
   "uptime-kuma",
   "vaultwarden",
+  "vikunja",
+  "wallos",
   "wazuh",
   "yacy",
   "postiz",
@@ -142,7 +145,7 @@ export function dailyRecipeSteps() {
       "--skip-local-lvm",
     ],
     requiresConfig: true,
-    note: "SSH keys, API token, load report, guest-agent ping, firewalls",
+    note: "SSH keys, API token, load report, guest-agent ping, firewalls, backups, replication, HA",
   });
 
   steps.push({

@@ -33,7 +33,7 @@
       "id": "verify-templates",
       "title": "Verify provision templates",
       "verb": "maintain",
-      "summary": "SSH keys, version-aware hdc API token ACL (PVE 8/9), Ubuntu LTS templates, NAS storage, host OS upgrades, QEMU guest agent report."
+      "summary": "SSH keys, version-aware hdc API token ACL (PVE 8/9), Ubuntu LTS templates, NAS storage, scheduled backup jobs, host OS upgrades, QEMU guest agent report."
     },
     {
       "id": "cluster-snapshot",

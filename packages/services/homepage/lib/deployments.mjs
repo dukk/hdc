@@ -1,5 +1,6 @@
 import { deploymentSystemIdPattern, lxcSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { homepageConfigFilePaths, validateHomepageConfigFiles } from "./homepage-config-load.mjs";
 import { allowedHosts, hostPort, normalizeImageTag, normalizePublicUrl } from "./homepage-render.mjs";
 
 const HOMEPAGE_ROLE = "homepage";
@@ -105,6 +106,7 @@ function validateDeployments(deployments) {
     ids.add(sid);
     const hp = isObject(d.homepage) ? d.homepage : {};
     allowedHosts(hp);
+    validateHomepageConfigFiles(hp);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
     if (mode === "proxmox-lxc" || mode === "" || !mode) {
       const px = isObject(d.proxmox) ? d.proxmox : {};
@@ -140,7 +142,12 @@ export function listHomepageDeploymentSummaries(cfg) {
     } catch {
       publicUrl = null;
     }
-    const groups = Array.isArray(hp.service_groups) ? hp.service_groups.length : 0;
+    let configFiles = null;
+    try {
+      configFiles = homepageConfigFilePaths(hp);
+    } catch {
+      configFiles = null;
+    }
     return {
       system_id: d.system_id,
       mode,
@@ -150,7 +157,7 @@ export function listHomepageDeploymentSummaries(cfg) {
       image_tag: normalizeImageTag(hp),
       host_port: hostPort(hp),
       public_url: publicUrl,
-      service_group_count: groups,
+      config_files: configFiles,
     };
   });
 }

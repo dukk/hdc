@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Deploy OpenVAS on Proxmox LXC (Docker Compose).
+ * Deploy Greenbone CE on Proxmox LXC (Docker Compose).
  *
- * Usage: hdc run service openvas deploy -- [--instance a | --system-id openvas-a] [--skip-install]
- *        hdc run service openvas deploy -- [--skip-existing | --redeploy-existing]
+ * Usage: hdc run service greenbone deploy -- [--instance a | --system-id greenbone-a] [--skip-install]
+ *        hdc run service greenbone deploy -- [--skip-existing | --redeploy-existing]
  */
 import { lxcHostnameFromSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
@@ -22,13 +22,13 @@ import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lx
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 
-import { resolveOpenvasDeployments } from "../lib/deployments.mjs";
+import { resolveGreenboneDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
-import { installOpenvasInCt, readCtPrimaryIp, resolvePveSshForHost } from "../lib/openvas-install.mjs";
-import { adminPasswordVaultKey, hostPort } from "../lib/openvas-render.mjs";
+import { installGreenboneInCt, readCtPrimaryIp, resolvePveSshForHost } from "../lib/greenbone-install.mjs";
+import { adminPasswordVaultKey, hostPort } from "../lib/greenbone-render.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
-import { createOpenvasVaultAccess } from "../lib/vault-deps.mjs";
+import { createGreenboneVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -36,7 +36,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
 const verb = basename(here);
 const packageRoot = join(here, "..");
-const PACKAGE_CONFIG_EXAMPLE = "packages/services/openvas/config.example.json";
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/greenbone/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
 function ensurePackageConfig() {
@@ -75,13 +75,13 @@ function existingGuestPolicy(flags) {
 }
 
 /**
- * @param {ReturnType<typeof resolveOpenvasDeployments>[number]} deployment
+ * @param {ReturnType<typeof resolveGreenboneDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
- * @param {{ ctPasswordCache?: { value: string | null }; vault: ReturnType<typeof createOpenvasVaultAccess> }} runOpts
+ * @param {{ ctPasswordCache?: { value: string | null }; vault: ReturnType<typeof createGreenboneVaultAccess> }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
-  const { mode, systemId, proxmox: px, openvas, install } = deployment;
+  const { mode, systemId, proxmox: px, greenbone, install } = deployment;
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
   logDeployInventoryStatus(target, verb, inv);
 
@@ -139,7 +139,7 @@ async function deployOne(deployment, flags, log, runOpts) {
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||
-      "openvas";
+      "greenbone";
     const memoryMb = typeof lxc.memory_mb === "number" ? lxc.memory_mb : Number(lxc.memory_mb);
     const cores = typeof lxc.cores === "number" ? lxc.cores : Number(lxc.cores);
     const diskGb = typeof lxc.rootfs_gb === "number" ? lxc.rootfs_gb : Number(lxc.rootfs_gb);
@@ -207,19 +207,19 @@ async function deployOne(deployment, flags, log, runOpts) {
   }
 
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-  const openvasCfg = isObject(openvas) ? openvas : {};
+  const greenboneCfg = isObject(greenbone) ? greenbone : {};
   if (shouldInstall(install)) {
-    const adminKey = adminPasswordVaultKey(openvasCfg);
+    const adminKey = adminPasswordVaultKey(greenboneCfg);
     errout.write(`[hdc] ${target} ${verb}: loading vault ${adminKey} …\n`);
     const adminPassword = String(await runOpts.vault.getSecret(adminKey, { promptLabel: `vault secret ${adminKey}` })).trim();
     if (!adminPassword) {
       return { ok: false, system_id: systemId, host_id: hostId, mode, message: `missing vault ${adminKey}` };
     }
-    installResult = await installOpenvasInCt(
+    installResult = await installGreenboneInCt(
       pveSsh.user,
       pveSsh.host,
       guestVmid,
-      openvasCfg,
+      greenboneCfg,
       isObject(install) ? install : {},
       adminPassword,
     );
@@ -239,14 +239,14 @@ async function deployOne(deployment, flags, log, runOpts) {
     mode,
     redeploy: skipProvision,
     ip,
-    ui_url: ip ? `http://${ip}:${hostPort(openvasCfg)}` : null,
+    ui_url: ip ? `http://${ip}:${hostPort(greenboneCfg)}` : null,
     result: provisionResult,
     install: installResult,
   };
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: OpenVAS LXC via Proxmox (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: Greenbone LXC via Proxmox (stderr log; JSON on stdout).\n`);
   if (!existsSync(ensurePackageConfig().path)) {
     const inv = deployTargetInventory(root, target);
     logDeployInventoryStatus(target, verb, inv);
@@ -261,7 +261,7 @@ async function main() {
   const flags = parseArgvFlags(process.argv.slice(2));
   let deployments;
   try {
-    deployments = resolveOpenvasDeployments(cfg, flags);
+    deployments = resolveGreenboneDeployments(cfg, flags);
   } catch (e) {
     errout.write(`[hdc] ${target} ${verb}: ${/** @type {Error} */ (e).message}\n`);
     process.stdout.write(
@@ -271,7 +271,7 @@ async function main() {
     return;
   }
 
-  const vault = createOpenvasVaultAccess();
+  const vault = createGreenboneVaultAccess();
   await vault.unlock({});
   const log = provisionLogFromConsole(console);
   /** @type {{ value: string | null }} */

@@ -132,7 +132,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
 - **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `openvas`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -557,21 +557,22 @@ Example: `node tools/hdc/cli.mjs run service crowdsec deploy -- --instance a`
 
 ## Wazuh in this repo
 
-- **Config:** [`packages/services/wazuh/config.json`](packages/services/wazuh/config.json) (copy from [`config.example.json`](packages/services/wazuh/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/wazuh-a.json`](inventory/manual/systems/wazuh-a.json); service sidecar [`inventory/manual/services/wazuh.json`](inventory/manual/services/wazuh.json).
-- **Proxmox:** `provision.guest_agents.wazuh.manager_host` → CT IP; vault `HDC_WAZUH_AGENT_PASSWORD`.
+- **Config:** [`packages/services/wazuh/config.json`](packages/services/wazuh/config.json) (copy from [`config.example.json`](packages/services/wazuh/config.example.json); keep local config out of git).
+- **Modes:** `proxmox-lxc` (`wazuh-a`) or `proxmox-qemu` (`vm-wazuh-a` + `configure.ssh.host`).
+- **Inventory:** [`inventory/manual/systems/wazuh-a.json`](inventory/manual/systems/wazuh-a.json) (LXC) or `vm-wazuh-a.json` (QEMU); service sidecar [`inventory/manual/services/wazuh.json`](inventory/manual/services/wazuh.json).
+- **Proxmox:** `provision.guest_agents.wazuh.manager_host` → manager IP; vault `HDC_WAZUH_AGENT_PASSWORD`.
 - **Schema:** [`tools/hdc/schema/wazuh.config.schema.json`](tools/hdc/schema/wazuh.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Privileged LXC + Docker Compose Wazuh stack (`deployments[]`; `--instance a`) |
-| `maintain` | `docker compose pull` + `up -d`; guest Linux baseline |
+| `deploy` | LXC or QEMU + Docker Compose Wazuh stack (`deployments[]`; `--instance a`; QEMU: `--destroy-existing`) |
+| `maintain` | `docker compose pull` + `up -d`; guest Linux baseline (`--skip-wazuh-agent` on manager) |
 | `query` | Config summary; `--live` for compose + dashboard probe |
-| `teardown` | Optional compose down then destroy LXC |
+| `teardown` | Optional compose down then destroy LXC or QEMU guest |
 
 Vault: `HDC_WAZUH_API_PASSWORD`, `HDC_WAZUH_AGENT_PASSWORD`.
 
-Example: `node tools/hdc/cli.mjs run service wazuh deploy --`
+Example: `node tools/hdc/cli.mjs run service wazuh deploy -- --instance a`
 
 ## Trivy in this repo
 
@@ -625,22 +626,22 @@ Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or ext
 
 Example: `node tools/hdc/cli.mjs run service keycloak deploy --`
 
-## OpenVAS in this repo
+## Greenbone in this repo
 
-- **Config:** [`packages/services/openvas/config.json`](packages/services/openvas/config.json) (copy from [`config.example.json`](packages/services/openvas/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/openvas-a.json`](inventory/manual/systems/openvas-a.json); service sidecar [`inventory/manual/services/openvas.json`](inventory/manual/services/openvas.json).
-- **Schema:** [`tools/hdc/schema/openvas.config.schema.json`](tools/hdc/schema/openvas.config.schema.json).
+- **Config:** [`packages/services/greenbone/config.json`](packages/services/greenbone/config.json) (copy from [`config.example.json`](packages/services/greenbone/config.example.json)).
+- **Inventory:** [`inventory/manual/systems/greenbone-a.json`](inventory/manual/systems/greenbone-a.json); service sidecar [`inventory/manual/services/greenbone.json`](inventory/manual/services/greenbone.json).
+- **Schema:** [`tools/hdc/schema/greenbone.config.schema.json`](tools/hdc/schema/greenbone.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Privileged LXC (8 GiB+ RAM) + Greenbone Community Edition Compose |
-| `maintain` | `docker compose pull` + `up -d`; guest baseline |
+| `maintain` | Re-push compose/env, `docker compose pull` + `up -d`; guest baseline |
 | `query` | Config summary; `--live` for compose + HTTPS admin probe |
 | `teardown` | Optional compose down then destroy LXC |
 
-Vault: `HDC_OPENVAS_ADMIN_PASSWORD`. First bootstrap may take a long time for NVT feed sync.
+Vault: `HDC_GREENBONE_ADMIN_PASSWORD`. First bootstrap may take a long time for NVT feed sync.
 
-Example: `node tools/hdc/cli.mjs run service openvas deploy --`
+Example: `node tools/hdc/cli.mjs run service greenbone deploy --`
 
 ## Nagios in this repo
 
@@ -716,6 +717,23 @@ Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto
 
 Example: `node tools/hdc/cli.mjs run service mailcow deploy -- --instance a --destroy-existing`
 
+## Wallos in this repo
+
+- **Config:** [`packages/services/wallos/config.json`](packages/services/wallos/config.json) (copy from [`config.example.json`](packages/services/wallos/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/wallos-a.json`](inventory/manual/systems/wallos-a.json); service sidecar [`inventory/manual/services/wallos.json`](inventory/manual/services/wallos.json).
+- **Schema:** [`tools/hdc/schema/wallos.config.schema.json`](tools/hdc/schema/wallos.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 1 GiB RAM, 16 GiB rootfs) + Docker Wallos (`bellamy/wallos`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 8282) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+No vault secrets for v1 — complete first-run admin setup in the web UI after deploy. `wallos.public_url` is optional (set when adding nginx-waf later). Data persists under `/opt/wallos/db` and `/opt/wallos/logos` on the CT.
+
+Example: `node tools/hdc/cli.mjs run service wallos deploy -- --instance a`
+
 ## n8n in this repo
 
 - **Config:** [`packages/services/n8n/config.json`](packages/services/n8n/config.json) (copy from [`config.example.json`](packages/services/n8n/config.example.json); keep local config out of git).
@@ -750,6 +768,23 @@ Set `listmonk.public_url` (`https://…`) when using nginx-waf; omit for HTTP on
 
 Example: `node tools/hdc/cli.mjs run service listmonk deploy -- --instance a`
 
+## Vikunja in this repo
+
+- **Config:** [`packages/services/vikunja/config.json`](packages/services/vikunja/config.json) (copy from [`config.example.json`](packages/services/vikunja/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vikunja-a.json`](inventory/manual/systems/vikunja-a.json); service sidecar [`inventory/manual/services/vikunja.json`](inventory/manual/services/vikunja.json).
+- **Schema:** [`tools/hdc/schema/vikunja.config.schema.json`](tools/hdc/schema/vikunja.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 20 GiB rootfs) + Docker Vikunja + PostgreSQL (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/api/v1/info` on port 3456 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `vikunja.public_url` (`https://…/` with trailing slash) when using nginx-waf. Vault: `HDC_VIKUNJA_JWT_SECRET` and `HDC_VIKUNJA_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `vikunja.mail.enabled` maps internal postfix-relay to `VIKUNJA_MAILER_*` env vars. Register the first account in the Vikunja UI after deploy. nginx-waf upstream: `http://<ct-ip>:3456` with WebSockets enabled.
+
+Example: `node tools/hdc/cli.mjs run service vikunja deploy -- --instance a`
+
 ## Home Assistant in this repo
 
 - **Config:** [`packages/services/homeassistant/config.json`](packages/services/homeassistant/config.json) (copy from [`config.example.json`](packages/services/homeassistant/config.example.json); keep local config out of git).
@@ -766,6 +801,28 @@ Example: `node tools/hdc/cli.mjs run service listmonk deploy -- --instance a`
 Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. nginx-waf may already point `ha.dukk.org` at `http://10.0.0.30:8123`. No vault secrets for v1.
 
 Example: `node tools/hdc/cli.mjs run service homeassistant deploy -- --instance a --destroy-existing`
+
+## Kali desktop in this repo
+
+- **Config:** [`packages/services/kali-desktop/config.json`](packages/services/kali-desktop/config.json) (copy from [`config.example.json`](packages/services/kali-desktop/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-kali-a.json`](inventory/manual/systems/vm-kali-a.json); service sidecar [`inventory/manual/services/kali-desktop.json`](inventory/manual/services/kali-desktop.json).
+- **Schema:** [`tools/hdc/schema/kali-desktop.config.schema.json`](tools/hdc/schema/kali-desktop.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Build Kali cloud-init QEMU template (`--build-template`; download + `virt-customize` on hypervisor), clone, cloud-init static IP (`deployments[]`; `--instance a`, `--destroy-existing`) |
+| `maintain` | Guest Linux baseline, optional apt upgrade, CPU/RAM sync (`--skip-package-upgrade`, `--skip-clamav`) |
+| `query` | Config summary; `--live` for guest agent + SSH |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Hypervisor prerequisites for template build: `libguestfs-tools`, `p7zip-full`. Vault: `HDC_KALI_DESKTOP_PASSWORD` (cloud-init password for user `kali`). Default image: Kali `qemu-amd64.7z` from `cdimage.kali.org`.
+
+Example:
+
+```bash
+node tools/hdc/cli.mjs run service kali-desktop deploy -- --instance a --build-template
+node tools/hdc/cli.mjs run service kali-desktop deploy -- --instance a
+```
 
 ## Windows desktop in this repo
 
@@ -914,7 +971,7 @@ node tools/hdc/cli.mjs run client client-ubuntu maintain -- --reboot --host-id w
 | `lxc-create` | deploy | Create LXC via API (`create-container`) |
 | `qemu-clone` | deploy | Clone QEMU VM from template (`create-vm`); enables `agent=1` after clone (in-guest install via service deploy or SSH) |
 | `qemu-list-templates` | deploy | List QEMU templates |
-| `verify-templates` | maintain | SSH keys, no-subscription APT sources and subscription nag removal, host firewall (SSH/8006 to allowed LANs), API token ACL, templates, NAS storage, host OS updates, OEM Windows SLIC/MSDM license reporting, configured load report, QEMU guest agent (config + ping), markdown report under `packages/infrastructure/proxmox/reports/` |
+| `verify-templates` | maintain | SSH keys, no-subscription APT sources and subscription nag removal, host firewall (SSH/8006 to allowed LANs), API token ACL, templates, NAS storage, scheduled backup jobs, storage replication jobs, HA groups/resources, guest startup order (`provision.startup`; `--skip-startup`), host OS updates, OEM Windows SLIC/MSDM license reporting, configured load report, QEMU guest agent (config + ping), markdown report under `packages/infrastructure/proxmox/reports/` |
 | `cluster-snapshot` | query | Cluster/guest inventory JSON on stdout |
 
 Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructure ubuntu maintain` or `users bootstrap-hdc` — not from `proxmox maintain`.

@@ -15,10 +15,10 @@ import { createNginxWafVaultAccess } from "../lib/vault-deps.mjs";
 import {
   findCertPrimaryDeployment,
   findPeerDeployment,
+  maintainSiteLists,
   nginxWafGlobalSettings,
   normalizeNginxWafConfig,
   resolveNginxWafDeployments,
-  resolveSites,
   sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import {
@@ -125,13 +125,10 @@ async function main() {
   }
 
   const global = nginxWafGlobalSettings(normalized);
-  const partialSiteUpdate = Boolean(siteFilter);
-  const sites = /** @type {Record<string, unknown>[]} */ (
-    siteFilter ? resolveSites(cfg, siteFilter) : global.sites
-  );
+  const { allSites, certSites, partialSiteUpdate } = maintainSiteLists(global, cfg, siteFilter);
   if (partialSiteUpdate) {
     errout.write(
-      `[hdc] ${target} ${verb}: updating site ${JSON.stringify(siteFilter)} only (other vhosts unchanged)\n`,
+      `[hdc] ${target} ${verb}: certificate scope for site ${JSON.stringify(siteFilter)}; all vhosts synced from config\n`,
     );
   }
 
@@ -221,7 +218,7 @@ async function main() {
   }
 
   if (!syncCerts && !renewCerts) {
-    const missingTlsPrimary = tlsDomainsFromSites(sites).filter(
+    const missingTlsPrimary = tlsDomainsFromSites(certSites).filter(
       (d) => !certExistsOnHost(certPrimaryExec, d),
     );
     if (missingTlsPrimary.length && email) {
@@ -235,7 +232,7 @@ async function main() {
           log,
           global,
           email,
-          sites,
+          sites: certSites,
           tsigSecret,
         });
       } else {
@@ -246,8 +243,8 @@ async function main() {
           exec: certPrimaryExec,
           log,
           global,
-          sites,
-          allSites: global.sites,
+          sites: allSites,
+          allSites,
           pruneStaleSites: !partialSiteUpdate,
           wafNodeId: certPrimary.systemId,
         });
@@ -256,7 +253,7 @@ async function main() {
           log,
           global,
           email,
-          sites,
+          sites: certSites,
           tsigSecret,
         });
       }
@@ -274,7 +271,7 @@ async function main() {
       errout.write(`[hdc] ${target} ${verb}: pushing sites to ${deployment.systemId} …\n`);
       try {
         const exec = configureExecFromDeployment(deployment);
-        const siteNeedsWaf = sites.some((s) => {
+        const siteNeedsWaf = allSites.some((s) => {
           const waf = s && typeof s === "object" && s.waf && typeof s.waf === "object" ? s.waf : {};
           return waf.enabled !== false;
         });
@@ -286,8 +283,8 @@ async function main() {
           exec,
           log,
           global,
-          sites,
-          allSites: global.sites,
+          sites: allSites,
+          allSites,
           pruneStaleSites: !partialSiteUpdate,
           wafNodeId: deployment.systemId,
         });
@@ -318,7 +315,7 @@ async function main() {
         log,
         global,
         email,
-        sites,
+        sites: certSites,
         tsigSecret,
       });
       if (certPeer) runCertSync(certPrimaryExec, log);
@@ -393,7 +390,7 @@ async function main() {
     }
   }
 
-  const domains = tlsDomainsFromSites(sites);
+  const domains = tlsDomainsFromSites(certSites);
   /** @type {Record<string, unknown>[]} */
   const certStatus = [];
   for (const deployment of allDeployments) {

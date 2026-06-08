@@ -4,6 +4,7 @@ import { extractPveUpid } from "./proxmox-qemu-post-clone.mjs";
 import { getLxcRuntimeStatus, startLxc } from "./proxmox-lxc-start.mjs";
 import { pveData, pveFormBody, pveJsonRequest, waitForPveTask } from "./pve-http.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { guestBootOptsFromBlock } from "./proxmox-guest-startup.mjs";
 
 /**
  * @typedef {object} GuestResourceSizing
@@ -12,11 +13,16 @@ import { flagGet } from "../../../lib/parse-argv-flags.mjs";
  */
 
 /**
+ * @typedef {import("./proxmox-guest-startup.mjs").GuestBootOpts} GuestBootOpts
+ */
+
+/**
  * @typedef {object} GuestResourceOpts
  * @property {number} memoryMb
  * @property {number} cores
  * @property {boolean} [reboot]
  * @property {boolean} [rebootOnChange]
+ * @property {GuestBootOpts} [boot]
  */
 
 /**
@@ -71,15 +77,19 @@ export function resolveRebootAfterResourceApply(flags, rebootOnChange = false) {
 /**
  * @param {unknown} block proxmox.qemu or proxmox.lxc
  * @param {Record<string, string>} [flags]
+ * @param {unknown} [proxmoxCfg]
+ * @param {string} [packageId]
  * @returns {GuestResourceOpts | undefined}
  */
-export function guestResourceOptsFromBlock(block, flags) {
+export function guestResourceOptsFromBlock(block, flags, proxmoxCfg, packageId) {
   const sizing = parseGuestResourceSizing(block);
   if (!sizing) return undefined;
+  const boot = guestBootOptsFromBlock(block, proxmoxCfg, packageId);
   return {
     memoryMb: sizing.memoryMb,
     cores: sizing.cores,
     reboot: rebootRequestedFromFlags(flags),
+    boot: boot?.startup ? boot : undefined,
   };
 }
 

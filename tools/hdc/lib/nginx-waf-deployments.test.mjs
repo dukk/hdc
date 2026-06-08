@@ -4,6 +4,7 @@ import {
   findCertPrimaryDeployment,
   findPeerDeployment,
   instanceFlagToSystemId,
+  maintainSiteLists,
   nginxWafGlobalSettings,
   normalizeNginxWafConfig,
   resolveNginxWafDeployments,
@@ -179,5 +180,49 @@ describe("nginx-waf deployments", () => {
     const access = resolveSiteAccessSettings(site, global);
     expect(access.trustedCidrs).toEqual(["192.168.1.0/24"]);
     expect(access.clientIp).toBe("cloudflare");
+  });
+
+  it("rejects duplicate server_names across sites", () => {
+    expect(() =>
+      normalizeNginxWafConfig({
+        ...sampleCfg,
+        sites: [
+          {
+            id: "draw",
+            server_names: ["draw.dukk.org"],
+            upstream: "http://10.0.0.155:8080",
+          },
+          {
+            id: "vaultwarden",
+            server_names: ["vault.dukk.org", "draw.dukk.org"],
+            upstream: "http://10.0.0.123:80",
+          },
+        ],
+      }),
+    ).toThrow(/draw\.dukk\.org/);
+  });
+
+  it("maintainSiteLists keeps allSites for vhost push when --site is set", () => {
+    const cfg = {
+      ...sampleCfg,
+      sites: [
+        sampleCfg.sites[0],
+        {
+          id: "other",
+          server_names: ["other.hdc.example.invalid"],
+          upstream: "http://192.0.2.51:8080",
+        },
+      ],
+    };
+    const global = nginxWafGlobalSettings(normalizeNginxWafConfig(cfg));
+    const { allSites, certSites, partialSiteUpdate } = maintainSiteLists(
+      global,
+      cfg,
+      "example-app",
+    );
+    expect(partialSiteUpdate).toBe(true);
+    expect(allSites).toHaveLength(2);
+    expect(certSites).toHaveLength(1);
+    expect(certSites[0].id).toBe("example-app");
   });
 });

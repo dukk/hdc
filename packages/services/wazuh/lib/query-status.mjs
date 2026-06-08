@@ -1,1 +1,1 @@
-export { queryWazuhInCt } from "./wazuh-install.mjs";
+export { queryWazuhInCt, queryWazuhOnHost } from "./wazuh-install.mjs";

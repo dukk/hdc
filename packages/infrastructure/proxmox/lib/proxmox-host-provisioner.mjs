@@ -1,3 +1,8 @@
+import {
+  formatProxmoxStartupString,
+  parseGuestBootOptions,
+  parseStartupObject,
+} from "./proxmox-guest-startup.mjs";
 import { pveJsonRequest, pveData, pveDataArray } from "./pve-http.mjs";
 
 /**
@@ -193,7 +198,8 @@ export function createProxmoxHostProvisioner(ctx) {
             : `name=eth0,bridge=${bridge},ip=${ipConfig}`;
         const unprivileged =
           p.unprivileged === undefined ? 1 : Number(p.unprivileged) === 0 ? 0 : 1;
-        const onboot = p.onboot === undefined ? 1 : Number(p.onboot) === 0 ? 0 : 1;
+        const boot = parseGuestBootOptions(p);
+        const onboot = boot?.onboot ?? (p.onboot === undefined ? 1 : Number(p.onboot) === 0 ? 0 : 1);
         const rootfs = typeof p.rootfs === "string" && p.rootfs.trim() ? p.rootfs.trim() : `${storage}:${diskGb}`;
 
         /** @type {Record<string, string | number | boolean | undefined>} */
@@ -208,6 +214,12 @@ export function createProxmoxHostProvisioner(ctx) {
           onboot,
           unprivileged,
         };
+        const startup =
+          boot?.startup ??
+          parseStartupObject(typeof p.startup === "object" ? p.startup : undefined);
+        if (startup) {
+          body.startup = formatProxmoxStartupString(startup);
+        }
         if (typeof p.password === "string" && p.password) body.password = p.password;
         if (typeof p["ssh-public-keys"] === "string" && p["ssh-public-keys"].trim()) {
           body["ssh-public-keys"] = p["ssh-public-keys"].trim();

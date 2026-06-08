@@ -1,5 +1,5 @@
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
-import { composeDir, hostPort } from "./openvas-render.mjs";
+import { composeDir, hostPort } from "./greenbone-render.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -10,11 +10,11 @@ function isObject(v) {
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
- * @param {Record<string, unknown>} openvas
+ * @param {Record<string, unknown>} greenbone
  * @param {Record<string, unknown>} install
  */
-export async function queryOpenvasInCt(user, pveHost, vmid, openvas, install) {
-  const port = hostPort(isObject(openvas) ? openvas : {});
+export async function queryGreenboneInCt(user, pveHost, vmid, greenbone, install) {
+  const port = hostPort(isObject(greenbone) ? greenbone : {});
   const dir = composeDir(isObject(install) ? install : {});
   const docker = pctExec(
     user,

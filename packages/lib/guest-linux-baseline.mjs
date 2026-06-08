@@ -14,6 +14,7 @@ import {
   proxmoxGuestTypeFromMode,
   syncProxmoxGuestResourcesOnMaintain,
 } from "./proxmox-guest-resources-maintain.mjs";
+import { syncProxmoxGuestStartupOnMaintain } from "./proxmox-guest-startup-maintain-sync.mjs";
 import { waitForQemuGuestSshAfterBoot } from "./qemu-guest-ssh-wait.mjs";
 import { waitForSsh } from "./ssh-wait.mjs";
 
@@ -81,11 +82,14 @@ export function resolveQemuSshTargetFromDeployment(deployment, env) {
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @param {Record<string, unknown>} [opts.deployment] when set with proxmoxPackageRoot, sync memory_mb/cores
  * @param {string} [opts.proxmoxPackageRoot]
+ * @param {string} [opts.packageId] service manifest id for startup priority fallback
  * @param {string} [opts.repoRoot]
  */
 export async function ensureGuestLinuxBaseline(opts) {
   /** @type {Record<string, unknown> | { skipped: boolean; message?: string }} */
   let guest_resources = { skipped: true, message: "no deployment" };
+  /** @type {Record<string, unknown> | { skipped: boolean; message?: string }} */
+  let guest_startup = { skipped: true, message: "no deployment" };
 
   const deployment = opts.deployment;
   const proxmoxPackageRoot = opts.proxmoxPackageRoot;
@@ -172,6 +176,25 @@ export async function ensureGuestLinuxBaseline(opts) {
         }
       }
     }
+
+    guest_startup = await syncProxmoxGuestStartupOnMaintain({
+      deployment,
+      proxmoxPackageRoot,
+      packageId: opts.packageId,
+      flags: effectiveFlags,
+      log: logLine,
+    });
+    if (guest_startup.ok === false) {
+      const msg =
+        typeof guest_startup.message === "string"
+          ? guest_startup.message
+          : "guest startup sync failed";
+      if (opts.log.warn) {
+        opts.log.warn(`guest startup sync: ${msg} (continuing with guest users / ClamAV)`);
+      } else {
+        opts.log.info(`guest startup sync: ${msg} (continuing with guest users / ClamAV)`);
+      }
+    }
   }
 
   const baselineOpts = { ...opts, flags: effectiveFlags };
@@ -225,6 +248,7 @@ export async function ensureGuestLinuxBaseline(opts) {
   });
 
   const guestResourcesOk = guest_resources.ok !== false || guest_resources.skipped === true;
+  const guestStartupOk = guest_startup.ok !== false || guest_startup.skipped === true;
   const usersOk =
     (hdcUser.skipped || hdcUser.ok) &&
     (adminUser.skipped || adminUser.ok) &&
@@ -237,8 +261,9 @@ export async function ensureGuestLinuxBaseline(opts) {
   const wzOk = wazuh_agent.ok || wazuh_agent.skipped;
 
   return {
-    ok: guestResourcesOk && usersOk && clamavOk && mailOk && scanOk && uuOk && csOk && wzOk,
+    ok: guestResourcesOk && guestStartupOk && usersOk && clamavOk && mailOk && scanOk && uuOk && csOk && wzOk,
     guest_resources,
+    guest_startup,
     hdc_user: hdcUser,
     admin_user: adminUser,
     clamav,

@@ -1,5 +1,6 @@
 import { waitForPveTask } from "./pve-http.mjs";
 import { applyLxcGuestResources } from "./proxmox-guest-resources.mjs";
+import { applyGuestBootOptions } from "./proxmox-guest-startup.mjs";
 import { extractPveUpid } from "./proxmox-qemu-post-clone.mjs";
 import { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
 
@@ -46,17 +47,30 @@ export async function waitForLxcCreateTaskAndApplyResources(
     log(`LXC ${guestVmid}: no Proxmox task UPID — skipping task wait.`);
   }
 
+  const statusOpts = {
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: lxcNode,
+    vmid: guestVmid,
+  };
+
   if (resourceOpts) {
     await applyLxcGuestResources({
-      apiBase: auth.host.apiBase,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-      node: lxcNode,
-      vmid: guestVmid,
+      ...statusOpts,
       memoryMb: resourceOpts.memoryMb,
       cores: resourceOpts.cores,
       reboot: resourceOpts.reboot,
       rebootOnChange: resourceOpts.rebootOnChange ?? true,
+      log,
+    });
+  }
+
+  if (resourceOpts?.boot?.startup) {
+    await applyGuestBootOptions({
+      guestType: "lxc",
+      ...statusOpts,
+      boot: resourceOpts.boot,
       log,
     });
   }

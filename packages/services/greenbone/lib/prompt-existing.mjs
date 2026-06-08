@@ -13,7 +13,7 @@ export async function promptExistingGuestAction(systemId, vmid, node, name) {
   const q = `${systemId}: ${label}vmid ${vmid} on ${node} already exists. [s]kip / [r]edeploy (reinstall in CT)? `;
   if (!stdin.isTTY) {
     stderr.write(
-      `[hdc] openvas: not a TTY — skipping ${systemId} (use --redeploy-existing or --skip-existing).\n`,
+      `[hdc] greenbone: not a TTY — skipping ${systemId} (use --redeploy-existing or --skip-existing).\n`,
     );
     return "skip";
   }

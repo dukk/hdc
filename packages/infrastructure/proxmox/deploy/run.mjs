@@ -23,6 +23,7 @@ import {
   fetchClusterVmResources,
   listQemuTemplates,
 } from "../lib/proxmox-host-provisioner.mjs";
+import { guestResourceOptsFromBlock } from "../lib/proxmox-guest-resources.mjs";
 import { waitForLxcCreateTaskAndApplyResources } from "../lib/proxmox-lxc-post-create.mjs";
 import { waitForCloneTaskAndEnableAgent } from "../lib/proxmox-qemu-post-clone.mjs";
 
@@ -39,12 +40,12 @@ function readJson(path) {
 
 function provisionDefaults() {
   const p = join(packageRoot, "config.json");
-  if (!existsSync(p)) return { lxc: {}, qemu: {} };
+  if (!existsSync(p)) return { cfg: null, lxc: {}, qemu: {} };
   const c = readJson(p);
   const pr = c && typeof c.provision === "object" && c.provision ? c.provision : {};
   const lxc = pr && typeof pr.lxc === "object" && pr.lxc ? pr.lxc : {};
   const qemu = pr && typeof pr.qemu === "object" && pr.qemu ? pr.qemu : {};
-  return { lxc, qemu };
+  return { cfg: c, lxc, qemu };
 }
 
 /**
@@ -64,8 +65,14 @@ function pick(base, flags, flagName, objKey) {
  * @param {number | undefined} memoryMb
  * @param {number | undefined} cores
  * @param {Record<string, string>} flags
+ * @param {unknown} [block]
+ * @param {unknown} [proxmoxCfg]
  */
-function resourceOptsFromSizing(memoryMb, cores, flags) {
+function resourceOptsFromSizing(memoryMb, cores, flags, block, proxmoxCfg) {
+  if (block) {
+    const fromBlock = guestResourceOptsFromBlock(block, flags, proxmoxCfg);
+    if (fromBlock) return fromBlock;
+  }
   if (memoryMb === undefined || cores === undefined) return undefined;
   return {
     memoryMb,
@@ -150,7 +157,7 @@ async function main() {
     rejectUnauthorized: auth.rejectUnauthorized,
   });
 
-  const { lxc: defLxc, qemu: defQemu } = provisionDefaults();
+  const { cfg: proxmoxCfg, lxc: defLxc, qemu: defQemu } = provisionDefaults();
 
   if (sub === "create-container") {
     const hostname = flagGet(flags, "hostname", "name");
@@ -234,6 +241,7 @@ async function main() {
     if (rootfs) parameters.rootfs = rootfs;
     if (defLxc.unprivileged !== undefined) parameters.unprivileged = defLxc.unprivileged;
     if (defLxc.onboot !== undefined) parameters.onboot = defLxc.onboot;
+    if (defLxc.startup !== undefined) parameters.startup = defLxc.startup;
 
     const result = await prov.createContainer(log, {
       name: hostname,
@@ -250,7 +258,7 @@ async function main() {
         auth,
         vmid,
         logLine,
-        resourceOptsFromSizing(memoryMb, cores, flags),
+        resourceOptsFromSizing(memoryMb, cores, flags, defLxc, proxmoxCfg),
       );
     }
 
@@ -309,6 +317,8 @@ async function main() {
   const st = pick(defQemu, flags, "storage", "storage");
   if (st) parameters.storage = st;
   if (flags.full === "0" || flags.full === "false") parameters.full = false;
+  if (defQemu.onboot !== undefined) parameters.onboot = defQemu.onboot;
+  if (defQemu.startup !== undefined) parameters.startup = defQemu.startup;
 
   const result = await prov.createVm(log, {
     name,
@@ -326,7 +336,7 @@ async function main() {
       auth,
       newid,
       logLine,
-      resourceOptsFromSizing(memoryMb, cores, flags),
+      resourceOptsFromSizing(memoryMb, cores, flags, defQemu, proxmoxCfg),
     );
   }
 

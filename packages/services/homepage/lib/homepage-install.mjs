@@ -3,14 +3,15 @@ import { stderr as errout } from "node:process";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
+import { loadHomepageConfigFiles } from "./homepage-config-load.mjs";
 import {
   composeDir,
   renderComposeYaml,
-  renderHomepageConfigFiles,
   renderHomepageEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
 } from "./homepage-render.mjs";
+import { resolveHomepageProxmoxWidgetEnv } from "./homepage-proxmox-widget.mjs";
 
 export { resolvePveSshForHost };
 
@@ -128,8 +129,10 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  * @param {number} vmid
  * @param {Record<string, unknown>} homepage
  * @param {Record<string, unknown>} install
+ * @param {string} packageRoot
+ * @param {{ widgetEnvLines?: string[] }} [opts]
  */
-export async function installHomepageInCt(user, pveHost, vmid, homepage, install) {
+export async function installHomepageInCt(user, pveHost, vmid, homepage, install, packageRoot, opts = {}) {
   errout.write(`[hdc] homepage install: Docker Compose in CT ${vmid} …\n`);
 
   const ready = await waitForCt(user, pveHost, vmid, 2000, "homepage install");
@@ -137,9 +140,9 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderHomepageEnv(homepage);
+  const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
   const composeYaml = renderComposeYaml();
-  const configFiles = renderHomepageConfigFiles(homepage);
+  const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const dir = composeDir(install);
   const inner = buildInstallScript(dir, composeYaml, envContent, configFiles);
 
@@ -161,6 +164,7 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
     web_url: resolveWebUrl(homepage),
     upstream_url: resolveUpstreamUrl(ip, homepage),
     ct_ip: ip,
+    config_paths: configFiles.config_paths,
   };
 }
 
@@ -170,9 +174,10 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
  * @param {number} vmid
  * @param {Record<string, unknown>} homepage
  * @param {Record<string, unknown>} install
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {string} packageRoot
+ * @param {{ skipUpgrade?: boolean; widgetEnvLines?: string[] }} [opts]
  */
-export async function maintainHomepageInCt(user, pveHost, vmid, homepage, install, opts = {}) {
+export async function maintainHomepageInCt(user, pveHost, vmid, homepage, install, packageRoot, opts = {}) {
   errout.write(`[hdc] homepage maintain: refreshing stack in CT ${vmid} …\n`);
 
   const ready = await waitForCt(user, pveHost, vmid, 2000, "homepage maintain");
@@ -180,8 +185,8 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderHomepageEnv(homepage);
-  const configFiles = renderHomepageConfigFiles(homepage);
+  const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
+  const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const dir = composeDir(install);
   const inner = buildMaintainScript(dir, envContent, configFiles, opts);
   const r = pctExec(user, pveHost, vmid, inner);
@@ -195,6 +200,7 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
     web_url: resolveWebUrl(homepage),
     upstream_url: resolveUpstreamUrl(ip, homepage),
     ct_ip: ip,
+    config_paths: configFiles.config_paths,
   };
 }
 

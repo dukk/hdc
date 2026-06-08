@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Query OpenVAS deployments.
+ * Query Greenbone CE deployments.
  *
- * Usage: hdc run service openvas query -- [--instance a]
- *        hdc run service openvas query -- --live
+ * Usage: hdc run service greenbone query -- [--instance a]
+ *        hdc run service greenbone query -- --live
  */
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,17 +12,17 @@ import { stderr as errout } from "node:process";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import {
-  listOpenvasDeploymentSummaries,
-  normalizeOpenvasConfig,
-  resolveOpenvasDeployments,
+  listGreenboneDeploymentSummaries,
+  normalizeGreenboneConfig,
+  resolveGreenboneDeployments,
 } from "../lib/deployments.mjs";
-import { resolvePveSshForHost } from "../lib/openvas-install.mjs";
-import { queryOpenvasInCt } from "../lib/query-status.mjs";
+import { resolvePveSshForHost } from "../lib/greenbone-install.mjs";
+import { queryGreenboneInCt } from "../lib/query-status.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
-const PACKAGE_CONFIG_EXAMPLE = "packages/services/openvas/config.example.json";
+const PACKAGE_CONFIG_EXAMPLE = "packages/services/greenbone/config.example.json";
 /** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
 let _pkgConfig = null;
 
@@ -68,9 +68,9 @@ async function main() {
 
   if (cfg) {
     try {
-      const norm = normalizeOpenvasConfig(cfg);
+      const norm = normalizeGreenboneConfig(cfg);
       schemaVersion = norm.schemaVersion;
-      deployments = listOpenvasDeploymentSummaries(cfg);
+      deployments = listGreenboneDeploymentSummaries(cfg);
     } catch (e) {
       configError = String(/** @type {Error} */ (e).message || e);
     }
@@ -81,7 +81,7 @@ async function main() {
   if (live && cfg && !configError) {
     let selected;
     try {
-      selected = resolveOpenvasDeployments(cfg, flags);
+      selected = resolveGreenboneDeployments(cfg, flags);
     } catch (e) {
       configError = String(/** @type {Error} */ (e).message || e);
     }
@@ -98,7 +98,7 @@ async function main() {
         errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} vmid ${vmid} …\n`);
         try {
           const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-          const status = await queryOpenvasInCt(pveSsh.user, pveSsh.host, vmid, d.openvas, d.install);
+          const status = await queryGreenboneInCt(pveSsh.user, pveSsh.host, vmid, d.greenbone, d.install);
           liveResults.push({ system_id: d.systemId, ok: true, ...status });
         } catch (e) {
           liveResults.push({
