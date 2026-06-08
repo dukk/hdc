@@ -11,18 +11,23 @@ import { discoverLocalSshMaterial } from "../../../../tools/hdc/lib/ssh-host-acc
  * @param {string} opts.gateway
  * @param {string} opts.ciuser
  * @param {string} [opts.cipassword]
+ * @param {string[]} [opts.dnsServers]
  * @param {string[]} [opts.publicKeyLines]
  * @returns {{ fields: Record<string, string | number>; sshBlob: string | null; keyCount: number }}
  */
 export function buildKaliCloudInitFields(opts) {
-  const { hostname, ipCidr, gateway, ciuser, cipassword } = opts;
+  const { hostname, ipCidr, gateway, ciuser, cipassword, dnsServers = [] } = opts;
   const keys = (opts.publicKeyLines ?? [])
     .map((line) => line.replace(/\r/g, "").trim())
     .filter(Boolean);
 
+  const dns = dnsServers.map((s) => String(s).trim()).filter(Boolean);
+  const ipParts = [`ip=${ipCidr}`, `gw=${gateway}`];
+  if (dns.length) ipParts.push(`dns=${dns.join("+")}`);
+
   /** @type {Record<string, string | number>} */
   const fields = {
-    ipconfig0: `ip=${ipCidr},gw=${gateway}`,
+    ipconfig0: ipParts.join(","),
     name: hostname,
     ciupgrade: 0,
     ciuser,
@@ -50,6 +55,7 @@ export function buildKaliCloudInitFields(opts) {
  * @param {string} opts.gateway
  * @param {string} opts.ciuser
  * @param {string} opts.cipassword
+ * @param {string[]} [opts.dnsServers]
  * @param {(line: string) => void} [opts.log]
  */
 export async function applyKaliCloudInit(opts) {
@@ -64,6 +70,7 @@ export async function applyKaliCloudInit(opts) {
     gateway,
     ciuser,
     cipassword,
+    dnsServers,
   } = opts;
   const log = opts.log ?? ((line) => errout.write(`${line}\n`));
   const path = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
@@ -75,6 +82,7 @@ export async function applyKaliCloudInit(opts) {
     gateway,
     ciuser,
     cipassword,
+    dnsServers,
     publicKeyLines,
   });
 

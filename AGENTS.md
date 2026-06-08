@@ -131,8 +131,8 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`, `openrouter`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -734,6 +734,57 @@ No vault secrets for v1 — complete first-run admin setup in the web UI after d
 
 Example: `node tools/hdc/cli.mjs run service wallos deploy -- --instance a`
 
+## Rackula in this repo
+
+- **Config:** [`packages/services/rackula/config.json`](packages/services/rackula/config.json) (copy from [`config.example.json`](packages/services/rackula/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/rackula-a.json`](inventory/manual/systems/rackula-a.json); service sidecar [`inventory/manual/services/rackula.json`](inventory/manual/services/rackula.json).
+- **Schema:** [`tools/hdc/schema/rackula.config.schema.json`](tools/hdc/schema/rackula.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 1 GiB RAM, 8 GiB rootfs) + Docker Rackula with persistence (`rackula:persist` + `rackula-api`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml` + `.env`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 8080) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Optional vault `HDC_RACKULA_API_WRITE_TOKEN` when `rackula.api_write_token_enabled` is true (API PUT/DELETE protection). LAN UI: `http://<ct-ip>:8080`. Layouts persist under `/opt/rackula/data` (UID 1001).
+
+Example: `node tools/hdc/cli.mjs run service rackula deploy -- --instance a`
+
+## OpenSpeedTest in this repo
+
+- **Config:** [`packages/services/openspeedtest/config.json`](packages/services/openspeedtest/config.json) (copy from [`config.example.json`](packages/services/openspeedtest/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/openspeedtest-a.json`](inventory/manual/systems/openspeedtest-a.json); service sidecar [`inventory/manual/services/openspeedtest.json`](inventory/manual/services/openspeedtest.json).
+- **Schema:** [`tools/hdc/schema/openspeedtest.config.schema.json`](tools/hdc/schema/openspeedtest.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 512 MiB RAM, 8 GiB rootfs) + Docker OpenSpeedTest (`openspeedtest/latest`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 3000) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+No vault secrets for v1. LAN UI: `http://<ct-ip>:3000`. Optional `openspeedtest.public_url` when adding nginx-waf later.
+
+Example: `node tools/hdc/cli.mjs run service openspeedtest deploy -- --instance a`
+
+## Stirling PDF in this repo
+
+- **Config:** [`packages/services/stirling-pdf/config.json`](packages/services/stirling-pdf/config.json) (copy from [`config.example.json`](packages/services/stirling-pdf/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/stirling-pdf-a.json`](inventory/manual/systems/stirling-pdf-a.json); service sidecar [`inventory/manual/services/stirling-pdf.json`](inventory/manual/services/stirling-pdf.json).
+- **Schema:** [`tools/hdc/schema/stirling-pdf.config.schema.json`](tools/hdc/schema/stirling-pdf.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 24 GiB rootfs) + Docker Stirling PDF (`stirlingtools/stirling-pdf:latest`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from vault; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/api/v1/info/status` on `host_port` (default 8080) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Vault: `HDC_STIRLING_PDF_ADMIN_PASSWORD` (initial admin login when `stirling_pdf.security.enable_login` is true). LAN UI: `http://<ct-ip>:8080`. Optional `stirling_pdf.public_url` when adding nginx-waf later (raise `client_max_body_size` for large PDF uploads).
+
+Example: `node tools/hdc/cli.mjs run service stirling-pdf deploy -- --instance a`
+
 ## n8n in this repo
 
 - **Config:** [`packages/services/n8n/config.json`](packages/services/n8n/config.json) (copy from [`config.example.json`](packages/services/n8n/config.example.json); keep local config out of git).
@@ -768,6 +819,23 @@ Set `listmonk.public_url` (`https://…`) when using nginx-waf; omit for HTTP on
 
 Example: `node tools/hdc/cli.mjs run service listmonk deploy -- --instance a`
 
+## Shlink in this repo
+
+- **Config:** [`packages/services/shlink/config.json`](packages/services/shlink/config.json) (copy from [`config.example.json`](packages/services/shlink/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/shlink-a.json`](inventory/manual/systems/shlink-a.json); service sidecar [`inventory/manual/services/shlink.json`](inventory/manual/services/shlink.json).
+- **Schema:** [`tools/hdc/schema/shlink.config.schema.json`](tools/hdc/schema/shlink.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 20 GiB rootfs) + Docker Shlink + PostgreSQL + Redis + optional web client (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/rest/health` on port 8080 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `shlink.default_domain` and `shlink.public_url` (`https://…`) when using nginx-waf for short links and the REST API; set `shlink.web_client.public_url` for the admin UI. Vault: `HDC_SHLINK_DB_PASSWORD` and `HDC_SHLINK_INITIAL_API_KEY` (auto-generated on first deploy if missing); optional `HDC_SHLINK_GEOLITE_LICENSE_KEY` for visit geolocation. After deploy, add BIND A records and nginx-waf `sites[]` upstreams to `http://<ct-ip>:8080` (short/API) and `http://<ct-ip>:8081` (web client).
+
+Example: `node tools/hdc/cli.mjs run service shlink deploy -- --instance a`
+
 ## Vikunja in this repo
 
 - **Config:** [`packages/services/vikunja/config.json`](packages/services/vikunja/config.json) (copy from [`config.example.json`](packages/services/vikunja/config.example.json); keep local config out of git).
@@ -784,6 +852,23 @@ Example: `node tools/hdc/cli.mjs run service listmonk deploy -- --instance a`
 Set `vikunja.public_url` (`https://…/` with trailing slash) when using nginx-waf. Vault: `HDC_VIKUNJA_JWT_SECRET` and `HDC_VIKUNJA_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `vikunja.mail.enabled` maps internal postfix-relay to `VIKUNJA_MAILER_*` env vars. Register the first account in the Vikunja UI after deploy. nginx-waf upstream: `http://<ct-ip>:3456` with WebSockets enabled.
 
 Example: `node tools/hdc/cli.mjs run service vikunja deploy -- --instance a`
+
+## Paperless-ngx in this repo
+
+- **Config:** [`packages/services/paperless-ngx/config.json`](packages/services/paperless-ngx/config.json) (copy from [`config.example.json`](packages/services/paperless-ngx/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/paperless-ngx-a.json`](inventory/manual/systems/paperless-ngx-a.json); service sidecar [`inventory/manual/services/paperless-ngx.json`](inventory/manual/services/paperless-ngx.json).
+- **Schema:** [`tools/hdc/schema/paperless-ngx.config.schema.json`](tools/hdc/schema/paperless-ngx.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (4 vCPU, 6 GiB RAM, 64 GiB rootfs) + Docker Paperless-ngx + PostgreSQL + Redis; optional Tika/Gotenberg when `paperless_ngx.tika_enabled` is true (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` / `paperless.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on port 8000 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `paperless_ngx.public_url` (`https://…`) when using nginx-waf. Vault: `HDC_PAPERLESS_SECRET_KEY` and `HDC_PAPERLESS_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `paperless_ngx.admin.enabled` + `HDC_PAPERLESS_ADMIN_PASSWORD` for first-boot superuser. Drop files in `/opt/paperless-ngx/consume` for automatic import. nginx-waf upstream: `http://<ct-ip>:8000` (consider larger `client_max_body_size` for uploads).
+
+Example: `node tools/hdc/cli.mjs run service paperless-ngx deploy -- --instance a`
 
 ## Home Assistant in this repo
 
@@ -1109,6 +1194,30 @@ node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list
+```
+
+## OpenRouter in this repo
+
+- **Config:** [`packages/infrastructure/openrouter/config.json`](packages/infrastructure/openrouter/config.json) (copy from [`config.example.json`](packages/infrastructure/openrouter/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/openrouter.config.schema.json`](tools/hdc/schema/openrouter.config.schema.json).
+- **Docs:** [`docs/manually-deployed/openrouter.md`](docs/manually-deployed/openrouter.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff credits and API keys vs config; per-key inference usage via `GET /key`; `--import --yes` writes live snapshot to hdc-private config |
+| `maintain` | Create or update managed inference API keys; optional `--prune` removes live keys not in config |
+
+Vault: `HDC_OPENROUTER_MANAGEMENT_API_KEY` (Management API). Consumers use separate inference keys (e.g. `HDC_HERMES_OPENROUTER_API_KEY` for **hermes**).
+
+**Bootstrap:** `query -- --import --yes` replaces `api_keys[]`; set `managed: true` before `maintain`.
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure openrouter query --
+node tools/hdc/cli.mjs run infrastructure openrouter query -- --import --yes
+node tools/hdc/cli.mjs run infrastructure openrouter maintain --
+node tools/hdc/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
 ```
 
 ## Twilio in this repo

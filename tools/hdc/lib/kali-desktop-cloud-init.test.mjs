@@ -10,12 +10,13 @@ describe("buildKaliCloudInitFields", () => {
       gateway: "10.0.0.1",
       ciuser: "kali",
       cipassword: "test-pass",
+      dnsServers: ["10.0.0.2", "10.0.0.3"],
       publicKeyLines: ["ssh-ed25519 AAAA comment"],
     });
 
     expect(fields.ciuser).toBe("kali");
     expect(fields.cipassword).toBe("test-pass");
-    expect(fields.ipconfig0).toBe("ip=10.0.0.189/24,gw=10.0.0.1");
+    expect(fields.ipconfig0).toBe("ip=10.0.0.189/24,gw=10.0.0.1,dns=10.0.0.2+10.0.0.3");
     expect(fields.name).toBe("kali-a");
     expect(fields.ciupgrade).toBe(0);
     expect(keyCount).toBe(1);

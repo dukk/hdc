@@ -64,6 +64,26 @@ export function listmonkMailEnvLines(listmonk) {
 }
 
 /**
+ * SMTP env lines for DocuSeal docker .env when mail.enabled.
+ * @param {Record<string, unknown>} docuseal
+ */
+export function docusealMailEnvLines(docuseal) {
+  const mail = mailBlockFromService(docuseal);
+  const relay = loadMailRelayAppSettings();
+  const recipients = resolveMailRecipients(mail, { from: relay.from });
+  if (!recipients) return [];
+
+  return [
+    `SMTP_ADDRESS=${relay.host}`,
+    `SMTP_PORT=${relay.port}`,
+    `SMTP_FROM=${recipients.from}`,
+    "SMTP_USERNAME=",
+    "SMTP_PASSWORD=",
+    "SMTP_ENABLE_STARTTLS=false",
+  ];
+}
+
+/**
  * SMTP env lines for Vikunja docker .env when mail.enabled.
  * @param {Record<string, unknown>} vikunja
  */

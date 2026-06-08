@@ -20,7 +20,9 @@ export const GUEST_BASELINE_SAFE_ARGS = ["--no-reboot", "--skip-resources", "--s
 
 /** @type {readonly string[]} */
 const DOCKER_COMPOSE_MAINTAIN_IDS = [
+  "cloudbeaver",
   "crowdsec",
+  "docuseal",
   "draw-io",
   "homepage",
   "gatus",
@@ -32,11 +34,15 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "n8n",
   "nextcloud",
   "open-webui",
+  "openspeedtest",
+  "paperless-ngx",
   "greenbone",
   "hermes",
   "scanopy",
   "searxng",
+  "shlink",
   "solidtime",
+  "stirling-pdf",
   "uptime-kuma",
   "vaultwarden",
   "vikunja",
@@ -44,6 +50,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "wazuh",
   "yacy",
   "postiz",
+  "rackula",
   "asterisk",
   "wireguard",
   "postfix-relay",
@@ -165,7 +172,7 @@ export function dailyRecipeSteps() {
     note: "DSM and package upgrades",
   });
 
-  for (const id of ["cloudflare", "unifi-network", "azure", "gcp-oauth"]) {
+  for (const id of ["cloudflare", "unifi-network", "azure", "gcp-oauth", "openrouter"]) {
     steps.push({
       tier: "infrastructure",
       id,

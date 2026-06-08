@@ -7,6 +7,7 @@
 - **Config:** [`config.example.json`](config.example.json) → `config.json` (in hdc-private for production)
 - **Inventory:** `inventory/manual/systems/hermes-a.json`; `inventory/manual/services/hermes.json`
 - **Vault:** `HDC_HERMES_OPENROUTER_API_KEY`, `HDC_HERMES_DASHBOARD_PASSWORD`; `HDC_HERMES_DASHBOARD_AUTH_SECRET` auto-generated on first deploy if missing
+- **OpenRouter account:** inference key lifecycle and credits are managed by [`packages/infrastructure/openrouter`](../../infrastructure/openrouter/README.md) (`HDC_OPENROUTER_MANAGEMENT_API_KEY` is separate)
 
 ## Commands
 

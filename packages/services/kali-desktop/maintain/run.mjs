@@ -140,8 +140,11 @@ async function maintainOne(deployment, defaults, flags, vaultAccess) {
   let aptUpgrade = { ok: true, skipped: skipUpgrade };
   if (!skipUpgrade) {
     errout.write(`[hdc] ${target} ${verb}: apt upgrade on ${sshUser}@${sshHost} …\n`);
-    const r = await exec("DEBIAN_FRONTEND=noninteractive apt-get -qq update && apt-get -qq -y upgrade");
-    aptUpgrade = { ok: r.exitCode === 0, exit_code: r.exitCode, skipped: false };
+    const r = exec.run(
+      "DEBIAN_FRONTEND=noninteractive apt-get -qq update && apt-get -qq -y upgrade",
+      { capture: true },
+    );
+    aptUpgrade = { ok: r.status === 0, exit_code: r.status, skipped: false };
   }
 
   const baseline = await ensureGuestLinuxBaseline({

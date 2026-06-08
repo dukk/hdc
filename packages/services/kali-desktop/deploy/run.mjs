@@ -122,6 +122,9 @@ async function deployOne(deployment, defaults, kaliPassword, flags, log) {
         ? q.gateway.trim()
         : "10.0.0.1";
   const bridge = typeof net.bridge === "string" && net.bridge.trim() ? net.bridge.trim() : "vmbr0";
+  const dnsServers = Array.isArray(net.dns)
+    ? net.dns.map((d) => String(d).trim()).filter(Boolean)
+    : [];
   const storage = typeof q.storage === "string" && q.storage.trim() ? q.storage.trim() : "local-lvm";
   const imageStorage =
     typeof q.image_storage === "string" && q.image_storage.trim() ? q.image_storage.trim() : "local";
@@ -282,6 +285,7 @@ async function deployOne(deployment, defaults, kaliPassword, flags, log) {
     gateway,
     ciuser,
     cipassword: kaliPassword,
+    dnsServers,
     log: logLine,
   });
 
