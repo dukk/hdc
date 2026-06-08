@@ -768,6 +768,23 @@ No vault secrets for v1. LAN UI: `http://<ct-ip>:3000`. Optional `openspeedtest.
 
 Example: `node tools/hdc/cli.mjs run service openspeedtest deploy -- --instance a`
 
+## IT-Tools in this repo
+
+- **Config:** [`packages/services/it-tools/config.json`](packages/services/it-tools/config.json) (copy from [`config.example.json`](packages/services/it-tools/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/it-tools-a.json`](inventory/manual/systems/it-tools-a.json); service sidecar [`inventory/manual/services/it-tools.json`](inventory/manual/services/it-tools.json).
+- **Schema:** [`tools/hdc/schema/it-tools.config.schema.json`](tools/hdc/schema/it-tools.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 512 MiB RAM, 8 GiB rootfs) + Docker IT-Tools (`corentinth/it-tools:latest`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 8080) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+No vault secrets for v1. LAN UI: `http://<ct-ip>:8080`. Optional `it_tools.public_url` when adding nginx-waf later.
+
+Example: `node tools/hdc/cli.mjs run service it-tools deploy -- --instance a`
+
 ## Stirling PDF in this repo
 
 - **Config:** [`packages/services/stirling-pdf/config.json`](packages/services/stirling-pdf/config.json) (copy from [`config.example.json`](packages/services/stirling-pdf/config.example.json); keep local config out of git).

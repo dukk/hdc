@@ -28,6 +28,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "gatus",
   "gitlab",
   "immich",
+  "it-tools",
   "keycloak",
   "listmonk",
   "mailcow",
