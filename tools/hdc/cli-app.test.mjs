@@ -514,6 +514,10 @@ describe("runCli", () => {
         "config server https://vault.example.test": { status: 0 },
         "login --check": { status: 0 },
         "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key" },
+        "list organizations": {
+          status: 0,
+          stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
+        },
         [`list org-collections --organizationid ${ORG_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),

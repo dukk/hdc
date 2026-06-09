@@ -39,15 +39,16 @@ export function clamavAptInstallCommandForProfile(profile) {
 }
 
 /**
+ * @param {string} dir
  * @param {string} path
  * @param {string | null} content null removes the drop-in
  */
-function dropInWriteFragment(path, content) {
+function dropInWriteFragment(dir, path, content) {
   if (content === null) {
     return `rm -f ${path}`;
   }
   const escaped = content.replace(/\\/g, "\\\\").replace(/'/g, "'\\''");
-  return `mkdir -p "$(dirname '${path}')'" && printf '%s' '${escaped}' > '${path}'`;
+  return `mkdir -p ${dir} && printf '%s' '${escaped}' > ${path}`;
 }
 
 /**
@@ -55,19 +56,23 @@ function dropInWriteFragment(path, content) {
  * @returns {string}
  */
 export function clamavConfigApplyCommandForProfile(profile) {
-  const clamdPath = "/etc/clamav/clamd.conf.d/99-hdc.conf";
-  const freshclamPath = "/etc/clamav/freshclam.conf.d/99-hdc.conf";
+  const clamdDir = "/etc/clamav/clamd.conf.d";
+  const clamdPath = `${clamdDir}/99-hdc.conf`;
+  const freshclamDir = "/etc/clamav/freshclam.conf.d";
+  const freshclamPath = `${freshclamDir}/99-hdc.conf`;
   const parts = [];
 
   if (profile === "standard") {
-    parts.push(dropInWriteFragment(clamdPath, "MaxThreads 4\nConcurrentDatabaseReload no\n"));
-    parts.push(dropInWriteFragment(freshclamPath, null));
+    parts.push(
+      dropInWriteFragment(clamdDir, clamdPath, "MaxThreads 4\nConcurrentDatabaseReload no\n"),
+    );
+    parts.push(dropInWriteFragment(freshclamDir, freshclamPath, null));
   } else if (profile === "lean") {
-    parts.push(dropInWriteFragment(clamdPath, null));
-    parts.push(dropInWriteFragment(freshclamPath, "Checks 2\n"));
+    parts.push(dropInWriteFragment(clamdDir, clamdPath, null));
+    parts.push(dropInWriteFragment(freshclamDir, freshclamPath, "Checks 2\n"));
   } else {
-    parts.push(dropInWriteFragment(clamdPath, null));
-    parts.push(dropInWriteFragment(freshclamPath, null));
+    parts.push(dropInWriteFragment(clamdDir, clamdPath, null));
+    parts.push(dropInWriteFragment(freshclamDir, freshclamPath, null));
   }
 
   return parts.join(" && ");

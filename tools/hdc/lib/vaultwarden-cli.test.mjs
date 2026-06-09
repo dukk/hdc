@@ -12,6 +12,7 @@ import {
 
 const ORG_ID = "org-1111-aaaa-bbbb-cccc";
 const COLL_ID = "coll-2222-dddd-eeee-ffff";
+const ENCODED_PAYLOAD = "encoded-payload";
 
 describe("vaultwarden-cli", () => {
   afterEach(() => {
@@ -33,7 +34,7 @@ describe("vaultwarden-cli", () => {
         status: 0,
         stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
       },
-      encode: { status: 0, stdout: "encoded-collection-ids" },
+      encode: { status: 0, stdout: ENCODED_PAYLOAD },
       ...(o.responses ?? {}),
     };
     const spawnSync = vi.fn((exe, args) => {
@@ -155,15 +156,45 @@ describe("vaultwarden-cli", () => {
       responses: {
         [`list items --search HDC_Y --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
         "list items --search HDC_Y": { status: 0, stdout: "[]" },
-        [`create item login --name HDC_Y --username HDC_Y --password new-secret --organizationid ${ORG_ID}`]: {
+        [`create item ${ENCODED_PAYLOAD}`]: {
           status: 0,
           stdout: JSON.stringify({ id: "item-new", name: "HDC_Y", organizationId: ORG_ID }),
         },
-        [`edit item-collections item-new encoded-collection-ids --organizationid ${ORG_ID}`]: { status: 0 },
       },
     });
     bwSetPassword(deps, "sess", "HDC_Y", "new-secret");
-    expect(deps.spawnSync).toHaveBeenCalled();
+    const createCall = deps.spawnSync.mock.calls.find(
+      (c) => Array.isArray(c[1]) && c[1][0] === "create" && c[1][1] === "item",
+    );
+    expect(createCall).toBeDefined();
+    expect(createCall[1]).toContain(ENCODED_PAYLOAD);
+  });
+
+  it("bwSetPassword updates existing org login item via encoded JSON edit", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --search HDC_Z --organizationid ${ORG_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([{ id: "item-z", name: "HDC_Z", organizationId: ORG_ID }]),
+        },
+        "get item item-z": {
+          status: 0,
+          stdout: JSON.stringify({
+            id: "item-z",
+            name: "HDC_Z",
+            organizationId: ORG_ID,
+            login: { username: "HDC_Z", password: "old-secret", uris: [] },
+          }),
+        },
+        [`edit item item-z ${ENCODED_PAYLOAD}`]: { status: 0 },
+      },
+    });
+    bwSetPassword(deps, "sess", "HDC_Z", "new-secret");
+    const editCall = deps.spawnSync.mock.calls.find(
+      (c) => Array.isArray(c[1]) && c[1][0] === "edit" && c[1][1] === "item" && c[1][2] === "item-z",
+    );
+    expect(editCall).toBeDefined();
+    expect(editCall[1]).toContain(ENCODED_PAYLOAD);
   });
 
   it("bwListItemNames lists organization items only", () => {

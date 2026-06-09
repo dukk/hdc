@@ -140,7 +140,12 @@ describe("clamav-resource-profile", () => {
 
   it("profile drop-ins tune clamd and freshclam", () => {
     expect(clamavConfigApplyCommandForProfile("lean")).toContain("Checks 2");
-    expect(clamavConfigApplyCommandForProfile("lean")).toContain("rm -f /etc/clamav/clamd.conf.d/99-hdc.conf");
+    expect(clamavConfigApplyCommandForProfile("lean")).toContain(
+      "rm -f /etc/clamav/clamd.conf.d/99-hdc.conf",
+    );
+    expect(clamavConfigApplyCommandForProfile("lean")).toContain(
+      "mkdir -p /etc/clamav/freshclam.conf.d",
+    );
     expect(clamavConfigApplyCommandForProfile("standard")).toContain("MaxThreads 4");
     expect(clamavConfigApplyCommandForProfile("standard")).toContain("ConcurrentDatabaseReload no");
     expect(clamavEnableServicesCommandForProfile("lean")).toContain("mask clamav-daemon");

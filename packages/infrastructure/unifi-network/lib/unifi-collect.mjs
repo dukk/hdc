@@ -37,6 +37,7 @@ function defaultLog(line) {
  * @param {string} opts.packageRoot
  * @param {(line: string) => void} [opts.log]
  * @param {Record<string, unknown>} [opts.cfgRaw]
+ * @param {boolean} [opts.bootstrapFromExample]
  */
 export async function createUnifiRunContext(opts) {
   const log = opts.log ?? defaultLog;
@@ -55,6 +56,7 @@ export async function createUnifiRunContext(opts) {
   if (!cfgRaw) {
     const loaded = loadPackageConfigFromPackageRoot(opts.packageRoot, {
       exampleRel: PACKAGE_CONFIG_EXAMPLE,
+      bootstrapFromExample: opts.bootstrapFromExample === true,
       log: (line) => errout.write(line),
     });
     cfgRaw = loaded.data;

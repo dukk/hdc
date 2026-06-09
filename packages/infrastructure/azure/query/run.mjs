@@ -54,6 +54,7 @@ async function main() {
 
   const { data: cfgRaw, source } = loadPackageConfigFromPackageRoot(packageRoot, {
     exampleRel: PACKAGE_CONFIG_EXAMPLE,
+    bootstrapFromExample: doImport,
     log: (line) => errout.write(line),
   });
   log(`config loaded (${source})`);

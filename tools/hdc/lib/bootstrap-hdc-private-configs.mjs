@@ -1,6 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
+import { bootstrapPackageConfigFromExample } from "./package-config.mjs";
 import { hdcPrivateRoot } from "./private-repo.mjs";
 
 const PACKAGE_BASES = ["packages/infrastructure", "packages/services", "packages/clients"];
@@ -90,39 +91,38 @@ export function runBootstrapHdcPrivateConfigs(publicRoot, opts = {}) {
     const absBase = join(publicRoot, base);
     if (!existsSync(absBase)) continue;
 
-    walkFiles(absBase, absBase, (rel, abs) => {
+    walkFiles(absBase, absBase, (rel) => {
       if (!rel.endsWith("config.example.json")) return;
 
       const destRel = join(base, rel.replace(/config\.example\.json$/, "config.json")).replace(/\\/g, "/");
-      const dest = join(privateRoot, destRel);
-      const destExists = existsSync(dest);
+      const exampleRel = join(base, rel).replace(/\\/g, "/");
 
-      if (destExists && !force) {
-        skipped.push(destRel);
-        log(`skip  ${destRel}`);
-        return;
-      }
+      const result = bootstrapPackageConfigFromExample(publicRoot, destRel, exampleRel, {
+        env: opts.env,
+        force,
+        dryRun,
+        privateRoot,
+        log,
+      });
 
-      if (dryRun) {
-        if (destExists) {
-          wouldOverwrite.push(destRel);
-          log(`would overwrite  ${destRel}`);
-        } else {
+      switch (result.action) {
+        case "created":
+          created.push(destRel);
+          break;
+        case "overwritten":
+          overwritten.push(destRel);
+          break;
+        case "skipped":
+          skipped.push(destRel);
+          break;
+        case "would_create":
           wouldCreate.push(destRel);
-          log(`would create  ${destRel}`);
-        }
-        return;
-      }
-
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(abs, dest);
-
-      if (destExists) {
-        overwritten.push(destRel);
-        log(`overwrite  ${destRel}`);
-      } else {
-        created.push(destRel);
-        log(`create  ${destRel}`);
+          break;
+        case "would_overwrite":
+          wouldOverwrite.push(destRel);
+          break;
+        default:
+          break;
       }
     });
   }

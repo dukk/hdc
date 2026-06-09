@@ -160,6 +160,87 @@ function bwEncodeJson(deps, value) {
 
 /**
  * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemId
+ * @returns {Record<string, unknown>}
+ */
+function bwGetItem(deps, session, itemId) {
+  const r = spawnBw(deps, ["get", "item", itemId], { capture: true, session });
+  if (!r.ok || !r.stdout) {
+    throw new Error(`bw get item failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+  try {
+    const parsed = JSON.parse(r.stdout);
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("invalid item JSON");
+    }
+    return /** @type {Record<string, unknown>} */ (parsed);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`bw get item returned invalid JSON: ${msg}`);
+  }
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemId
+ * @param {string} password
+ */
+function bwUpdateLoginPassword(deps, session, itemId, password) {
+  const item = bwGetItem(deps, session, itemId);
+  const login =
+    item.login && typeof item.login === "object"
+      ? /** @type {Record<string, unknown>} */ ({ ...item.login })
+      : {};
+  login.password = password;
+  item.login = login;
+  const encoded = bwEncodeJson(deps, item);
+  const r = spawnBw(deps, ["edit", "item", itemId, encoded], { capture: true, session });
+  if (!r.ok) {
+    throw new Error(`bw edit item failed: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {{ name: string; password: string; organizationId: string; collectionId: string }} opts
+ * @returns {string | null} created item id when returned by bw
+ */
+function bwCreateOrgLoginItem(deps, session, opts) {
+  const item = {
+    organizationId: opts.organizationId,
+    collectionIds: [opts.collectionId],
+    type: 1,
+    name: opts.name,
+    login: {
+      uris: [],
+      username: opts.name,
+      password: opts.password,
+      totp: null,
+    },
+  };
+
+  const encoded = bwEncodeJson(deps, item);
+  const r = spawnBw(deps, ["create", "item", encoded], { capture: true, session });
+  if (!r.ok) {
+    throw new Error(`bw create item failed for ${opts.name}: ${r.stderr || r.stdout || "unknown error"}`);
+  }
+
+  try {
+    const created = JSON.parse(r.stdout);
+    if (created && typeof created === "object" && typeof created.id === "string") {
+      return created.id;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
  * @param {string} url
  */
 export function ensureBwConfigured(deps, url) {
@@ -558,59 +639,38 @@ export function bwSetPassword(deps, session, itemName, value) {
 
   const orgItemId = bwFindItemId(deps, session, itemName, organizationId);
   if (orgItemId) {
-    const r = spawnBw(deps, ["edit", "item", orgItemId, "--password", value], { capture: true, session });
-    if (!r.ok) {
-      throw new Error(`bw edit item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
+    try {
+      bwUpdateLoginPassword(deps, session, orgItemId, value);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`bw edit item failed for ${itemName}: ${msg}`);
     }
-    bwAssignItemToCollection(deps, session, orgItemId, organizationId, collectionId);
     return;
   }
 
   const personalItemId = bwFindItemId(deps, session, itemName, null);
   if (personalItemId) {
     bwMoveItemToOrg(deps, session, personalItemId, organizationId, collectionId);
-    const r = spawnBw(deps, ["edit", "item", personalItemId, "--password", value], { capture: true, session });
-    if (!r.ok) {
-      throw new Error(`bw edit item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
+    try {
+      bwUpdateLoginPassword(deps, session, personalItemId, value);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`bw edit item failed for ${itemName}: ${msg}`);
     }
     return;
   }
 
-  const r = spawnBw(
-    deps,
-    [
-      "create",
-      "item",
-      "login",
-      "--name",
-      itemName,
-      "--username",
-      itemName,
-      "--password",
-      value,
-      "--organizationid",
-      organizationId,
-    ],
-    { capture: true, session },
-  );
-  if (!r.ok) {
-    throw new Error(`bw create item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
-  }
-
-  let createdId = null;
-  try {
-    const created = JSON.parse(r.stdout);
-    if (created && typeof created === "object" && typeof created.id === "string") {
-      createdId = created.id;
-    }
-  } catch {
-    // fall through to search
-  }
+  const createdId = bwCreateOrgLoginItem(deps, session, {
+    name: itemName,
+    password: value,
+    organizationId,
+    collectionId,
+  });
   if (!createdId) {
-    createdId = bwFindItemId(deps, session, itemName, organizationId);
-  }
-  if (createdId) {
-    bwAssignItemToCollection(deps, session, createdId, organizationId, collectionId);
+    const foundId = bwFindItemId(deps, session, itemName, organizationId);
+    if (foundId) {
+      bwAssignItemToCollection(deps, session, foundId, organizationId, collectionId);
+    }
   }
 }
 

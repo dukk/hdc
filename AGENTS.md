@@ -16,7 +16,7 @@ Automation and documentation for a manually deployed home data center. Agents op
   - Cross-platform: `node tools/hdc/cli.mjs <command>`
   - macOS/Linux (after `chmod +x hdc`): `./hdc <command>`
 - **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored). API keys and passwords live in the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
-- **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Package `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed package configs from examples: `node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). Shared loaders: [`tools/hdc/lib/private-repo.mjs`](tools/hdc/lib/private-repo.mjs), [`tools/hdc/lib/package-config.mjs`](tools/hdc/lib/package-config.mjs).
+- **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Package `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed package configs from examples: `node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). On supported infrastructure packages, `query --import --yes` (or package-specific import flags such as Cloudflare `--import-zones`) auto-seeds missing `config.json` from `config.example.json` in hdc-private before importing live API data. Shared loaders: [`tools/hdc/lib/private-repo.mjs`](tools/hdc/lib/private-repo.mjs), [`tools/hdc/lib/package-config.mjs`](tools/hdc/lib/package-config.mjs).
 
 ### Package config JSONC (comments + includes)
 

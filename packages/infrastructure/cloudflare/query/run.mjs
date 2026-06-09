@@ -59,6 +59,7 @@ async function main() {
   const importPageRules = flags["import-page-rules"] === "1";
   const importEmailRouting = flags["import-email-routing"] === "1";
   const yes = flags.yes === "1";
+  const bootstrapFromExample = importZones || importPageRules || importEmailRouting;
 
   if (importZones) {
     log("import-zones: will replace zones[] in config.json with live DNS snapshot from Cloudflare.");
@@ -72,6 +73,7 @@ async function main() {
 
   const { data: cfgRaw, source } = loadPackageConfigFromPackageRoot(packageRoot, {
     exampleRel: PACKAGE_CONFIG_EXAMPLE,
+    bootstrapFromExample,
     log: (line) => errout.write(line),
   });
   log(`config loaded (${source})`);

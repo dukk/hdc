@@ -87,6 +87,8 @@ export function syncPrimaryZoneFiles(opts) {
     const file = zoneFileName(zoneId);
     const remotePath = `/var/lib/bind/zones/${file}.zone`;
     uploadFile(exec, remotePath, body, log);
+    // Stale journals after a full zone rewrite cause "journal out of sync" on named restart.
+    runChecked(exec, `rm -f ${shellQuote(`${remotePath}.jnl`)}`, log);
     const bundle = bundles.find((b) => b.id === zoneId);
     runChecked(exec, `named-checkzone ${shellQuote(zoneId)} ${shellQuote(remotePath)}`, log);
     synced.push({

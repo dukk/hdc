@@ -9,6 +9,7 @@ import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultward
 
 const ORG_ID = "org-1111-aaaa-bbbb-cccc";
 const COLL_ID = "coll-2222-dddd-eeee-ffff";
+const ENCODED_PAYLOAD = "encoded-payload";
 
 describe("vaultwarden-sync", () => {
   it("parseSecretsPushArgv defaults to skipExisting without force", () => {
@@ -43,22 +44,25 @@ describe("vaultwarden-sync", () => {
         "config server https://vault.example.test": { status: 0 },
         "login --check": { status: 0 },
         "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key" },
+        "list organizations": {
+          status: 0,
+          stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
+        },
         [`list org-collections --organizationid ${ORG_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
         },
-        encode: { status: 0, stdout: "encoded-collection-ids" },
+        encode: { status: 0, stdout: ENCODED_PAYLOAD },
         [`list items --search HDC_EXISTING --organizationid ${ORG_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: "item-1", name: "HDC_EXISTING", organizationId: ORG_ID }]),
         },
         [`list items --search HDC_NEW --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
         "list items --search HDC_NEW": { status: 0, stdout: "[]" },
-        [`create item login --name HDC_NEW --username HDC_NEW --password new-val --organizationid ${ORG_ID}`]: {
+        [`create item ${ENCODED_PAYLOAD}`]: {
           status: 0,
           stdout: JSON.stringify({ id: "item-new", name: "HDC_NEW", organizationId: ORG_ID }),
         },
-        [`edit item-collections item-new encoded-collection-ids --organizationid ${ORG_ID}`]: { status: 0 },
       };
       return vi.fn((exe, args) => {
         const key = args.join(" ");

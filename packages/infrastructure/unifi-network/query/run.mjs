@@ -569,7 +569,11 @@ async function main() {
     logUser("import-port-forwards: will replace port_forwards[] in config.json with live snapshot.");
   }
 
-  const ctx = await createUnifiRunContext({ packageRoot, log: logUser });
+  const ctx = await createUnifiRunContext({
+    packageRoot,
+    log: logUser,
+    bootstrapFromExample: importPortForwards,
+  });
   const { base, apiKey, rejectUnauthorized } = ctx;
   const integrationSiteId = ctx.siteId;
   let classicSiteKey = ctx.classicSiteKey;
