@@ -5,7 +5,7 @@ import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/gu
  * Maintain Immich: re-push .env, refresh Docker images, optional ClamAV.
  *
  * Usage: hdc run service immich maintain -- [--instance a | --system-id immich-a]
- *        [--skip-upgrade] [--skip-clamav]
+ *        [--skip-upgrade] [--skip-admin-sync] [--test-email <addr>] [--skip-clamav]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -29,6 +29,9 @@ import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs"
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { syncImmichAdminConfig } from "../lib/immich-admin-sync.mjs";
+import { mailBlockFromService } from "../../../lib/app-mail-render.mjs";
+import { mailEnabledFromConfig } from "../../../lib/mail-relay-settings.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +69,8 @@ async function main() {
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
   const skipUpgrade = flagGet(flags, "skip-upgrade") !== undefined;
+  const skipAdminSync = flagGet(flags, "skip-admin-sync") !== undefined;
+  const testEmail = flagGet(flags, "test-email");
 
   let toMaintain;
   try {
@@ -127,11 +132,40 @@ async function main() {
         skipUpgrade,
         dataDiskGb,
       });
+
+      /** @type {Record<string, unknown> | null} */
+      let adminSync = null;
+      const immichBlock = deployment.immich;
+      const hasAdminPayload =
+        isObject(immichBlock?.system_config) ||
+        mailEnabledFromConfig(mailBlockFromService(immichBlock)) ||
+        (typeof immichBlock?.public_url === "string" && immichBlock.public_url.trim());
+
+      if (!skipAdminSync && hasAdminPayload) {
+        try {
+          adminSync = await syncImmichAdminConfig({
+            vault,
+            immich: immichBlock,
+            sshHost: host,
+            testEmail: testEmail || null,
+            log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+          });
+        } catch (e) {
+          const msg = String(/** @type {Error} */ (e).message || e);
+          errout.write(`[hdc] ${target} ${verb}: admin sync failed: ${msg}\n`);
+          adminSync = { ok: false, message: msg };
+        }
+      } else if (skipAdminSync) {
+        adminSync = { ok: true, skipped: true, message: "--skip-admin-sync" };
+      }
+
       const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
+      const adminOk = !adminSync || adminSync.ok !== false;
       results.push({
-        ok: maintain.ok && baseline.clamav.ok,
+        ok: maintain.ok && baseline.clamav.ok && adminOk,
         system_id: deployment.systemId,
         maintain,
+        admin_sync: adminSync,
         ...guestBaselineResultFields(baseline),
       });
     } catch (e) {

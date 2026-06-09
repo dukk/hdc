@@ -1,15 +1,29 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveSiteAccessSettings } from "./deployments.mjs";
+import { groupUsesModsecurity, modsecurityProfilePath } from "./nginx-waf-policies.mjs";
 import {
+  DEFAULT_SELF_SIGNED_CERT,
+  DEFAULT_SELF_SIGNED_KEY,
+  DEFAULT_SITE_ROOT,
   MODSECURITY_RULES_FILE,
+  WAF_MAPS_FILE,
+  renderDefaultCatchAllVhost,
   renderHdcNginxInclude,
+  renderHdcNginxMaps,
   renderModsecurityMainConf,
   renderSiteVhost,
-  serverNames,
+  hostNames,
   siteId,
   sitesNeedWebsocketMap,
 } from "./nginx-waf-render.mjs";
 import { certExistsOnHost } from "./letsencrypt.mjs";
+
+const packageLibDir = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_404_ASSET = join(packageLibDir, "..", "assets", "default-404.html");
 
 export { createConfigureExec };
 
@@ -54,71 +68,117 @@ function uploadFile(exec, remotePath, content, log) {
  * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
  * @param {boolean} [opts.verifyPackages]
  */
-export function configureModsecurityCrs(opts) {
-  const { exec, log, global, verifyPackages = true } = opts;
-  if (!global.modsecurityEnabled) {
-    return { configured: false };
+export function configureModsecurityProfiles(opts) {
+  const { exec, log, global, verifyPackages = true, pruneStale = false } = opts;
+  const profiles = global.groupPolicyPlan?.modsecurityProfiles || [];
+  if (!profiles.length) {
+    return { configured: false, profiles: [] };
   }
 
-  if (verifyPackages) {
-    runChecked(exec, `test -f ${shellQuote(global.modsecurityCrsSetup)}`, log);
+  if (verifyPackages && profiles.length) {
+    const sample = profiles[0];
+    runChecked(exec, `test -f ${shellQuote(sample.crsSetup)}`, log);
     const rulesCheck = exec.run(
-      `sh -c 'ls ${global.modsecurityCrsRulesGlob.replace(/'/g, `'\\''`)} 2>/dev/null | head -1'`,
+      `sh -c 'ls ${String(sample.crsRulesGlob).replace(/'/g, `'\\''`)} 2>/dev/null | head -1'`,
       { capture: true },
     );
     if (rulesCheck.status !== 0 || !rulesCheck.stdout.trim()) {
       throw new Error(
-        `OWASP CRS rules not found at ${global.modsecurityCrsRulesGlob} — install modsecurity-crs package`,
+        `OWASP CRS rules not found at ${sample.crsRulesGlob} — install modsecurity-crs package`,
       );
-    }
-    if (global.modsecurityUnicodeMap) {
-      runChecked(exec, `test -f ${shellQuote(global.modsecurityUnicodeMap)}`, log);
     }
   }
 
-  const conf = renderModsecurityMainConf({
-    ruleEngine: global.modsecurityRuleEngine,
-    crsSetup: global.modsecurityCrsSetup,
-    crsRulesGlob: global.modsecurityCrsRulesGlob,
-    unicodeMap: global.modsecurityUnicodeMap,
-    auditLog: global.modsecurityAuditLog,
-  });
-  runChecked(exec, "mkdir -p /etc/modsecurity", log);
-  uploadFile(exec, MODSECURITY_RULES_FILE, conf, log);
-  runChecked(exec, `chmod 644 ${shellQuote(MODSECURITY_RULES_FILE)}`, log);
-  runChecked(exec, "mkdir -p /var/log/nginx", log);
-  runChecked(
-    exec,
-    `touch ${shellQuote(global.modsecurityAuditLog)} && chown www-data:adm ${shellQuote(global.modsecurityAuditLog)} 2>/dev/null || chown www-data:www-data ${shellQuote(global.modsecurityAuditLog)} 2>/dev/null || true`,
-    log,
-  );
+  runChecked(exec, "mkdir -p /etc/modsecurity /var/log/nginx", log);
+  /** @type {string[]} */
+  const written = [];
+  for (const profile of profiles) {
+    if (profile.enabled === false) continue;
+    const profileId = String(profile.profileId);
+    const path = modsecurityProfilePath(profileId);
+    const conf = renderModsecurityMainConf({
+      ruleEngine: String(profile.ruleEngine),
+      crsSetup: String(profile.crsSetup),
+      crsRulesGlob: String(profile.crsRulesGlob),
+      unicodeMap: typeof profile.unicodeMap === "string" ? profile.unicodeMap : "",
+      auditLog: String(profile.auditLog),
+      profileId,
+    });
+    uploadFile(exec, path, conf, log);
+    runChecked(exec, `chmod 644 ${shellQuote(path)}`, log);
+    written.push(path);
+    runChecked(
+      exec,
+      `touch ${shellQuote(profile.auditLog)} && chown www-data:adm ${shellQuote(profile.auditLog)} 2>/dev/null || chown www-data:www-data ${shellQuote(profile.auditLog)} 2>/dev/null || true`,
+      log,
+    );
+  }
 
-  const modProbe = exec.run("nginx -V 2>&1", { capture: true });
-  const modLoaded =
-    modProbe.stdout.includes("modsecurity") || modProbe.stderr.includes("modsecurity");
-  log.info(`ModSecurity nginx module loaded: ${modLoaded ? "yes" : "unknown"}`);
+  // Legacy default file for global include fallback
+  const primary = profiles.find((p) => p.enabled !== false) || profiles[0];
+  if (primary) {
+    uploadFile(
+      exec,
+      MODSECURITY_RULES_FILE,
+      renderModsecurityMainConf({
+        ruleEngine: String(primary.ruleEngine),
+        crsSetup: String(primary.crsSetup),
+        crsRulesGlob: String(primary.crsRulesGlob),
+        unicodeMap: typeof primary.unicodeMap === "string" ? primary.unicodeMap : "",
+        auditLog: String(primary.auditLog),
+        profileId: String(primary.profileId),
+      }),
+      log,
+    );
+  }
 
-  return {
-    configured: true,
-    rules_file: MODSECURITY_RULES_FILE,
-    rule_engine: global.modsecurityRuleEngine,
-  };
+  if (pruneStale) {
+    const list = runChecked(
+      exec,
+      "ls -1 /etc/modsecurity/hdc-waf-*.conf 2>/dev/null || true",
+      log,
+    );
+    for (const p of list.stdout.trim().split("\n").filter(Boolean)) {
+      if (p === MODSECURITY_RULES_FILE) continue;
+      if (!written.includes(p)) {
+        runChecked(exec, `rm -f ${shellQuote(p)}`, log);
+      }
+    }
+  }
+
+  return { configured: true, profiles: written };
+}
+
+/** @deprecated Use configureModsecurityProfiles */
+export function configureModsecurityCrs(opts) {
+  const { exec, log, global, verifyPackages = true } = opts;
+  if (!global.modsecurityEnabled) return { configured: false };
+  return configureModsecurityProfiles({ exec, log, global, verifyPackages });
 }
 
 /**
- * Upload /etc/nginx/hdc/waf-global.conf (timeouts, ModSecurity, optional WebSocket map).
+ * Upload /etc/nginx/hdc/waf-global.conf and waf-maps.conf
  * @param {object} opts
  * @param {ReturnType<typeof createConfigureExec>} opts.exec
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
- * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGlobalSettings>} opts.global
+ * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGroupSettings>} opts.global
  * @param {Record<string, unknown>[]} opts.allSites
  */
 export function uploadHdcNginxGlobalInclude(opts) {
   const { exec, log, global, allSites } = opts;
   runChecked(exec, "mkdir -p /etc/nginx/hdc", log);
-  const include = renderHdcNginxInclude({
-    modsecurityEnabled: global.modsecurityEnabled,
+  const plan = global.groupPolicyPlan || {
+    blockCommonExploits: false,
+    rateLimitZones: [],
+  };
+  const maps = renderHdcNginxMaps({
     websocketMapEnabled: sitesNeedWebsocketMap(allSites),
+    blockCommonExploits: plan.blockCommonExploits,
+    rateLimitZones: plan.rateLimitZones || [],
+  });
+  uploadFile(exec, WAF_MAPS_FILE, maps, log);
+  const include = renderHdcNginxInclude({
+    modsecurityEnabled: global.modsecurityEnabled && groupUsesModsecurity(plan),
   });
   uploadFile(exec, "/etc/nginx/hdc/waf-global.conf", include, log);
 }
@@ -132,7 +192,7 @@ export function uploadHdcNginxGlobalInclude(opts) {
  * @param {Record<string, unknown>[]} [opts.allSites]
  */
 export function installNginxWafBase(opts) {
-  const { exec, log, global, dns01, allSites = [] } = opts;
+  const { exec, log, global, dns01, allSites = [], rootCaContent = "" } = opts;
   const pkgs = [
     "nginx",
     "libmodsecurity3",
@@ -172,8 +232,78 @@ export function installNginxWafBase(opts) {
   );
 
   if (global.modsecurityEnabled) {
-    configureModsecurityCrs({ exec, log, global, verifyPackages: true });
+    configureModsecurityProfiles({ exec, log, global, verifyPackages: true });
   }
+  installAcmeRootCa({ exec, log, global, rootCaContent });
+  ensureDefaultSiteInfrastructure({ exec, log, global });
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
+ * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGroupSettings>} opts.global
+ */
+export function ensureDefaultSiteInfrastructure(opts) {
+  const { exec, log } = opts;
+  runChecked(exec, `mkdir -p ${shellQuote(DEFAULT_SITE_ROOT)} /etc/nginx/hdc`, log);
+  runChecked(
+    exec,
+    `test -f ${shellQuote(DEFAULT_SELF_SIGNED_CERT)} || openssl req -x509 -nodes -days 3650 -newkey rsa:2048 ` +
+      `-keyout ${shellQuote(DEFAULT_SELF_SIGNED_KEY)} -out ${shellQuote(DEFAULT_SELF_SIGNED_CERT)} ` +
+      `-subj ${shellQuote("/CN=hdc-waf-default")}`,
+    log,
+  );
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
+ * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGroupSettings>} opts.global
+ * @param {string} [opts.rootCaContent] PEM content for custom ACME trust
+ */
+export function installAcmeRootCa(opts) {
+  const { exec, log, global, rootCaContent } = opts;
+  if (global.acmeProvider !== "custom" || !global.rootCaPath) return { installed: false };
+  if (!rootCaContent || !rootCaContent.trim()) {
+    log.info(`custom ACME root CA not provided — ensure ${global.rootCaPath} exists on host`);
+    return { installed: false, skipped: true };
+  }
+  runChecked(exec, `mkdir -p $(dirname ${shellQuote(global.rootCaPath)})`, log);
+  uploadFile(exec, global.rootCaPath, rootCaContent.trim() + "\n", log);
+  runChecked(exec, `chmod 644 ${shellQuote(global.rootCaPath)}`, log);
+  return { installed: true, path: global.rootCaPath };
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof createConfigureExec>} opts.exec
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
+ * @param {ReturnType<typeof import("./deployments.mjs").nginxWafGroupSettings>} opts.global
+ */
+export function configureDefaultCatchAllSite(opts) {
+  const { exec, log, global } = opts;
+  if (!global.defaultSiteEnabled) {
+    runChecked(
+      exec,
+      `rm -f /etc/nginx/sites-enabled/hdc-default.conf /etc/nginx/sites-available/hdc-default.conf`,
+      log,
+    );
+    return { enabled: false };
+  }
+  const html = readFileSync(DEFAULT_404_ASSET, "utf8");
+  uploadFile(exec, `${DEFAULT_SITE_ROOT}/index.html`, html, log);
+  const vhost = renderDefaultCatchAllVhost({ webroot: DEFAULT_SITE_ROOT });
+  const avail = "/etc/nginx/sites-available/hdc-default.conf";
+  uploadFile(exec, avail, vhost, log);
+  runChecked(exec, `ln -sf ${shellQuote(avail)} /etc/nginx/sites-enabled/hdc-default.conf`, log);
+  runChecked(
+    exec,
+    "rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default 2>/dev/null || true",
+    log,
+  );
+  return { enabled: true, path: avail };
 }
 
 /**
@@ -191,9 +321,10 @@ export function configureNginxWafSites(opts) {
   runChecked(exec, "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled", log);
   uploadHdcNginxGlobalInclude({ exec, log, global, allSites });
 
-  const http01 = global.challenge === "http-01";
   /** @type {string[]} */
   const enabledIds = [];
+
+  configureDefaultCatchAllSite({ exec, log, global });
 
   for (const site of sites) {
     const id = siteId(site);
@@ -201,20 +332,19 @@ export function configureNginxWafSites(opts) {
     const certName =
       typeof tls.cert_name === "string" && tls.cert_name.trim()
         ? tls.cert_name.trim()
-        : serverNames(site)[0];
-    const deferTls =
-      tls.enabled !== false && http01 && !certExistsOnHost(exec, certName);
+        : hostNames(site)[0];
+    const deferTls = tls.enabled !== false && !certExistsOnHost(exec, certName);
     const access = resolveSiteAccessSettings(site, global);
     const vhost = renderSiteVhost({
       site,
       modsecurityEnabled: global.modsecurityEnabled,
-      http01Acme: http01,
+      http01Acme: global.challenge === "http-01",
       webroot: global.webroot,
       deferTlsUntilCertExists: deferTls,
-      trustedCidrs: access.trustedCidrs,
       clientIp: access.clientIp,
       cloudflareIpv4: access.cloudflareIpv4,
       wafNodeId,
+      policyCatalog: global.policyDefinitions,
     });
     const avail = `/etc/nginx/sites-available/hdc-${id}.conf`;
     uploadFile(exec, avail, vhost, log);
@@ -239,6 +369,7 @@ export function configureNginxWafSites(opts) {
       .filter(Boolean);
 
     for (const oldId of existing) {
+      if (oldId === "default") continue;
       if (!enabledIds.includes(/** @type {string} */ (oldId))) {
         runChecked(
           exec,
@@ -270,11 +401,18 @@ export function configureNginxWafSites(opts) {
  * @param {string} [opts.wafNodeId]
  */
 export function configureNginxWaf(opts) {
-  const { exec, log, global, sites, skipBaseInstall, wafNodeId } = opts;
+  const { exec, log, global, sites, skipBaseInstall, wafNodeId, rootCaContent = "" } = opts;
   if (!skipBaseInstall) {
-    installNginxWafBase({ exec, log, global, dns01: global.challenge === "dns-01", allSites: sites });
+    installNginxWafBase({
+      exec,
+      log,
+      global,
+      dns01: global.challenge === "dns-01",
+      allSites: sites,
+      rootCaContent,
+    });
   } else if (global.modsecurityEnabled) {
-    configureModsecurityCrs({ exec, log, global, verifyPackages: false });
+    configureModsecurityProfiles({ exec, log, global, verifyPackages: false });
   }
   const sitesResult = configureNginxWafSites({ exec, log, global, sites, allSites: sites, wafNodeId });
   return { ...sitesResult };
@@ -290,5 +428,11 @@ export function configureNginxWaf(opts) {
 export function maintainModsecurityCrs(opts) {
   const { exec, log, global } = opts;
   if (!global.modsecurityEnabled) return { configured: false };
-  return configureModsecurityCrs({ exec, log, global, verifyPackages: false });
+  return configureModsecurityProfiles({
+    exec,
+    log,
+    global,
+    verifyPackages: false,
+    pruneStale: true,
+  });
 }

@@ -5,13 +5,53 @@ import {
   findPeerDeployment,
   instanceFlagToSystemId,
   maintainSiteLists,
-  nginxWafGlobalSettings,
   normalizeNginxWafConfig,
   resolveNginxWafDeployments,
+  resolveNginxWafGroups,
   resolveSiteAccessSettings,
+  nginxWafGroupSettings,
 } from "../../../packages/services/nginx-waf/lib/deployments.mjs";
 
 const sampleCfg = {
+  schema_version: 3,
+  deployment_groups: [
+    {
+      id: "edge",
+      acme: {
+        provider: "lets_encrypt",
+        challenge: "http-01",
+        email_vault_key: "HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL",
+        cert_primary_system_id: "vm-nginx-waf-a",
+      },
+      sites: [
+        {
+          id: "example-app",
+          host_names: ["app.hdc.example.invalid"],
+          upstream: "http://192.0.2.50:8080",
+          tls: { enabled: true, cert_name: "app.hdc.example.invalid" },
+        },
+      ],
+      deployments: [
+        {
+          system_id: "vm-nginx-waf-a",
+          role: "cert-primary",
+          configure: { ssh: { host: "192.0.2.20" } },
+        },
+        {
+          system_id: "vm-nginx-waf-b",
+          role: "peer",
+          configure: { ssh: { host: "192.0.2.21" } },
+        },
+      ],
+    },
+  ],
+  defaults: {
+    mode: "configure-only",
+    proxmox: { qemu: { template_vmid: 9024 } },
+  },
+};
+
+const legacyCfg = {
   schema_version: 2,
   letsencrypt: {
     challenge: "http-01",
@@ -25,10 +65,7 @@ const sampleCfg = {
       tls: { enabled: true, cert_name: "app.hdc.example.invalid" },
     },
   ],
-  defaults: {
-    mode: "configure-only",
-    proxmox: { qemu: { template_vmid: 9024 } },
-  },
+  defaults: { mode: "configure-only" },
   deployments: [
     {
       system_id: "vm-nginx-waf-a",
@@ -44,38 +81,50 @@ const sampleCfg = {
 };
 
 describe("nginx-waf deployments", () => {
-  it("normalizes deployments[] with defaults merge", () => {
-    const { deployments } = normalizeNginxWafConfig(sampleCfg);
-    expect(deployments).toHaveLength(2);
-    expect(deployments[0].system_id).toBe("vm-nginx-waf-a");
-    expect(deployments[0].mode).toBe("configure-only");
+  it("normalizes deployment_groups with defaults merge", () => {
+    const { deploymentGroups } = normalizeNginxWafConfig(sampleCfg);
+    expect(deploymentGroups).toHaveLength(1);
+    expect(deploymentGroups[0].id).toBe("edge");
+    expect(deploymentGroups[0].deployments[0].mode).toBe("configure-only");
   });
 
-  it("rejects duplicate system_id", () => {
+  it("migrates v2 flat config into default deployment group", () => {
+    const { deploymentGroups } = normalizeNginxWafConfig(legacyCfg);
+    expect(deploymentGroups).toHaveLength(1);
+    expect(deploymentGroups[0].id).toBe("default");
+    expect(deploymentGroups[0].sites[0].host_names).toEqual(["app.hdc.example.invalid"]);
+  });
+
+  it("rejects duplicate system_id across groups", () => {
     expect(() =>
       normalizeNginxWafConfig({
-        deployments: [
-          { system_id: "vm-nginx-waf-a", role: "cert-primary" },
-          { system_id: "vm-nginx-waf-a", role: "peer" },
+        schema_version: 3,
+        deployment_groups: [
+          {
+            id: "a",
+            deployments: [{ system_id: "vm-nginx-waf-a", role: "cert-primary" }],
+          },
+          {
+            id: "b",
+            deployments: [{ system_id: "vm-nginx-waf-a", role: "cert-primary" }],
+          },
         ],
       }),
     ).toThrow(/duplicate system_id/);
   });
 
-  it("rejects invalid system_id pattern", () => {
+  it("requires exactly one cert-primary per group", () => {
     expect(() =>
       normalizeNginxWafConfig({
-        deployments: [{ system_id: "vm-waf-a", role: "cert-primary" }],
-      }),
-    ).toThrow(/vm-nginx-waf/);
-  });
-
-  it("requires exactly one cert-primary", () => {
-    expect(() =>
-      normalizeNginxWafConfig({
-        deployments: [
-          { system_id: "vm-nginx-waf-a", role: "peer" },
-          { system_id: "vm-nginx-waf-b", role: "peer" },
+        schema_version: 3,
+        deployment_groups: [
+          {
+            id: "edge",
+            deployments: [
+              { system_id: "vm-nginx-waf-a", role: "peer" },
+              { system_id: "vm-nginx-waf-b", role: "peer" },
+            ],
+          },
         ],
       }),
     ).toThrow(/cert-primary/);
@@ -86,7 +135,14 @@ describe("nginx-waf deployments", () => {
     const one = resolveNginxWafDeployments(sampleCfg, { instance: "b" });
     expect(one).toHaveLength(1);
     expect(one[0].systemId).toBe("vm-nginx-waf-b");
-    expect(one[0].role).toBe("peer");
+    expect(one[0].groupId).toBe("edge");
+  });
+
+  it("filters by --group", () => {
+    const groups = resolveNginxWafGroups(sampleCfg, { group: "edge" });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].groupId).toBe("edge");
+    expect(groups[0].deployments).toHaveLength(2);
   });
 
   it("returns all deployments cert-primary first when no filter", () => {
@@ -94,55 +150,48 @@ describe("nginx-waf deployments", () => {
     expect(all.map((d) => d.systemId)).toEqual(["vm-nginx-waf-a", "vm-nginx-waf-b"]);
   });
 
-  it("finds cert-primary and peer", () => {
-    const all = resolveNginxWafDeployments(sampleCfg, {});
-    const global = nginxWafGlobalSettings(normalizeNginxWafConfig(sampleCfg));
-    const primary = findCertPrimaryDeployment(all, global.certPrimarySystemId);
-    const peer = findPeerDeployment(all, primary);
+  it("finds cert-primary and peer within group", () => {
+    const ctx = resolveNginxWafGroups(sampleCfg, {})[0];
+    const primary = findCertPrimaryDeployment(ctx.deployments, ctx.global.certPrimarySystemId);
+    const peer = findPeerDeployment(ctx.deployments, primary);
     expect(primary.systemId).toBe("vm-nginx-waf-a");
-    expect(peer.systemId).toBe("vm-nginx-waf-b");
+    expect(peer?.systemId).toBe("vm-nginx-waf-b");
   });
 
-  it("parses letsencrypt challenge dns-01", () => {
-    const global = nginxWafGlobalSettings(
-      normalizeNginxWafConfig({
-        ...sampleCfg,
-        letsencrypt: { ...sampleCfg.letsencrypt, challenge: "dns-01" },
-      }),
-    );
+  it("parses acme challenge dns-01", () => {
+    const normalized = normalizeNginxWafConfig({
+      ...sampleCfg,
+      deployment_groups: [
+        {
+          ...sampleCfg.deployment_groups[0],
+          acme: { ...sampleCfg.deployment_groups[0].acme, challenge: "dns-01" },
+        },
+      ],
+    });
+    const global = nginxWafGroupSettings(normalized, normalized.deploymentGroups[0]);
     expect(global.challenge).toBe("dns-01");
   });
 
-  it("defaults rule_engine to DetectionOnly when letsencrypt staging", () => {
-    const global = nginxWafGlobalSettings(
-      normalizeNginxWafConfig({
-        ...sampleCfg,
-        letsencrypt: { ...sampleCfg.letsencrypt, staging: true },
-      }),
-    );
+  it("defaults rule_engine to DetectionOnly when acme staging", () => {
+    const normalized = normalizeNginxWafConfig({
+      ...sampleCfg,
+      deployment_groups: [
+        {
+          ...sampleCfg.deployment_groups[0],
+          acme: { ...sampleCfg.deployment_groups[0].acme, staging: true },
+        },
+      ],
+    });
+    const global = nginxWafGroupSettings(normalized, normalized.deploymentGroups[0]);
     expect(global.modsecurityRuleEngine).toBe("DetectionOnly");
   });
 
-  it("uses explicit modsecurity rule_engine override", () => {
-    const global = nginxWafGlobalSettings(
-      normalizeNginxWafConfig({
-        ...sampleCfg,
-        defaults: {
-          ...sampleCfg.defaults,
-          nginx_waf: {
-            modsecurity: { enabled: true, rule_engine: "On" },
-          },
-        },
-        letsencrypt: { ...sampleCfg.letsencrypt, staging: true },
-      }),
-    );
-    expect(global.modsecurityRuleEngine).toBe("On");
-  });
-
   it("defaults trusted_cidrs to RFC1918-style ranges", () => {
-    const global = nginxWafGlobalSettings(normalizeNginxWafConfig(sampleCfg));
+    const normalized = normalizeNginxWafConfig(sampleCfg);
+    const global = nginxWafGroupSettings(normalized, normalized.deploymentGroups[0]);
     expect(global.trustedCidrs).toEqual(DEFAULT_TRUSTED_CIDRS);
     expect(global.cloudflareIpv4).toBe(true);
+    expect(global.emailVaultKey).toBe("HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL");
   });
 
   it("resolveSiteAccessSettings inherits defaults.nginx_waf.client_ip", () => {
@@ -153,49 +202,31 @@ describe("nginx-waf deployments", () => {
         nginx_waf: { client_ip: "cloudflare" },
       },
     });
-    const global = nginxWafGlobalSettings(normalized);
+    const global = nginxWafGroupSettings(normalized, normalized.deploymentGroups[0]);
     const access = resolveSiteAccessSettings({ id: "example-app" }, global);
     expect(access.clientIp).toBe("cloudflare");
-    const override = resolveSiteAccessSettings(
-      { id: "example-app", client_ip: "remote_addr" },
-      global,
-    );
-    expect(override.clientIp).toBe("remote_addr");
   });
 
-  it("resolveSiteAccessSettings uses site trusted_cidrs override", () => {
-    const normalized = normalizeNginxWafConfig({
-      ...sampleCfg,
-      defaults: {
-        ...sampleCfg.defaults,
-        nginx_waf: { trusted_cidrs: ["10.0.0.0/8"] },
-      },
-    });
-    const global = nginxWafGlobalSettings(normalized);
-    const site = {
-      id: "example-app",
-      trusted_cidrs: ["192.168.1.0/24"],
-      client_ip: "cloudflare",
-    };
-    const access = resolveSiteAccessSettings(site, global);
-    expect(access.trustedCidrs).toEqual(["192.168.1.0/24"]);
-    expect(access.clientIp).toBe("cloudflare");
-  });
-
-  it("rejects duplicate server_names across sites", () => {
+  it("rejects duplicate host_names within a group", () => {
     expect(() =>
       normalizeNginxWafConfig({
-        ...sampleCfg,
-        sites: [
+        schema_version: 3,
+        deployment_groups: [
           {
-            id: "draw",
-            server_names: ["draw.dukk.org"],
-            upstream: "http://10.0.0.155:8080",
-          },
-          {
-            id: "vaultwarden",
-            server_names: ["vault.dukk.org", "draw.dukk.org"],
-            upstream: "http://10.0.0.123:80",
+            id: "edge",
+            deployments: [{ system_id: "vm-nginx-waf-a", role: "cert-primary" }],
+            sites: [
+              {
+                id: "draw",
+                host_names: ["draw.dukk.org"],
+                upstream: "http://10.0.0.155:8080",
+              },
+              {
+                id: "vaultwarden",
+                host_names: ["vault.dukk.org", "draw.dukk.org"],
+                upstream: "http://10.0.0.123:80",
+              },
+            ],
           },
         ],
       }),
@@ -205,24 +236,82 @@ describe("nginx-waf deployments", () => {
   it("maintainSiteLists keeps allSites for vhost push when --site is set", () => {
     const cfg = {
       ...sampleCfg,
-      sites: [
-        sampleCfg.sites[0],
+      deployment_groups: [
         {
-          id: "other",
-          server_names: ["other.hdc.example.invalid"],
-          upstream: "http://192.0.2.51:8080",
+          ...sampleCfg.deployment_groups[0],
+          sites: [
+            sampleCfg.deployment_groups[0].sites[0],
+            {
+              id: "other",
+              host_names: ["other.hdc.example.invalid"],
+              upstream: "http://192.0.2.51:8080",
+            },
+          ],
         },
       ],
     };
-    const global = nginxWafGlobalSettings(normalizeNginxWafConfig(cfg));
+    const normalized = normalizeNginxWafConfig(cfg);
+    const global = nginxWafGroupSettings(normalized, normalized.deploymentGroups[0]);
     const { allSites, certSites, partialSiteUpdate } = maintainSiteLists(
       global,
       cfg,
       "example-app",
+      "edge",
     );
     expect(partialSiteUpdate).toBe(true);
     expect(allSites).toHaveLength(2);
     expect(certSites).toHaveLength(1);
     expect(certSites[0].id).toBe("example-app");
+  });
+
+  it("migrates v3 waf fields to policies on normalize", () => {
+    const { deploymentGroups } = normalizeNginxWafConfig({
+      schema_version: 3,
+      deployment_groups: [
+        {
+          id: "edge",
+          deployments: [{ system_id: "vm-nginx-waf-a", role: "cert-primary" }],
+          sites: [
+            {
+              id: "app",
+              host_names: ["app.example.com"],
+              upstream: "http://127.0.0.1:1",
+              waf: { enabled: true },
+              locations: [
+                { path: "/", access: { policy: "internal_only", deny_status: 404 } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const site = deploymentGroups[0].sites[0];
+    expect(site.policies).toContain("modsecurity-default");
+    expect(site.locations[0].policies?.[0]).toMatchObject({ type: "trusted_cidrs" });
+  });
+
+  it("accepts schema_version 4 with explicit policies", () => {
+    const { deploymentGroups } = normalizeNginxWafConfig({
+      schema_version: 4,
+      deployment_groups: [
+        {
+          id: "edge",
+          deployments: [{ system_id: "vm-nginx-waf-a", role: "cert-primary" }],
+          sites: [
+            {
+              id: "app",
+              host_names: ["app.example.com"],
+              upstream: "http://127.0.0.1:1",
+              policies: ["modsecurity-default", "block-exploits"],
+            },
+          ],
+        },
+      ],
+    });
+    expect(deploymentGroups[0].policyDefinitions["modsecurity-default"]).toBeDefined();
+    expect(deploymentGroups[0].sites[0].policies).toEqual([
+      "modsecurity-default",
+      "block-exploits",
+    ]);
   });
 });

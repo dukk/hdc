@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { configureNginxWafSites } from "../../../packages/services/nginx-waf/lib/nginx-waf-configure.mjs";
 import { configureNginxSites } from "../../../packages/services/nginx/lib/nginx-configure.mjs";
 
-const sampleSite = {
+const wafSampleSite = {
+  id: "vaultwarden",
+  host_names: ["vault.example.test"],
+  listen: [80],
+  upstream: "http://10.0.0.123:80",
+  tls: { enabled: false },
+};
+
+const nginxSampleSite = {
   id: "vaultwarden",
   server_names: ["vault.example.test"],
   listen: [80],
@@ -35,6 +43,7 @@ function createMockExec(existingSiteIds = ["bookshelf"]) {
 const wafGlobal = {
   challenge: "http-01",
   modsecurityEnabled: false,
+  defaultSiteEnabled: true,
   webroot: "/var/www/letsencrypt",
 };
 
@@ -61,7 +70,7 @@ describe("configureNginxWafSites pruneStaleSites", () => {
       exec,
       log,
       global: wafGlobal,
-      sites: [sampleSite],
+      sites: [wafSampleSite],
       pruneStaleSites: false,
     });
     expect(rmSiteCommands(exec.commands)).toHaveLength(0);
@@ -74,7 +83,7 @@ describe("configureNginxWafSites pruneStaleSites", () => {
       exec,
       log,
       global: wafGlobal,
-      sites: [sampleSite],
+      sites: [wafSampleSite],
       pruneStaleSites: true,
     });
     expect(rmSiteCommands(exec.commands)).toHaveLength(1);
@@ -90,7 +99,7 @@ describe("configureNginxSites pruneStaleSites", () => {
       exec,
       log,
       global: nginxGlobal,
-      sites: [sampleSite],
+      sites: [nginxSampleSite],
       pruneStaleSites: false,
     });
     expect(rmSiteCommands(exec.commands)).toHaveLength(0);
@@ -103,7 +112,7 @@ describe("configureNginxSites pruneStaleSites", () => {
       exec,
       log,
       global: nginxGlobal,
-      sites: [sampleSite],
+      sites: [nginxSampleSite],
       pruneStaleSites: true,
     });
     expect(rmSiteCommands(exec.commands)).toHaveLength(1);

@@ -3,7 +3,7 @@ import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Deploy nginx WAF nodes: optional Proxmox QEMU provision, base install, sites, certs, peer sync.
  *
- * Usage: hdc run service nginx-waf deploy -- [--instance a|b] [--skip-provision] [--destroy-existing]
+ * Usage: hdc run service nginx-waf deploy -- [--instance a|b] [--group <id>] [--skip-provision] [--destroy-existing]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -29,9 +29,10 @@ import { createNginxWafVaultAccess } from "../lib/vault-deps.mjs";
 import {
   findCertPrimaryDeployment,
   findPeerDeployment,
-  nginxWafGlobalSettings,
-  normalizeNginxWafConfig,
+  loadAcmeRootCaContent,
+  loadLetsEncryptEmail,
   resolveNginxWafDeployments,
+  resolveNginxWafGroups,
   sshTargetFromDeployment,
 } from "../lib/deployments.mjs";
 import { configureNginxWaf, createConfigureExec } from "../lib/nginx-waf-configure.mjs";
@@ -119,6 +120,7 @@ function existingGuestPolicy(flags) {
 function runConfigure(deployment, global, sites, log, skipBaseInstall) {
   const { user, host } = sshTargetFromDeployment(deployment);
   const exec = createConfigureExec("ssh", { user, host });
+  const rootCaContent = loadAcmeRootCaContent(global.acme);
   return configureNginxWaf({
     exec,
     log,
@@ -126,6 +128,7 @@ function runConfigure(deployment, global, sites, log, skipBaseInstall) {
     sites,
     skipBaseInstall,
     wafNodeId: deployment.systemId,
+    rootCaContent,
   });
 }
 
@@ -534,19 +537,11 @@ async function deployOne(deployment, flags, global, sites, log) {
 }
 
 /**
- * @param {string} email
- * @param {ReturnType<typeof nginxWafGlobalSettings>} global
+ * @param {ReturnType<typeof nginxWafGroupSettings>} global
  * @param {Awaited<ReturnType<typeof createNginxWafVaultAccess>>} vault
  */
-async function loadSecrets(email, global, vault) {
-  let leEmail = global.email;
-  if (!leEmail) {
-    leEmail = String(
-      await vault.getSecret(global.emailVaultKey, {
-        promptLabel: `vault secret ${global.emailVaultKey}`,
-      }),
-    ).trim();
-  }
+async function loadSecrets(global, vault) {
+  const email = await loadLetsEncryptEmail(global, vault);
   let tsigSecret = "";
   if (global.challenge === "dns-01") {
     tsigSecret = String(
@@ -555,7 +550,7 @@ async function loadSecrets(email, global, vault) {
       }),
     ).trim();
   }
-  return { email: leEmail, tsigSecret };
+  return { email, tsigSecret };
 }
 
 async function main() {
@@ -573,10 +568,10 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
-  let normalized;
+  let groupContexts;
   let deployments;
   try {
-    normalized = normalizeNginxWafConfig(cfg);
+    groupContexts = resolveNginxWafGroups(cfg, flags);
     deployments = resolveNginxWafDeployments(cfg, flags);
   } catch (e) {
     const msg = String(/** @type {Error} */ (e).message || e);
@@ -586,19 +581,25 @@ async function main() {
     return;
   }
 
-  const global = nginxWafGlobalSettings(normalized);
-  const sites = /** @type {Record<string, unknown>[]} */ (global.sites);
+  /** @type {Map<string, { global: ReturnType<typeof import("../lib/deployments.mjs").nginxWafGroupSettings>, sites: Record<string, unknown>[] }>} */
+  const contextBySystemId = new Map();
+  for (const ctx of groupContexts) {
+    for (const d of ctx.deployments) {
+      contextBySystemId.set(d.systemId, { global: ctx.global, sites: ctx.sites });
+    }
+  }
 
   const vault = createNginxWafVaultAccess();
   errout.write(`[hdc] ${target} ${verb}: unlocking vault …\n`);
   await vault.unlock({});
-  const { email, tsigSecret } = await loadSecrets("", global, vault);
+  const firstGlobal = groupContexts[0].global;
+  const { email, tsigSecret } = await loadSecrets(firstGlobal, vault);
   if (!email) {
     errout.write(
-      `[hdc] ${target} ${verb}: Let's Encrypt email missing — set letsencrypt.email or hdc secrets set ${global.emailVaultKey}\n`,
+      `[hdc] ${target} ${verb}: ACME account email missing — set acme.email or hdc secrets set ${firstGlobal.emailVaultKey}\n`,
     );
     process.stdout.write(
-      `${JSON.stringify({ ok: false, target, verb, message: "missing Let's Encrypt email" }, null, 2)}\n`,
+      `${JSON.stringify({ ok: false, target, verb, message: "missing ACME account email" }, null, 2)}\n`,
     );
     process.exitCode = 1;
     return;
@@ -609,8 +610,17 @@ async function main() {
   const results = [];
 
   for (const deployment of deployments) {
+    const ctx = contextBySystemId.get(deployment.systemId);
+    if (!ctx) {
+      results.push({
+        ok: false,
+        system_id: deployment.systemId,
+        message: "deployment group context missing",
+      });
+      continue;
+    }
     try {
-      results.push(await deployOne(deployment, flags, global, sites, log));
+      results.push(await deployOne(deployment, flags, ctx.global, ctx.sites, log));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
@@ -618,36 +628,49 @@ async function main() {
     }
   }
 
-  const allDeployments = resolveNginxWafDeployments(cfg, {});
-  const primary = findCertPrimaryDeployment(allDeployments, global.certPrimarySystemId);
-  const peer = findPeerDeployment(allDeployments, primary);
-  const primaryTarget = sshTargetFromDeployment(primary);
-  const primaryExec = createConfigureExec("ssh", primaryTarget);
+  const allGroupContexts = resolveNginxWafGroups(cfg, {});
+  for (const ctx of allGroupContexts) {
+    const global = ctx.global;
+    const groupSecrets = await loadSecrets(global, vault);
+    const primary = findCertPrimaryDeployment(ctx.deployments, global.certPrimarySystemId);
+    const peer = findPeerDeployment(ctx.deployments, primary);
+    const primaryTarget = sshTargetFromDeployment(primary);
+    const primaryExec = createConfigureExec("ssh", primaryTarget);
 
-  try {
-    if (primary.role === "cert-primary" && !skipInstall(flags)) {
-      installCertSyncOnPrimary({ primary, peer, primaryExec, log });
+    try {
+      if (primary.role === "cert-primary" && !skipInstall(flags) && peer) {
+        installCertSyncOnPrimary({ primary, peer, primaryExec, log });
+      }
+      const certResult = obtainMissingCertificates({
+        exec: primaryExec,
+        log,
+        global,
+        email: groupSecrets.email || email,
+        sites: ctx.sites,
+        tsigSecret: groupSecrets.tsigSecret || tsigSecret,
+      });
+      if (peer) {
+        runCertSync(primaryExec, log);
+      }
+      results.push({
+        ok: true,
+        system_id: primary.systemId,
+        deployment_group: ctx.groupId,
+        step: "certificates",
+        certificates: certResult,
+        synced_to: peer?.systemId ?? null,
+      });
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: group ${ctx.groupId}: certificate step failed: ${msg}\n`);
+      results.push({
+        ok: false,
+        system_id: primary.systemId,
+        deployment_group: ctx.groupId,
+        step: "certificates",
+        message: msg,
+      });
     }
-    const certResult = obtainMissingCertificates({
-      exec: primaryExec,
-      log,
-      global,
-      email,
-      sites,
-      tsigSecret,
-    });
-    runCertSync(primaryExec, log);
-    results.push({
-      ok: true,
-      system_id: primary.systemId,
-      step: "certificates",
-      certificates: certResult,
-      synced_to: peer.systemId,
-    });
-  } catch (e) {
-    const msg = String(/** @type {Error} */ (e).message || e);
-    errout.write(`[hdc] ${target} ${verb}: certificate step failed: ${msg}\n`);
-    results.push({ ok: false, system_id: primary.systemId, step: "certificates", message: msg });
   }
 
   const ok = results.every((r) => r.ok === true);

@@ -20,7 +20,8 @@ import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/pro
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
-import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { extractPveUpid, waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { pveData, pveFormBody, pveJsonRequest, waitForPveTask } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import {
   dataDiskGbFromDeployment,
@@ -36,6 +37,7 @@ import {
   applyQemuCloudInit,
   cloneQemuGuest,
   locateGuest,
+  migrateQemuGuest,
   startQemuGuest,
   stopAndDestroyQemu,
   waitForQemuGuestSshAfterBoot,
@@ -247,13 +249,57 @@ async function deployOne(deployment, dbPassword, flags, log) {
     };
   }
 
-  const { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
+  let { node: cloneNode, vmid: guestVmid } = await waitForCloneTaskAndEnableAgent(
     provisionResult,
     auth,
     vmid,
     (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
     guestResourceOptsFromBlock(q, flags),
   );
+
+  const targetNode = auth.host.pveNode;
+  if (cloneNode !== targetNode) {
+    errout.write(
+      `[hdc] ${target} ${verb}: VM ${guestVmid} on ${cloneNode} — migrating to ${targetNode} …\n`,
+    );
+    await migrateQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      sourceNode: cloneNode,
+      targetNode,
+      vmid: guestVmid,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    cloneNode = targetNode;
+  }
+
+  const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+  if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+    errout.write(
+      `[hdc] ${target} ${verb}: resizing scsi0 to ${rootfsGb}G on vmid ${guestVmid} (node ${cloneNode}) …\n`,
+    );
+    const resizeBody = await pveJsonRequest(
+      "PUT",
+      auth.host.apiBase,
+      `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(guestVmid))}/resize`,
+      auth.authorization,
+      auth.rejectUnauthorized,
+      pveFormBody({ disk: "scsi0", size: `${rootfsGb}G` }),
+    );
+    const resizeUpid = extractPveUpid(pveData(resizeBody));
+    if (resizeUpid) {
+      await waitForPveTask({
+        apiBase: auth.host.apiBase,
+        node: cloneNode,
+        upid: resizeUpid,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        timeoutMs: 300_000,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    }
+  }
 
   if (dataDiskGb > 0) {
     await attachQemuDataDisk({

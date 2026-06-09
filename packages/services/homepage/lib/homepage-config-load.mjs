@@ -33,15 +33,17 @@ export function validateHomepageConfigFiles(homepage) {
 
 /**
  * @param {Record<string, unknown>} homepage
- * @returns {{ services: string; settings: string; bookmarks: string }}
+ * @returns {{ services: string; settings: string; bookmarks: string; widgets?: string }}
  */
 export function homepageConfigFilePaths(homepage) {
   validateHomepageConfigFiles(homepage);
   const cf = /** @type {Record<string, unknown>} */ (homepage.config_files);
+  const widgets = typeof cf.widgets === "string" ? cf.widgets.trim() : "";
   return {
     services: String(cf.services).trim(),
     settings: String(cf.settings).trim(),
     bookmarks: String(cf.bookmarks).trim(),
+    ...(widgets ? { widgets } : {}),
   };
 }
 
@@ -86,14 +88,18 @@ function readPackageConfigFile(packageRoot, relPath, label) {
 /**
  * @param {Record<string, unknown>} homepage
  * @param {string} packageRoot absolute path to packages/services/homepage
- * @returns {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; config_paths: { services: string; settings: string; bookmarks: string } }}
+ * @returns {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string; config_paths: { services: string; settings: string; bookmarks: string; widgets?: string } }}
  */
 export function loadHomepageConfigFiles(homepage, packageRoot) {
   const paths = homepageConfigFilePaths(homepage);
-  return {
+  const loaded = {
     servicesYaml: readPackageConfigFile(packageRoot, paths.services, "services"),
     settingsYaml: readPackageConfigFile(packageRoot, paths.settings, "settings"),
     bookmarksYaml: readPackageConfigFile(packageRoot, paths.bookmarks, "bookmarks"),
     config_paths: paths,
   };
+  if (paths.widgets) {
+    loaded.widgetsYaml = readPackageConfigFile(packageRoot, paths.widgets, "widgets");
+  }
+  return loaded;
 }

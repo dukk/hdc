@@ -2,6 +2,7 @@ export {
   applyQemuCloudInit,
   cloneQemuGuest,
   locateGuest,
+  migrateQemuGuest,
   startQemuGuest,
   stopAndDestroyQemu,
   waitForQemuGuestSshAfterBoot,

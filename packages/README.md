@@ -45,6 +45,7 @@ Shared capabilities: hypervisors, SaaS APIs, NAS, and network controllers. Sever
 | [smtp2go](infrastructure/smtp2go/README.md) | `smtp2go` | SMTP2GO | [config.example.json](infrastructure/smtp2go/config.example.json) | SMTP2GO REST API; outbound mail via postfix-relay |
 | [synology-nas](infrastructure/synology-nas/README.md) | `synology-nas` | Synology NAS | [config.example.json](infrastructure/synology-nas/config.example.json) | DSM `https://<nas-ip>:5001`; SSH for automation |
 | [twilio](infrastructure/twilio/README.md) | `twilio` | Twilio | [config.example.json](infrastructure/twilio/config.example.json) | Twilio REST API (SIP trunks, phone numbers) |
+| [uptimerobot](infrastructure/uptimerobot/README.md) | `uptimerobot` | UptimeRobot | [config.example.json](infrastructure/uptimerobot/config.example.json) | UptimeRobot API v2 (monitors, status pages, alert contacts) |
 | [ubuntu](infrastructure/ubuntu/README.md) | `ubuntu` | Ubuntu server | [config.example.json](infrastructure/ubuntu/config.example.json) | SSH to bootstrap hosts; Docker deploy over SSH |
 | [unifi-network](infrastructure/unifi-network/README.md) | `unifi-network` | UniFi Network | [config.example.json](infrastructure/unifi-network/config.example.json) | UniFi controller API (sites, port forwards) |
 
@@ -94,6 +95,7 @@ Applications and workloads on Proxmox guests, Synology, or configure-only SSH ta
 | [splunk](services/splunk/README.md) | `splunk` | Splunk Free (standalone) | [config.example.json](services/splunk/config.example.json) | `https://<guest-ip>:8000` (Splunk Web) |
 | [step-ca](services/step-ca/README.md) | `step-ca` | Smallstep step-ca | [config.example.json](services/step-ca/config.example.json) | HTTPS `:443`; ACME `https://<ca-host>/acme/acme/directory` |
 | [trivy](services/trivy/README.md) | `trivy` | Trivy scanner node | [config.example.json](services/trivy/config.example.json) | SSH scan runner (no web UI) |
+| [unleash](services/unleash/README.md) | `unleash` | Unleash feature flags | [config.example.json](services/unleash/config.example.json) | `http://<guest-ip>:4242` or HTTPS via nginx-waf |
 | [uptime-kuma](services/uptime-kuma/README.md) | `uptime-kuma` | Uptime Kuma monitoring | [config.example.json](services/uptime-kuma/config.example.json) | `http://<guest-ip>:3001` |
 | [valkey](services/valkey/README.md) | `valkey` | Valkey Cluster | [config.example.json](services/valkey/config.example.json) | `:6379` on `<node-ip>` (cluster clients) |
 | [vaultwarden](services/vaultwarden/README.md) | `vaultwarden` | Vaultwarden password manager | [config.example.json](services/vaultwarden/config.example.json) | `https://<domain-from-config>` via nginx-waf; `/admin` |

@@ -30,11 +30,21 @@ export function deriveUrisFromNginxWaf(deriveFrom) {
     return { redirect_uris: [], javascript_origins: [], hostname: null };
   }
   const cfg = loadNginxWafConfig(deriveFrom.nginx_waf_config_path);
-  const sites = Array.isArray(cfg.sites) ? cfg.sites : [];
+  /** @type {Record<string, unknown>[]} */
+  const siteLists = [];
+  if (Array.isArray(cfg.deployment_groups)) {
+    for (const group of cfg.deployment_groups) {
+      if (isObject(group) && Array.isArray(group.sites)) {
+        siteLists.push(...group.sites.filter(isObject));
+      }
+    }
+  }
+  if (Array.isArray(cfg.sites)) {
+    siteLists.push(...cfg.sites.filter(isObject));
+  }
   /** @type {Record<string, unknown> | null} */
   let site = null;
-  for (const s of sites) {
-    if (!isObject(s)) continue;
+  for (const s of siteLists) {
     if (typeof s.id === "string" && s.id.trim() === deriveFrom.site_id) {
       site = s;
       break;
@@ -45,12 +55,14 @@ export function deriveUrisFromNginxWaf(deriveFrom) {
       `nginx-waf site not found: ${deriveFrom.site_id} in ${deriveFrom.nginx_waf_config_path}`
     );
   }
-  const names = Array.isArray(site.server_names)
-    ? site.server_names.map((n) => String(n).trim()).filter(Boolean)
-    : [];
+  const names = Array.isArray(site.host_names)
+    ? site.host_names.map((n) => String(n).trim()).filter(Boolean)
+    : Array.isArray(site.server_names)
+      ? site.server_names.map((n) => String(n).trim()).filter(Boolean)
+      : [];
   if (!names.length) {
     throw new Error(
-      `nginx-waf site ${deriveFrom.site_id} has no server_names in ${deriveFrom.nginx_waf_config_path}`
+      `nginx-waf site ${deriveFrom.site_id} has no host_names in ${deriveFrom.nginx_waf_config_path}`
     );
   }
   return buildDerivedUris(names[0], deriveFrom.callback_path);

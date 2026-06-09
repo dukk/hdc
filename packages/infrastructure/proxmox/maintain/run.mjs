@@ -38,6 +38,9 @@
  *   --skip-load-report     Skip configured CPU/RAM/disk load report (stderr); markdown may still collect capacity
  *   --skip-oem-license     Skip OEM Windows SLIC/MSDM probe on hypervisors
  *   --skip-guest-agent     Skip QEMU guest agent config + ping report
+ *   --expand-guest-rootfs  Expand running Linux guest root disks in +8G steps until usage is below 50% (opt-in)
+ *   --guest-rootfs-threshold <pct>  Used-percent trigger (default 50; config: provision.guest_rootdisk.max_used_percent)
+ *   --guest-rootfs-increment-gb <n>  GiB per expansion step (default 8; config: provision.guest_rootdisk.increment_gb)
  *   --skip-host-firewall   Skip Proxmox host firewall (SSH/8006 restriction)
  *   --skip-guest-firewall  Skip Proxmox guest firewall rules on managed vmids
  *   --skip-mail-relay      Skip Postfix satellite (internal mail relay) on hypervisors
@@ -76,6 +79,7 @@ import {
 } from "../lib/proxmox-host-load-report.mjs";
 import { runProxmoxOemWindowsLicenseReport } from "../lib/proxmox-oem-windows-license.mjs";
 import { runProxmoxQemuGuestAgentReport } from "../lib/proxmox-qemu-guest-agent.mjs";
+import { runProxmoxGuestRootdiskMaintain } from "../lib/proxmox-guest-rootdisk-maintain.mjs";
 import { runProxmoxHostFirewallMaintain } from "../lib/proxmox-host-firewall-maintain.mjs";
 import { runProxmoxGuestFirewallMaintain } from "../lib/proxmox-guest-firewall-maintain.mjs";
 import { isProxmoxConfigObject, isProxmoxHostDown } from "../lib/proxmox-config.mjs";
@@ -155,6 +159,19 @@ function flagValuesFromArgv(argv, flag) {
   return out;
 }
 
+/**
+ * @param {string[]} argv
+ * @param {string} flag
+ * @returns {string | undefined}
+ */
+function flagValueFromArgv(argv, flag) {
+  const idx = argv.indexOf(flag);
+  if (idx >= 0 && argv[idx + 1] && !argv[idx + 1].startsWith("--")) {
+    return argv[idx + 1];
+  }
+  return undefined;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const skipTemplates = argv.includes("--skip-templates");
@@ -174,6 +191,9 @@ async function main() {
   const skipLoadReport = argv.includes("--skip-load-report");
   const skipOemLicense = argv.includes("--skip-oem-license");
   const skipGuestAgent = argv.includes("--skip-guest-agent");
+  const expandGuestRootfs = argv.includes("--expand-guest-rootfs");
+  const guestRootfsThreshold = flagValueFromArgv(argv, "--guest-rootfs-threshold");
+  const guestRootfsIncrementGb = flagValueFromArgv(argv, "--guest-rootfs-increment-gb");
   const skipHostFirewall = argv.includes("--skip-host-firewall");
   const skipGuestFirewall = argv.includes("--skip-guest-firewall");
   const skipMailRelay = argv.includes("--skip-mail-relay");
@@ -203,6 +223,7 @@ async function main() {
     !skipApiToken ||
     !skipServiceAccounts ||
     !skipLoadReport ||
+    expandGuestRootfs ||
     !noReport;
 
   try {
@@ -935,6 +956,56 @@ async function main() {
         title: "QEMU guest agent",
         ran: false,
         skipReason: "--skip-guest-agent",
+      });
+    }
+
+    if (expandGuestRootfs) {
+      /** @type {Record<string, string>} */
+      const guestRootdiskFlags = {};
+      if (guestRootfsThreshold !== undefined) {
+        guestRootdiskFlags["guest-rootfs-threshold"] = guestRootfsThreshold;
+      }
+      if (guestRootfsIncrementGb !== undefined) {
+        guestRootdiskFlags["guest-rootfs-increment-gb"] = guestRootfsIncrementGb;
+      }
+      try {
+        const rootdiskResult = await runProxmoxGuestRootdiskMaintain({
+          packageRoot,
+          log,
+          warn,
+          dryRun,
+          env: deps.env,
+          vault,
+          flags: guestRootdiskFlags,
+        });
+        reportCtx.guestRootdisk = rootdiskResult;
+        if (!rootdiskResult.ok) exitCode = 1;
+        for (const w of rootdiskResult.warnings ?? []) {
+          pushWarning(reportCtx, w);
+        }
+        recordStep(reportCtx, {
+          id: "guest-rootdisk",
+          title: "Guest root disk expansion",
+          ran: true,
+          ok: rootdiskResult.ok,
+        });
+      } catch (e) {
+        log(`Guest root disk maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
+        exitCode = 1;
+        recordStep(reportCtx, {
+          id: "guest-rootdisk",
+          title: "Guest root disk expansion",
+          ran: true,
+          ok: false,
+          notes: [String(/** @type {Error} */ (e).message || e)],
+        });
+      }
+    } else {
+      recordStep(reportCtx, {
+        id: "guest-rootdisk",
+        title: "Guest root disk expansion",
+        ran: false,
+        skipReason: "pass --expand-guest-rootfs to run",
       });
     }
 

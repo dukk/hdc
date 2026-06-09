@@ -6,14 +6,14 @@ import {
 
 const drawSite = {
   id: "draw",
-  server_names: ["draw.dukk.org"],
+  host_names: ["draw.dukk.org"],
   upstream: "http://10.0.0.155:8080",
   tls: { enabled: true, cert_name: "draw.dukk.org" },
 };
 
 const vaultSite = {
   id: "vaultwarden",
-  server_names: ["vault.dukk.org", "vault.hdc.dukk.org"],
+  host_names: ["vault.dukk.org", "vault.hdc.dukk.org"],
   upstream: "http://10.0.0.123:80",
   tls: { enabled: true, cert_name: "vault.dukk.org" },
 };
@@ -38,7 +38,7 @@ server {
 }
 `;
     const parsed = parseLiveSiteVhost(content, "draw");
-    expect(parsed.server_names).toEqual(["draw.dukk.org", "draw.dukk.org"]);
+    expect(parsed.host_names).toEqual(["draw.dukk.org", "draw.dukk.org"]);
     expect(parsed.upstream).toBe("http://10.0.0.155:8080");
     expect(parsed.has_listen_443).toBe(true);
   });

@@ -58,3 +58,10 @@
         href: http://pi-hole-a.hdc.dukk.org/admin
         description: DNS ad-block
         siteMonitor: http://10.0.0.4/admin
+        showStats: true
+        widget:
+          type: pihole
+          url: "{{HOMEPAGE_VAR_PIHOLE_A_URL}}"
+          version: 6
+          key: "{{HOMEPAGE_VAR_PIHOLE_A_KEY}}"
+          fields: ["queries", "blocked", "blocked_percent", "gravity"]

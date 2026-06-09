@@ -97,6 +97,13 @@ export function syncPrimaryZoneFiles(opts) {
     log.info(`${exec.label}: zone ${zoneId} — ${bundle?.records.length ?? 0} records, serial ${serial}`);
   }
 
+  // Dynamic updates (RFC2136 / certbot dns-01) need bind to write .jnl journals in this directory.
+  runChecked(
+    exec,
+    "chown bind:bind /var/lib/bind/zones /var/lib/bind/zones/*.zone && chmod 775 /var/lib/bind/zones",
+    log,
+  );
+
   // Full restart: rndc reload leaves stale in-memory zone data when allow-update is set.
   runChecked(exec, "systemctl restart named", log);
 

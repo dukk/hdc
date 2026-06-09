@@ -31,11 +31,11 @@ node tools/hdc/cli.mjs run service homepage maintain --
 
 ## Config
 
-- `homepage.config_files` — paths relative to `packages/services/homepage/` (`services`, `settings`, `bookmarks` YAML). hdc checks the public repo first, then hdc-private.
+- `homepage.config_files` — paths relative to `packages/services/homepage/` (`services`, `settings`, `bookmarks`, optional `widgets` YAML). hdc checks the public repo first, then hdc-private.
 - `homepage.allowed_hosts[]` — required for `HOMEPAGE_ALLOWED_HOSTS` (comma-separated in container env)
 - `homepage.public_url` — optional HTTPS URL shown in reports (e.g. `https://hdc.dukk.org`)
 
-Edit `homepage/services.yaml` (and optional `settings.yaml` / `bookmarks.yaml`) in hdc-private and run `maintain` to refresh the dashboard. Use native gethomepage keys (`siteMonitor`, `disableIndexing`, etc.) — see [Homepage docs](https://gethomepage.dev/configs/services/).
+Edit `homepage/services.yaml` (and optional `settings.yaml` / `bookmarks.yaml` / `widgets.yaml`) in hdc-private and run `maintain` to refresh the dashboard. Use native gethomepage keys (`siteMonitor`, `disableIndexing`, etc.) — see [Homepage docs](https://gethomepage.dev/configs/services/). Header info bars (CPU, memory, disk, search, datetime) live in `widgets.yaml` — see [info widgets](https://gethomepage.dev/widgets/info/datetime/).
 
 Trivy and WireGuard have no browser UI in this deployment; omit them from the dashboard or link only via `siteMonitor` if you add a health endpoint.
 
@@ -62,6 +62,16 @@ layout:
 ```
 
 See `homepage/services.example.yaml` for the cluster + node widget pattern.
+
+## Pi-hole widget
+
+DNS query stats for Pi-hole instances use the admin password from [`packages/services/pi-hole/config.json`](../pi-hole/config.example.json) `defaults.pihole.webpassword` (injected at maintain time, not stored in `services.yaml`).
+
+1. Enable `homepage.pihole_widget` in homepage config (`version`, optional `instances[]`).
+2. Add `widget:` blocks to `homepage/services.yaml` using `{{HOMEPAGE_VAR_PIHOLE_*}}` placeholders.
+3. Run `homepage maintain` to push `.env` into the CT.
+
+Widget `url` must be the Pi-hole base URL (LAN IP, no `/admin`). Set `version: 6` when running Pi-hole v6+.
 
 ## After deploy
 

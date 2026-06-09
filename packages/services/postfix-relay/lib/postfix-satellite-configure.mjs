@@ -66,8 +66,7 @@ export function configurePostfixSatellite(opts) {
   );
   runChecked(
     exec,
-    "grep -q '^include /etc/postfix/main.cf.d' /etc/postfix/main.cf 2>/dev/null || " +
-      "echo 'include /etc/postfix/main.cf.d' >> /etc/postfix/main.cf",
+    "sed -i '/^include \\/etc\\/postfix\\/main.cf.d/d' /etc/postfix/main.cf 2>/dev/null || true",
     log,
   );
   runChecked(
@@ -78,6 +77,7 @@ export function configurePostfixSatellite(opts) {
       `postconf -e ${shellQuote(`relayhost=${relayhost}`)}`,
       `postconf -e ${shellQuote(`inet_interfaces=${inetInterfaces}`)}`,
       "postconf -e 'mydestination='",
+      "postconf -e 'local_transport=error:local delivery disabled on satellite'",
     ].join(" && "),
     log,
   );

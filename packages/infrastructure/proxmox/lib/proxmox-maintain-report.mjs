@@ -9,6 +9,7 @@ import {
   formatGuestLine,
   formatHostLoadSummary,
 } from "./proxmox-host-load-report.mjs";
+import { renderGuestRootdiskMarkdown } from "./proxmox-guest-rootdisk-maintain.mjs";
 
 /**
  * @typedef {object} MaintainStepRecord
@@ -32,6 +33,7 @@ import {
  * @property {string[]} downHosts
  * @property {import("./proxmox-oem-windows-license.mjs").OemLicenseHostResult[]} [oemWindowsLicense]
  * @property {import("./proxmox-qemu-guest-agent.mjs").QemuGuestAgentReportData | null} [qemuGuestAgent]
+ * @property {import("./proxmox-guest-rootdisk-maintain.mjs").GuestRootdiskReportData | null} [guestRootdisk]
  * @property {Record<string, unknown>[]} [mailRelay]
  * @property {number | null} exitCode
  * @property {string | null} reportPath
@@ -60,6 +62,7 @@ export function createMaintainReportContext(argv) {
     skipLoadReport: argv.includes("--skip-load-report"),
     skipOemLicense: argv.includes("--skip-oem-license"),
     skipGuestAgent: argv.includes("--skip-guest-agent"),
+    expandGuestRootfs: argv.includes("--expand-guest-rootfs"),
     skipMailRelay: argv.includes("--skip-mail-relay"),
     noDownload: argv.includes("--no-download"),
     noBuildQemu: argv.includes("--no-build-qemu"),
@@ -82,6 +85,7 @@ export function createMaintainReportContext(argv) {
     downHosts: [],
     oemWindowsLicense: [],
     qemuGuestAgent: null,
+    guestRootdisk: null,
     mailRelay: [],
     exitCode: null,
     reportPath: null,
@@ -576,6 +580,10 @@ export function renderMaintainReportMarkdown(ctx) {
 
   if (ctx.qemuGuestAgent) {
     lines.push(...renderQemuGuestAgentMarkdown(ctx.qemuGuestAgent));
+  }
+
+  if (ctx.guestRootdisk?.guests?.length) {
+    lines.push(...renderGuestRootdiskMarkdown(ctx.guestRootdisk.guests));
   }
 
   if (ctx.templateChecks.length) {

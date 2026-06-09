@@ -37,6 +37,7 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
+import { resolveHomepagePiholeWidgetEnv } from "../lib/homepage-pihole-widget.mjs";
 import { resolveHomepageProxmoxWidgetEnv } from "../lib/homepage-proxmox-widget.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,7 @@ function ensurePackageConfig() {
 }
 
 const root = repoRoot();
+const piholeRoot = join(root, "packages", "services", "pi-hole");
 const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
@@ -318,9 +320,9 @@ async function deployOne(deployment, flags, log, runOpts) {
 
   /** @type {string[]} */
   let widgetEnvLines = [];
-  if (runOpts.vaultAccess) {
-    try {
-      const widgetEnv = await resolveHomepageProxmoxWidgetEnv({
+  try {
+    if (runOpts.vaultAccess) {
+      const proxmoxWidgetEnv = await resolveHomepageProxmoxWidgetEnv({
         homepage: homepageCfg,
         proxmoxPackageRoot: proxmoxRoot,
         vaultAccess: runOpts.vaultAccess,
@@ -328,16 +330,21 @@ async function deployOne(deployment, flags, log, runOpts) {
         spawnSync: (runOpts.cliDeps ?? createNodeCliDeps()).spawnSync,
         readLineQuestion: (runOpts.cliDeps ?? createNodeCliDeps()).readLineQuestion,
       });
-      if (widgetEnv) widgetEnvLines = widgetEnv.lines;
-    } catch (e) {
-      return {
-        ok: false,
-        system_id: systemId,
-        host_id: hostId,
-        mode,
-        message: String(/** @type {Error} */ (e).message || e),
-      };
+      if (proxmoxWidgetEnv) widgetEnvLines.push(...proxmoxWidgetEnv.lines);
     }
+    const piholeWidgetEnv = await resolveHomepagePiholeWidgetEnv({
+      homepage: homepageCfg,
+      piholePackageRoot: piholeRoot,
+    });
+    if (piholeWidgetEnv) widgetEnvLines.push(...piholeWidgetEnv.lines);
+  } catch (e) {
+    return {
+      ok: false,
+      system_id: systemId,
+      host_id: hostId,
+      mode,
+      message: String(/** @type {Error} */ (e).message || e),
+    };
   }
 
   if (shouldInstall(install)) {

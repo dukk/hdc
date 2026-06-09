@@ -16,6 +16,44 @@ import {
   shouldSkipMailRelayForDeployment,
 } from "../../packages/lib/postfix-satellite-ensure.mjs";
 import { mailEnabledFromConfig } from "../../packages/lib/mail-relay-settings.mjs";
+import { configurePostfixSatellite } from "../../packages/services/postfix-relay/lib/postfix-satellite-configure.mjs";
+
+describe("configurePostfixSatellite", () => {
+  it("removes invalid main.cf include and sets relay via postconf", () => {
+    /** @type {string[]} */
+    const commands = [];
+    const exec = {
+      label: "test-ssh",
+      run(cmd, _opts) {
+        commands.push(cmd);
+        if (cmd.includes("dpkg -s postfix")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.includes("apt-get install")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.startsWith("mkdir -p")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.includes("base64 -d")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.includes("sed -i")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.includes("postconf -e")) return { status: 0, stdout: "", stderr: "" };
+        if (cmd.includes("postfix check")) return { status: 0, stdout: "", stderr: "" };
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    };
+    const log = { info: () => {} };
+
+    configurePostfixSatellite({
+      exec,
+      log,
+      relayhost: "[10.0.0.60]",
+      myhostname: "nginx-waf-a.hdc.dukk.org",
+      myorigin: "hdc.dukk.org",
+      inetInterfaces: "loopback-only",
+    });
+
+    const joined = commands.join("\n");
+    expect(joined).toContain("sed -i '/^include \\/etc\\/postfix\\/main.cf.d/d'");
+    expect(joined).not.toContain("echo 'include /etc/postfix/main.cf.d'");
+    expect(joined).toContain("relayhost=[10.0.0.60]");
+    expect(joined).toContain("local_transport=error:local delivery disabled on satellite");
+  });
+});
 
 describe("postfix-relay-render (SMTP2GO)", () => {
   it("renderRelayCfSnippet matches SMTP2GO submission settings", () => {

@@ -1,5 +1,6 @@
 import { stderr as errout } from "node:process";
 
+import { growRootFilesystemScript } from "../../../lib/qemu-rootfs-resize.mjs";
 import {
   composeDir,
   composeFileUrl,
@@ -38,6 +39,7 @@ export function buildInstallScript(
   if (dataDiskMountScript) {
     lines.push(dataDiskMountScript);
   }
+  lines.push(growRootFilesystemScript());
   for (const p of mkdirPaths) {
     const mp = p.replace(/'/g, `'\\''`);
     lines.push(`mkdir -p '${mp}'`);

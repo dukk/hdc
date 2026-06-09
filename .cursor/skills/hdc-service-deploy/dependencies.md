@@ -26,7 +26,7 @@ Use this when filling **section 7** of [plan-template.md](plan-template.md). Def
 | `nagios` | service | `maintain` | Regenerate Nagios hosts from BIND forward A records |
 | `proxmox` | infrastructure | `maintain` | Templates, storage — rarely part of app deploy; use for capacity checks |
 
-Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-waf), `HDC_NGINX_WAF_LE_EMAIL`, `HDC_NGINX_LE_EMAIL`, `HDC_CLOUDFLARE_API_TOKEN`.
+Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-waf), `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL`, `HDC_NGINX_LE_EMAIL`, `HDC_CLOUDFLARE_API_TOKEN`.
 
 ## Service matrix (typical — confirm per README)
 

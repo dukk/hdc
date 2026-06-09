@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/unleash.config.schema.json",
+  "title": "HDC unleash service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^unleash-[a-z]+$" },
+          "mode": { "enum": ["proxmox-lxc"] },
+          "proxmox": { "type": "object" },
+          "unleash": {
+            "type": "object",
+            "properties": {
+              "image_tag": { "type": "string" },
+              "postgres_image_tag": { "type": "string" },
+              "host_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "public_url": { "type": "string" },
+              "admin_user": { "type": "string" },
+              "admin_password_vault_key": { "type": "string" },
+              "db_password_vault_key": { "type": "string" },
+              "log_level": { "type": "string" }
+            }
+          },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "compose_dir": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

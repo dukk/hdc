@@ -3,13 +3,16 @@ import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 /**
  * Query Immich deployments (config summary + optional live VM status).
  *
- * Usage: hdc run service immich query -- [--instance a]
+ * Usage: hdc run service immich query -- [--instance a | --system-id vm-immich-a]
  *        hdc run service immich query -- --live
+ *        hdc run service immich query -- --system-id vm-immich-a --admin
+ *        hdc run service immich query -- --system-id vm-immich-a --import --yes
  */
+import { createInterface } from "node:readline/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { stderr as errout } from "node:process";
+import { stdin as input, stderr as errout } from "node:process";
 
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
@@ -22,6 +25,10 @@ import {
 import { queryImmichOnHost } from "../lib/query-status.mjs";
 import { queryImmichOnSynology } from "../lib/immich-synology.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { diffSystemConfigSections, smtpSummaryFromSystemConfig } from "../lib/immich-admin-config.mjs";
+import { fetchImmichAdminState } from "../lib/immich-admin-sync.mjs";
+import { importImmichAdminToConfig } from "../lib/immich-import.mjs";
+import { createImmichVaultAccess } from "../lib/vault-deps.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +54,19 @@ function loadCfg() {
   return loaded;
 }
 
+/**
+ * @param {string} question
+ */
+async function confirm(question) {
+  const rl = createInterface({ input, output: errout });
+  try {
+    const answer = await rl.question(question);
+    return /^y(es)?$/i.test(String(answer).trim());
+  } finally {
+    rl.close();
+  }
+}
+
 async function main() {
   const loaded = loadCfg();
   const rel = _pkgConfig
@@ -55,8 +75,14 @@ async function main() {
   const cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;
+  const admin = flagGet(flags, "admin") !== undefined;
+  const doImport = flagGet(flags, "import") !== undefined;
+  const yes = flagGet(flags, "yes") !== undefined;
 
   errout.write(`[hdc] ${target} ${verb}: config ${rel} ${loaded.ok ? "loaded" : "not loaded"}.\n`);
+  if (doImport) {
+    errout.write(`[hdc] ${target} ${verb}: import will write sanitized immich.system_config to config.\n`);
+  }
 
   /** @type {unknown[]} */
   let deployments = [];
@@ -76,6 +102,87 @@ async function main() {
 
   /** @type {Record<string, unknown>[]} */
   const liveResults = [];
+  /** @type {Record<string, unknown> | null} */
+  let adminResult = null;
+
+  if ((admin || doImport) && cfg && !configError) {
+    let selected;
+    try {
+      selected = resolveImmichDeployments(cfg, flags);
+    } catch (e) {
+      configError = String(/** @type {Error} */ (e).message || e);
+    }
+
+    if (selected && selected.length === 1) {
+      const d = selected[0];
+      const immich = isObject(d.immich) ? d.immich : {};
+      const configure = isObject(d.configure) ? d.configure : {};
+      const ssh = isObject(configure.ssh) ? configure.ssh : {};
+      const sshHost = typeof ssh.host === "string" ? ssh.host.trim() : "";
+
+      try {
+        const vault = createImmichVaultAccess();
+        errout.write(`[hdc] ${target} ${verb}: admin query ${d.systemId} …\n`);
+        const state = await fetchImmichAdminState({
+          vault,
+          immich,
+          sshHost: sshHost || null,
+          log: (line) => errout.write(`${line}\n`),
+        });
+
+        const configured = immich.system_config;
+        const driftSections = diffSystemConfigSections(configured, state.live);
+        const hasDrift = driftSections.length > 0;
+
+        /** @type {Record<string, unknown> | null} */
+        let importMeta = null;
+        if (doImport) {
+          if (!yes) {
+            const ok = await confirm(
+              `Replace immich.system_config with live sanitized config (${Object.keys(state.live ?? {}).length} sections)? [y/N] `,
+            );
+            if (!ok) {
+              errout.write(`[hdc] ${target} ${verb}: import aborted (use --yes to skip prompt).\n`);
+              process.exitCode = 1;
+              process.stdout.write(
+                `${JSON.stringify({ ok: false, target, verb, message: "import not confirmed" }, null, 2)}\n`,
+              );
+              return;
+            }
+          }
+          importMeta = importImmichAdminToConfig({
+            packageRoot,
+            live: state.live,
+            log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+          });
+        }
+
+        adminResult = {
+          ok: true,
+          system_id: d.systemId,
+          api_reachable: true,
+          api_base: state.api_base,
+          has_drift: hasDrift,
+          drift_sections: driftSections,
+          smtp_summary: state.smtp_summary,
+          configured_sections: isObject(configured) ? Object.keys(configured).sort() : [],
+          import: importMeta,
+        };
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        errout.write(`[hdc] ${target} ${verb}: admin query failed: ${msg}\n`);
+        adminResult = {
+          ok: false,
+          system_id: d.systemId,
+          api_reachable: false,
+          message: msg,
+          smtp_summary: smtpSummaryFromSystemConfig(null),
+        };
+      }
+    } else if (selected && selected.length !== 1) {
+      configError = "admin query/import requires exactly one deployment (--system-id)";
+    }
+  }
 
   if (live && cfg && !configError) {
     let selected;
@@ -132,8 +239,9 @@ async function main() {
     }
   }
 
+  const adminOk = adminResult ? adminResult.ok !== false : true;
   const payload = {
-    ok: !configError && (loaded.ok || loaded.missing),
+    ok: !configError && (loaded.ok || loaded.missing) && adminOk,
     target,
     verb,
     config_path: rel,
@@ -145,10 +253,12 @@ async function main() {
     deployments,
     live_requested: live,
     live: liveResults.length ? liveResults : undefined,
+    admin_requested: admin || doImport,
+    admin: adminResult ?? undefined,
   };
 
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  process.exitCode = configError ? 1 : 0;
+  process.exitCode = configError || !adminOk ? 1 : 0;
 }
 
 main().catch((e) => {

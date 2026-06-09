@@ -80,7 +80,7 @@ export async function ensureWazuhAgent(opts) {
   let regPass = "";
   if (opts.vaultAccess) {
     try {
-      regPass = (await opts.vaultAccess.getSecret(vaultKey)) || "";
+      regPass = (await opts.vaultAccess.getSecret(vaultKey, { optional: true })) || "";
     } catch {
       regPass = "";
     }

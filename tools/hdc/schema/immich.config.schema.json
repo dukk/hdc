@@ -37,8 +37,18 @@
               "upload_location": { "type": "string" },
               "db_data_location": { "type": "string" },
               "db_password_vault_key": { "type": "string" },
+              "api_key_vault_key": { "type": "string" },
               "timezone": { "type": "string" },
-              "disable_machine_learning": { "type": "boolean" }
+              "disable_machine_learning": { "type": "boolean" },
+              "mail": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "from": { "type": "string" },
+                  "reply_to": { "type": "string" }
+                }
+              },
+              "system_config": { "type": ["object", "null"] }
             }
           },
           "install": {

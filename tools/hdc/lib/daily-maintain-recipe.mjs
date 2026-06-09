@@ -37,6 +37,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "open-webui",
   "openspeedtest",
   "paperless-ngx",
+  "glances",
   "greenbone",
   "hermes",
   "scanopy",
@@ -44,6 +45,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "shlink",
   "solidtime",
   "stirling-pdf",
+  "unleash",
   "uptime-kuma",
   "vaultwarden",
   "vikunja",
@@ -56,6 +58,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "asterisk",
   "wireguard",
   "postfix-relay",
+  "safeline",
 ];
 
 /** @type {readonly string[]} */
@@ -203,7 +206,11 @@ export function dailyRecipeSteps() {
   }
 
   for (const id of DOCKER_COMPOSE_MAINTAIN_IDS) {
-    steps.push(maintainService(id));
+    if (id === "safeline") {
+      steps.push(maintainService(id, ["--skip-sites"]));
+    } else {
+      steps.push(maintainService(id));
+    }
   }
 
   for (const id of PACKAGE_UPGRADE_MAINTAIN_IDS) {

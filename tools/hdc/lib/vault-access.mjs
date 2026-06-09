@@ -40,6 +40,7 @@ export function clearVaultPassphraseProcessCache() {
  * @typedef {object} GetSecretOptions
  * @property {string} [promptLabel]
  * @property {boolean} [allowEmpty]
+ * @property {boolean} [optional] When true, return "" if the secret is missing instead of prompting.
  * @property {(value: string) => boolean | Promise<boolean>} [verify] If provided, must return true before saving.
  */
 
@@ -254,12 +255,25 @@ export function createVaultAccess(deps) {
    * @param {GetSecretOptions} [options]
    * @returns {Promise<string>}
    */
+  /**
+   * @param {string} key
+   */
+  function secretFromEnv(key) {
+    const v = deps.env[key];
+    return typeof v === "string" ? v.trim() : "";
+  }
+
   async function getSecretLocal(key, options = {}) {
-    const { promptLabel, verify, allowEmpty = false } = options;
+    const { promptLabel, verify, allowEmpty = false, optional = false } = options;
+    const fromEnv = secretFromEnv(key);
+    if (fromEnv) return fromEnv;
+
     let data = await readLocalSecrets({});
     if (data === null) data = {};
     const cur = data[key];
     if (typeof cur === "string" && cur.length > 0) return cur;
+
+    if (optional) return "";
 
     const label = promptLabel ?? `Secret value for ${key}`;
     for (;;) {
@@ -290,7 +304,10 @@ export function createVaultAccess(deps) {
    * @returns {Promise<string>}
    */
   async function getSecret(key, options = {}) {
-    const { promptLabel, verify, allowEmpty = false } = options;
+    const { promptLabel, verify, allowEmpty = false, optional = false } = options;
+    const fromEnv = secretFromEnv(key);
+    if (fromEnv) return fromEnv;
+
     const useLocalOnly = isLocalOnlyVaultKey(key) || backendMode() === "local";
 
     if (useLocalOnly) {
@@ -312,6 +329,8 @@ export function createVaultAccess(deps) {
       );
       const cur = bwGetPassword(vwCli, session, key);
       if (typeof cur === "string" && cur.length > 0) return cur;
+
+      if (optional) return "";
 
       const label = promptLabel ?? `Secret value for ${key}`;
       for (;;) {

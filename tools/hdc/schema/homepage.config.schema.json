@@ -35,7 +35,12 @@
                 "properties": {
                   "services": { "type": "string", "minLength": 1 },
                   "settings": { "type": "string", "minLength": 1 },
-                  "bookmarks": { "type": "string", "minLength": 1 }
+                  "bookmarks": { "type": "string", "minLength": 1 },
+                  "widgets": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional header info widgets (datetime, search, resources, …)."
+                  }
                 },
                 "additionalProperties": false
               },
@@ -51,6 +56,23 @@
                     "type": "array",
                     "items": { "type": "string", "minLength": 1 },
                     "description": "Proxmox host ids for per-node widget URL env vars."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "pihole_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "description": "Pi-hole API version for gethomepage widget (6 for Pi-hole v6+)."
+                  },
+                  "instances": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Instance letters (a, b) or system_ids (pi-hole-a); empty = all deployments."
                   }
                 },
                 "additionalProperties": false

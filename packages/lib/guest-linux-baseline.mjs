@@ -1,4 +1,7 @@
-import { noRebootFromFlags } from "../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import {
+  noRebootFromFlags,
+  parseGuestResourceSizing,
+} from "../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { ensureAdminUser } from "./admin-user-ensure.mjs";
 import { ensureClamav } from "./clamav-ensure.mjs";
 import { ensureClamavScanSchedule } from "./clamav-scan-schedule.mjs";
@@ -27,6 +30,20 @@ function isObject(v) {
  * @param {Record<string, unknown>} [deployment]
  * @param {Record<string, string>} [flags]
  */
+/**
+ * @param {Record<string, unknown>} [deployment]
+ * @returns {number | undefined}
+ */
+function memoryMbFromDeployment(deployment) {
+  if (!deployment || !isObject(deployment)) return undefined;
+  const guestType = proxmoxGuestTypeFromMode(deployment.mode);
+  if (!guestType) return undefined;
+  const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
+  const block = guestType === "qemu" ? px.qemu : px.lxc;
+  const sizing = parseGuestResourceSizing(block);
+  return sizing?.memoryMb;
+}
+
 function baselineFlagsForDeployment(deployment, flags) {
   const systemId =
     deployment && typeof deployment.system_id === "string"
@@ -197,7 +214,10 @@ export async function ensureGuestLinuxBaseline(opts) {
     }
   }
 
-  const baselineOpts = { ...opts, flags: effectiveFlags };
+  const memoryMb = memoryMbFromDeployment(
+    deployment && isObject(deployment) ? deployment : undefined,
+  );
+  const baselineOpts = { ...opts, flags: effectiveFlags, memoryMb };
 
   const hdcUser = await ensureHdcUser(baselineOpts);
   const adminUser = await ensureAdminUser(baselineOpts);

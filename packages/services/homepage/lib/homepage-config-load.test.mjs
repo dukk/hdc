@@ -51,4 +51,24 @@ describe("homepage-config-load", () => {
     expect(loaded.settingsYaml).toContain("title:");
     expect(loaded.bookmarksYaml).toBe("[]\n");
   });
+
+  it("loadHomepageConfigFiles reads optional widgets yaml", () => {
+    const exampleWidgets = join(packageRoot, "homepage", "widgets.example.yaml");
+    if (!existsSync(exampleWidgets)) {
+      return;
+    }
+    const loaded = loadHomepageConfigFiles(
+      {
+        config_files: {
+          services: "homepage/services.example.yaml",
+          settings: "homepage/settings.example.yaml",
+          bookmarks: "homepage/bookmarks.example.yaml",
+          widgets: "homepage/widgets.example.yaml",
+        },
+      },
+      packageRoot,
+    );
+    expect(loaded.widgetsYaml).toContain("datetime:");
+    expect(loaded.config_paths.widgets).toBe("homepage/widgets.example.yaml");
+  });
 });

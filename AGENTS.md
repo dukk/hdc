@@ -131,7 +131,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`, `openrouter`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
 - **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
@@ -155,7 +155,7 @@ Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`package
 
 1. **`hdc` automation user** — fixed username `hdc`; per-system vault key `HDC_USER_HDC_PASSWORD_<SYSTEM_ID>` (auto-generated on first maintain when missing). Passwordless sudo via `/etc/sudoers.d/hdc-automation`. Operator `~/.ssh` public keys installed on `hdc`. Helpers: [`packages/lib/hdc-user-ensure.mjs`](packages/lib/hdc-user-ensure.mjs). Skip with `--skip-hdc-user` or `--skip-hdc-ssh-keys`.
 2. **Local sudo admin** — username from `HDC_ADMIN_USER` in repo `.env`; password in vault as `HDC_ADMIN_USER_PASSWORD`. Helpers: [`packages/lib/admin-user-ensure.mjs`](packages/lib/admin-user-ensure.mjs), [`packages/lib/linux-local-admin-user.mjs`](packages/lib/linux-local-admin-user.mjs). Skip with `--skip-admin-user`.
-3. **ClamAV** — install/enable via [`packages/lib/clamav-ensure.mjs`](packages/lib/clamav-ensure.mjs); daily staggered `clamscan` timer on `/home`, `/opt`, `/var` via [`packages/lib/clamav-scan-schedule.mjs`](packages/lib/clamav-scan-schedule.mjs). Skip with `--skip-clamav` or `--skip-clamav-scan`.
+3. **ClamAV** — install/enable via [`packages/lib/clamav-ensure.mjs`](packages/lib/clamav-ensure.mjs); profile from guest `memory_mb` (`lean` ≤3072: freshclam + oneshot `clamscan` only, no `clamd`; `standard` ≤8191: tuned `clamd`; `full`: Debian defaults). Daily staggered `clamscan` on `/home`, `/opt`, `/var` via [`packages/lib/clamav-scan-schedule.mjs`](packages/lib/clamav-scan-schedule.mjs). Skip with `--skip-clamav` or `--skip-clamav-scan`.
 4. **Unattended-upgrades** — apt security updates via [`packages/lib/unattended-upgrades-ensure.mjs`](packages/lib/unattended-upgrades-ensure.mjs) (no auto-reboot). Skip with `--skip-unattended-upgrades`.
 5. **Mail relay (Postfix satellite)** — forward local mail to the internal relay from [`packages/services/postfix-relay/config.json`](packages/services/postfix-relay/config.json) `client_defaults` (relay host `postfix-relay.hdc.dukk.org` / `10.0.0.60`, no per-guest SMTP2GO creds). Helpers: [`packages/lib/postfix-satellite-ensure.mjs`](packages/lib/postfix-satellite-ensure.mjs), [`packages/lib/mail-relay-config.mjs`](packages/lib/mail-relay-config.mjs). Skip with `--skip-mail-relay`. Auto-skipped on `postfix-relay-a` (the relay host itself).
 6. **CrowdSec agent** — enroll to central LAPI from [`packages/infrastructure/proxmox/config.json`](packages/infrastructure/proxmox/config.json) `provision.guest_agents.crowdsec` + vault `HDC_CROWDSEC_ENROLL_KEY`. Skip with `--skip-crowdsec-agent`.
@@ -338,21 +338,23 @@ Example: `node tools/hdc/cli.mjs run service valkey deploy --`
 
 ## Nginx WAF in this repo
 
-- **Config:** [`packages/services/nginx-waf/config.json`](packages/services/nginx-waf/config.json) (copy from [`config.example.json`](packages/services/nginx-waf/config.example.json); keep local config out of git).
+- **Config:** [`packages/services/nginx-waf/config.json`](packages/services/nginx-waf/config.json) (copy from [`config.example.json`](packages/services/nginx-waf/config.example.json); keep local config out of git). **Schema v4** uses `deployment_groups[]` with a **policy catalog** (`defaults.nginx_waf.policy_definitions` + site/location `policies[]`); v3 `waf` / `access.internal_only` auto-migrate at normalize time.
 - **Inventory:** [`inventory/manual/systems/vm-nginx-waf-a.json`](inventory/manual/systems/vm-nginx-waf-a.json), [`vm-nginx-waf-b.json`](inventory/manual/systems/vm-nginx-waf-b.json); service sidecar [`inventory/manual/services/nginx-waf.json`](inventory/manual/services/nginx-waf.json).
 - **Schema:** [`tools/hdc/schema/nginx-waf.config.schema.json`](tools/hdc/schema/nginx-waf.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Optional Proxmox QEMU provision or configure-only; install nginx, libmodsecurity3, ModSecurity-nginx, OWASP CRS (`/etc/modsecurity/hdc-waf.conf`); push `sites[]`; LE certs on cert-primary + peer sync |
-| `maintain` | Re-apply OWASP CRS config + push `sites[]` to all nodes (default); `--renew-certs`; `--sync-certs`; `--site <id>` updates only that site (other vhosts unchanged); full maintain prunes sites removed from config |
-| `query` | `nginx` status, config test, ModSecurity module + CRS rule count + `SecRuleEngine`, cert expiry, upstream probes |
+| `deploy` | Optional Proxmox QEMU provision or configure-only; install nginx, libmodsecurity3, ModSecurity-nginx, OWASP CRS; push group `sites[]`; ACME certs on each group's cert-primary + peer sync; default catch-all 404 vhost |
+| `maintain` | Re-apply OWASP CRS profiles + push group sites/maps; `--renew-certs`; `--sync-certs`; `--site <id>` (cert scope only); `--group <id>`; full maintain prunes sites removed from config |
+| `query` | `nginx` status, config test, ModSecurity module + CRS rule count + per-profile `SecRuleEngine`, policy types per site, rate-limit zones, cert expiry, upstream probes |
 
-**Per-location network access:** `defaults.nginx_waf.trusted_cidrs[]` (RFC1918 defaults); per-site `client_ip` (`remote_addr` or `cloudflare`); `locations[].access` with `policy: internal_only` and `deny_status` `401` or `404` for URL-pattern restrictions (nginx `location` path syntax).
+**Policies:** catalog refs (`modsecurity-default`, `internal-lan`, `block-exploits`, `hide-version`, …) or inline `{ "type": "…" }` on `sites[].policies[]` and `locations[].policies[]`. Location wins over site for the same policy type. **`trusted_cidrs`**: union match across named CIDR groups; per-site geo variable. **`cloudflare_origin`**: require `CF-Connecting-IP` on direct origin. **`rate_limit`**: shared `limit_req_zone` in `/etc/nginx/hdc/waf-maps.conf`.
 
-Vault: `HDC_NGINX_WAF_LE_EMAIL` (required for deploy); `HDC_BIND_TSIG_KEY` when `letsencrypt.challenge` is `dns-01`.
+**Sites:** `host_names[]` (legacy `server_names` accepted with warning); `upstream` as URL string or pool object (`method`, `servers[]`); optional `locations[].upstream`. **TLS:** enabled by default; `tls.http_redirect` (default true) controls HTTP→HTTPS redirect.
 
-Example: `node tools/hdc/cli.mjs run service nginx-waf maintain --`
+Vault: `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt deploy; legacy `HDC_NGINX_WAF_LE_EMAIL` still read with deprecation warning); `HDC_BIND_TSIG_KEY` when ACME uses **dns-01** (explicit challenge or http-01 fallback for names in `acme.dns.zone` only — Cloudflare DNS zones such as `drippylit.com` / `typotests.com` use http-01 via proxy).
+
+Example: `node tools/hdc/cli.mjs run service nginx-waf maintain -- --group edge`
 
 ## Nginx web hosting in this repo
 
@@ -490,17 +492,17 @@ Example: `node tools/hdc/cli.mjs run service searxng deploy --`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | **Synology:** fetch release compose, push `.env` + stack to `/volume1/docker/immich` (`synology-docker`). **Proxmox:** QEMU clone + SSH install (`proxmox-qemu`; `--destroy-existing`, `--skip-provision`, …) |
-| `maintain` | Re-push `.env`, `docker compose pull` + `up -d` (omit `--skip-upgrade`). ClamAV baseline on Proxmox guests only (`--skip-clamav`) |
-| `query` | Config summary; `--live` for compose health + `/api/server/ping` on port 2283 |
+| `maintain` | Re-push `.env`, `docker compose pull` + `up -d` (omit `--skip-upgrade`); **admin sync** via `PUT /api/system-config` when `system_config`, `mail.enabled`, or `public_url` set (`--skip-admin-sync`, optional `--test-email`); ClamAV baseline on Proxmox guests only (`--skip-clamav`) |
+| `query` | Config summary; `--live` for compose health + `/api/server/ping`; `--admin` / `--import --yes` for sanitized `system_config` drift vs live (requires API key; single `--system-id`) |
 | `teardown` | Synology: `docker compose down`. Proxmox: optional compose down then destroy QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Set `immich.public_url` (e.g. `https://immich.dukk.org`) for `IMMICH_SERVER_URL` in `.env` behind nginx-waf. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
+Set `immich.public_url` (e.g. `https://immich.dukk.org`) for `IMMICH_SERVER_URL` in `.env` and `server.externalDomain` on admin sync. **`immich.mail.enabled`:** maps internal postfix-relay SMTP into `notifications.smtp` (`postfix-relay.hdc.dukk.org:25`, no auth). **`immich.system_config`:** full sanitized admin config from `query --import`; maintain deep-merges over live before PUT. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
 
 **HTTPS:** nginx-waf `sites[]` upstream `http://<nas-ip>:2283`; Cloudflare A `immich` → WAF WAN IP. Prerequisite: `node tools/hdc/cli.mjs run infrastructure synology-nas maintain -- --instance a`.
 
-Vault: `HDC_IMMICH_DB_PASSWORD` (required for deploy/maintain).
+Vault: `HDC_IMMICH_DB_PASSWORD` (required for deploy/maintain); `HDC_IMMICH_API_KEY` (admin API: `systemConfig.read` + `systemConfig.update` in Immich UI).
 
-Example: `node tools/hdc/cli.mjs run service immich deploy -- --instance a`
+Example: `node tools/hdc/cli.mjs run service immich query -- --system-id vm-immich-a --import --yes`
 
 ## Plex in this repo
 
@@ -1080,6 +1082,13 @@ Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructur
 
 **QEMU guest agent:** Deploy scripts enable `agent=1` on new QEMU VMs and install `qemu-guest-agent` in Linux guests when deploy has SSH (e.g. BIND). LXC deploys are unchanged. See [`.cursor/rules/proxmox-qemu-guest-agent.mdc`](.cursor/rules/proxmox-qemu-guest-agent.mdc). Maintain `verify-templates` reports agent config + ping.
 
+**Guest root disk expansion (opt-in):** Pass `--expand-guest-rootfs` on `proxmox maintain` to probe `/` on running Linux LXC/QEMU guests and expand root disks in 8 GiB steps until used space is below 50% (defaults from `provision.guest_rootdisk` in config). Skips Windows/HAOS name patterns and guests without a working probe (LXC `pct exec`, QEMU guest agent, or inventory SSH). Optional `--guest-rootfs-threshold`, `--guest-rootfs-increment-gb`, `--dry-run`. Does not update per-service `rootfs_gb` in package configs.
+
+```bash
+node tools/hdc/cli.mjs run infrastructure proxmox maintain -- --expand-guest-rootfs --dry-run
+node tools/hdc/cli.mjs run infrastructure proxmox maintain -- --expand-guest-rootfs
+```
+
 **QEMU first-boot SSH wait:** Ubuntu cloud templates use `serial0: socket` / `vga: serial0`; clones can hang at the serial console on first boot. Deploy and maintain use [`qemu-guest-ssh-wait.mjs`](packages/lib/qemu-guest-ssh-wait.mjs): optional settle delay, short SSH probe, then Proxmox API reboot if the probe fails. Tune `provision.qemu.first_boot` in proxmox config; flags: `--skip-first-boot-reboot`, `--first-boot-reboot`.
 
 **Guest CPU/RAM:** QEMU clones and LXC creates apply `proxmox.qemu` / `proxmox.lxc` `memory_mb` and `cores` after the Proxmox task completes (template sizing is not kept when config differs). **Service maintain** syncs the same fields on live guests without destroy (QEMU reboot when running and sizing changed; LXC stop/PUT/start). Shared helpers: [`proxmox-guest-resources.mjs`](packages/infrastructure/proxmox/lib/proxmox-guest-resources.mjs), [`proxmox-guest-resources-maintain.mjs`](packages/lib/proxmox-guest-resources-maintain.mjs) (via [`guest-linux-baseline.mjs`](packages/lib/guest-linux-baseline.mjs) for Proxmox guests). Flags: `--skip-resources`, `--no-reboot` (disable auto-reboot on change); `--reboot` forces reboot. Infrastructure deploy: `create-vm` / `create-container` accept `--memory-mb`, `--cores`, and `--reboot`. Service deploy: optional `--reboot` when resizing a running guest.
@@ -1256,6 +1265,29 @@ Examples:
 ```bash
 node tools/hdc/cli.mjs run infrastructure twilio query --
 node tools/hdc/cli.mjs run infrastructure twilio query -- --import --yes
+```
+
+## UptimeRobot in this repo
+
+- **Config:** [`packages/infrastructure/uptimerobot/config.json`](packages/infrastructure/uptimerobot/config.json) (copy from [`config.example.json`](packages/infrastructure/uptimerobot/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/uptimerobot.config.schema.json`](tools/hdc/schema/uptimerobot.config.schema.json).
+- **Docs:** [`docs/manually-deployed/uptimerobot.md`](docs/manually-deployed/uptimerobot.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff monitors, status pages, and alert contacts vs config; `--import --yes` writes live snapshot to hdc-private config (JSON on stdout) |
+| `maintain` | Reconcile `managed: true` entries via UptimeRobot API v2; optional `--prune` removes live resources not listed in config |
+
+Vault: `HDC_UPTIMEROBOT_API_KEY` (Main API key from Integrations & API → API).
+
+**Bootstrap:** `query -- --import --yes` replaces `monitors[]`, `status_pages[]`, and `alert_contacts[]`.
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure uptimerobot query --
+node tools/hdc/cli.mjs run infrastructure uptimerobot query -- --import --yes
+node tools/hdc/cli.mjs run infrastructure uptimerobot maintain --
 ```
 
 ## External reference: Proxmox VE Helper-Scripts

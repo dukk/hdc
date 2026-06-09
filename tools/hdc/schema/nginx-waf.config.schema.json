@@ -4,56 +4,49 @@
   "title": "HDC nginx-waf service package config",
   "type": "object",
   "additionalProperties": true,
-  "required": ["schema_version", "deployments"],
+  "required": ["schema_version"],
   "properties": {
-    "schema_version": { "type": "integer", "minimum": 2 },
-    "sites": {
+    "schema_version": { "type": "integer", "minimum": 3 },
+    "deployment_groups": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "server_names", "upstream"],
+        "required": ["id", "deployments"],
         "properties": {
           "id": { "type": "string" },
-          "server_names": { "type": "array", "items": { "type": "string" } },
-          "listen": { "type": "array", "items": { "type": "integer" } },
-          "upstream": { "type": "string" },
-          "client_ip": { "enum": ["remote_addr", "cloudflare"] },
-          "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
-          "tls": { "type": "object" },
-          "waf": { "type": "object" },
-          "locations": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "path": { "type": "string" },
-                "proxy_headers": { "type": "boolean" },
-                "websocket": { "type": "boolean" },
-                "access": {
-                  "type": "object",
-                  "properties": {
-                    "policy": { "enum": ["internal_only"] },
-                    "deny_status": { "enum": [401, 404] }
-                  },
-                  "required": ["policy", "deny_status"]
-                }
-              }
+          "default_site": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" }
             }
+          },
+          "policy_definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/policyDefinition" }
+          },
+          "acme": { "type": "object" },
+          "letsencrypt": { "type": "object" },
+          "sites": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/site" }
+          },
+          "deployments": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/deployment" }
           }
         }
       }
     },
-    "letsencrypt": {
-      "type": "object",
-      "properties": {
-        "email": { "type": "string" },
-        "email_vault_key": { "type": "string" },
-        "staging": { "type": "boolean" },
-        "cert_primary_system_id": { "type": "string" },
-        "challenge": { "enum": ["http-01", "dns-01"] },
-        "webroot": { "type": "string" },
-        "dns": { "type": "object" }
-      }
+    "sites": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/site" }
+    },
+    "letsencrypt": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deployment" }
     },
     "defaults": {
       "type": "object",
@@ -72,27 +65,188 @@
                 "audit_log": { "type": "string" }
               }
             },
+            "policy_definitions": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/policyDefinition" }
+            },
             "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
             "cloudflare_ipv4": { "type": "boolean" },
             "client_ip": { "enum": ["remote_addr", "cloudflare"] }
           }
         }
       }
+    }
+  },
+  "$defs": {
+    "policyRef": {
+      "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/policy" }]
     },
-    "deployments": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "required": ["system_id", "role"],
-        "properties": {
-          "system_id": { "type": "string", "pattern": "^vm-nginx-waf-[a-z]+$" },
-          "role": { "enum": ["cert-primary", "peer"] },
-          "hostname": { "type": "string" },
-          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
-          "proxmox": { "type": "object" },
-          "configure": { "type": "object" }
+    "policy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "modsecurity",
+            "trusted_cidrs",
+            "cloudflare_origin",
+            "server_tokens",
+            "rate_limit",
+            "client_buffers",
+            "http_protocol",
+            "block_common_exploits"
+          ]
+        },
+        "ref": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "rule_engine": { "enum": ["On", "DetectionOnly", "Off"] },
+        "crs_setup": { "type": "string" },
+        "crs_rules_glob": { "type": "string" },
+        "unicode_map": { "type": "string" },
+        "audit_log": { "type": "string" },
+        "deny_status": { "type": "integer" },
+        "groups": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" } },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "cidrs"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "cidrs": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          ]
+        },
+        "require_headers": { "type": "boolean" },
+        "require_cf_ray": { "type": "boolean" },
+        "zone_name": { "type": "string" },
+        "key": { "type": "string" },
+        "rate": { "type": "string" },
+        "burst": { "type": "number" },
+        "nodelay": { "type": "boolean" },
+        "zone_size": { "type": "string" },
+        "client_body_buffer_size": { "type": "string" },
+        "client_header_buffer_size": { "type": "string" },
+        "large_client_header_buffers": { "type": "string" },
+        "min_version": { "type": "string" }
+      }
+    },
+    "policyDefinition": {
+      "allOf": [{ "$ref": "#/$defs/policy" }]
+    },
+    "upstreamServer": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "address": { "type": "string" },
+        "weight": { "type": "number" },
+        "max_fails": { "type": "number" },
+        "fail_timeout": { "type": "string" },
+        "backup": { "type": "boolean" },
+        "down": { "type": "boolean" }
+      }
+    },
+    "upstreamPool": {
+      "type": "object",
+      "required": ["servers"],
+      "properties": {
+        "method": {
+          "enum": ["round_robin", "least_conn", "ip_hash", "hash", "random"]
+        },
+        "hash_key": { "type": "string" },
+        "keepalive": { "type": "integer" },
+        "servers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/upstreamServer" }
         }
+      }
+    },
+    "site": {
+      "type": "object",
+      "required": ["id", "host_names", "upstream"],
+      "properties": {
+        "id": { "type": "string" },
+        "host_names": { "type": "array", "items": { "type": "string" } },
+        "server_names": { "type": "array", "items": { "type": "string" } },
+        "listen": { "type": "array", "items": { "type": "integer" } },
+        "upstream": {
+          "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/upstreamPool" }]
+        },
+        "client_ip": { "enum": ["remote_addr", "cloudflare"] },
+        "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
+        "policies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/policyRef" }
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "http_redirect": { "type": "boolean" },
+            "http2": { "type": "boolean" },
+            "cert_name": { "type": "string" },
+            "certificate": {
+              "type": "object",
+              "properties": {
+                "provider": { "enum": ["lets_encrypt", "custom", "step_ca", "step-ca"] },
+                "server": { "type": "string" },
+                "challenge": { "enum": ["http-01", "dns-01"] },
+                "staging": { "type": "boolean" },
+                "root_ca_path": { "type": "string" }
+              }
+            }
+          }
+        },
+        "waf": { "type": "object" },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "upstream": {
+                "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/upstreamPool" }]
+              },
+              "proxy_headers": { "type": "boolean" },
+              "websocket": { "type": "boolean" },
+              "policies": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/policyRef" }
+              },
+              "waf": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" }
+                }
+              },
+              "access": {
+                "type": "object",
+                "properties": {
+                  "policy": { "enum": ["internal_only"] },
+                  "deny_status": { "enum": [401, 404] }
+                },
+                "required": ["policy", "deny_status"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["system_id", "role"],
+      "properties": {
+        "system_id": { "type": "string", "pattern": "^vm-nginx-waf-[a-z]+$" },
+        "role": { "enum": ["cert-primary", "peer"] },
+        "hostname": { "type": "string" },
+        "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+        "proxmox": { "type": "object" },
+        "configure": { "type": "object" }
       }
     }
   }

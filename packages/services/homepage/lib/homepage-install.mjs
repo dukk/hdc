@@ -35,10 +35,19 @@ function writeConfigFileHerdoc(dir, relPath, content) {
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} envContent
- * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string }} configFiles
+ * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
  */
 export function buildInstallScript(composeDirPath, composeYaml, envContent, configFiles) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
+  /** @type {string[]} */
+  const configWrites = [
+    ...writeConfigFileHerdoc(dir, "config/services.yaml", configFiles.servicesYaml),
+    ...writeConfigFileHerdoc(dir, "config/settings.yaml", configFiles.settingsYaml),
+    ...writeConfigFileHerdoc(dir, "config/bookmarks.yaml", configFiles.bookmarksYaml),
+  ];
+  if (configFiles.widgetsYaml) {
+    configWrites.push(...writeConfigFileHerdoc(dir, "config/widgets.yaml", configFiles.widgetsYaml));
+  }
 
   return [
     "set -euo pipefail",
@@ -55,9 +64,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
     "fi",
     "systemctl enable --now docker",
     `mkdir -p '${dir}'`,
-    ...writeConfigFileHerdoc(dir, "config/services.yaml", configFiles.servicesYaml),
-    ...writeConfigFileHerdoc(dir, "config/settings.yaml", configFiles.settingsYaml),
-    ...writeConfigFileHerdoc(dir, "config/bookmarks.yaml", configFiles.bookmarksYaml),
+    ...configWrites,
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
@@ -74,17 +81,24 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
 /**
  * @param {string} composeDirPath
  * @param {string} envContent
- * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string }} configFiles
+ * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
  * @param {{ skipUpgrade?: boolean }} [opts]
  */
 export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
-  const lines = [
-    "set -euo pipefail",
-    `mkdir -p '${dir}'`,
+  /** @type {string[]} */
+  const configWrites = [
     ...writeConfigFileHerdoc(dir, "config/services.yaml", configFiles.servicesYaml),
     ...writeConfigFileHerdoc(dir, "config/settings.yaml", configFiles.settingsYaml),
     ...writeConfigFileHerdoc(dir, "config/bookmarks.yaml", configFiles.bookmarksYaml),
+  ];
+  if (configFiles.widgetsYaml) {
+    configWrites.push(...writeConfigFileHerdoc(dir, "config/widgets.yaml", configFiles.widgetsYaml));
+  }
+  const lines = [
+    "set -euo pipefail",
+    `mkdir -p '${dir}'`,
+    ...configWrites,
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",

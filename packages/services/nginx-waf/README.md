@@ -1,97 +1,134 @@
 # Nginx WAF (`nginx-waf`)
 
-Nginx with ModSecurity (OWASP CRS), reverse proxy `sites[]`, and Let's Encrypt with optional cert sync between HA nodes.
+Nginx with ModSecurity (OWASP CRS), reverse proxy `sites[]`, catalog-driven security **policies**, ACME certificates (Let's Encrypt or custom step-ca), optional cert sync between HA nodes, and deployment groups for separate WAF pairs.
 
 ## Prerequisites
 
-- **Config:** [`config.example.json`](config.example.json) → `config.json`
+- **Config:** [`config.example.json`](config.example.json) → `config.json` (`schema_version`: **4**)
 - **Inventory:** [`inventory/manual/systems/vm-nginx-waf-a.json`](../../../inventory/manual/systems/vm-nginx-waf-a.json), [`vm-nginx-waf-b.json`](../../../inventory/manual/systems/vm-nginx-waf-b.json); [`inventory/manual/services/nginx-waf.json`](../../../inventory/manual/services/nginx-waf.json)
-- **Vault:** `HDC_NGINX_WAF_LE_EMAIL` (required); `HDC_BIND_TSIG_KEY` for DNS-01 challenges
+- **Vault:** `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt); legacy `HDC_NGINX_WAF_LE_EMAIL` is still read with a deprecation warning. Default ACME challenge is **http-01** (webroot). Optional group `acme.dns` enables **dns-01** fallback via BIND RFC2136 when HTTP obtain fails — only for hostnames in that authoritative zone (e.g. `*.hdc.dukk.org`). Public names on **Cloudflare DNS** (`*.dukk.org` via orange-cloud, `drippylit.com`, `typotests.com`, etc.) must use http-01 through Cloudflare proxy to the WAF; BIND fallback is skipped when SANs are outside `acme.dns.zone` (`HDC_BIND_TSIG_KEY` required for DNS fallback).
 
 ## Commands
 
 | Verb | Purpose |
 |------|---------|
-| `deploy` | QEMU (optional) + nginx + ModSecurity + CRS; push sites; LE on cert-primary |
-| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push CRS and **all** sites from config; `--renew-certs`; `--sync-certs`; `--site <id>` (certificate scope only — vhosts still fully synced) |
-| `query` | nginx, ModSecurity, CRS rule count, certs, upstream probes; `--live` adds vhost drift audit vs config |
+| `deploy` | QEMU (optional) + nginx + ModSecurity + CRS; push sites; ACME on cert-primary per group |
+| `maintain` | Grow root disk when `defaults.proxmox.qemu.rootfs_gb` exceeds live size (`--skip-disk-resize`); re-push CRS and group sites; `--renew-certs`; `--sync-certs`; `--site <id>` (certificate scope only); `--group <id>` |
+| `query` | nginx, ModSecurity profiles, CRS rule count, policy summary per site, certs, upstream probes; `--live` adds vhost drift audit vs config |
 
 ```bash
 node tools/hdc/cli.mjs run service nginx-waf maintain --
 node tools/hdc/cli.mjs run service nginx-waf query --
+node tools/hdc/cli.mjs run service nginx-waf maintain -- --group edge
 ```
 
-## URL access by network source
+## Config layout (schema v4)
 
-Restrict specific URL paths so only clients on trusted networks reach the upstream; everyone else gets `401` or `404`.
+Top-level **`deployment_groups[]`** each contain:
 
-**Global defaults** (`defaults.nginx_waf.trusted_cidrs`): RFC1918-style ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`). Override in `config.json` (e.g. `10.0.0.0/24` only).
+- `id` — slug (`edge`, `internal`, …)
+- `acme` — group ACME defaults (`provider`: `lets_encrypt` or `custom` + `server` URL for step-ca)
+- `sites[]` — vhosts pushed only to that group's nodes
+- `deployments[]` — exactly one `cert-primary` and optional `peer` per group
+- `default_site.enabled` — catch-all 404 page for unmatched hostnames (default **true**)
+- optional `policy_definitions` — merge over `defaults.nginx_waf.policy_definitions`
+
+**v3 migration:** `site.waf` and `location.access.internal_only` are auto-converted to `policies[]` at normalize time (stderr deprecation warnings). Set `schema_version: 4` and prefer explicit `policies[]` in config.
+
+## Policy catalog
+
+Define reusable policies under **`defaults.nginx_waf.policy_definitions`** (and optional per-group overrides). Sites and locations attach policies by **name** or inline `{ "type": "…" }` object.
+
+Auto-seeded catalog entries (from legacy `modsecurity` / `trusted_cidrs` defaults):
+
+| Id | Type | Purpose |
+|----|------|---------|
+| `modsecurity-default` | `modsecurity` | OWASP CRS via `/etc/modsecurity/hdc-waf-modsecurity-default.conf` |
+| `internal-lan` | `trusted_cidrs` | RFC1918-style ranges from `defaults.nginx_waf.trusted_cidrs` |
+| `block-exploits` | `block_common_exploits` | Shared http-level path regex map |
+| `hide-version` | `server_tokens` | `server_tokens off` |
+
+Example site:
+
+```json
+"policies": ["modsecurity-default", "cloudflare-only", "hide-version", "block-exploits"],
+"locations": [
+  { "path": "/admin", "policies": ["internal-lan", { "type": "modsecurity", "enabled": false }] }
+]
+```
+
+**Policy types:** `modsecurity`, `trusted_cidrs`, `cloudflare_origin`, `server_tokens`, `rate_limit`, `client_buffers`, `http_protocol`, `block_common_exploits`. Location policies override site policies for the same `type`.
+
+## Sites
+
+Each site requires `id`, **`host_names`**, and `upstream` (string URL or upstream pool object).
+
+**HTTPS defaults:** TLS enabled; HTTP redirects to HTTPS unless `tls.http_redirect: false`. Set `tls.enabled: false` for HTTP-only sites.
+
+**ACME per site:** override group defaults with `tls.certificate`:
+
+```json
+"certificate": {
+  "provider": "custom",
+  "server": "https://ca.hdc.dukk.org/acme/acme/directory"
+}
+```
+
+Install the step-ca root at `acme.root_ca_path` on WAF nodes (default `/etc/ssl/certs/hdc-step-ca-root.crt`) before using custom ACME.
+
+**Cloudflare DNS zones:** Group `acme.dns` targets authoritative BIND (RFC2136 to `acme.dns.zone`, typically `hdc.dukk.org`). Public hostnames on Cloudflare — including `*.dukk.org` CNAMEs to `waf.dukk.org`, `drippylit.com`, and `typotests.com` — obtain certs via **http-01** only (orange-cloud proxy to WAF port 80). dns-01 fallback is skipped when any cert SAN is outside `acme.dns.zone`.
+
+**Upstream pools:**
+
+```json
+"upstream": {
+  "method": "least_conn",
+  "servers": [
+    { "url": "https://pve-a.hdc.dukk.org:8006", "weight": 1 },
+    { "url": "https://pve-b.hdc.dukk.org:8006", "weight": 1 }
+  ]
+}
+```
+
+Optional **`locations[].upstream`** overrides the site default for that path.
+
+## Default 404 site
+
+When `default_site.enabled` is true, hdc installs `hdc-default.conf` as nginx `default_server` (ASCII duck 404 page at `/var/www/hdc-default/index.html`) and removes the Debian default site.
+
+## Network access (`trusted_cidrs` policy)
+
+Restrict URL paths to trusted networks using the **`internal-lan`** catalog entry or a custom `trusted_cidrs` policy. Clients outside allowed CIDRs receive `401` or `404` per `deny_status`.
+
+**Global defaults** (`defaults.nginx_waf.trusted_cidrs`): RFC1918-style ranges. Override in `config.json` or define named groups in a `trusted_cidrs` policy definition.
 
 **Per-site** (optional):
 
-- `client_ip`: `remote_addr` (default) or `cloudflare` (uses `CF-Connecting-IP` + Cloudflare `set_real_ip_from` ranges on ports 80 and 443). Omit on a site to inherit `defaults.nginx_waf.client_ip` when set.
-- `trusted_cidrs`: replaces global list for that site when set.
+- `client_ip`: `remote_addr` (default) or `cloudflare` (sets `real_ip` from `CF-Connecting-IP`)
+- **`cloudflare-only`** policy: reject direct-origin requests missing Cloudflare headers
 
 ## Upstream proxy headers
 
-When `proxy_headers` is true (default), hdc sets on requests to backends:
-
-| Header | Value |
-|--------|--------|
-| `X-HDC-Nginx-Waf-Node` | Deployed node id (`vm-nginx-waf-a`, `vm-nginx-waf-b`, …) |
-| `X-Real-IP` | Client IP (`$remote_addr` after Cloudflare `real_ip` when `client_ip` is `cloudflare`) |
-| `X-Forwarded-For` | Appended chain |
-| `X-Forwarded-Proto` | `http` or `https` |
-
-Set `proxy_headers: false` on a location to omit these headers.
+When `proxy_headers` is true (default), hdc sets `X-HDC-Nginx-Waf-Node`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
 
 ## WebSockets
 
-Apps that use WebSockets (Audiobookshelf, Home Assistant, Vaultwarden live notifications, Immich, etc.) need Upgrade proxying on the relevant location(s). Set `"websocket": true` on each location that should pass WebSocket handshakes:
+Set `"websocket": true` on locations that need Upgrade proxying. The global `map $http_upgrade $connection_upgrade` lives in `/etc/nginx/hdc/waf-maps.conf` (included from `waf-global.conf`).
 
-```json
-{
-  "path": "/",
-  "proxy_headers": true,
-  "websocket": true
-}
-```
+## Migrating from v3
 
-When any site has a websocket location, hdc adds a single `map $http_upgrade $connection_upgrade` block to `/etc/nginx/hdc/waf-global.conf` (not per-site vhosts). Partial `maintain -- --site <id>` still refreshes the global map from the full `sites[]` list in config and re-pushes **every** vhost from config (only certificate obtain/renew/status is scoped to `--site`).
+1. Set `schema_version: 4`
+2. Add `defaults.nginx_waf.policy_definitions` for custom policies (e.g. `cloudflare-only`)
+3. Replace `waf: { enabled: true }` with `"policies": ["modsecurity-default", "hide-version", "block-exploits"]`
+4. Replace `locations[].access.internal_only` with `"policies": ["internal-lan"]`
+5. Cloudflare-fronted sites: add `"cloudflare-only"` to site `policies[]`
+6. Run `maintain` to push updated vhosts, maps, and ModSecurity profile files
 
-**Per-location** `access` (only on paths you want restricted):
-
-```json
-{
-  "path": "/api/",
-  "proxy_headers": true,
-  "access": { "policy": "internal_only", "deny_status": 404 }
-}
-```
-
-- `path` uses nginx location syntax: prefix (`/api/`), exact (`= /health`), regex (`~ ^/admin`).
-- Locations without `access` stay open to all clients.
-- Put more specific paths before broader ones (same as normal nginx location order).
-
-**Hairpin NAT:** LAN clients using the **public** hostname may not appear as `10.x` on the WAF. Use split-horizon DNS to the WAF internal IP, or add your gateway/router CIDR to `trusted_cidrs`.
-
-Apply after editing: `node tools/hdc/cli.mjs run service nginx-waf maintain --` (all sites). Use `maintain -- --site <id>` when you only need to obtain or renew that site's certificate; vhosts are still synced from the full config. Run `query -- --live` to compare live nginx vhosts against config (`vhost_drift[]`).
-
-Run full `maintain` (no `--site`) after removing a site from `config.json` so stale `hdc-*.conf` files are pruned from the hosts.
-
-## Root disk
-
-Set `defaults.proxmox.qemu.rootfs_gb` (e.g. `32`) for QEMU guests. Maintain grows the Proxmox `scsi0` volume and guest filesystem when config exceeds live size (`--skip-disk-resize` to skip).
+Legacy `waf` / `access` fields still work for one release via normalize-time migration.
 
 ## Common flags
 
-`--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>` (cert scope only; all vhosts synced), `--skip-disk-resize`, `--dry-run`.
-
-## After deploy
-
-1. Browse `https://<server-name-from-sites[]>` for each published site.
-2. WAF logs: ModSecurity under `/var/log/nginx/` (on guest).
-3. Use query output to confirm `SecRuleEngine` and cert expiry before go-live.
+`--group <id>`, `--instance a|b`, `--destroy-existing`, `--skip-provision`, `--renew-certs`, `--sync-certs`, `--site <id>`, `--skip-disk-resize`, `--dry-run`.
 
 ## Related
 

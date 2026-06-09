@@ -1,5 +1,5 @@
 import { certExistsOnHost } from "./letsencrypt.mjs";
-import { serverNames, siteId } from "./nginx-waf-render.mjs";
+import { hostNames, parseUpstream, siteId } from "./nginx-waf-render.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -19,14 +19,14 @@ function shellQuote(s) {
  */
 export function parseLiveSiteVhost(content, fileSiteId) {
   /** @type {string[]} */
-  const serverNamesList = [];
+  const hostNamesList = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     const m = trimmed.match(/^server_name\s+(.+?)\s*;/);
     if (m) {
       for (const name of m[1].split(/\s+/)) {
         const n = name.trim();
-        if (n) serverNamesList.push(n);
+        if (n && n !== "_") hostNamesList.push(n);
       }
     }
   }
@@ -38,7 +38,7 @@ export function parseLiveSiteVhost(content, fileSiteId) {
     if (anyPass) {
       return {
         file_site_id: fileSiteId,
-        server_names: serverNamesList,
+        host_names: hostNamesList,
         has_listen_443: hasListen443,
         upstream: anyPass[1].replace(/;$/, ""),
       };
@@ -46,10 +46,28 @@ export function parseLiveSiteVhost(content, fileSiteId) {
   }
   return {
     file_site_id: fileSiteId,
-    server_names: serverNamesList,
+    host_names: hostNamesList,
     has_listen_443: hasListen443,
     upstream: rootUpstream,
   };
+}
+
+/**
+ * @param {Record<string, unknown>} site
+ */
+function expectedUpstreamFromSite(site) {
+  const id = siteId(site);
+  if (typeof site.upstream === "string" && site.upstream.trim()) {
+    return site.upstream.trim();
+  }
+  if (isObject(site.upstream)) {
+    const parsed = parseUpstream(site.upstream, id);
+    if (parsed.type === "direct") return parsed.proxyPass;
+    const blockName = `hdc_${id.replace(/-/g, "_")}`;
+    const scheme = parsed.scheme === "https" ? "https" : "http";
+    return `${scheme}://${blockName}`;
+  }
+  return "";
 }
 
 /**
@@ -58,21 +76,20 @@ export function parseLiveSiteVhost(content, fileSiteId) {
 export function expectedSiteMapFromConfig(sites) {
   /** @type {Map<string, { site_id: string; upstream: string; tls_enabled: boolean; cert_name: string | null }>} */
   const hostnameOwner = new Map();
-  /** @type {Map<string, { upstream: string; server_names: string[]; tls_enabled: boolean; cert_name: string | null }>} */
+  /** @type {Map<string, { upstream: string; host_names: string[]; tls_enabled: boolean; cert_name: string | null }>} */
   const bySiteId = new Map();
 
   for (const site of sites) {
     const id = siteId(site);
-    const upstream =
-      typeof site.upstream === "string" && site.upstream.trim() ? site.upstream.trim() : "";
+    const upstream = expectedUpstreamFromSite(site);
     const tls = isObject(site.tls) ? site.tls : {};
     const tlsEnabled = tls.enabled !== false;
     const certName =
       typeof tls.cert_name === "string" && tls.cert_name.trim()
         ? tls.cert_name.trim()
-        : serverNames(site)[0] ?? null;
-    const names = serverNames(site);
-    bySiteId.set(id, { upstream, server_names: names, tls_enabled: tlsEnabled, cert_name: certName });
+        : hostNames(site)[0] ?? null;
+    const names = hostNames(site);
+    bySiteId.set(id, { upstream, host_names: names, tls_enabled: tlsEnabled, cert_name: certName });
     for (const name of names) {
       hostnameOwner.set(name, { site_id: id, upstream, tls_enabled: tlsEnabled, cert_name: certName });
     }
@@ -120,7 +137,7 @@ export function detectVhostDrift(opts) {
         message: `${id}: TLS cert present but vhost has no listen 443`,
       });
     }
-    for (const name of live.server_names) {
+    for (const name of live.host_names) {
       const owner = hostnameOwner.get(name);
       if (!owner || owner.site_id !== id) {
         drift.push({
@@ -137,11 +154,12 @@ export function detectVhostDrift(opts) {
   }
 
   for (const live of liveSites) {
+    if (live.file_site_id === "default") continue;
     if (!bySiteId.has(live.file_site_id)) {
       drift.push({
         kind: "extra_site",
         site_id: live.file_site_id,
-        server_names: live.server_names,
+        host_names: live.host_names,
         message: `live hdc-${live.file_site_id}.conf is not in config (run full maintain --prune to remove)`,
       });
     }
@@ -176,3 +194,6 @@ export function queryLiveVhostDrift(exec, configSites) {
   });
   return { live_sites: liveSites, vhost_drift: drift, ok: drift.length === 0 };
 }
+
+/** @deprecated Use host_names in drift output */
+export const server_names = "host_names";

@@ -27,12 +27,18 @@
       "config_files": {
         "services": "homepage/services.example.yaml",
         "settings": "homepage/settings.example.yaml",
-        "bookmarks": "homepage/bookmarks.example.yaml"
+        "bookmarks": "homepage/bookmarks.example.yaml",
+        "widgets": "homepage/widgets.example.yaml"
       },
       "proxmox_widget": {
         "enabled": true,
         "service_account_id": "homepage",
         "hosts": ["pve-a", "pve-b", "pve-c", "pve-d", "pve-h"]
+      },
+      "pihole_widget": {
+        "enabled": true,
+        "version": 6,
+        "instances": ["a", "b"]
       }
     },
     "install": {

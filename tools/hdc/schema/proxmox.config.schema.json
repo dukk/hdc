@@ -121,6 +121,7 @@
         "ssh_keys": { "$ref": "#/$defs/provision_ssh_keys" },
         "host_firewall": { "$ref": "#/$defs/provision_host_firewall" },
         "guest_firewall": { "$ref": "#/$defs/provision_guest_firewall" },
+        "guest_rootdisk": { "$ref": "#/$defs/provision_guest_rootdisk" },
         "guest_agents": { "$ref": "#/$defs/provision_guest_agents" },
         "apt_sources": { "$ref": "#/$defs/provision_apt_sources" },
         "lxc": { "$ref": "#/$defs/provision_lxc" },
@@ -383,6 +384,28 @@
         "manage_from_deployments": {
           "type": ["boolean", "integer"],
           "description": "When true (default), collect vmids from packages/services/*/config.json deployments."
+        }
+      }
+    },
+    "provision_guest_rootdisk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_used_percent": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 99,
+          "description": "Expand running Linux guests when root used percent exceeds this value (default 50). Requires maintain --expand-guest-rootfs."
+        },
+        "increment_gb": {
+          "type": "number",
+          "minimum": 1,
+          "description": "GiB added per expansion step on the hypervisor (default 8)."
+        },
+        "skip_name_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Case-insensitive substring matches on guest name to skip (Windows, HAOS, etc.)."
         }
       }
     },

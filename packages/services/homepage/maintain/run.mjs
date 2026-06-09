@@ -14,6 +14,7 @@ import { stderr as errout } from "node:process";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
+import { resolveHomepagePiholeWidgetEnv } from "../lib/homepage-pihole-widget.mjs";
 import { resolveHomepageProxmoxWidgetEnv } from "../lib/homepage-proxmox-widget.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
@@ -40,6 +41,7 @@ function ensurePackageConfig() {
 
 const root = repoRoot();
 const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
+const piholeRoot = join(root, "packages", "services", "pi-hole");
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -83,8 +85,10 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
   let widgetEnvLines = [];
   /** @type {Record<string, unknown>} */
   let proxmoxWidgetMeta = {};
+  /** @type {Record<string, unknown>} */
+  let piholeWidgetMeta = {};
   try {
-    const widgetEnv = await resolveHomepageProxmoxWidgetEnv({
+    const proxmoxWidgetEnv = await resolveHomepageProxmoxWidgetEnv({
       homepage: homepageCfg,
       proxmoxPackageRoot: proxmoxRoot,
       vaultAccess,
@@ -92,11 +96,22 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
       spawnSync: cliDeps.spawnSync,
       readLineQuestion: cliDeps.readLineQuestion,
     });
-    if (widgetEnv) {
-      widgetEnvLines = widgetEnv.lines;
+    if (proxmoxWidgetEnv) {
+      widgetEnvLines.push(...proxmoxWidgetEnv.lines);
       proxmoxWidgetMeta = {
-        service_account_id: widgetEnv.service_account_id,
-        token_vault_key: widgetEnv.token_vault_key,
+        service_account_id: proxmoxWidgetEnv.service_account_id,
+        token_vault_key: proxmoxWidgetEnv.token_vault_key,
+      };
+    }
+    const piholeWidgetEnv = await resolveHomepagePiholeWidgetEnv({
+      homepage: homepageCfg,
+      piholePackageRoot: piholeRoot,
+    });
+    if (piholeWidgetEnv) {
+      widgetEnvLines.push(...piholeWidgetEnv.lines);
+      piholeWidgetMeta = {
+        version: piholeWidgetEnv.version,
+        instances: piholeWidgetEnv.instances,
       };
     }
   } catch (e) {
@@ -138,6 +153,7 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
     web_url: result.web_url ?? null,
     upstream_url: result.upstream_url ?? null,
     proxmox_widget: proxmoxWidgetMeta,
+    pihole_widget: piholeWidgetMeta,
     message: result.message,
     ...guestBaselineResultFields(baseline),
   };

@@ -1,5 +1,17 @@
 import { flagGet } from "./parse-argv-flags.mjs";
 import { waitForAptLock } from "./apt-lock-wait.mjs";
+import {
+  clamavAptInstallCommandForProfile,
+  clamavConfigApplyCommandForProfile,
+  clamavDaemonInstalledCheckCommand,
+  clamavDaemonPackageInstallCommand,
+  clamavEnableServicesCommandForProfile,
+  resolveClamavProfile,
+} from "./clamav-resource-profile.mjs";
+
+/**
+ * @typedef {import("./clamav-resource-profile.mjs").ClamavProfile} ClamavProfile
+ */
 
 /**
  * @typedef {object} ConfigureExec
@@ -12,6 +24,8 @@ import { waitForAptLock } from "./apt-lock-wait.mjs";
  * @property {boolean} ok
  * @property {boolean} skipped
  * @property {string} message
+ * @property {ClamavProfile} [profile]
+ * @property {number} [memory_mb]
  */
 
 /** @returns {string} */
@@ -19,25 +33,20 @@ export function clamavInstalledCheckCommand() {
   return "dpkg -s clamav >/dev/null 2>&1";
 }
 
-/** @returns {string} */
-export function clamavAptInstallCommand() {
-  return [
-    "export DEBIAN_FRONTEND=noninteractive",
-    "apt-get update -qq",
-    "apt-get install -y -qq clamav clamav-daemon clamav-freshclam",
-  ].join(" && ");
+/**
+ * @param {ClamavProfile} [profile]
+ * @returns {string}
+ */
+export function clamavAptInstallCommand(profile = "full") {
+  return clamavAptInstallCommandForProfile(profile);
 }
 
-/** @returns {string} */
-export function clamavEnableServicesCommand() {
-  return [
-    "systemctl enable clamav-freshclam 2>/dev/null || true",
-    "systemctl start clamav-freshclam 2>/dev/null || true",
-    "if systemctl list-unit-files clamav-daemon.service >/dev/null 2>&1; then",
-    "  systemctl enable clamav-daemon 2>/dev/null || true",
-    "  systemctl start clamav-daemon 2>/dev/null || true",
-    "fi",
-  ].join("\n");
+/**
+ * @param {ClamavProfile} [profile]
+ * @returns {string}
+ */
+export function clamavEnableServicesCommand(profile = "full") {
+  return clamavEnableServicesCommandForProfile(profile);
 }
 
 /**
@@ -65,45 +74,73 @@ function runChecked(exec, cmd, log) {
 }
 
 /**
+ * @param {ConfigureExec} exec
+ * @param {ClamavProfile} profile
+ * @param {{ info: (msg: string) => void }} log
+ */
+async function ensureClamavDaemonPackage(exec, profile, log) {
+  if (profile === "lean") return;
+  const check = exec.run(clamavDaemonInstalledCheckCommand(), { capture: true });
+  if (check.status === 0) return;
+
+  const lock = await waitForAptLock(exec, log);
+  if (!lock.ok) {
+    throw new Error(lock.message);
+  }
+  log.info(`${exec.label}: installing clamav-daemon for ${profile} profile`);
+  runChecked(exec, clamavDaemonPackageInstallCommand(), log);
+}
+
+/**
  * Idempotent ClamAV install + enable freshclam (definitions update in background).
+ * Resource profile is derived from guest memory_mb (lean ≤3072, standard ≤8191, full above).
  *
  * @param {object} opts
  * @param {ConfigureExec} opts.exec
  * @param {{ info: (msg: string) => void; warn?: (msg: string) => void }} opts.log
  * @param {Record<string, string>} [opts.flags]
+ * @param {number} [opts.memoryMb] guest memory_mb from deployment proxmox block
  * @returns {Promise<ClamavEnsureResult>}
  */
-export async function ensureClamav({ exec, log, flags }) {
+export async function ensureClamav({ exec, log, flags, memoryMb }) {
   if (clamavSkippedByFlags(flags)) {
     log.info(`${exec.label}: ClamAV skipped (--skip-clamav)`);
     return { ok: true, skipped: true, message: "skipped by flag" };
   }
 
+  const profile = resolveClamavProfile(memoryMb);
+  log.info(`${exec.label}: ClamAV profile ${profile}${memoryMb ? ` (memory_mb=${memoryMb})` : ""}`);
+
   const check = exec.run(clamavInstalledCheckCommand(), { capture: true });
   const alreadyInstalled = check.status === 0;
 
   try {
-    if (alreadyInstalled) {
-      log.info(`${exec.label}: ClamAV already installed — ensuring services`);
-      runChecked(exec, clamavEnableServicesCommand(), log);
-      return { ok: true, skipped: false, message: "already installed; services ensured" };
+    if (!alreadyInstalled) {
+      const lock = await waitForAptLock(exec, log);
+      if (!lock.ok) {
+        return { ok: false, skipped: false, message: lock.message, profile, memory_mb: memoryMb };
+      }
+
+      log.info(`${exec.label}: installing ClamAV packages (${profile})`);
+      runChecked(exec, clamavAptInstallCommandForProfile(profile), log);
+    } else {
+      log.info(`${exec.label}: ClamAV already installed — applying ${profile} profile`);
+      await ensureClamavDaemonPackage(exec, profile, log);
     }
 
-    const lock = await waitForAptLock(exec, log);
-    if (!lock.ok) {
-      return { ok: false, skipped: false, message: lock.message };
-    }
+    runChecked(exec, clamavConfigApplyCommandForProfile(profile), log);
+    runChecked(exec, clamavEnableServicesCommandForProfile(profile), log);
 
-    log.info(`${exec.label}: installing ClamAV packages`);
-    runChecked(exec, clamavAptInstallCommand(), log);
-    runChecked(exec, clamavEnableServicesCommand(), log);
+    const message = alreadyInstalled
+      ? `already installed; ${profile} profile ensured`
+      : `installed (${profile})`;
     log.info(
-      `${exec.label}: ClamAV installed; virus definitions will update via clamav-freshclam in the background`,
+      `${exec.label}: ClamAV ${message}; virus definitions update via clamav-freshclam in the background`,
     );
-    return { ok: true, skipped: false, message: "installed" };
+    return { ok: true, skipped: false, message, profile, memory_mb: memoryMb };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (log.warn) log.warn(`${exec.label}: ClamAV ensure failed: ${msg}`);
-    return { ok: false, skipped: false, message: msg };
+    return { ok: false, skipped: false, message: msg, profile, memory_mb: memoryMb };
   }
 }

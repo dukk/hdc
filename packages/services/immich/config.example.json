@@ -25,8 +25,15 @@
       "upload_location": "/data/immich/library",
       "db_data_location": "/data/immich/postgres",
       "db_password_vault_key": "HDC_IMMICH_DB_PASSWORD",
+      "api_key_vault_key": "HDC_IMMICH_API_KEY",
       "timezone": "UTC",
-      "disable_machine_learning": false
+      "disable_machine_learning": false,
+      "mail": {
+        "enabled": false,
+        "from": "",
+        "reply_to": ""
+      },
+      "system_config": null
     },
     "install": {
       "enabled": true,

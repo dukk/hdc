@@ -73,7 +73,7 @@ export async function ensureCrowdsecAgent(opts) {
   let enrollKey = "";
   if (opts.vaultAccess) {
     try {
-      enrollKey = (await opts.vaultAccess.getSecret(vaultKey)) || "";
+      enrollKey = (await opts.vaultAccess.getSecret(vaultKey, { optional: true })) || "";
     } catch {
       enrollKey = "";
     }

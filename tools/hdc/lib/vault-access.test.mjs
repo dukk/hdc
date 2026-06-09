@@ -115,6 +115,28 @@ describe("createVaultAccess local vault", () => {
     expect(v).toBe("stored");
   });
 
+  it("getSecret optional returns empty without prompting when missing", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-va-"));
+    writeVault(join(root, "vault.enc"), "p", {});
+    const q = vi.fn(async () => "should-not-prompt");
+    const deps = makeDeps({ envVars: { HDC_VAULT_PASSPHRASE: "p" }, readLineQuestion: q });
+    const a = createVaultAccess(vaultDepsFromCli(deps));
+    const v = await a.getSecret("HDC_CROWDSEC_ENROLL_KEY", { optional: true });
+    expect(v).toBe("");
+    expect(q).not.toHaveBeenCalled();
+  });
+
+  it("getSecret optional prefers env over vault", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-va-"));
+    writeVault(join(root, "vault.enc"), "p", { HDC_CROWDSEC_ENROLL_KEY: "vault-key" });
+    const deps = makeDeps({
+      envVars: { HDC_VAULT_PASSPHRASE: "p", HDC_CROWDSEC_ENROLL_KEY: "env-key" },
+    });
+    const a = createVaultAccess(vaultDepsFromCli(deps));
+    const v = await a.getSecret("HDC_CROWDSEC_ENROLL_KEY", { optional: true });
+    expect(v).toBe("env-key");
+  });
+
   it("throws CliExit on empty interactive vault passphrase", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-va-"));
     writeVault(join(root, "vault.enc"), "p", {});
