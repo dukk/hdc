@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { readCtPrimaryIp, resolvePveSshForHost } from "../../gatus/lib/gatus-install.mjs";
+
 /**
  * Bitwarden CLI release URL (linux x86_64).
  *
@@ -26,7 +28,8 @@ export function buildHdcRunnerInstallScript(runner) {
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update -qq",
-    "apt-get install -y -qq curl ca-certificates gnupg rsync git mailutils unzip",
+    "apt-get install -y -qq curl ca-certificates gnupg rsync git mailutils unzip openssh-server",
+    "systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true",
     "",
     "# Node.js",
     "command -v node >/dev/null 2>&1 || {",
@@ -34,13 +37,21 @@ export function buildHdcRunnerInstallScript(runner) {
     "  apt-get install -y -qq nodejs",
     "}",
     "",
-    "# Bitwarden CLI",
-    `BW_URL='${bwDownloadUrl(bwVersion)}'`,
-    "TMP_BW=$(mktemp -d)",
-    "curl -fsSL \"$BW_URL\" -o \"$TMP_BW/bw.zip\"",
-    "unzip -qo \"$TMP_BW/bw.zip\" -d \"$TMP_BW\"",
-    "install -m 0755 \"$TMP_BW/bw\" /usr/local/bin/bw",
-    "rm -rf \"$TMP_BW\"",
+    "# Bitwarden CLI (npm; zip fallback when npm registry unreachable)",
+    "if ! command -v bw >/dev/null 2>&1; then",
+    "  if npm install -g @bitwarden/cli@" + bwVersion + " 2>/dev/null; then",
+    "    true",
+    "  else",
+    `    BW_URL='${bwDownloadUrl(bwVersion)}'`,
+    "    TMP_BW=$(mktemp -d)",
+    "    curl -fsSL \"$BW_URL\" -o \"$TMP_BW/bw.zip\"",
+    "    unzip -qo \"$TMP_BW/bw.zip\" -d \"$TMP_BW\"",
+    '    BW_BIN="$(find "$TMP_BW" -maxdepth 3 -type f -name bw 2>/dev/null | head -1)"',
+    '    if [ -z "$BW_BIN" ] || [ ! -f "$BW_BIN" ]; then echo "bw binary not found in archive" >&2; exit 1; fi',
+    '    install -m 0755 "$BW_BIN" /usr/local/bin/bw',
+    "    rm -rf \"$TMP_BW\"",
+    "  fi",
+    "fi",
     "bw --version",
     "",
     `# Directory layout`,
@@ -126,6 +137,27 @@ export function ensureOperatorSshKeysOnGuest(exec, log) {
     return { ok: false, message: detail };
   }
   return { ok: true, skipped: false, message: `${pubKeys.length} key(s)` };
+}
+
+/**
+ * Install production npm deps in synced hdc tree (node_modules excluded from rsync).
+ *
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
+ * @param {string} installRoot
+ * @param {{ info: (msg: string) => void }} log
+ */
+export function ensureHdcNpmDepsOnGuest(exec, installRoot, log) {
+  const root = String(installRoot ?? "/opt/hdc").trim() || "/opt/hdc";
+  log.info(`${exec.label}: npm install --omit=dev in ${root}`);
+  const r = exec.run(
+    `test -f '${root}/package.json' && cd '${root}' && npm install --omit=dev --no-audit --no-fund`,
+    { capture: true },
+  );
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    return { ok: false, message: detail };
+  }
+  return { ok: true, message: "npm deps installed" };
 }
 
 export { resolvePveSshForHost, readCtPrimaryIp };

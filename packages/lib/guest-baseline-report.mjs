@@ -56,6 +56,9 @@ export function mergeGuestBaselineIntoResult(existing, baseline) {
   existing.mail_relay = baseline.mail_relay;
   existing.crowdsec_agent = baseline.crowdsec_agent;
   existing.wazuh_agent = baseline.wazuh_agent;
+  if (baseline.wazuh_log_collection) {
+    existing.wazuh_log_collection = baseline.wazuh_log_collection;
+  }
   existing.root_login_disabled = baseline.root_login_disabled;
   if (!guestBaselineUsersOk(baseline)) {
     existing.ok = false;
@@ -67,6 +70,7 @@ export function mergeGuestBaselineIntoResult(existing, baseline) {
     "unattended_upgrades",
     "crowdsec_agent",
     "wazuh_agent",
+    "wazuh_log_collection",
   ]) {
     const block = baseline[key];
     if (isResultRow(block) && block.skipped !== true && block.ok === false) {
@@ -140,7 +144,8 @@ export function guestBaselineReportExtraSections(ctx) {
       !row.root_login_disabled &&
       !row.mail_relay &&
       !row.crowdsec_agent &&
-      !row.wazuh_agent
+      !row.wazuh_agent &&
+      !row.wazuh_log_collection
     )
       continue;
     bySystem.set(sid, row);
@@ -175,6 +180,9 @@ export function guestBaselineReportExtraSections(ctx) {
     if (row.wazuh_agent) {
       lines.push(`- **wazuh_agent:** ${formatGuestBaselineBlock(row.wazuh_agent)}`);
     }
+    if (row.wazuh_log_collection) {
+      lines.push(`- **wazuh_log_collection:** ${formatGuestBaselineBlock(row.wazuh_log_collection)}`);
+    }
     if (row.mail_relay) {
       lines.push(`- **mail_relay:** ${formatGuestBaselineBlock(row.mail_relay)}`);
     }
@@ -204,7 +212,8 @@ export function payloadHasGuestBaseline(ctx) {
         payload?.root_login_disabled ||
         payload?.mail_relay ||
         payload?.crowdsec_agent ||
-        payload?.wazuh_agent,
+        payload?.wazuh_agent ||
+        payload?.wazuh_log_collection,
     );
   }
   return rawResults.some((r) => {
@@ -219,7 +228,8 @@ export function payloadHasGuestBaseline(ctx) {
         row.root_login_disabled ||
         row.mail_relay ||
         row.crowdsec_agent ||
-        row.wazuh_agent,
+        row.wazuh_agent ||
+        row.wazuh_log_collection,
     );
   });
 }

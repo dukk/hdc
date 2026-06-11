@@ -1,6 +1,6 @@
 # Mailcow (HDC service package)
 
-Deploy [mailcow-dockerized](https://github.com/mailcow/mailcow-dockerized) on Proxmox **LXC** or **QEMU VM** with Docker. Manages mail **domains** (not mailboxes) via the Mailcow API, documents DNS (MX/SPF/DKIM/DMARC), and supports per-domain outbound delivery:
+Deploy [mailcow-dockerized](https://github.com/mailcow/mailcow-dockerized) on Proxmox **LXC** or **QEMU VM** with Docker. Manages mail **domains**, **mailboxes**, and **aliases** via the Mailcow API, documents DNS (MX/SPF/DKIM/DMARC), and supports per-domain outbound delivery:
 
 | `outbound.mode` | Behavior |
 | --- | --- |
@@ -24,8 +24,8 @@ Key blocks:
 
 - `mailcow.hostname` — `MAILCOW_HOSTNAME` FQDN (e.g. `mailcow-a.hdc.dukk.org`), **not** a mail domain
 - `mailcow.admin_url` — browser UI URL (often nginx-waf front door)
-- `mailcow.api_url` — optional Mailcow API base (defaults to `https://{hostname}` before `admin_url`)
-- `mailcow.domains[]` — domains to add in Mailcow; each has `outbound.mode` and `dns` templates
+- `mailcow.api_url` — optional Mailcow API base (defaults to `https://{hostname}`); set to `https://<guest-ip>` when running `maintain` from a LAN workstation (uses insecure TLS for self-signed certs on the guest IP)
+- `mailcow.domains[]` — domains to add in Mailcow; each has `outbound.mode`, `dns` templates, optional `mailboxes[]` and `aliases[]`
 - `mailcow.dns_publish.cloudflare_dkim` — when true (default), publish DKIM TXT to Cloudflare after reconcile
 - `install.install_dir` — default `/opt/mailcow-dockerized` (LXC); use `/data/mailcow/mailcow-dockerized` on QEMU with a data disk
 
@@ -40,11 +40,14 @@ QEMU defaults (typical): 8 GiB RAM, 4 vCPU, 32 GiB rootfs + optional `data_disk_
 | `HDC_MAILCOW_DBPASS` | Auto-generated on first deploy if missing |
 | `HDC_MAILCOW_DBROOT` | Auto-generated on first deploy if missing |
 | `HDC_MAILCOW_REDISPASS` | Auto-generated on first deploy if missing |
-| `HDC_MAILCOW_API_KEY` | Required for domain reconciliation on `deploy` / `maintain` (create in Mailcow UI after first boot) |
+| `HDC_MAILCOW_API_KEY` | Required for domain/mailbox/alias reconciliation on `deploy` / `maintain` (create in Mailcow UI after first boot) |
 | `HDC_CLOUDFLARE_API_TOKEN` | Required for automatic DKIM TXT publish (repo `.env` or vault; same token as cloudflare package) |
+
+Per-mailbox passwords use `domains[].mailboxes[].password_vault_key` (auto-generated on first maintain when missing).
 
 ```bash
 node tools/hdc/cli.mjs secrets set HDC_MAILCOW_API_KEY
+node tools/hdc/cli.mjs secrets set HDC_MAILCOW_MAILBOX_ADMIN_EXAMPLE_INVALID_PASSWORD
 ```
 
 ## Commands
@@ -61,9 +64,9 @@ node tools/hdc/cli.mjs run service mailcow teardown -- --dry-run
 
 | Verb | Flags |
 | --- | --- |
-| `deploy` | `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` (QEMU), `--skip-domains`, `--skip-cloudflare-dkim` |
-| `maintain` | `--skip-upgrade`, `--skip-domains`, `--skip-cloudflare-dkim`, `--skip-baseline`, `--skip-clamav`, … |
-| `query` | `--live` (reports `missing_domains` / `extra_domains` vs config) |
+| `deploy` | `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` (QEMU), `--skip-domains`, `--skip-cloudflare-dkim`, `--skip-mailboxes`, `--skip-aliases`, `--prune` |
+| `maintain` | `--skip-upgrade`, `--skip-domains`, `--skip-cloudflare-dkim`, `--skip-mailboxes`, `--skip-aliases`, `--prune`, `--rotate-mailbox-passwords`, `--skip-baseline`, `--skip-clamav`, … |
+| `query` | `--live` (reports domain/mailbox/alias drift vs config) |
 | `teardown` | `--dry-run`, `--yes`, `--skip-compose-down` |
 
 ## DNS

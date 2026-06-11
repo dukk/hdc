@@ -39,6 +39,14 @@ Edit `homepage/services.yaml` (and optional `settings.yaml` / `bookmarks.yaml` /
 
 Trivy and WireGuard have no browser UI in this deployment; omit them from the dashboard or link only via `siteMonitor` if you add a health endpoint.
 
+## Custom icons
+
+Most tiles use [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) names (kebab-case, optional `.png` suffix). Examples: `draw-io.png`, `isc-bind9.png`, `immich.png`.
+
+Services without a dashboard-icons entry can use vendored PNGs under `homepage/icons/` (public hdc repo). Reference them in `services.yaml` as `/icons/<name>.png`. hdc syncs that directory to the guest on deploy/maintain and mounts it at `/app/public/icons` in the Homepage container.
+
+Run `homepage maintain` after adding or changing icons. See `homepage/icons/README.md` for upstream sources.
+
 ## Proxmox widget
 
 Read-only hypervisor metrics use a dedicated Proxmox service account (not the hdc operator token). The account needs **PVEAuditor** on `/` for both the **user** and the **API token** (privilege separation enabled); hdc `proxmox maintain` ensures both.

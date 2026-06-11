@@ -3,7 +3,7 @@
  * Maintain Mailcow: refresh stack, reconcile domains/DKIM/relay via API, guest baseline.
  *
  * Usage: hdc run service mailcow maintain -- [--instance a | --system-id vm-mailcow-a]
- *        hdc run service mailcow maintain -- [--skip-upgrade] [--skip-domains] [--skip-cloudflare-dkim] [--skip-clamav]
+ *        hdc run service mailcow maintain -- [--skip-upgrade] [--skip-domains] [--skip-cloudflare-dkim] [--skip-mailboxes] [--skip-aliases] [--prune] [--rotate-mailbox-passwords] [--skip-clamav]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
@@ -23,6 +23,8 @@ import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-confi
 
 import { resolveMailcowDeployments } from "../lib/deployments.mjs";
 import { reconcileMailcowDomainsForConfig } from "../lib/mailcow-domains.mjs";
+import { reconcileMailcowMailboxesForConfig } from "../lib/mailcow-mailboxes.mjs";
+import { resolveMailcowApiKey } from "../lib/vault-secrets.mjs";
 import {
   maintainMailcowStackInCt,
   maintainMailcowStackOnHost,
@@ -68,6 +70,11 @@ async function maintainOne(deployment, flags, vault) {
   const skipDomains = flagGet(flags, "skip-domains", "skip_domains") !== undefined;
   const skipCloudflareDkim =
     flagGet(flags, "skip-cloudflare-dkim", "skip_cloudflare_dkim") !== undefined;
+  const skipMailboxes = flagGet(flags, "skip-mailboxes", "skip_mailboxes") !== undefined;
+  const skipAliases = flagGet(flags, "skip-aliases", "skip_aliases") !== undefined;
+  const prune = flagGet(flags, "prune") !== undefined;
+  const rotateMailboxPasswords =
+    flagGet(flags, "rotate-mailbox-passwords", "rotate_mailbox_passwords") !== undefined;
   const skipBaseline = flagGet(flags, "skip-baseline", "skip_baseline") !== undefined;
 
   if (!isObject(px)) {
@@ -115,10 +122,22 @@ async function maintainOne(deployment, flags, vault) {
     );
   }
 
+  const reconcileLog = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  const apiKey = await resolveMailcowApiKey(vault, mailcowCfg, { required: false });
+
   const domainReconcile = await reconcileMailcowDomainsForConfig(mailcowCfg, vault, {
     skipDomains,
     skipCloudflareDkim,
-    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    apiKey,
+    log: reconcileLog,
+  });
+  const mailboxReconcile = await reconcileMailcowMailboxesForConfig(mailcowCfg, vault, {
+    skipMailboxes,
+    skipAliases,
+    prune,
+    rotateMailboxPasswords,
+    apiKey,
+    log: reconcileLog,
   });
   const domainResults = domainReconcile.domain_results;
   const dnsChecklists = domainReconcile.dns_checklists;
@@ -128,7 +147,7 @@ async function maintainOne(deployment, flags, vault) {
   if (!skipBaseline) {
     const log = provisionLogFromConsole(console);
     const vaultAccess = createPackageVaultAccess();
-    const baselineFlags = { ...flags, "skip-mail-relay": "" };
+    const baselineFlags = { ...flags, "skip-mail-relay": "1" };
 
     if (mode === "proxmox-qemu" || mode === "configure-only") {
       const cfg = isObject(configure) ? configure : {};
@@ -170,6 +189,13 @@ async function maintainOne(deployment, flags, vault) {
     : domainReconcile.api_ok === false
       ? false
       : domainResults.every((r) => r.ok !== false);
+  const mailboxesOk =
+    mailboxReconcile.mailboxes_skipped && mailboxReconcile.aliases_skipped
+      ? true
+      : mailboxReconcile.api_ok === false
+        ? false
+        : mailboxReconcile.mailbox_results.every((r) => r.ok !== false) &&
+          mailboxReconcile.alias_results.every((r) => r.ok !== false);
   const cloudflareDkimOk =
     !domainReconcile.cloudflare_dkim ||
     domainReconcile.cloudflare_dkim.skipped === true ||
@@ -188,7 +214,7 @@ async function maintainOne(deployment, flags, vault) {
         : null;
 
   return {
-    ok: stackResult.ok && domainsOk && cloudflareDkimOk && baseline.ok,
+    ok: stackResult.ok && domainsOk && mailboxesOk && cloudflareDkimOk && baseline.ok,
     system_id: systemId,
     host_id: hostId,
     mode,
@@ -196,13 +222,26 @@ async function maintainOne(deployment, flags, vault) {
     skip_upgrade: skipUpgrade,
     skip_domains: skipDomains,
     skip_cloudflare_dkim: skipCloudflareDkim,
+    skip_mailboxes: skipMailboxes,
+    skip_aliases: skipAliases,
+    prune,
     domains_skipped: domainsSkipped,
+    mailboxes_skipped: mailboxReconcile.mailboxes_skipped,
+    aliases_skipped: mailboxReconcile.aliases_skipped,
     configured_domain_count: domainReconcile.configured_domain_count,
+    configured_mailbox_count: mailboxReconcile.configured_mailbox_count,
+    configured_alias_count: mailboxReconcile.configured_alias_count,
     api_ok: domainReconcile.api_ok,
     api_error: domainReconcile.api_error,
+    mailbox_api_ok: mailboxReconcile.api_ok,
+    mailbox_api_error: mailboxReconcile.api_error,
     reconcile_summary: domainReconcile.reconcile_summary,
+    mailbox_reconcile_summary: mailboxReconcile.mailbox_reconcile_summary,
+    alias_reconcile_summary: mailboxReconcile.alias_reconcile_summary,
     cloudflare_dkim: domainReconcile.cloudflare_dkim,
     domain_results: domainResults,
+    mailbox_results: mailboxReconcile.mailbox_results,
+    alias_results: mailboxReconcile.alias_results,
     dns_checklists: dnsChecklists,
     admin_url: stackResult.admin_url ?? null,
     guest_ip: stackResult.guest_ip ?? stackResult.ct_ip ?? null,

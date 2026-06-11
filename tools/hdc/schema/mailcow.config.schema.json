@@ -72,6 +72,39 @@
                         "dmarc": { "type": "string" },
                         "notes": { "type": "string" }
                       }
+                    },
+                    "mailboxes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["local_part"],
+                        "properties": {
+                          "id": { "type": "string" },
+                          "local_part": { "type": "string" },
+                          "name": { "type": "string" },
+                          "quota_mb": { "type": "integer", "minimum": 1 },
+                          "active": { "type": "boolean" },
+                          "password_vault_key": { "type": "string" }
+                        }
+                      }
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["goto"],
+                        "properties": {
+                          "id": { "type": "string" },
+                          "address": { "type": "string" },
+                          "local_part": { "type": "string" },
+                          "goto": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "minItems": 1
+                          },
+                          "active": { "type": "boolean" }
+                        }
+                      }
                     }
                   }
                 }

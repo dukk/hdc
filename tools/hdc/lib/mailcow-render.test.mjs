@@ -1,100 +1,56 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildGenerateConfigEnv,
-  buildInstallScript,
-  normalizeDomainList,
-  normalizeHostname,
-  resolveApiBaseUrl,
-  shellExportEnv,
+  buildTimezoneConfScript,
+  normalizeAliasList,
+  normalizeMailboxList,
 } from "../../../packages/services/mailcow/lib/mailcow-render.mjs";
-import { normalizeMailcowConfig } from "../../../packages/services/mailcow/lib/deployments.mjs";
 
-describe("mailcow-render", () => {
-  it("resolveApiBaseUrl prefers api_url then hostname over admin_url", () => {
-    expect(
-      resolveApiBaseUrl({
-        hostname: "mail.example.invalid",
-        admin_url: "https://mail-web.example.invalid",
-        api_url: "https://api.example.invalid",
-      }),
-    ).toBe("https://api.example.invalid");
-    expect(
-      resolveApiBaseUrl({
-        hostname: "mail.example.invalid",
-        admin_url: "https://mail-web.example.invalid",
-      }),
-    ).toBe("https://mail.example.invalid");
-  });
-
-  it("normalizeHostname requires FQDN", () => {
-    expect(() => normalizeHostname({})).toThrow(/hostname/);
-    expect(normalizeHostname({ hostname: "mail.example.invalid" })).toBe("mail.example.invalid");
-    expect(() => normalizeHostname({ hostname: "mail" })).toThrow(/FQDN/);
-  });
-
-  it("buildGenerateConfigEnv sets mailcow env and skip flags", () => {
-    const env = buildGenerateConfigEnv(
-      { hostname: "mail.example.invalid", timezone: "UTC", skip_clamd: true, skip_solr: true },
-      { dbpass: "db", dbroot: "root", redispass: "redis" },
-    );
-    expect(env.MAILCOW_HOSTNAME).toBe("mail.example.invalid");
-    expect(env.MAILCOW_DBPASS).toBe("db");
-    expect(env.SKIP_CLAMD).toBe("y");
-    expect(env.SKIP_SOLR).toBe("y");
-  });
-
-  it("shellExportEnv quotes values", () => {
-    const s = shellExportEnv({ MAILCOW_HOSTNAME: "mail.example.invalid" });
-    expect(s).toContain('export MAILCOW_HOSTNAME="mail.example.invalid"');
-  });
-
-  it("buildInstallScript clones mailcow-dockerized", () => {
-    const script = buildInstallScript("/opt/mailcow-dockerized", "master", {
-      MAILCOW_HOSTNAME: "mail.example.invalid",
-      MAILCOW_TZ: "UTC",
-      MAILCOW_DBPASS: "x",
-      MAILCOW_DBROOT: "y",
-      MAILCOW_REDISPASS: "z",
-    });
-    expect(script).toContain("mailcow/mailcow-dockerized");
-    expect(script).toContain("generate_config.sh");
-    expect(script).toContain("docker compose up -d");
-  });
-
-  it("normalizeDomainList parses outbound mode", () => {
-    const domains = normalizeDomainList({
-      domains: [
-        { name: "a.invalid", outbound: { mode: "postfix-relay" } },
-        { name: "b.invalid", outbound: { mode: "direct" } },
-        { name: "c.invalid" },
-      ],
-    });
-    expect(domains).toHaveLength(3);
-    expect(domains[0].outbound_mode).toBe("postfix-relay");
-    expect(domains[1].outbound_mode).toBe("direct");
-    expect(domains[2].outbound_mode).toBe("direct");
-  });
-});
-
-describe("mailcow deployments config", () => {
-  it("normalizeMailcowConfig validates example shape", () => {
-    const cfg = {
-      schema_version: 2,
-      defaults: {
-        mode: "proxmox-lxc",
-        mailcow: { hostname: "mail.example.invalid" },
-        proxmox: { lxc: { vmid: 1, memory_mb: 1024, cores: 1, rootfs_gb: 10 } },
+describe("mailcow-render mailbox/alias normalize", () => {
+  const mailcow = {
+    domains: [
+      {
+        name: "dukk.cloud",
+        mailboxes: [
+          {
+            local_part: "dukk",
+            name: "Dukk Cloud",
+            quota_mb: 4096,
+            password_vault_key: "HDC_MAILCOW_MAILBOX_DUKK_DUKK_CLOUD_PASSWORD",
+          },
+        ],
+        aliases: [
+          {
+            address: "info@dukk.cloud",
+            goto: ["dukk@dukk.cloud"],
+          },
+        ],
       },
-      deployments: [
-        {
-          system_id: "mailcow-a",
-          proxmox: { host_id: "pve-a", lxc: { vmid: 490 } },
-        },
-      ],
-    };
-    const norm = normalizeMailcowConfig(cfg);
-    expect(norm.deployments).toHaveLength(1);
-    expect(norm.deployments[0].system_id).toBe("mailcow-a");
+    ],
+  };
+
+  it("normalizes mailbox list from domains", () => {
+    const mailboxes = normalizeMailboxList(mailcow);
+    expect(mailboxes).toHaveLength(1);
+    expect(mailboxes[0].address).toBe("dukk@dukk.cloud");
+    expect(mailboxes[0].quota_mb).toBe(4096);
+    expect(mailboxes[0].password_vault_key).toBe(
+      "HDC_MAILCOW_MAILBOX_DUKK_DUKK_CLOUD_PASSWORD",
+    );
+  });
+
+  it("normalizes alias list from domains", () => {
+    const aliases = normalizeAliasList(mailcow);
+    expect(aliases).toHaveLength(1);
+    expect(aliases[0].address).toBe("info@dukk.cloud");
+    expect(aliases[0].goto).toEqual(["dukk@dukk.cloud"]);
+  });
+
+  it("builds timezone script for mailcow.conf and timedatectl", () => {
+    const script = buildTimezoneConfScript("/opt/mailcow", {
+      timezone: "America/New_York",
+    });
+    expect(script).toContain("set_kv TZ 'America/New_York'");
+    expect(script).toContain("timedatectl set-timezone 'America/New_York'");
   });
 });

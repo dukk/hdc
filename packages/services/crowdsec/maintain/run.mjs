@@ -22,6 +22,8 @@ import { resolvePveSshForHost, maintainCrowdsecInCt, readCtPrimaryIp } from "../
 import { syncCrowdsecBouncers } from "../lib/crowdsec-bouncer-sync.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { ensureWazuhLogCollection } from "../../../lib/wazuh-log-collection.mjs";
+import { resolveCrowdsecWazuhLogCollection } from "../lib/wazuh-log-collection.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -83,6 +85,13 @@ async function maintainOne(deployment, flags, vaultAccess) {
     deployment,
     proxmoxPackageRoot: proxmoxRoot,
   });
+  const wazuhLogEntries = resolveCrowdsecWazuhLogCollection(readCfg());
+  const wazuh_log_collection = await ensureWazuhLogCollection({
+    exec,
+    log,
+    flags,
+    entries: wazuhLogEntries,
+  });
 
   /** @type {Record<string, unknown> | null} */
   let bouncerSync = null;
@@ -102,13 +111,18 @@ async function maintainOne(deployment, flags, vaultAccess) {
   }
 
   return {
-    ok: result.ok && baseline.ok && (!bouncerSync || bouncerSync.ok === true),
+    ok:
+      result.ok &&
+      baseline.ok &&
+      (wazuh_log_collection.ok !== false || wazuh_log_collection.skipped === true) &&
+      (!bouncerSync || bouncerSync.ok === true),
     system_id: systemId,
     host_id: hostId,
     vmid,
     lapi_url: ctIp ? `http://${ctIp}:${crowdsecLapiPort(crowdsecCfg)}` : null,
     ...result,
     ...guestBaselineResultFields(baseline),
+    wazuh_log_collection,
     bouncer_sync: bouncerSync,
   };
 }

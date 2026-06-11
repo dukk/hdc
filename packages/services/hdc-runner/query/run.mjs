@@ -32,7 +32,7 @@ async function main() {
   const loaded = tryLoadPackageConfigFromPackageRoot(packageRoot, {
     exampleRel: PACKAGE_CONFIG_EXAMPLE,
   });
-  if (!loaded.found) {
+  if (!loaded.ok) {
     process.stdout.write(
       JSON.stringify({ ok: false, target, verb, message: "package config missing" }, null, 2) + "\n",
     );

@@ -25,6 +25,7 @@ function isObject(v) {
  *   dryRun?: boolean;
  *   log?: (line: string) => void;
  *   requiredApiKey?: boolean;
+ *   apiKey?: string | null;
  * }} [opts]
  */
 export async function reconcileMailcowDomainsForConfig(mailcowCfg, vault, opts = {}) {
@@ -62,7 +63,10 @@ export async function reconcileMailcowDomainsForConfig(mailcowCfg, vault, opts =
     };
   }
 
-  const apiKey = await resolveMailcowApiKey(vault, mc, { required: Boolean(opts.requiredApiKey) });
+  const apiKey =
+    opts.apiKey !== undefined
+      ? opts.apiKey
+      : await resolveMailcowApiKey(vault, mc, { required: Boolean(opts.requiredApiKey) });
 
   if (!apiKey) {
     domainsSkipped = true;

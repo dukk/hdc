@@ -17,6 +17,8 @@ import { listWazuhDeploymentSummaries, normalizeWazuhConfig, resolveWazuhDeploym
 import { resolvePveSshForHost } from "../lib/wazuh-install.mjs";
 import { queryWazuhInCt, queryWazuhOnHost } from "../lib/query-status.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { createWazuhVaultAccess } from "../lib/vault-deps.mjs";
+import { wazuhApiPasswordVaultKey } from "../lib/deployments.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -69,8 +71,15 @@ async function main() {
   const liveResults = [];
   if (live && cfg && !configError) {
     let selected;
+    /** @type {string} */
+    let apiPassword = "";
     try {
       selected = resolveWazuhDeployments(cfg, flags);
+      const defaultsWazuh = isObject(cfg.defaults) && isObject(cfg.defaults.wazuh) ? cfg.defaults.wazuh : {};
+      const apiKeyName = wazuhApiPasswordVaultKey(defaultsWazuh);
+      const vaultAccess = createWazuhVaultAccess();
+      await vaultAccess.unlock({});
+      apiPassword = String(await vaultAccess.getSecret(apiKeyName, { optional: true })).trim();
     } catch (e) {
       configError = String(/** @type {Error} */ (e).message || e);
     }
@@ -91,7 +100,13 @@ async function main() {
             const q = isObject(px.qemu) ? px.qemu : {};
             const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
             const exec = createConfigureExec("ssh", { user, host });
-            const status = queryWazuhOnHost(exec, d.wazuh, d.install, Number.isFinite(vmid) ? vmid : null);
+            const status = queryWazuhOnHost(
+              exec,
+              d.wazuh,
+              d.install,
+              Number.isFinite(vmid) ? vmid : null,
+              apiPassword,
+            );
             liveResults.push({ system_id: d.systemId, ok: true, ...status });
           } else {
             const lxc = isObject(px.lxc) ? px.lxc : {};
@@ -101,7 +116,7 @@ async function main() {
               continue;
             }
             const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-            const status = queryWazuhInCt(pveSsh.user, pveSsh.host, vmid, d.wazuh, d.install);
+            const status = queryWazuhInCt(pveSsh.user, pveSsh.host, vmid, d.wazuh, d.install, apiPassword);
             liveResults.push({ system_id: d.systemId, ok: true, ...status });
           }
         } catch (e) {

@@ -131,7 +131,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
 - **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
@@ -662,6 +662,25 @@ No vault secrets for v1. Web UI: `http://192.0.2.120/nagios4` (and `.121`, `.122
 
 Example: `node tools/hdc/cli.mjs run service nagios deploy --`
 
+## Hermes Agent in this repo
+
+- **Config:** [`packages/services/hermes/config.json`](packages/services/hermes/config.json) (copy from [`config.example.json`](packages/services/hermes/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/hermes-a.json`](inventory/manual/systems/hermes-a.json); service sidecar [`inventory/manual/services/hermes.json`](inventory/manual/services/hermes.json).
+- **Schema:** [`tools/hdc/schema/hermes.config.schema.json`](tools/hdc/schema/hermes.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU Ubuntu VM (default) or LXC + Docker Hermes Agent; Ollama primary via `config.yaml`, OpenRouter fallback, Discord bot token (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `.env`, `config.yaml`, `docker compose pull` + `up -d`; guest Linux baseline (`--skip-upgrade`, `--skip-clamav`, …) |
+| `query` | Config summary; `--live` for Docker + dashboard HTTP on port 9119 |
+| `teardown` | Optional compose down then destroy QEMU or LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Set `hermes.ollama_backends[]` to local Ollama HTTP APIs and `hermes.model.default` to a pulled model tag. `hermes.fallback_providers[]` uses OpenRouter when local inference fails. `hermes.discord.enabled` maps vault `HDC_HERMES_DISCORD_BOT_TOKEN` → `DISCORD_BOT_TOKEN` in compose `.env`.
+
+Vault: prefer `HDC_HERMES_OPENROUTER_API_KEY`; falls back to `HDC_OPENROUTER_API_KEY`. `HDC_HERMES_DASHBOARD_PASSWORD` required; `HDC_HERMES_DISCORD_BOT_TOKEN` when Discord is enabled; `HDC_HERMES_DASHBOARD_AUTH_SECRET` auto-generated if missing.
+
+Example: `node tools/hdc/cli.mjs run service hermes deploy -- --instance a`
+
 ## Open WebUI in this repo
 
 - **Config:** [`packages/services/open-webui/config.json`](packages/services/open-webui/config.json) (copy from [`config.example.json`](packages/services/open-webui/config.example.json); keep local config out of git).
@@ -706,16 +725,16 @@ Example: `node tools/hdc/cli.mjs run service vaultwarden deploy -- --instance a`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC or QEMU: mailcow-dockerized clone + `generate_config.sh`; reconcile `domains[]` + DKIM + relay via Mailcow API; publish DKIM TXT to Cloudflare when token present (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` for QEMU, `--skip-domains`, `--skip-cloudflare-dkim`) |
-| `maintain` | `docker compose pull` + `up -d`; reconcile `domains[]` + DKIM + per-domain relay via Mailcow API; publish DKIM TXT to Cloudflare (`--skip-domains`, `--skip-cloudflare-dkim`, `--skip-upgrade`); guest baseline with `--skip-mail-relay` |
-| `query` | Config summary; `--live` for Docker/admin probe, API domain drift (`missing_domains` / `extra_domains`), DNS checklist (MX/SPF/DKIM/DMARC) |
+| `deploy` | Proxmox LXC or QEMU: mailcow-dockerized clone + `generate_config.sh`; reconcile `domains[]` + DKIM + relay + `mailboxes[]` / `aliases[]` via Mailcow API; publish DKIM TXT to Cloudflare when token present (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--destroy-existing`, `--skip-provision` for QEMU, `--skip-domains`, `--skip-cloudflare-dkim`, `--skip-mailboxes`, `--skip-aliases`, `--prune`) |
+| `maintain` | `docker compose pull` + `up -d`; reconcile `domains[]`, `mailboxes[]`, `aliases[]` via Mailcow API; publish DKIM TXT to Cloudflare (`--skip-domains`, `--skip-mailboxes`, `--skip-aliases`, `--skip-cloudflare-dkim`, `--skip-upgrade`, `--prune`, `--rotate-mailbox-passwords`); guest baseline with `--skip-mail-relay` |
+| `query` | Config summary; `--live` for Docker/admin probe, domain/mailbox/alias drift, DNS checklist (MX/SPF/DKIM/DMARC) |
 | `teardown` | Optional compose down then destroy LXC or QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
 QEMU: set `mode: proxmox-qemu`, `system_id: vm-mailcow-a`, `proxmox.qemu` (`template_vmid`, `ip`, `vmid`, optional `data_disk_gb` + `data_disk_storage`), `configure.ssh.host`. Data disk mounts at `/data/mailcow`; Docker data-root on the data mount when `data_disk_gb` > 0.
 
-Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN), optional `mailcow.api_url` (defaults to `https://{hostname}`; `admin_url` is for browser UI via nginx-waf), and `mailcow.domains[]` with `outbound.mode`: `direct` (mailcow sends) or `postfix-relay` (internal smarthost from [`postfix-relay` config](packages/services/postfix-relay/config.json) `client_defaults`). MX/SPF/DMARC: publish via BIND or [`cloudflare`](packages/infrastructure/cloudflare/) config. DKIM TXT: auto-published to Cloudflare when `HDC_CLOUDFLARE_API_TOKEN` is set and `mailcow.dns_publish.cloudflare_dkim` is not false.
+Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN), optional `mailcow.api_url` (defaults to `https://{hostname}`; `admin_url` is for browser UI via nginx-waf), and `mailcow.domains[]` with `outbound.mode`: `direct` (mailcow sends) or `postfix-relay` (internal smarthost from [`postfix-relay` config](packages/services/postfix-relay/config.json) `client_defaults`). Nest `mailboxes[]` (`local_part`, `name`, `quota_mb`, `password_vault_key`) and `aliases[]` (`address`, `goto[]`) under each domain. MX/SPF/DMARC: publish via BIND or [`cloudflare`](packages/infrastructure/cloudflare/) config. DKIM TXT: auto-published to Cloudflare when `HDC_CLOUDFLARE_API_TOKEN` is set and `mailcow.dns_publish.cloudflare_dkim` is not false.
 
-Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for domain reconciliation on deploy/maintain).
+Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for API reconciliation); per-mailbox `password_vault_key` values (auto-generated on first maintain when missing).
 
 Example: `node tools/hdc/cli.mjs run service mailcow deploy -- --instance a --destroy-existing`
 
@@ -1244,6 +1263,29 @@ node tools/hdc/cli.mjs run infrastructure openrouter query --
 node tools/hdc/cli.mjs run infrastructure openrouter query -- --import --yes
 node tools/hdc/cli.mjs run infrastructure openrouter maintain --
 node tools/hdc/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
+```
+
+## Discord in this repo
+
+- **Config:** [`packages/infrastructure/discord/config.json`](packages/infrastructure/discord/config.json) (copy from [`config.example.json`](packages/infrastructure/discord/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/discord.config.schema.json`](tools/hdc/schema/discord.config.schema.json).
+- **Docs:** [`docs/manually-deployed/discord.md`](docs/manually-deployed/discord.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff Developer applications vs config per bot token; `--import --yes` merges live metadata into hdc-private config |
+| `maintain` | PATCH managed apps for API-supported fields; prints Developer Portal checklist for privileged intents |
+
+Vault: per-app `bot_token_vault_key` (e.g. `HDC_HERMES_DISCORD_BOT_TOKEN` for Hermes — shared with **hermes** compose). Discord has no API to list or create applications; declare each app in `applications[]` after creating it in the Developer Portal.
+
+**Bootstrap:** `query -- --import --yes` after bot tokens are in vault; set `managed: true` before `maintain`.
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure discord query --
+node tools/hdc/cli.mjs run infrastructure discord query -- --import --yes --require-vault
+node tools/hdc/cli.mjs run infrastructure discord maintain -- --app hermes --dry-run
 ```
 
 ## Twilio in this repo

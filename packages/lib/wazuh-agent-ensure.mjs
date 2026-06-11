@@ -7,6 +7,7 @@ import {
   loadGuestAgentsConfig,
   resolveProxmoxPackageRoot,
 } from "./guest-agents-config.mjs";
+import { resolveWazuhManagerRelease } from "./wazuh-release.mjs";
 
 /**
  * @param {Record<string, string>} [flags]
@@ -23,18 +24,34 @@ export function wazuhAgentInstalledCheckCommand() {
 /**
  * @param {string} managerHost
  * @param {string} registrationPassword
+ * @param {string} [agentVersion] Manager release pin (e.g. 4.10.3)
  */
-export function wazuhAgentInstallCommand(managerHost, registrationPassword) {
+export function wazuhAgentInstallCommand(managerHost, registrationPassword, agentVersion = "") {
   const host = managerHost.replace(/'/g, `'\\''`);
   const pass = registrationPassword.replace(/'/g, `'\\''`);
+  const version = agentVersion.trim();
+  const versionPin =
+    version && /^\d+\.\d+\.\d+$/.test(version)
+      ? `wazuh-agent=${version}-*`
+      : "wazuh-agent";
+  const versionEnv = version ? `WAZUH_AGENT_VERSION='${version.replace(/'/g, `'\\''`)}'` : "";
   return [
     "export DEBIAN_FRONTEND=noninteractive",
     "if ! dpkg -s wazuh-agent >/dev/null 2>&1; then",
-    "  curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import 2>/dev/null || true",
-    "  chmod 644 /usr/share/keyrings/wazuh.gpg 2>/dev/null || true",
-    '  echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list',
+    "  rm -f /etc/apt/sources.list.d/wazuh.list",
+    "  apt-get install -y -qq ca-certificates curl gnupg",
+    "  install -d -m 0755 /etc/apt/keyrings",
+    "  curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --dearmor -o /etc/apt/keyrings/wazuh.gpg",
+    "  chmod 644 /etc/apt/keyrings/wazuh.gpg",
+    '  echo "deb [signed-by=/etc/apt/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list',
     "  apt-get update -qq",
-    "  WAZUH_MANAGER='" + host + "' WAZUH_REGISTRATION_PASSWORD='" + pass + "' apt-get install -y -qq wazuh-agent",
+    (versionEnv ? `${versionEnv} ` : "") +
+      "WAZUH_MANAGER='" +
+      host +
+      "' WAZUH_REGISTRATION_PASSWORD='" +
+      pass +
+      "' apt-get install -y -qq " +
+      versionPin,
     "else",
     "  if [ -f /var/ossec/etc/ossec.conf ]; then",
     "    sed -i 's|<address>.*</address>|<address>" + host + "</address>|' /var/ossec/etc/ossec.conf 2>/dev/null || true",
@@ -102,8 +119,11 @@ export async function ensureWazuhAgent(opts) {
         return { ok: false, skipped: false, message: lock.message };
       }
     }
-    opts.log.info(`${opts.exec.label}: ensuring Wazuh agent → ${managerHost}`);
-    const cmd = wazuhAgentInstallCommand(managerHost, regPass);
+    const agentVersion = resolveWazuhManagerRelease(opts.repoRoot);
+    opts.log.info(
+      `${opts.exec.label}: ensuring Wazuh agent → ${managerHost}${agentVersion ? ` (release ${agentVersion})` : ""}`,
+    );
+    const cmd = wazuhAgentInstallCommand(managerHost, regPass, agentVersion);
     const r = opts.exec.run(cmd, { capture: true });
     if (r.status !== 0) {
       const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;

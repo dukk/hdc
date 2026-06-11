@@ -124,6 +124,26 @@ export function cloudflareDkimPublishEnabled(mailcow) {
 }
 
 /**
+ * @typedef {object} MailcowMailboxConfig
+ * @property {string} [id]
+ * @property {string} local_part
+ * @property {string} domain
+ * @property {string} address
+ * @property {string} name
+ * @property {number} quota_mb
+ * @property {boolean} active
+ * @property {string} password_vault_key
+ */
+
+/**
+ * @typedef {object} MailcowAliasConfig
+ * @property {string} [id]
+ * @property {string} address
+ * @property {string[]} goto
+ * @property {boolean} active
+ */
+
+/**
  * @param {Record<string, unknown>} mailcow
  * @returns {import("./mailcow-dns.mjs").MailcowDomainConfig[]}
  */
@@ -164,6 +184,101 @@ export function normalizeDomainList(mailcow) {
         notes: typeof dns.notes === "string" ? dns.notes.trim() : "",
       },
     });
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} mailcow
+ * @returns {MailcowMailboxConfig[]}
+ */
+export function normalizeMailboxList(mailcow) {
+  const raw = mailcow.domains;
+  if (!Array.isArray(raw)) return [];
+  /** @type {MailcowMailboxConfig[]} */
+  const out = [];
+  for (const item of raw) {
+    if (!isObject(item)) continue;
+    const domainName = typeof item.name === "string" ? item.name.trim() : "";
+    if (!domainName) continue;
+    const mailboxes = Array.isArray(item.mailboxes) ? item.mailboxes : [];
+    for (const mb of mailboxes) {
+      if (!isObject(mb)) continue;
+      const localPart =
+        typeof mb.local_part === "string" ? mb.local_part.trim().toLowerCase() : "";
+      if (!localPart) continue;
+      const vaultKey =
+        typeof mb.password_vault_key === "string" && mb.password_vault_key.trim()
+          ? mb.password_vault_key.trim()
+          : `HDC_MAILCOW_MAILBOX_${localPart.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}_${domainName.replace(/\./g, "_").toUpperCase()}_PASSWORD`;
+      const quotaRaw = mb.quota_mb;
+      const quotaMb =
+        typeof quotaRaw === "number" && Number.isFinite(quotaRaw) && quotaRaw > 0
+          ? Math.floor(quotaRaw)
+          : 3072;
+      const address = `${localPart}@${domainName}`.toLowerCase();
+      out.push({
+        id: typeof mb.id === "string" && mb.id.trim() ? mb.id.trim() : undefined,
+        local_part: localPart,
+        domain: domainName,
+        address,
+        name:
+          typeof mb.name === "string" && mb.name.trim()
+            ? mb.name.trim()
+            : localPart,
+        quota_mb: quotaMb,
+        active: mb.active !== false,
+        password_vault_key: vaultKey,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} mailcow
+ * @returns {MailcowAliasConfig[]}
+ */
+export function normalizeAliasList(mailcow) {
+  const raw = mailcow.domains;
+  if (!Array.isArray(raw)) return [];
+  /** @type {MailcowAliasConfig[]} */
+  const out = [];
+  for (const item of raw) {
+    if (!isObject(item)) continue;
+    const domainName = typeof item.name === "string" ? item.name.trim() : "";
+    const aliases = Array.isArray(item.aliases) ? item.aliases : [];
+    for (const alias of aliases) {
+      if (!isObject(alias)) continue;
+      let address =
+        typeof alias.address === "string" ? alias.address.trim().toLowerCase() : "";
+      if (!address && domainName) {
+        const local =
+          typeof alias.local_part === "string" ? alias.local_part.trim().toLowerCase() : "";
+        if (local) address = `${local}@${domainName}`;
+      }
+      if (!address || !address.includes("@")) continue;
+      const gotoRaw = alias.goto;
+      /** @type {string[]} */
+      let goto = [];
+      if (Array.isArray(gotoRaw)) {
+        goto = gotoRaw
+          .map((g) => (typeof g === "string" ? g.trim().toLowerCase() : ""))
+          .filter(Boolean);
+      } else if (typeof gotoRaw === "string" && gotoRaw.trim()) {
+        goto = gotoRaw
+          .split(/[,\s]+/)
+          .map((g) => g.trim().toLowerCase())
+          .filter(Boolean);
+      }
+      if (!goto.length) continue;
+      out.push({
+        id: typeof alias.id === "string" && alias.id.trim() ? alias.id.trim() : undefined,
+        address,
+        goto,
+        active: alias.active !== false,
+      });
+    }
   }
   return out;
 }
@@ -285,6 +400,35 @@ export function reverseProxyAdditionalServerNames(mailcow) {
     .filter(Boolean);
   if (fromExplicit.length) return fromExplicit;
   return normalizeDomainList(mailcow).map((d) => `mail.${d.name}`);
+}
+
+/**
+ * @param {string} dirPath
+ * @param {Record<string, unknown>} mailcow
+ * @returns {string}
+ */
+export function buildTimezoneConfScript(dirPath, mailcow) {
+  const tz = normalizeTimezone(mailcow);
+  const dir = dirPath.replace(/'/g, `'\\''`);
+  const tzEsc = tz.replace(/'/g, `'\\''`);
+  return [
+    "set -euo pipefail",
+    `cd '${dir}'`,
+    "test -f mailcow.conf",
+    `set_kv() {`,
+    `  key="$1"`,
+    `  val="$2"`,
+    `  if grep -q "^$key=" mailcow.conf; then`,
+    `    sed -i "s|^$key=.*|$key=$val|" mailcow.conf`,
+    `  else`,
+    `    printf '%s=%s\\n' "$key" "$val" >> mailcow.conf`,
+    `  fi`,
+    `}`,
+    `set_kv TZ '${tzEsc}'`,
+    `if command -v timedatectl >/dev/null 2>&1; then`,
+    `  timedatectl set-timezone '${tzEsc}'`,
+    `fi`,
+  ].join("\n");
 }
 
 /**

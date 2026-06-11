@@ -102,6 +102,8 @@ export function configureModsecurityProfiles(opts) {
       crsRulesGlob: String(profile.crsRulesGlob),
       unicodeMap: typeof profile.unicodeMap === "string" ? profile.unicodeMap : "",
       auditLog: String(profile.auditLog),
+      auditLogFormat:
+        typeof profile.auditLogFormat === "string" ? profile.auditLogFormat : "json",
       profileId,
     });
     uploadFile(exec, path, conf, log);
@@ -126,6 +128,8 @@ export function configureModsecurityProfiles(opts) {
         crsRulesGlob: String(primary.crsRulesGlob),
         unicodeMap: typeof primary.unicodeMap === "string" ? primary.unicodeMap : "",
         auditLog: String(primary.auditLog),
+        auditLogFormat:
+          typeof primary.auditLogFormat === "string" ? primary.auditLogFormat : "json",
         profileId: String(primary.profileId),
       }),
       log,

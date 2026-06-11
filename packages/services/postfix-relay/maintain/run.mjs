@@ -25,6 +25,8 @@ import { syncProxmoxGuestResourcesOnMaintain } from "../../../lib/proxmox-guest-
 import { createPostfixRelayVaultAccess } from "../lib/vault-deps.mjs";
 import { configurePostfixRelay } from "../lib/postfix-relay-configure.mjs";
 import { resolveConfigureTarget } from "../lib/configure-target.mjs";
+import { ensureWazuhLogCollection } from "../../../lib/wazuh-log-collection.mjs";
+import { resolvePostfixRelayWazuhLogCollection } from "../lib/wazuh-log-collection.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -208,13 +210,24 @@ async function main() {
       proxmoxPackageRoot: proxmoxRoot,
     });
   }
+  /** @type {Awaited<ReturnType<typeof ensureWazuhLogCollection>> | null} */
+  let wazuh_log_collection = null;
+  if (deployMode === "proxmox-lxc" && baseline) {
+    wazuh_log_collection = await ensureWazuhLogCollection({
+      exec,
+      log,
+      flags,
+      entries: resolvePostfixRelayWazuhLogCollection(cfg),
+    });
+  }
   let payload;
   try {
     const configure = configurePostfixRelay({ exec, log, postfix, smtp, smtpUser, smtpPass });
     errout.write(`[hdc] ${target} ${verb}: ok (${via}).\n`);
     const baselineOk = !baseline || baseline.admin_user?.ok !== false;
+    const logsOk = !wazuh_log_collection || wazuh_log_collection.ok !== false || wazuh_log_collection.skipped === true;
     payload = {
-      ok: baselineOk,
+      ok: baselineOk && logsOk,
       target,
       verb,
       configure_via: via,
@@ -224,6 +237,7 @@ async function main() {
       ...(baseline
         ? {
             ...guestBaselineResultFields(baseline),
+            ...(wazuh_log_collection ? { wazuh_log_collection } : {}),
           }
         : {}),
     };

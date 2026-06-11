@@ -221,6 +221,18 @@ describe("nginx-waf render", () => {
     expect(conf).toContain("SecUnicodeMapFile /usr/share/modsecurity-crs/unicode.mapping");
   });
 
+  it("renders SecAuditLogFormat JSON when audit_log_format is json", () => {
+    const conf = renderModsecurityMainConf({
+      ruleEngine: "On",
+      crsSetup: "/etc/modsecurity/crs/crs-setup.conf",
+      crsRulesGlob: "/usr/share/modsecurity-crs/rules/*.conf",
+      unicodeMap: "",
+      auditLog: "/var/log/nginx/modsec_audit.log",
+      auditLogFormat: "json",
+    });
+    expect(conf).toContain("SecAuditLogFormat JSON");
+  });
+
   it("renders cert sync script with peer target", () => {
     const script = renderCertSyncScript({ peerUser: "root", peerHost: "192.0.2.21" });
     expect(script).toContain("root@192.0.2.21");

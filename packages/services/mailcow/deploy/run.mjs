@@ -4,7 +4,7 @@
  *
  * Usage: hdc run service mailcow deploy -- [--instance a | --system-id vm-mailcow-a] [--skip-install]
  *        hdc run service mailcow deploy -- [--skip-existing | --redeploy-existing | --destroy-existing]
- *        hdc run service mailcow deploy -- [--skip-provision] [--skip-domains] [--skip-cloudflare-dkim]
+ *        hdc run service mailcow deploy -- [--skip-provision] [--skip-domains] [--skip-cloudflare-dkim] [--skip-mailboxes] [--skip-aliases] [--prune]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { lxcHostnameFromSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
@@ -43,6 +43,7 @@ import {
   resolvePveSshForHost,
 } from "../lib/mailcow-install.mjs";
 import { reconcileMailcowDomainsForConfig } from "../lib/mailcow-domains.mjs";
+import { reconcileMailcowMailboxesForConfig } from "../lib/mailcow-mailboxes.mjs";
 import { resolveAdminUrl } from "../lib/mailcow-render.mjs";
 import { attachQemuDataDisk } from "../lib/proxmox-data-disk.mjs";
 import {
@@ -576,12 +577,25 @@ async function applyDomainReconciliationAfterDeploy(result, deployment, flags, v
   const skipDomains = flagGet(flags, "skip-domains", "skip_domains") !== undefined;
   const skipCloudflareDkim =
     flagGet(flags, "skip-cloudflare-dkim", "skip_cloudflare_dkim") !== undefined;
+  const skipMailboxes = flagGet(flags, "skip-mailboxes", "skip_mailboxes") !== undefined;
+  const skipAliases = flagGet(flags, "skip-aliases", "skip_aliases") !== undefined;
+  const prune = flagGet(flags, "prune") !== undefined;
   const mailcowCfg = isObject(deployment.mailcow) ? deployment.mailcow : {};
+  const reconcileLog = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  const apiKey = await resolveMailcowApiKey(vault, mailcowCfg, { required: false });
 
   const domainReconcile = await reconcileMailcowDomainsForConfig(mailcowCfg, vault, {
     skipDomains,
     skipCloudflareDkim,
-    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    apiKey,
+    log: reconcileLog,
+  });
+  const mailboxReconcile = await reconcileMailcowMailboxesForConfig(mailcowCfg, vault, {
+    skipMailboxes,
+    skipAliases,
+    prune,
+    apiKey,
+    log: reconcileLog,
   });
 
   const domainResults = domainReconcile.domain_results;
@@ -590,6 +604,13 @@ async function applyDomainReconciliationAfterDeploy(result, deployment, flags, v
     : domainReconcile.api_ok === false
       ? false
       : domainResults.every((r) => r.ok !== false);
+  const mailboxesOk =
+    mailboxReconcile.mailboxes_skipped && mailboxReconcile.aliases_skipped
+      ? true
+      : mailboxReconcile.api_ok === false
+        ? false
+        : mailboxReconcile.mailbox_results.every((r) => r.ok !== false) &&
+          mailboxReconcile.alias_results.every((r) => r.ok !== false);
   const cloudflareDkimOk =
     !domainReconcile.cloudflare_dkim ||
     domainReconcile.cloudflare_dkim.skipped === true ||
@@ -597,16 +618,29 @@ async function applyDomainReconciliationAfterDeploy(result, deployment, flags, v
 
   return {
     ...result,
-    ok: result.ok !== false && domainsOk && cloudflareDkimOk,
+    ok: result.ok !== false && domainsOk && mailboxesOk && cloudflareDkimOk,
     skip_domains: skipDomains,
     skip_cloudflare_dkim: skipCloudflareDkim,
+    skip_mailboxes: skipMailboxes,
+    skip_aliases: skipAliases,
+    prune,
     domains_skipped: domainReconcile.domains_skipped,
+    mailboxes_skipped: mailboxReconcile.mailboxes_skipped,
+    aliases_skipped: mailboxReconcile.aliases_skipped,
     configured_domain_count: domainReconcile.configured_domain_count,
+    configured_mailbox_count: mailboxReconcile.configured_mailbox_count,
+    configured_alias_count: mailboxReconcile.configured_alias_count,
     api_ok: domainReconcile.api_ok,
     api_error: domainReconcile.api_error,
+    mailbox_api_ok: mailboxReconcile.api_ok,
+    mailbox_api_error: mailboxReconcile.api_error,
     reconcile_summary: domainReconcile.reconcile_summary,
+    mailbox_reconcile_summary: mailboxReconcile.mailbox_reconcile_summary,
+    alias_reconcile_summary: mailboxReconcile.alias_reconcile_summary,
     cloudflare_dkim: domainReconcile.cloudflare_dkim,
     domain_results: domainResults,
+    mailbox_results: mailboxReconcile.mailbox_results,
+    alias_results: mailboxReconcile.alias_results,
     dns_checklists: domainReconcile.dns_checklists,
   };
 }

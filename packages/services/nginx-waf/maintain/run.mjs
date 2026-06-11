@@ -2,7 +2,7 @@
 /**
  * Maintain nginx WAF: push site configs, optional cert renew/sync.
  *
- * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--group <id>] [--skip-clamav] [--skip-guest-agent] [--skip-disk-resize] [--dry-run]
+ * Usage: hdc run service nginx-waf maintain -- [--sync-certs] [--renew-certs] [--site <id>] [--group <id>] [--skip-clamav] [--skip-guest-agent] [--skip-wazuh-log-collection] [--skip-disk-resize] [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -35,7 +35,13 @@ import { tlsDomainsFromSites } from "../lib/nginx-waf-render.mjs";
 import { certExistsOnHost } from "../lib/letsencrypt.mjs";
 import { nginxWafReportExtraSections } from "../lib/nginx-waf-report.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
-import { mergeGuestBaselineIntoResult } from "../../../lib/guest-baseline-report.mjs";
+import {
+  guestBaselineResultFields,
+  guestBaselineUsersOk,
+  mergeGuestBaselineIntoResult,
+} from "../../../lib/guest-baseline-report.mjs";
+import { ensureWazuhLogCollection } from "../../../lib/wazuh-log-collection.mjs";
+import { resolveNginxWafWazuhLogCollection } from "../lib/wazuh-log-collection.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
@@ -121,6 +127,8 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+
+  const wazuhLogEntries = resolveNginxWafWazuhLogCollection(cfg);
 
   const vault = createNginxWafVaultAccess();
   const needVault =
@@ -432,15 +440,28 @@ async function main() {
         deployment,
         proxmoxPackageRoot: proxmoxRoot,
       });
+      const wazuh_log_collection = await ensureWazuhLogCollection({
+        exec,
+        log,
+        flags,
+        entries: wazuhLogEntries,
+      });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {
         mergeGuestBaselineIntoResult(existing, baseline);
+        existing.wazuh_log_collection = wazuh_log_collection;
+        if (wazuh_log_collection.ok === false && wazuh_log_collection.skipped !== true) {
+          existing.ok = false;
+        }
       } else {
         results.push({
-          ok: guestBaselineUsersOk(baseline),
+          ok:
+            guestBaselineUsersOk(baseline) &&
+            (wazuh_log_collection.ok !== false || wazuh_log_collection.skipped === true),
           system_id: deployment.systemId,
           role: deployment.role,
           ...guestBaselineResultFields(baseline),
+          wazuh_log_collection,
         });
       }
     } catch (e) {

@@ -1,9 +1,50 @@
 import { stderr as errout } from "node:process";
 
-import { pveData, pveFormBody, pveJsonRequest, waitForPveTask } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
+import {
+  pveData,
+  pveFormBody,
+  pveJsonRequest,
+  waitForPveTask,
+} from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { extractPveUpid } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 import { haosOvaDownloadUrl, haosOvaFilename, haosQcow2Filename } from "./haos-image.mjs";
+
+/** Proxmox QEMU console fields for HAOS (avoid Ubuntu serial0/socket hang). */
+export const HAOS_QEMU_CONSOLE_FIELDS = {
+  vga: "std",
+  tablet: 0,
+};
+
+/**
+ * @param {Record<string, unknown>} config
+ * @returns {boolean}
+ */
+export function haosConsoleNeedsRepair(config) {
+  const vga = typeof config.vga === "string" ? config.vga.trim() : "";
+  const serial0 = typeof config.serial0 === "string" ? config.serial0.trim() : "";
+  return vga === "serial0" || serial0.length > 0;
+}
+
+/**
+ * HAOS cannot boot when UEFI Secure Boot is enabled (pre-enrolled-keys=1 on efidisk0).
+ *
+ * @param {Record<string, unknown>} config
+ * @returns {boolean}
+ */
+export function haosEfiSecureBootNeedsRepair(config) {
+  const efi = typeof config.efidisk0 === "string" ? config.efidisk0 : "";
+  if (!efi.trim()) return false;
+  return /(?:^|,)pre-enrolled-keys=1(?:,|$)/.test(efi);
+}
+
+/**
+ * @param {string} storage
+ * @returns {string}
+ */
+export function haosEfidisk0Spec(storage) {
+  return `${storage}:1,efitype=4m,pre-enrolled-keys=0,size=4M`;
+}
 
 /**
  * @param {string} user
@@ -18,6 +59,252 @@ function sshChecked(user, host, remoteCommand) {
     );
   }
   return r.stdout;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * @param {string} diskRef Proxmox disk value (volume plus optional options)
+ */
+function volumeRefOnly(diskRef) {
+  return String(diskRef ?? "")
+    .split(",")[0]
+    .trim();
+}
+
+/**
+ * After efidisk0 + importdisk, the HAOS image is usually on unused0 as vm-{vmid}-disk-1
+ * (efidisk0 consumes disk-0). Attaching disk-0 to scsi0 causes "no bootable disk".
+ *
+ * @param {Record<string, unknown>} config QEMU config from GET /qemu/{vmid}/config
+ * @param {string} storage Expected root disk storage id
+ * @param {number} vmid
+ * @returns {string} volume ref e.g. local-lvm:vm-121-disk-1
+ */
+export function resolveHaosImportedDiskVolume(config, storage, vmid) {
+  for (let i = 0; i < 8; i++) {
+    const raw = config[`unused${i}`];
+    if (typeof raw === "string" && raw.trim()) {
+      return volumeRefOnly(raw);
+    }
+  }
+
+  const efiVol = volumeRefOnly(config.efidisk0);
+  const scsiVol = volumeRefOnly(config.scsi0);
+  const prefix = `${storage}:vm-${vmid}-disk-`;
+
+  // Broken deploy attached scsi0 to the EFI vars disk (disk-0); HAOS import is disk-1.
+  if (efiVol && scsiVol && scsiVol === efiVol) {
+    return `${storage}:vm-${vmid}-disk-1`;
+  }
+
+  /** @type {{ vol: string; index: number }[]} */
+  const candidates = [];
+  for (const value of Object.values(config)) {
+    if (typeof value !== "string") continue;
+    const vol = volumeRefOnly(value);
+    if (!vol.startsWith(prefix) || vol === efiVol) continue;
+    const index = Number.parseInt(vol.slice(prefix.length), 10);
+    if (Number.isFinite(index)) candidates.push({ vol, index });
+  }
+
+  if (!candidates.length) {
+    throw new Error(
+      `No imported HAOS disk found for vmid ${vmid} on ${storage} (check importdisk / unused0)`,
+    );
+  }
+
+  candidates.sort((a, b) => b.index - a.index);
+  return candidates[0].vol;
+}
+
+/**
+ * Fix scsi0/boot when HAOS was imported after efidisk0 (disk-1) but attached as disk-0.
+ *
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {number} opts.vmid
+ * @param {string} opts.storage
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function repairHaosBootDisk(opts) {
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const { apiBase, node, authorization, rejectUnauthorized, vmid, storage } = opts;
+  const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
+
+  const config = await fetchQemuConfig({
+    apiBase,
+    node,
+    vmid,
+    authorization,
+    rejectUnauthorized,
+  });
+  const importedVol = resolveHaosImportedDiskVolume(config, storage, vmid);
+  const currentScsi = volumeRefOnly(config.scsi0);
+
+  if (currentScsi === importedVol) {
+    log(`scsi0 already uses ${importedVol}; boot repair not needed.`);
+    return { repaired: false, scsi0: currentScsi };
+  }
+
+  log(`Repairing boot disk: scsi0 ${currentScsi || "(none)"} → ${importedVol}`);
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({
+      scsi0: `${importedVol},discard=on`,
+      boot: "order=scsi0",
+    }),
+  );
+
+  return { repaired: true, scsi0: importedVol, previous_scsi0: currentScsi || null };
+}
+
+/**
+ * Remove Ubuntu-style serial console redirect (serial0 socket + vga serial0) that stalls HAOS boot.
+ *
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {number} opts.vmid
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function repairHaosSerialConsole(opts) {
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const { apiBase, node, authorization, rejectUnauthorized, vmid } = opts;
+  const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
+
+  const config = await fetchQemuConfig({
+    apiBase,
+    node,
+    vmid,
+    authorization,
+    rejectUnauthorized,
+  });
+
+  const previousVga = typeof config.vga === "string" ? config.vga : null;
+  const previousSerial0 = typeof config.serial0 === "string" ? config.serial0 : null;
+
+  if (!haosConsoleNeedsRepair(config)) {
+    log(`QEMU ${vmid}: console already uses vga=${previousVga ?? "default"} without serial0 — repair not needed.`);
+    return {
+      repaired: false,
+      previous_vga: previousVga,
+      previous_serial0: previousSerial0,
+    };
+  }
+
+  log(
+    `Repairing HAOS console on vmid ${vmid}: removing serial0 (was ${previousSerial0 ?? "unset"}) and vga=${previousVga ?? "default"} → vga=std …`,
+  );
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({
+      delete: "serial0",
+      ...HAOS_QEMU_CONSOLE_FIELDS,
+    }),
+  );
+
+  return {
+    repaired: true,
+    previous_vga: previousVga,
+    previous_serial0: previousSerial0,
+  };
+}
+
+/**
+ * Recreate efidisk0 without Secure Boot when Proxmox enrolled pre-enrolled-keys=1.
+ *
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {number} opts.vmid
+ * @param {string} opts.storage
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function repairHaosEfiSecureBoot(opts) {
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const { apiBase, node, authorization, rejectUnauthorized, vmid, storage } = opts;
+  const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
+
+  const config = await fetchQemuConfig({
+    apiBase,
+    node,
+    vmid,
+    authorization,
+    rejectUnauthorized,
+  });
+
+  const previousEfi = typeof config.efidisk0 === "string" ? config.efidisk0 : null;
+
+  if (!haosEfiSecureBootNeedsRepair(config)) {
+    log(`QEMU ${vmid}: efidisk0 already has Secure Boot disabled — repair not needed.`);
+    return { repaired: false, previous_efidisk0: previousEfi };
+  }
+
+  log(`Repairing HAOS EFI on vmid ${vmid}: recreating efidisk0 without pre-enrolled-keys …`);
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({ delete: "efidisk0" }),
+  );
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({ efidisk0: haosEfidisk0Spec(storage) }),
+  );
+
+  return { repaired: true, previous_efidisk0: previousEfi };
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {number} opts.vmid
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ */
+async function fetchQemuConfig(opts) {
+  const configPath = `/nodes/${encodeURIComponent(opts.node)}/qemu/${encodeURIComponent(String(opts.vmid))}/config`;
+  const body = await pveJsonRequest(
+    "GET",
+    opts.apiBase,
+    configPath,
+    opts.authorization,
+    opts.rejectUnauthorized,
+  );
+  const data = pveData(body);
+  if (!isObject(data)) {
+    throw new Error(`Invalid qemu config for vmid ${opts.vmid}`);
+  }
+  return data;
 }
 
 /**
@@ -97,7 +384,7 @@ export async function provisionHaosQemuVm(opts) {
     authorization,
     rejectUnauthorized,
     pveFormBody({
-      efidisk0: `${storage}:1,efitype=4m,pre-enrolled-keys=1,size=4M`,
+      efidisk0: haosEfidisk0Spec(storage),
     }),
   );
 
@@ -156,8 +443,15 @@ export async function provisionHaosQemuVm(opts) {
     log(`qm importdisk completed on ${sshHost}.`);
   }
 
-  const scsi0 = `${storage}:vm-${vmid}-disk-0`;
-  log(`Attaching ${scsi0} and setting boot order …`);
+  const configAfterImport = await fetchQemuConfig({
+    apiBase,
+    node,
+    vmid,
+    authorization,
+    rejectUnauthorized,
+  });
+  const importedVol = resolveHaosImportedDiskVolume(configAfterImport, storage, vmid);
+  log(`Attaching ${importedVol} as scsi0 and setting boot order …`);
   await pveJsonRequest(
     "PUT",
     apiBase,
@@ -165,10 +459,9 @@ export async function provisionHaosQemuVm(opts) {
     authorization,
     rejectUnauthorized,
     pveFormBody({
-      scsi0: `${scsi0},discard=on`,
+      scsi0: `${importedVol},discard=on`,
       boot: "order=scsi0",
-      serial0: "socket",
-      vga: "serial0",
+      ...HAOS_QEMU_CONSOLE_FIELDS,
     }),
   );
 

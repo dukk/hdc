@@ -8,6 +8,7 @@ import {
   pruneStaleCronFiles,
 } from "./hdc-runner-configure.mjs";
 import {
+  ensureHdcNpmDepsOnGuest,
   ensureOperatorSshKeysOnGuest,
   installHdcRunnerOnGuest,
 } from "./hdc-runner-install.mjs";
@@ -87,6 +88,14 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
     result.sync = syncResult;
     if (!syncResult.ok) {
       return { ...result, ok: false, message: syncResult.message };
+    }
+
+    if (!dryRun) {
+      const npmResult = ensureHdcNpmDepsOnGuest(exec, runner.install_root, log);
+      result.npm_deps = npmResult;
+      if (!npmResult.ok) {
+        return { ...result, ok: false, message: npmResult.message };
+      }
     }
   } else {
     result.sync = { ok: true, skipped: true, message: "skipped by flag" };

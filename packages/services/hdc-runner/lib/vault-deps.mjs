@@ -8,7 +8,6 @@ export function createHdcRunnerVaultAccess() {
  * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
 export async function resolveVaultwardenMasterPassword(vaultAccess) {
-  await vaultAccess.unlock({});
   const value = await vaultAccess.getSecret("HDC_VAULTWARDEN_MASTER_PASSWORD", {
     promptLabel: "Vaultwarden master password for hdc-runner guest .env",
     allowEmpty: false,

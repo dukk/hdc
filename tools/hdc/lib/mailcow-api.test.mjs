@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { reconcileMailcowDomains } from "../../../packages/services/mailcow/lib/mailcow-api.mjs";
+import {
+  reconcileMailcowAliases,
+  reconcileMailcowDomains,
+  reconcileMailcowMailboxes,
+} from "../../../packages/services/mailcow/lib/mailcow-api.mjs";
 
 vi.mock("../../../packages/lib/mail-relay-config.mjs", () => ({
   loadMailRelayClientDefaults: () => ({
@@ -162,5 +166,154 @@ describe("reconcileMailcowDomains", () => {
     expect(result.domain_results[0].domain_added).toBe(false);
     expect(result.domain_results[0].description_updated).toBe(true);
     expect(result.summary.added_count).toBe(0);
+  });
+});
+
+describe("reconcileMailcowMailboxes", () => {
+  /** @type {import("vitest").Mock} */
+  let fetchMock;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const client = {
+    baseUrl: "https://mail.example.invalid",
+    apiKey: "test-key",
+    request: (path, opts = {}) => {
+      const method = opts.method ?? (opts.body !== undefined ? "POST" : "GET");
+      const url = `https://mail.example.invalid${path.startsWith("/") ? path : `/${path}`}`;
+      return fetchMock(url, {
+        method,
+        headers: { "X-API-Key": "test-key" },
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      }).then(async (res) => {
+        const text = await res.text();
+        return text ? JSON.parse(text) : null;
+      });
+    },
+  };
+
+  const mailboxes = [
+    {
+      local_part: "admin",
+      domain: "example.invalid",
+      address: "admin@example.invalid",
+      name: "Admin",
+      quota_mb: 3072,
+      active: true,
+      password_vault_key: "HDC_TEST_MAILBOX_PASSWORD",
+    },
+  ];
+
+  it("adds missing mailbox with password", async () => {
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url.endsWith("/api/v1/get/mailbox/all")) {
+        return new Response(JSON.stringify([]));
+      }
+      if (url.endsWith("/api/v1/add/mailbox") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.local_part).toBe("admin");
+        expect(body.password).toBe("secret123");
+        return new Response(JSON.stringify([{ type: "success" }]));
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await reconcileMailcowMailboxes(mailboxes, client, {
+      resolvePassword: async () => "secret123",
+    });
+    expect(result.summary.added_count).toBe(1);
+    expect(result.mailbox_results[0].mailbox_added).toBe(true);
+  });
+
+  it("updates existing mailbox display name", async () => {
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url.endsWith("/api/v1/get/mailbox/all")) {
+        return new Response(
+          JSON.stringify([
+            {
+              username: "admin@example.invalid",
+              name: "Old Name",
+              quota: "3072",
+              active: "1",
+            },
+          ]),
+        );
+      }
+      if (url.endsWith("/api/v1/edit/mailbox") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.attr.name).toBe("Admin");
+        return new Response(JSON.stringify([{ type: "success" }]));
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await reconcileMailcowMailboxes(mailboxes, client, {});
+    expect(result.summary.updated_count).toBe(1);
+    expect(result.mailbox_results[0].mailbox_updated).toBe(true);
+  });
+});
+
+describe("reconcileMailcowAliases", () => {
+  /** @type {import("vitest").Mock} */
+  let fetchMock;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const client = {
+    baseUrl: "https://mail.example.invalid",
+    apiKey: "test-key",
+    request: (path, opts = {}) => {
+      const method = opts.method ?? (opts.body !== undefined ? "POST" : "GET");
+      const url = `https://mail.example.invalid${path.startsWith("/") ? path : `/${path}`}`;
+      return fetchMock(url, {
+        method,
+        headers: { "X-API-Key": "test-key" },
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      }).then(async (res) => {
+        const text = await res.text();
+        return text ? JSON.parse(text) : null;
+      });
+    },
+  };
+
+  const aliases = [
+    {
+      address: "info@example.invalid",
+      goto: ["admin@example.invalid"],
+      active: true,
+    },
+  ];
+
+  it("adds missing alias", async () => {
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url.endsWith("/api/v1/get/alias/all")) {
+        return new Response(JSON.stringify([]));
+      }
+      if (url.endsWith("/api/v1/add/alias") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.address).toBe("info@example.invalid");
+        expect(body.goto).toBe("admin@example.invalid");
+        return new Response(JSON.stringify([{ type: "success" }]));
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await reconcileMailcowAliases(aliases, client);
+    expect(result.summary.added_count).toBe(1);
+    expect(result.alias_results[0].alias_added).toBe(true);
   });
 });

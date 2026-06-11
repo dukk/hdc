@@ -4,7 +4,7 @@
  *
  * Usage: hdc run service homeassistant deploy -- [--instance a | --system-id vm-homeassistant-a]
  *        [--destroy-existing] [--skip-provision] [--skip-existing | --redeploy-existing]
- *        [--usb-id vvvv:pppp] [--no-wait-http]
+ *        [--usb-id vvvv:pppp] [--no-wait-http] [--skip-first-boot-restart]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,7 @@ import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 import { promptExistingGuestAction } from "../../postgresql/lib/prompt-existing.mjs";
 
 import { resolveHomeassistantDeployments } from "../lib/deployments.mjs";
+import { maybeRestartHaosAfterFirstBoot } from "../lib/haos-first-boot.mjs";
 import { provisionHaosQemuVm } from "../lib/proxmox-haos-vm.mjs";
 import { waitForHomeAssistantHttp } from "../lib/query-status.mjs";
 import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
@@ -191,18 +192,38 @@ async function deployOne(deployment, flags, log) {
     });
   }
 
+  const logLine = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+
   await startQemuGuest({
     apiBase: auth.host.apiBase,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
     node,
     vmid,
-    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    log: logLine,
   });
 
   const ipHost = q.ip.split("/")[0];
   /** @type {Record<string, unknown>} */
   const extra = { vmid, node, usb: usbDevices.map((u) => u.id), ip: q.ip };
+
+  const firstBoot = await maybeRestartHaosAfterFirstBoot({
+    host: ipHost,
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node,
+    vmid,
+    sshUser: pveSsh.user,
+    sshHost: pveSsh.host,
+    proxmoxPackageRoot: proxmoxRoot,
+    flags,
+    log: logLine,
+  });
+  extra.first_boot_restart = firstBoot.restarted;
+  if (firstBoot.probe.ok) {
+    extra.first_boot_http = firstBoot.probe;
+  }
 
   if (flagGet(flags, "no-wait-http") === undefined) {
     errout.write(
@@ -219,6 +240,12 @@ async function deployOne(deployment, flags, log) {
     });
     extra.http_wait = httpWait;
     if (!httpWait.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: if the Proxmox console shows a serial boot hang, run: hdc run service homeassistant maintain -- --fix-serial-console\n`,
+      );
+      errout.write(
+        `[hdc] ${target} ${verb}: if UEFI shows Access Denied on boot, run: hdc run service homeassistant maintain -- --repair-secure-boot\n`,
+      );
       errout.write(
         `[hdc] ${target} ${verb}: VM is up but HTTP probe failed � configure static IP ${q.ip} in HA Settings ? System ? Network, then run query --live.\n`,
       );

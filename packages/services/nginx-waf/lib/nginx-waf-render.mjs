@@ -160,13 +160,18 @@ export function renderProxyHeaders(opts) {
  * @param {string} opts.crsRulesGlob
  * @param {string} opts.unicodeMap
  * @param {string} opts.auditLog
+ * @param {string} [opts.auditLogFormat]
  */
 export function renderModsecurityMainConf(opts) {
-  const { ruleEngine, crsSetup, crsRulesGlob, unicodeMap, auditLog, profileId } = opts;
+  const { ruleEngine, crsSetup, crsRulesGlob, unicodeMap, auditLog, profileId, auditLogFormat } = opts;
   const header =
     profileId && profileId !== "default"
       ? `# Managed by hdc nginx-waf — profile ${profileId}`
       : "# Managed by hdc nginx-waf — do not edit manually";
+  const auditFormatLine =
+    typeof auditLogFormat === "string" && auditLogFormat.trim().toLowerCase() === "json"
+      ? "SecAuditLogFormat JSON"
+      : null;
   return [
     header,
     `SecRuleEngine ${ruleEngine}`,
@@ -174,6 +179,7 @@ export function renderModsecurityMainConf(opts) {
     "SecResponseBodyAccess Off",
     "SecAuditEngine RelevantOnly",
     `SecAuditLog ${auditLog}`,
+    ...(auditFormatLine ? [auditFormatLine] : []),
     ...(unicodeMap && unicodeMap.trim() ? [`SecUnicodeMapFile ${unicodeMap.trim()} 20127`] : []),
     `Include ${crsSetup}`,
     `Include ${crsRulesGlob}`,

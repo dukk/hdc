@@ -16,8 +16,10 @@
         "required": ["system_id"],
         "properties": {
           "system_id": { "type": "string", "pattern": "^hermes-[a-z]+$" },
-          "mode": { "enum": ["proxmox-lxc"] },
+          "mode": { "enum": ["proxmox-lxc", "proxmox-qemu"] },
+          "hostname": { "type": "string" },
           "proxmox": { "type": "object" },
+          "configure": { "type": "object" },
           "hermes": {
             "type": "object",
             "properties": {
@@ -30,6 +32,54 @@
               "dashboard_password_vault_key": { "type": "string" },
               "dashboard_auth_secret_vault_key": { "type": "string" },
               "searxng_url": { "type": ["string", "null"] },
+              "ollama_backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "url"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "url": { "type": "string" },
+                    "primary": { "type": "boolean" },
+                    "notes": { "type": "string" }
+                  }
+                }
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "default": { "type": "string" },
+                  "context_length": { "type": "integer", "minimum": 1 }
+                }
+              },
+              "fallback_providers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["provider", "model"],
+                  "properties": {
+                    "provider": { "type": "string" },
+                    "model": { "type": "string" }
+                  }
+                }
+              },
+              "agent": {
+                "type": "object",
+                "properties": {
+                  "api_timeout": { "type": "integer", "minimum": 1 }
+                }
+              },
+              "discord": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "bot_token_vault_key": { "type": "string" },
+                  "require_mention": { "type": "boolean" },
+                  "free_response_channels": { "type": "string" },
+                  "auto_thread": { "type": "boolean" }
+                }
+              },
+              "config_extra": { "type": "object" },
               "env_extra": { "type": "object" }
             }
           },

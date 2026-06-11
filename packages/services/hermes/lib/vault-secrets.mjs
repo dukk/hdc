@@ -4,6 +4,7 @@ import { stderr as errout } from "node:process";
 import {
   dashboardAuthSecretVaultKey,
   dashboardPasswordVaultKey,
+  openrouterFallbackVaultKey,
   openrouterVaultKey,
 } from "./deployments.mjs";
 
@@ -19,10 +20,9 @@ function isObject(v) {
  */
 async function loadSecret(vault, key, opts = {}) {
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  const existing = String(await vault.getSecret(key, { optional: true, promptLabel: opts.label })).trim();
   if (existing) {
-    errout.write(`[hdc] hermes: secret loaded from vault ${key}\n`);
+    errout.write(`[hdc] hermes: secret loaded ${key}\n`);
     return existing;
   }
   if (opts.generate) {
@@ -40,17 +40,42 @@ async function loadSecret(vault, key, opts = {}) {
  * @param {ReturnType<import("./vault-deps.mjs").createHermesVaultAccess>} vault
  * @param {Record<string, unknown>} hermes
  */
+async function loadOpenrouterApiKey(vault, hermes) {
+  const cfg = isObject(hermes) ? hermes : {};
+  const primaryKey = openrouterVaultKey(cfg);
+  const fallbackKey = openrouterFallbackVaultKey();
+  const keys = primaryKey === fallbackKey ? [primaryKey] : [primaryKey, fallbackKey];
+
+  await vault.unlock({});
+
+  for (const key of keys) {
+    const existing = String(await vault.getSecret(key, { optional: true })).trim();
+    if (existing) {
+      errout.write(`[hdc] hermes: OpenRouter secret loaded ${key}\n`);
+      return { value: existing, vaultKey: key };
+    }
+  }
+
+  throw new Error(
+    `missing OpenRouter API key — run: node tools/hdc/cli.mjs secrets set ${primaryKey}` +
+      (primaryKey !== fallbackKey ? ` (or ${fallbackKey})` : ""),
+  );
+}
+
+/**
+ * @param {ReturnType<import("./vault-deps.mjs").createHermesVaultAccess>} vault
+ * @param {Record<string, unknown>} hermes
+ */
 export async function resolveHermesSecrets(vault, hermes) {
   const cfg = isObject(hermes) ? hermes : {};
-  const openrouterKey = openrouterVaultKey(cfg);
   const dashboardPasswordKey = dashboardPasswordVaultKey(cfg);
   const dashboardAuthSecretKey = dashboardAuthSecretVaultKey(cfg);
 
-  const openrouterApiKey = await loadSecret(vault, openrouterKey, {
-    label: "OpenRouter API key",
-  });
+  const openrouter = await loadOpenrouterApiKey(vault, cfg);
+  const openrouterApiKey = openrouter.value;
   const dashboardPassword = await loadSecret(vault, dashboardPasswordKey, {
     label: "dashboard basic auth password",
+    generate: true,
   });
   const dashboardAuthSecret = await loadSecret(vault, dashboardAuthSecretKey, {
     generate: true,
@@ -66,13 +91,26 @@ export async function resolveHermesSecrets(vault, hermes) {
     extraEnv[envVar] = await loadSecret(vault, vaultKey, { label: envVar });
   }
 
+  const discord = isObject(cfg.discord) ? cfg.discord : {};
+  if (discord.enabled !== false) {
+    const discordVaultKey =
+      typeof discord.bot_token_vault_key === "string" && discord.bot_token_vault_key.trim()
+        ? discord.bot_token_vault_key.trim()
+        : "HDC_HERMES_DISCORD_BOT_TOKEN";
+    if (!extraEnv.DISCORD_BOT_TOKEN && (discord.enabled === true || discord.bot_token_vault_key)) {
+      extraEnv.DISCORD_BOT_TOKEN = await loadSecret(vault, discordVaultKey, {
+        label: "Discord bot token",
+      });
+    }
+  }
+
   return {
     openrouterApiKey,
     dashboardPassword,
     dashboardAuthSecret,
     extraEnv,
     vaultKeys: {
-      openrouter: openrouterKey,
+      openrouter: openrouter.vaultKey,
       dashboardPassword: dashboardPasswordKey,
       dashboardAuthSecret: dashboardAuthSecretKey,
     },

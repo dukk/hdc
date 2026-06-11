@@ -103,17 +103,35 @@ function validateDeployments(deployments) {
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
-    if (mode === "proxmox-lxc" || mode === "" || !mode) {
-      const px = isObject(d.proxmox) ? d.proxmox : {};
-      const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-      if (!hostId) {
-        throw new Error(`${sid}: proxmox.host_id required for proxmox-lxc`);
+    const px = isObject(d.proxmox) ? d.proxmox : {};
+    const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+    if (!hostId) {
+      throw new Error(`${sid}: proxmox.host_id required`);
+    }
+
+    if (mode === "proxmox-qemu") {
+      const q = isObject(px.qemu) ? px.qemu : {};
+      const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+      if (!Number.isFinite(vmid) || vmid <= 0) {
+        throw new Error(`${sid}: proxmox.qemu.vmid must be a positive number`);
       }
+      const templateVmid =
+        typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+      if (!Number.isFinite(templateVmid) || templateVmid <= 0) {
+        throw new Error(`${sid}: proxmox.qemu.template_vmid must be a positive number`);
+      }
+      const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+      if (!ip) {
+        throw new Error(`${sid}: proxmox.qemu.ip required (static CIDR for cloud-init)`);
+      }
+    } else if (mode === "proxmox-lxc" || mode === "" || !mode) {
       const lxc = isObject(px.lxc) ? px.lxc : {};
       const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
       if (!Number.isFinite(vmid) || vmid <= 0) {
         throw new Error(`${sid}: proxmox.lxc.vmid must be a positive number`);
       }
+    } else {
+      throw new Error(`${sid}: unsupported mode ${JSON.stringify(mode)}`);
     }
   }
 }
@@ -128,19 +146,39 @@ export function listHermesDeploymentSummaries(cfg) {
     const px = isObject(d.proxmox) ? d.proxmox : {};
     const hostId = typeof px.host_id === "string" ? px.host_id : null;
     const lxc = isObject(px.lxc) ? px.lxc : {};
-    const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const qemu = isObject(px.qemu) ? px.qemu : {};
+    const lxcVmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+    const qemuVmid = typeof qemu.vmid === "number" ? qemu.vmid : Number(qemu.vmid);
+    const vmid =
+      mode === "proxmox-qemu"
+        ? Number.isFinite(qemuVmid)
+          ? qemuVmid
+          : null
+        : Number.isFinite(lxcVmid)
+          ? lxcVmid
+          : null;
     const install = isObject(d.install) ? d.install : {};
     const hermes = isObject(d.hermes) ? d.hermes : {};
+    const configure = isObject(d.configure) ? d.configure : {};
+    const ssh = isObject(configure.ssh) ? configure.ssh : {};
     return {
       system_id: d.system_id,
       mode,
       host_id: hostId,
-      vmid: Number.isFinite(vmid) ? vmid : null,
+      vmid,
+      ssh_host: typeof ssh.host === "string" ? ssh.host : null,
+      qemu_ip: typeof qemu.ip === "string" ? qemu.ip : null,
       install_enabled: install.enabled !== false,
       image_tag: typeof hermes.image_tag === "string" ? hermes.image_tag : "latest",
       api_port: apiPort(hermes),
       dashboard_port: dashboardPort(hermes),
       dashboard_enabled: dashboardEnabled(hermes),
+      ollama_backend_ids: Array.isArray(hermes.ollama_backends)
+        ? hermes.ollama_backends
+            .filter((b) => b && typeof b === "object" && typeof b.id === "string")
+            .map((b) => b.id)
+        : [],
+      discord_enabled: isObject(hermes.discord) ? hermes.discord.enabled !== false : false,
     };
   });
 }
@@ -191,6 +229,10 @@ export function openrouterVaultKey(hermes) {
   return key;
 }
 
+export function openrouterFallbackVaultKey() {
+  return "HDC_OPENROUTER_API_KEY";
+}
+
 /**
  * @param {Record<string, unknown>} hermes
  */
@@ -239,9 +281,12 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
   return {
     systemId: String(d.system_id),
     mode,
+    hostname: typeof d.hostname === "string" ? d.hostname.trim() : null,
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
+    configure: isObject(d.configure) ? d.configure : {},
     hermes: isObject(d.hermes) ? d.hermes : {},
     install,
+    raw: d,
   };
 }
 

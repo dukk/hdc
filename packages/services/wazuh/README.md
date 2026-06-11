@@ -46,7 +46,15 @@ QEMU example deployment block (merge into `config.json`):
 }
 ```
 
+## Alerting and agents
+
+- Mail + OpenSearch channel: `defaults.mail` in config; skip with `--skip-wazuh-mail`.
+- Dashboard monitors: created on maintain (skip with `--skip-dashboard-monitors`).
+- Guest agents: proxmox `guest_agents.wazuh` + guest `maintain`; version pinned to `defaults.wazuh.release`.
+- Log collection: nginx-waf, crowdsec, postfix-relay (see [`docs/manually-deployed/wazuh.md`](../../../docs/manually-deployed/wazuh.md)).
+
 ## Related
 
+- [Operator guide](../../../docs/manually-deployed/wazuh.md)
 - [AGENTS.md — Wazuh references](../../../AGENTS.md)
 - Schema: [`tools/hdc/schema/wazuh.config.schema.json`](../../../tools/hdc/schema/wazuh.config.schema.json)

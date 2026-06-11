@@ -46,6 +46,83 @@ export function renderWazuhEnv(wazuh, apiPassword, agentPassword) {
   return `${lines.join("\n")}\n`;
 }
 
+/** Bash fragment: patch compose + wazuh.yml API credentials (expects STACK, WAZUH_API_PASSWORD). */
+export function wazuhStackApiCredentialsPatchBash() {
+  return [
+    "python3 - <<'PY'",
+    "from pathlib import Path",
+    "import os",
+    "import re",
+    "stack = Path(os.environ['STACK'])",
+    "api_pw = os.environ['WAZUH_API_PASSWORD']",
+    "compose = stack / 'docker-compose.yml'",
+    "text = compose.read_text()",
+    "text = text.replace('SecretPassword', api_pw)",
+    "text = text.replace('MyS3cr37P450r.*-', api_pw)",
+    "text = re.sub(r'(DASHBOARD_PASSWORD=)kibanaserver', r'\\1' + api_pw, text)",
+    "compose.write_text(text)",
+    "wazuh_yml = stack / 'config' / 'wazuh_dashboard' / 'wazuh.yml'",
+    "if wazuh_yml.is_file():",
+    "  yml_text = wazuh_yml.read_text()",
+    "  yml_text = re.sub(r'(password:\\s*)\"[^\"]*\"', r'\\1\"' + api_pw.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"') + '\"', yml_text, count=1)",
+    "  wazuh_yml.write_text(yml_text)",
+    "PY",
+  ].join("\n");
+}
+
+/**
+ * Re-hash indexer internal_users.yml from WAZUH_API_PASSWORD and apply via securityadmin.
+ * Expects STACK, WAZUH_API_PASSWORD, WAZUH_RELEASE (optional).
+ */
+export function wazuhIndexerPasswordResyncBash() {
+  return [
+    "python3 - <<'PY'",
+    "from pathlib import Path",
+    "import os",
+    "import re",
+    "import subprocess",
+    "stack = Path(os.environ['STACK'])",
+    "api_pw = os.environ['WAZUH_API_PASSWORD']",
+    "release = os.environ.get('WAZUH_RELEASE', '4.10.3').strip() or '4.10.3'",
+    "hash_out = subprocess.check_output([",
+    "  'docker', 'run', '--rm', f'wazuh/wazuh-indexer:{release}',",
+    "  '/usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh',",
+    "  '-p', api_pw,",
+    "], text=True)",
+    "pw_hash = hash_out.strip().splitlines()[-1]",
+    "users = stack / 'config' / 'wazuh_indexer' / 'internal_users.yml'",
+    "if not users.is_file():",
+    "  raise SystemExit('missing internal_users.yml')",
+    "user_text = users.read_text()",
+    "for user in ('admin', 'kibanaserver'):",
+    "  user_text = re.sub(rf'({user}:\\n  hash: )\"[^\"]+\"', rf'\\1\"{pw_hash}\"', user_text)",
+    "users.write_text(user_text)",
+    "print('indexer internal_users password hash refreshed')",
+    "PY",
+    "docker exec -u root single-node-wazuh.indexer-1 bash -c '",
+    "  export JAVA_HOME=/usr/share/wazuh-indexer/jdk",
+    "  /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \\",
+    "    -cd /usr/share/wazuh-indexer/opensearch-security/ \\",
+    "    -icl -nhnv \\",
+    "    -cacert /usr/share/wazuh-indexer/certs/root-ca.pem \\",
+    "    -cert /usr/share/wazuh-indexer/certs/admin.pem \\",
+    "    -key /usr/share/wazuh-indexer/certs/admin-key.pem \\",
+    "    -h wazuh.indexer",
+    "' || true",
+    "docker compose restart wazuh.indexer",
+    "for i in $(seq 1 30); do curl -sk -u \"admin:$WAZUH_API_PASSWORD\" https://127.0.0.1:9200/ >/dev/null 2>&1 && break; sleep 5; done",
+  ].join("\n");
+}
+
+/** Restart API-facing services after wazuh.yml / compose credential patch. */
+export function wazuhDashboardApiConfigSyncBash() {
+  return [
+    'if test -f config/wazuh_dashboard/wazuh.yml; then',
+    "  docker compose restart wazuh.dashboard wazuh.manager",
+    "fi",
+  ].join("\n");
+}
+
 /**
  * @param {string} release
  * @param {string} apiPassword
@@ -109,6 +186,11 @@ export function buildOfficialStackInstallScript(release, apiPassword, agentPassw
     "port = os.environ.get('WAZUH_DASHBOARD_PORT', '443')",
     "text = text.replace('443:5601', f'{port}:5601')",
     "compose.write_text(text)",
+    "wazuh_yml = stack / 'config' / 'wazuh_dashboard' / 'wazuh.yml'",
+    "if wazuh_yml.is_file():",
+    "  yml_text = wazuh_yml.read_text()",
+    "  yml_text = re.sub(r'(password:\\s*)\"[^\"]*\"', r'\\1\"' + api_pw.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"') + '\"', yml_text, count=1)",
+    "  wazuh_yml.write_text(yml_text)",
     "hash_out = subprocess.check_output([",
     "  'docker', 'run', '--rm', f'wazuh/wazuh-indexer:{release}',",
     "  '/usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh',",

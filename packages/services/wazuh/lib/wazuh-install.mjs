@@ -3,14 +3,20 @@ import { stderr as errout } from "node:process";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
+import { buildWazuhManagerAlertsPatchBash } from "../../../lib/wazuh-manager-alerts.mjs";
 import {
   buildOfficialStackInstallScript,
   composeDir,
   renderWazuhEnv,
   resolveDashboardUrl,
   wazuhDockerRelease,
+  wazuhDashboardApiConfigSyncBash,
+  wazuhStackApiCredentialsPatchBash,
+  wazuhIndexerPasswordResyncBash,
   wazuhStackDir,
 } from "./wazuh-render.mjs";
+import { buildWazuhNotificationsSyncBash } from "./wazuh-notifications.mjs";
+import { buildWazuhDashboardMonitorsSyncBash } from "./wazuh-dashboard-monitors.mjs";
 import { wazuhDashboardPort } from "./deployments.mjs";
 
 export { resolvePveSshForHost };
@@ -32,14 +38,24 @@ function shellQuote(s) {
  * @param {string} apiPassword
  * @param {string} agentPassword
  */
-export function buildInstallScript(wazuh, install, apiPassword, agentPassword) {
+/**
+ * @param {import("./wazuh-mail-config.mjs").WazuhMailSettings | null} [mailSettings]
+ * @param {{ skipMail?: boolean }} [opts]
+ */
+export function buildInstallScript(wazuh, install, apiPassword, agentPassword, mailSettings = null, opts = {}) {
   const release = wazuhDockerRelease(wazuh);
   const dashboardPort = wazuhDashboardPort(wazuh);
   const root = composeDir(install).replace(/'/g, `'\\''`);
-  const script = buildOfficialStackInstallScript(release, apiPassword, agentPassword, dashboardPort).replace(
+  let script = buildOfficialStackInstallScript(release, apiPassword, agentPassword, dashboardPort).replace(
     `export WAZUH_ROOT='${composeDir({}).replace(/'/g, `'\\''`)}'`,
     `export WAZUH_ROOT='${root}'`,
   );
+  if (mailSettings && !opts.skipMail) {
+    script = [script, buildWazuhManagerAlertsPatchBash(mailSettings)].join("\n");
+    if (mailSettings.notifications.enabled) {
+      script = [script, buildWazuhNotificationsSyncBash(mailSettings)].join("\n");
+    }
+  }
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
   return [
     script,
@@ -54,9 +70,15 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword) {
  * @param {string} envContent
  * @param {{ skipUpgrade?: boolean }} [opts]
  */
-export function buildMaintainScript(install, envContent, opts = {}) {
+/**
+ * @param {import("./wazuh-mail-config.mjs").WazuhMailSettings | null} [mailSettings]
+ * @param {{ skipUpgrade?: boolean; skipMail?: boolean; setupDashboardMonitors?: boolean; release?: string }} [opts]
+ */
+export function buildMaintainScript(install, envContent, apiPassword, mailSettings = null, opts = {}) {
   const stack = wazuhStackDir(install).replace(/'/g, `'\\''`);
   const root = composeDir(install).replace(/'/g, `'\\''`);
+  const apiPw = apiPassword.replace(/'/g, `'\\''`);
+  const release = (opts.release ?? "").replace(/'/g, `'\\''`);
   const lines = [
     "set -euo pipefail",
     `mkdir -p '${root}'`,
@@ -65,9 +87,29 @@ export function buildMaintainScript(install, envContent, opts = {}) {
     envContent.trimEnd(),
     "HDCENV",
     `cd '${stack}'`,
+    `export STACK='${stack}'`,
+    `export WAZUH_API_PASSWORD='${apiPw}'`,
   ];
+  if (release) lines.push(`export WAZUH_RELEASE='${release}'`);
+  lines.push(wazuhStackApiCredentialsPatchBash());
   if (!opts.skipUpgrade) lines.push("docker compose pull");
-  lines.push("docker compose up -d", "docker compose ps");
+  lines.push("docker compose up -d", wazuhDashboardApiConfigSyncBash());
+  if (mailSettings && !opts.skipMail) {
+    lines.push(wazuhIndexerPasswordResyncBash());
+  }
+  lines.push(
+    'for i in $(seq 1 30); do curl -sk -u "admin:$WAZUH_API_PASSWORD" https://127.0.0.1:9200/ >/dev/null 2>&1 && break; sleep 5; done',
+  );
+  if (mailSettings && !opts.skipMail) {
+    lines.push(buildWazuhManagerAlertsPatchBash(mailSettings));
+    if (mailSettings.notifications.enabled) {
+      lines.push(buildWazuhNotificationsSyncBash(mailSettings));
+      if (opts.setupDashboardMonitors) {
+        lines.push(buildWazuhDashboardMonitorsSyncBash(mailSettings));
+      }
+    }
+  }
+  lines.push("docker compose ps");
   return lines.join("\n");
 }
 
@@ -105,13 +147,13 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  * @param {string} apiPassword
  * @param {string} agentPassword
  */
-export async function installWazuhInCt(user, pveHost, vmid, wazuh, install, apiPassword, agentPassword) {
+export async function installWazuhInCt(user, pveHost, vmid, wazuh, install, apiPassword, agentPassword, opts = {}) {
   errout.write(`[hdc] wazuh install: Docker Compose in CT ${vmid} ...\n`);
   const ready = await waitForCt(user, pveHost, vmid, 2000, "wazuh install");
   if (!ready) {
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
-  const inner = buildInstallScript(wazuh, install, apiPassword, agentPassword);
+  const inner = buildInstallScript(wazuh, install, apiPassword, agentPassword, opts.mailSettings ?? null, opts);
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, method: "docker-compose", message: `install failed (exit ${r.status})` };
@@ -144,10 +186,13 @@ export async function maintainWazuhInCt(
   const ready = await waitForCt(user, pveHost, vmid, 2000, "wazuh maintain");
   if (!ready) return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
-  const inner = buildMaintainScript(install, envContent, opts);
+  const inner = buildMaintainScript(install, envContent, apiPassword, opts.mailSettings ?? null, {
+    ...opts,
+    release: wazuhDockerRelease(wazuh),
+  });
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) return { ok: false, message: `maintain failed (exit ${r.status})` };
-  return { ok: true, message: "images refreshed" };
+  return { ok: true, message: opts.skipUpgrade ? "restarted" : "images refreshed" };
 }
 
 /**
@@ -175,9 +220,9 @@ export function composeDownInCt(user, pveHost, vmid, install) {
  * @param {string} apiPassword
  * @param {string} agentPassword
  */
-export async function installWazuhOnHost(exec, wazuh, install, apiPassword, agentPassword) {
+export async function installWazuhOnHost(exec, wazuh, install, apiPassword, agentPassword, opts = {}) {
   errout.write(`[hdc] wazuh install: Docker Compose via ${exec.label ?? "ssh"} …\n`);
-  const inner = buildInstallScript(wazuh, install, apiPassword, agentPassword);
+  const inner = buildInstallScript(wazuh, install, apiPassword, agentPassword, opts.mailSettings ?? null, opts);
   const r = exec.run(inner);
   if (r.status !== 0) {
     return {
@@ -210,7 +255,10 @@ export async function maintainWazuhOnHost(
 ) {
   errout.write(`[hdc] wazuh maintain: refreshing stack via ${exec.label ?? "ssh"} …\n`);
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
-  const inner = buildMaintainScript(install, envContent, opts);
+  const inner = buildMaintainScript(install, envContent, apiPassword, opts.mailSettings ?? null, {
+    ...opts,
+    release: wazuhDockerRelease(wazuh),
+  });
   const r = exec.run(inner);
   if (r.status !== 0) return { ok: false, message: `maintain failed (exit ${r.status})` };
   return { ok: true, message: opts.skipUpgrade ? "restarted" : "images refreshed" };
@@ -231,7 +279,43 @@ export function composeDownOnHost(exec, install) {
  * @param {Record<string, unknown>} install
  * @param {number | null} [vmid]
  */
-export function queryWazuhOnHost(exec, wazuh, install, vmid = null) {
+/**
+ * @param {GuestExec} exec
+ * @param {string} apiPassword
+ */
+export function queryWazuhManagerApiOnHost(exec, apiPassword) {
+  const cap = { capture: true };
+  const apiPw = apiPassword.replace(/'/g, `'\\''`);
+  const agents = exec.run(
+    `curl -sk --max-time 10 -u "wazuh-wui:${apiPw}" "https://127.0.0.1:55000/agents?pretty=false&limit=1" 2>/dev/null || echo '{}'`,
+    cap,
+  );
+  const notifications = exec.run(
+    `curl -sk --max-time 10 -u "admin:${apiPw}" "https://127.0.0.1:9200/_plugins/_notifications/configs/hdc-wazuh-alerts" 2>/dev/null || echo '{}'`,
+    cap,
+  );
+  let agentSummary = { total: null, active: null, parse_error: null };
+  try {
+    const data = JSON.parse(agents.stdout.trim() || "{}");
+    const inner = data.data ?? data;
+    agentSummary = {
+      total: typeof inner.total_affected_items === "number" ? inner.total_affected_items : null,
+      active: typeof inner.active === "number" ? inner.active : null,
+    };
+  } catch {
+    agentSummary.parse_error = "agents API response not JSON";
+  }
+  let notificationChannelOk = null;
+  try {
+    const ch = JSON.parse(notifications.stdout.trim() || "{}");
+    notificationChannelOk = Boolean(ch.config_id === "hdc-wazuh-alerts" || ch.config?.config_id === "hdc-wazuh-alerts");
+  } catch {
+    notificationChannelOk = false;
+  }
+  return { agents: agentSummary, notification_channel_ok: notificationChannelOk };
+}
+
+export function queryWazuhOnHost(exec, wazuh, install, vmid = null, apiPassword = "") {
   const dir = wazuhStackDir(install);
   const dashboardPort = wazuhDashboardPort(wazuh);
   const cap = { capture: true };
@@ -246,7 +330,7 @@ export function queryWazuhOnHost(exec, wazuh, install, vmid = null) {
     `curl -skf --max-time 8 https://127.0.0.1:${dashboardPort}/ -o /dev/null && echo ok || echo fail`,
     cap,
   );
-  return {
+  const base = {
     vmid,
     docker_active: docker.stdout.trim(),
     compose_ps: composePs.stdout.trim() || null,
@@ -256,9 +340,13 @@ export function queryWazuhOnHost(exec, wazuh, install, vmid = null) {
     dashboard_url: resolveDashboardUrl(wazuh, ip),
     dashboard_ok: health.stdout.trim() === "ok",
   };
+  if (apiPassword) {
+    return { ...base, manager_api: queryWazuhManagerApiOnHost(exec, apiPassword) };
+  }
+  return base;
 }
 
-export function queryWazuhInCt(user, pveHost, vmid, wazuh, install) {
+export function queryWazuhInCt(user, pveHost, vmid, wazuh, install, apiPassword = "") {
   const dir = wazuhStackDir(install);
   const dashboardPort = wazuhDashboardPort(wazuh);
   const docker = pctExec(user, pveHost, vmid, "systemctl is-active docker 2>/dev/null || echo inactive", {
@@ -279,7 +367,7 @@ export function queryWazuhInCt(user, pveHost, vmid, wazuh, install) {
     `curl -skf --max-time 8 https://127.0.0.1:${dashboardPort}/ -o /dev/null && echo ok || echo fail`,
     { capture: true },
   );
-  return {
+  const base = {
     vmid,
     docker_active: docker.stdout.trim(),
     compose_ps: composePs.stdout.trim() || null,
@@ -289,4 +377,28 @@ export function queryWazuhInCt(user, pveHost, vmid, wazuh, install) {
     dashboard_url: resolveDashboardUrl(wazuh, ip),
     dashboard_ok: health.stdout.trim() === "ok",
   };
+  if (apiPassword) {
+    const cap = { capture: true };
+    const apiPw = apiPassword.replace(/'/g, `'\\''`);
+    const agents = pctExec(
+      user,
+      pveHost,
+      vmid,
+      `curl -sk --max-time 10 -u "wazuh-wui:${apiPw}" "https://127.0.0.1:55000/agents?pretty=false&limit=1" 2>/dev/null || echo '{}'`,
+      cap,
+    );
+    let agentSummary = { total: null, active: null, parse_error: null };
+    try {
+      const data = JSON.parse(agents.stdout.trim() || "{}");
+      const inner = data.data ?? data;
+      agentSummary = {
+        total: typeof inner.total_affected_items === "number" ? inner.total_affected_items : null,
+        active: typeof inner.active === "number" ? inner.active : null,
+      };
+    } catch {
+      agentSummary.parse_error = "agents API response not JSON";
+    }
+    return { ...base, manager_api: { agents: agentSummary, notification_channel_ok: null } };
+  }
+  return base;
 }

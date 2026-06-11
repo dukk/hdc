@@ -5,6 +5,7 @@
  * Usage: hdc run service hermes maintain -- [--instance a | --system-id hermes-a]
  *        [--skip-clamav] [--skip-admin-user] [--skip-upgrade]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -18,7 +19,11 @@ import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveHermesDeployments } from "../lib/deployments.mjs";
-import { maintainHermesInCt, resolvePveSshForHost } from "../lib/hermes-install.mjs";
+import {
+  maintainHermesInCt,
+  maintainHermesInQemu,
+  resolvePveSshForHost,
+} from "../lib/hermes-install.mjs";
 import { resolveHermesSecrets } from "../lib/vault-secrets.mjs";
 import { createHermesVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -54,10 +59,11 @@ function readCfg() {
  * @param {ReturnType<typeof resolveHermesDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/package-vault-access.mjs").PackageVaultAccess} vaultAccess
- * @param {{ secrets: Awaited<ReturnType<typeof resolveHermesSecrets>>; skipUpgrade: boolean }} runOpts
+ * @param {ReturnType<typeof createHermesVaultAccess>} vault
+ * @param {{ skipUpgrade: boolean }} runOpts
  */
-async function maintainOne(deployment, flags, vaultAccess, runOpts) {
-  const { systemId, proxmox: px, hermes, install } = deployment;
+async function maintainOne(deployment, flags, vaultAccess, vault, runOpts) {
+  const { systemId, mode, proxmox: px, configure, hermes, install } = deployment;
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -65,6 +71,49 @@ async function maintainOne(deployment, flags, vaultAccess, runOpts) {
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   if (!hostId) {
     return { ok: false, system_id: systemId, message: "missing host_id" };
+  }
+
+  const hermesCfg = isObject(hermes) ? hermes : {};
+  const installCfg = isObject(install) ? install : {};
+  const secrets = await resolveHermesSecrets(vault, hermesCfg);
+  const log = provisionLogFromConsole(console);
+
+  if (mode === "proxmox-qemu") {
+    const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+    const q = isObject(px.qemu) ? px.qemu : {};
+    const sshUser = resolveGuestSshUser(sshCfg.user);
+    const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+    const sshHost =
+      typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+    if (!sshHost) {
+      return { ok: false, system_id: systemId, message: "configure.ssh.host or proxmox.qemu.ip required" };
+    }
+
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${sshUser}@${sshHost} …\n`);
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    const result = await maintainHermesInQemu({
+      exec,
+      hermes: hermesCfg,
+      install: installCfg,
+      secrets,
+      maintainOpts: { skipUpgrade: runOpts.skipUpgrade },
+    });
+    const baseline = await ensureGuestLinuxBaseline({
+      exec,
+      log,
+      flags,
+      vaultAccess,
+      deployment,
+      proxmoxPackageRoot: proxmoxRoot,
+    });
+    return {
+      ok: result.ok && baseline.ok,
+      system_id: systemId,
+      host_id: hostId,
+      mode,
+      message: result.message,
+      ...guestBaselineResultFields(baseline),
+    };
   }
 
   const lxc = isObject(px.lxc) ? px.lxc : {};
@@ -75,18 +124,15 @@ async function maintainOne(deployment, flags, vaultAccess, runOpts) {
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-  const hermesCfg = isObject(hermes) ? hermes : {};
-  const installCfg = isObject(install) ? install : {};
   const result = await maintainHermesInCt(
     pveSsh.user,
     pveSsh.host,
     vmid,
     hermesCfg,
     installCfg,
-    runOpts.secrets,
+    secrets,
     { skipUpgrade: runOpts.skipUpgrade },
   );
-  const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
     user: pveSsh.user,
     host: pveSsh.host,
@@ -106,6 +152,7 @@ async function maintainOne(deployment, flags, vaultAccess, runOpts) {
     system_id: systemId,
     host_id: hostId,
     vmid,
+    mode,
     message: result.message,
     ...guestBaselineResultFields(baseline),
   };
@@ -127,12 +174,7 @@ async function main() {
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
 
   const vault = createHermesVaultAccess();
-  const defaultsHermes =
-    isObject(cfg.defaults) && isObject(cfg.defaults.hermes) ? cfg.defaults.hermes : {};
-  const secrets = await resolveHermesSecrets(vault, defaultsHermes);
-  errout.write(
-    `[hdc] ${target} ${verb}: secrets ready (vault ${secrets.vaultKeys.openrouter}, ${secrets.vaultKeys.dashboardPassword})\n`,
-  );
+  await vault.unlock({});
 
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
@@ -153,8 +195,7 @@ async function main() {
   for (const deployment of deployments) {
     try {
       results.push(
-        await maintainOne(deployment, flags, vaultAccess, {
-          secrets,
+        await maintainOne(deployment, flags, vaultAccess, vault, {
           skipUpgrade,
         }),
       );

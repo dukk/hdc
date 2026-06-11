@@ -2,7 +2,7 @@
 /**
  * Maintain Wazuh: refresh docker stack and guest baseline.
  *
- * Usage: hdc run service wazuh maintain -- [--instance a | --system-id vm-wazuh-a] [--skip-upgrade] [--skip-clamav]
+ * Usage: hdc run service wazuh maintain -- [--instance a | --system-id vm-wazuh-a] [--skip-upgrade] [--skip-clamav] [--skip-wazuh-mail] [--skip-dashboard-monitors]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join } from "node:path";
@@ -17,7 +17,10 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
+import { wazuhManagerAlertsSkippedByFlags } from "../../../lib/wazuh-manager-alerts.mjs";
+import { wazuhDashboardMonitorsSkippedByFlags } from "../lib/wazuh-dashboard-monitors.mjs";
 import { maintainWazuhInCt, maintainWazuhOnHost, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
+import { resolveWazuhMailConfig } from "../lib/wazuh-mail-config.mjs";
 import { createWazuhVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -50,16 +53,28 @@ function readCfg() {
  * @param {Record<string, string>} flags
  * @param {ReturnType<typeof createWazuhVaultAccess>} vaultAccess
  * @param {{ apiPassword: string; agentPassword: string }} passwords
+ * @param {import("../lib/wazuh-mail-config.mjs").WazuhMailSettings | null} mailSettings
  */
-async function maintainOne(deployment, flags, vaultAccess, passwords) {
+async function maintainOne(deployment, flags, vaultAccess, passwords, mailSettings) {
   const { systemId, mode, proxmox: px, wazuh, install, configure } = deployment;
   if (!isObject(px)) return { ok: false, system_id: systemId, message: "bad proxmox config" };
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   if (!hostId) return { ok: false, system_id: systemId, message: "missing host_id" };
 
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
+  const skipMail = wazuhManagerAlertsSkippedByFlags(flags);
+  const setupDashboardMonitors =
+    !skipMail &&
+    !wazuhDashboardMonitorsSkippedByFlags(flags) &&
+    Boolean(mailSettings?.notifications?.enabled);
   const wazuhCfg = isObject(wazuh) ? wazuh : {};
   const installCfg = isObject(install) ? install : {};
+  const maintainOpts = {
+    skipUpgrade,
+    skipMail,
+    mailSettings: skipMail ? null : mailSettings,
+    setupDashboardMonitors,
+  };
 
   /** @type {{ ok: boolean; message?: string }} */
   let result;
@@ -74,9 +89,14 @@ async function maintainOne(deployment, flags, vaultAccess, passwords) {
     const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
     errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} (QEMU) …\n`);
     const exec = createConfigureExec("ssh", { user, host });
-    result = await maintainWazuhOnHost(exec, wazuhCfg, installCfg, passwords.apiPassword, passwords.agentPassword, {
-      skipUpgrade,
-    });
+    result = await maintainWazuhOnHost(
+      exec,
+      wazuhCfg,
+      installCfg,
+      passwords.apiPassword,
+      passwords.agentPassword,
+      maintainOpts,
+    );
   } else {
     const lxc = isObject(px.lxc) ? px.lxc : {};
     const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
@@ -90,7 +110,7 @@ async function maintainOne(deployment, flags, vaultAccess, passwords) {
       installCfg,
       passwords.apiPassword,
       passwords.agentPassword,
-      { skipUpgrade },
+      maintainOpts,
     );
   }
 
@@ -181,10 +201,13 @@ async function main() {
     return;
   }
 
+  const skipMail = wazuhManagerAlertsSkippedByFlags(flags);
+  const mailSettings = skipMail ? null : resolveWazuhMailConfig(cfg);
+
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await maintainOne(deployment, flags, vaultAccess, { apiPassword, agentPassword }));
+      results.push(await maintainOne(deployment, flags, vaultAccess, { apiPassword, agentPassword }, mailSettings));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       results.push({ ok: false, system_id: deployment.systemId, message: msg });

@@ -24,7 +24,8 @@
         "rule_engine": "On",
         "crs_setup": "/etc/modsecurity/crs/crs-setup.conf",
         "crs_rules_glob": "/usr/share/modsecurity-crs/rules/*.conf",
-        "audit_log": "/var/log/nginx/modsec_audit.log"
+        "audit_log": "/var/log/nginx/modsec_audit.log",
+        "audit_log_format": "json"
       },
       "trusted_cidrs": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
       "cloudflare_ipv4": true,
@@ -51,6 +52,13 @@
     "install": { "enabled": true },
     "backup": {
       "profile": "daily"
+    },
+    "wazuh": {
+      "log_collection": [
+        { "location": "/var/log/nginx/access.log", "log_format": "syslog" },
+        { "location": "/var/log/nginx/error.log", "log_format": "syslog" },
+        { "location": "/var/log/nginx/modsec_audit.log", "log_format": "json" }
+      ]
     }
   },
   "deployment_groups": [

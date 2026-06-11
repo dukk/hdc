@@ -4,6 +4,7 @@ import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import { loadHomepageConfigFiles } from "./homepage-config-load.mjs";
+import { buildIconWriteScriptLines, loadHomepageIcons } from "./homepage-icons.mjs";
 import {
   composeDir,
   renderComposeYaml,
@@ -36,8 +37,9 @@ function writeConfigFileHerdoc(dir, relPath, content) {
  * @param {string} composeYaml
  * @param {string} envContent
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
+ * @param {{ name: string; b64: string }[]} [icons]
  */
-export function buildInstallScript(composeDirPath, composeYaml, envContent, configFiles) {
+export function buildInstallScript(composeDirPath, composeYaml, envContent, configFiles, icons = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -65,6 +67,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
     "systemctl enable --now docker",
     `mkdir -p '${dir}'`,
     ...configWrites,
+    ...buildIconWriteScriptLines(composeDirPath, icons),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
@@ -83,8 +86,9 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
  * @param {string} envContent
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
  * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ name: string; b64: string }[]} [icons]
  */
-export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, opts = {}) {
+export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, opts = {}, icons = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -99,6 +103,7 @@ export function buildMaintainScript(composeDirPath, envContent, configFiles, com
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
     ...configWrites,
+    ...buildIconWriteScriptLines(composeDirPath, icons),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
@@ -159,15 +164,17 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
   const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
   const composeYaml = renderComposeYaml();
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
+  const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
-  const inner = buildInstallScript(dir, composeYaml, envContent, configFiles);
+  const inner = buildInstallScript(dir, composeYaml, envContent, configFiles, icons);
 
-  const r = pctExec(user, pveHost, vmid, inner);
+  const r = pctExec(user, pveHost, vmid, inner, { stdin: true });
   if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim();
     return {
       ok: false,
       method: "docker-compose",
-      message: `install failed (exit ${r.status})`,
+      message: detail ? `install failed (exit ${r.status}): ${detail.slice(0, 500)}` : `install failed (exit ${r.status})`,
     };
   }
 
@@ -203,12 +210,17 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
 
   const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
+  const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
   const composeYaml = renderComposeYaml();
-  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, opts);
-  const r = pctExec(user, pveHost, vmid, inner);
+  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, opts, icons);
+  const r = pctExec(user, pveHost, vmid, inner, { stdin: true, capture: true });
   if (r.status !== 0) {
-    return { ok: false, message: `maintain failed (exit ${r.status})` };
+    const detail = `${r.stderr}${r.stdout}`.trim();
+    return {
+      ok: false,
+      message: detail ? `maintain failed (exit ${r.status}): ${detail.slice(0, 500)}` : `maintain failed (exit ${r.status})`,
+    };
   }
   const ip = readCtPrimaryIp(user, pveHost, vmid);
   return {

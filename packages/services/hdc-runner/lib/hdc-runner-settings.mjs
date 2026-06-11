@@ -26,11 +26,15 @@ export function normalizeHdcRunnerBlock(runnerBlock) {
     node_version:
       typeof r.node_version === "string" && r.node_version.trim() ? r.node_version.trim() : "22",
     bw_version:
-      typeof r.bw_version === "string" && r.bw_version.trim() ? r.bw_version.trim() : "2025.11.0",
+      typeof r.bw_version === "string" && r.bw_version.trim() ? r.bw_version.trim() : "2026.5.0",
     env: isObject(r.env) ? { ...r.env } : {},
     mail: isObject(r.mail) ? { ...r.mail } : {},
     schedules: Array.isArray(r.schedules) ? r.schedules.filter(isObject) : [],
-    sync: isObject(r.sync) ? { ...r.sync } : { exclude: [".git", "node_modules", "**/reports"] },
+    sync: isObject(r.sync)
+      ? { ...r.sync }
+      : {
+          exclude: [".git", "node_modules", "**/reports", ".env", ".env.*", ".cursor", ".vscode"],
+        },
   };
 }
 

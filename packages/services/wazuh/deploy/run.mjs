@@ -29,12 +29,14 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
+import { wazuhManagerAlertsSkippedByFlags } from "../../../lib/wazuh-manager-alerts.mjs";
 import {
   installWazuhInCt,
   installWazuhOnHost,
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/wazuh-install.mjs";
+import { resolveWazuhMailConfig } from "../lib/wazuh-mail-config.mjs";
 import { ensureLxcDockerApparmorWorkaround, pctRestart, pctSetFeatures } from "../../../lib/pve-pct-remote.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
@@ -87,7 +89,7 @@ function existingGuestPolicy(flags) {
 /**
  * @param {ReturnType<typeof resolveWazuhDeployments>[number]} deployment
  * @param {Record<string, string>} flags
- * @param {{ apiPassword: string; agentPassword: string }} runOpts
+ * @param {{ apiPassword: string; agentPassword: string; mailSettings: import("../lib/wazuh-mail-config.mjs").WazuhMailSettings | null; skipMail?: boolean }} runOpts
  */
 async function runConfigure(deployment, flags, runOpts) {
   const { systemId, mode, wazuh, install, configure } = deployment;
@@ -110,6 +112,7 @@ async function runConfigure(deployment, flags, runOpts) {
       installCfg,
       runOpts.apiPassword,
       runOpts.agentPassword,
+      { mailSettings: runOpts.mailSettings, skipMail: runOpts.skipMail },
     );
   }
   const cfg = isObject(configure) ? configure : {};
@@ -118,7 +121,10 @@ async function runConfigure(deployment, flags, runOpts) {
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) throw new Error(`${systemId}: configure.ssh.host required`);
   const exec = createConfigureExec("ssh", { user, host });
-  return installWazuhOnHost(exec, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword);
+  return installWazuhOnHost(exec, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword, {
+    mailSettings: runOpts.mailSettings,
+    skipMail: runOpts.skipMail,
+  });
 }
 
 /**
@@ -243,6 +249,7 @@ async function deployLxcOne(deployment, flags, log, runOpts) {
         isObject(install) ? install : {},
         runOpts.apiPassword,
         runOpts.agentPassword,
+        { mailSettings: runOpts.mailSettings, skipMail: runOpts.skipMail },
       )
     : { ok: true, method: "skipped", message: "skipped" };
   if (!installResult.ok) return { ok: false, system_id: systemId, host_id: hostId, mode, result: provisionResult, install: installResult };
@@ -490,13 +497,24 @@ async function main() {
     return;
   }
 
+  const skipMail = wazuhManagerAlertsSkippedByFlags(flags);
+  const mailSettings = skipMail ? null : resolveWazuhMailConfig(cfg);
+
   const log = provisionLogFromConsole(console);
   /** @type {{ value: string | null }} */
   const ctPasswordCache = { value: null };
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache, apiPassword, agentPassword }));
+      results.push(
+        await deployOne(deployment, flags, log, {
+          ctPasswordCache,
+          apiPassword,
+          agentPassword,
+          mailSettings,
+          skipMail,
+        }),
+      );
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

@@ -51,6 +51,25 @@
     "defaults": {
       "type": "object",
       "properties": {
+        "wazuh": {
+          "type": "object",
+          "properties": {
+            "log_collection": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["location"],
+                "properties": {
+                  "location": { "type": "string", "minLength": 1 },
+                  "log_format": {
+                    "type": "string",
+                    "description": "Wazuh localfile log_format (default syslog)."
+                  }
+                }
+              }
+            }
+          }
+        },
         "nginx_waf": {
           "type": "object",
           "properties": {
@@ -62,7 +81,8 @@
                 "crs_setup": { "type": "string" },
                 "crs_rules_glob": { "type": "string" },
                 "unicode_map": { "type": "string" },
-                "audit_log": { "type": "string" }
+                "audit_log": { "type": "string" },
+                "audit_log_format": { "enum": ["json", "native"] }
               }
             },
             "policy_definitions": {

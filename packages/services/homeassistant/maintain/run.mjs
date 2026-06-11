@@ -3,7 +3,7 @@
  * Maintain Home Assistant OS QEMU VM (USB passthrough + HTTP health).
  *
  * Usage: hdc run service homeassistant maintain -- [--instance a]
- *        [--reapply-usb] [--skip-http]
+ *        [--reapply-usb] [--repair-boot-disk] [--fix-serial-console] [--repair-secure-boot] [--skip-http]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,12 +17,17 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import {
   locateGuest,
-  stopQemuGuest,
   startQemuGuest,
 } from "../../bind/lib/proxmox-qemu-redeploy.mjs";
 import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 
 import { resolveHomeassistantDeployments } from "../lib/deployments.mjs";
+import { forceStopHaosQemuGuest } from "../lib/haos-qemu-lifecycle.mjs";
+import {
+  repairHaosBootDisk,
+  repairHaosEfiSecureBoot,
+  repairHaosSerialConsole,
+} from "../lib/proxmox-haos-vm.mjs";
 import { probeHomeAssistantHttp } from "../lib/query-status.mjs";
 import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
 
@@ -71,18 +76,36 @@ async function maintainOne(deployment, flags) {
   const extra = { vmid, node: located.node };
 
   const reapplyUsb = flagGet(flags, "reapply-usb") !== undefined;
+  const repairBootDisk = flagGet(flags, "repair-boot-disk") !== undefined;
+  const fixSerialConsole = flagGet(flags, "fix-serial-console") !== undefined;
+  const repairSecureBoot = flagGet(flags, "repair-secure-boot") !== undefined;
   const usbOverride = flagGet(flags, "usb-id");
+  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
 
-  if (reapplyUsb || usbOverride || q.usb.length) {
-    const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-    const usbDevices = await resolveUsbDevicesForDeploy({
-      user: pveSsh.user,
-      host: pveSsh.host,
-      configured: q.usb,
-      overrideId: usbOverride,
+  const forceStopOpts = {
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node: located.node,
+    vmid,
+    sshUser: pveSsh.user,
+    sshHost: pveSsh.host,
+    log,
+  };
+
+  if (fixSerialConsole) {
+    errout.write(`[hdc] ${target} ${verb}: stopping VM for serial-console repair …\n`);
+    await forceStopHaosQemuGuest(forceStopOpts);
+    const consoleRepair = await repairHaosSerialConsole({
+      apiBase: auth.host.apiBase,
+      node: located.node,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      vmid,
+      log,
     });
-    errout.write(`[hdc] ${target} ${verb}: stopping VM for USB update �\n`);
-    await stopQemuGuest({
+    extra.serial_console_repair = consoleRepair;
+    await startQemuGuest({
       apiBase: auth.host.apiBase,
       authorization: auth.authorization,
       rejectUnauthorized: auth.rejectUnauthorized,
@@ -90,6 +113,63 @@ async function maintainOne(deployment, flags) {
       vmid,
       log,
     });
+  }
+
+  if (repairSecureBoot) {
+    errout.write(`[hdc] ${target} ${verb}: stopping VM for EFI Secure Boot repair …\n`);
+    await forceStopHaosQemuGuest(forceStopOpts);
+    const efiRepair = await repairHaosEfiSecureBoot({
+      apiBase: auth.host.apiBase,
+      node: located.node,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      vmid,
+      storage: q.storage,
+      log,
+    });
+    extra.efi_secure_boot_repair = efiRepair;
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: located.node,
+      vmid,
+      log,
+    });
+  }
+
+  if (repairBootDisk) {
+    errout.write(`[hdc] ${target} ${verb}: stopping VM for boot-disk repair …\n`);
+    await forceStopHaosQemuGuest(forceStopOpts);
+    const repair = await repairHaosBootDisk({
+      apiBase: auth.host.apiBase,
+      node: located.node,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      vmid,
+      storage: q.storage,
+      log,
+    });
+    extra.boot_disk_repair = repair;
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: located.node,
+      vmid,
+      log,
+    });
+  }
+
+  if (reapplyUsb || usbOverride || q.usb.length) {
+    const usbDevices = await resolveUsbDevicesForDeploy({
+      user: pveSsh.user,
+      host: pveSsh.host,
+      configured: q.usb,
+      overrideId: usbOverride,
+    });
+    errout.write(`[hdc] ${target} ${verb}: stopping VM for USB update �\n`);
+    await forceStopHaosQemuGuest(forceStopOpts);
     await applyQemuUsb({
       apiBase: auth.host.apiBase,
       authorization: auth.authorization,
@@ -117,6 +197,12 @@ async function maintainOne(deployment, flags) {
     const probe = await probeHomeAssistantHttp(ipHost);
     extra.http = probe;
     if (!probe.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: if the Proxmox console shows a serial boot hang, run with --fix-serial-console.\n`,
+      );
+      errout.write(
+        `[hdc] ${target} ${verb}: if UEFI shows Access Denied on boot, run with --repair-secure-boot.\n`,
+      );
       errout.write(
         `[hdc] ${target} ${verb}: HTTP probe failed � confirm static IP ${q.ip} in HA Settings ? System ? Network.\n`,
       );

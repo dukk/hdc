@@ -77,6 +77,10 @@ export function seedPolicyCatalogFromLegacy(nw, trustedCidrs) {
       typeof ms.audit_log === "string" && ms.audit_log.trim()
         ? ms.audit_log.trim()
         : DEFAULT_MODSEC_AUDIT_LOG,
+    audit_log_format:
+      typeof ms.audit_log_format === "string" && ms.audit_log_format.trim()
+        ? ms.audit_log_format.trim()
+        : "json",
   };
   catalog[DEFAULT_INTERNAL_POLICY_ID] = {
     type: "trusted_cidrs",
@@ -269,6 +273,12 @@ export function normalizeResolvedPolicies(policies, catalog, context) {
             typeof p.audit_log === "string" && p.audit_log.trim()
               ? p.audit_log.trim()
               : DEFAULT_MODSEC_AUDIT_LOG,
+          auditLogFormat:
+            typeof p.audit_log_format === "string" && p.audit_log_format.trim()
+              ? p.audit_log_format.trim()
+              : typeof catalog[DEFAULT_MODSECURITY_PROFILE_ID]?.audit_log_format === "string"
+                ? String(catalog[DEFAULT_MODSECURITY_PROFILE_ID].audit_log_format).trim()
+                : "json",
         };
         break;
       }

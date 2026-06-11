@@ -51,6 +51,9 @@ import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { nginxWafReportExtraSections } from "../lib/nginx-waf-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { configureExecFromDeployment } from "../lib/configure-exec.mjs";
+import { ensureWazuhLogCollection } from "../../../lib/wazuh-log-collection.mjs";
+import { resolveNginxWafWazuhLogCollection } from "../lib/wazuh-log-collection.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -670,6 +673,38 @@ async function main() {
         step: "certificates",
         message: msg,
       });
+    }
+  }
+
+  const wazuhLogEntries = resolveNginxWafWazuhLogCollection(cfg);
+  if (flagGet(flags, "skip-wazuh-log-collection", "skip_wazuh_log_collection") === undefined) {
+    errout.write(`[hdc] ${target} ${verb}: Wazuh log collection on nodes …\n`);
+    for (const deployment of deployments) {
+      try {
+        const exec = configureExecFromDeployment(deployment);
+        const wazuh_log_collection = await ensureWazuhLogCollection({
+          exec,
+          log,
+          flags,
+          entries: wazuhLogEntries,
+        });
+        const existing = results.find((r) => r.system_id === deployment.systemId);
+        if (existing) {
+          existing.wazuh_log_collection = wazuh_log_collection;
+          if (wazuh_log_collection.ok === false && wazuh_log_collection.skipped !== true) {
+            existing.ok = false;
+          }
+        } else {
+          results.push({
+            ok: wazuh_log_collection.ok !== false || wazuh_log_collection.skipped === true,
+            system_id: deployment.systemId,
+            wazuh_log_collection,
+          });
+        }
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        results.push({ ok: false, system_id: deployment.systemId, wazuh_log_collection: { ok: false, message: msg } });
+      }
     }
   }
 

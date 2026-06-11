@@ -22,6 +22,19 @@
       "api_password_vault_key": "HDC_WAZUH_API_PASSWORD",
       "agent_password_vault_key": "HDC_WAZUH_AGENT_PASSWORD"
     },
+    "mail": {
+      "enabled": true,
+      "to": ["operator@example.invalid"],
+      "from": "",
+      "alert_level": 10,
+      "max_per_hour": 12,
+      "notifications": {
+        "enabled": true,
+        "smtp_sender_id": "hdc-postfix-relay",
+        "email_channel_id": "hdc-wazuh-alerts",
+        "channel_name": "HDC Wazuh alerts"
+      }
+    },
     "install": {
       "enabled": true,
       "compose_dir": "/opt/wazuh"

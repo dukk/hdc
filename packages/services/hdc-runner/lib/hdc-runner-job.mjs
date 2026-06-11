@@ -33,7 +33,7 @@ function loadDotEnv(path) {
     ) {
       val = val.slice(1, -1);
     }
-    if (!(key in process.env)) process.env[key] = val;
+    process.env[key] = val;
   }
 }
 
@@ -68,7 +68,8 @@ async function main() {
   }
 
   const cliPath = join(INSTALL_ROOT, "tools/hdc/cli.mjs");
-  const args = [cliPath, ...cli, ...cliArgs];
+  const args =
+    cliArgs.length > 0 ? [cliPath, ...cli, "--", ...cliArgs] : [cliPath, ...cli];
 
   process.stderr.write(`[hdc-runner] job ${scheduleId}: node ${args.join(" ")}\n`);
   const r = spawnSync(process.execPath, args, {

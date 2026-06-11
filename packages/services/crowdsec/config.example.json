@@ -23,6 +23,12 @@
         { "system_id": "vm-nginx-waf-b" }
       ]
     },
+    "wazuh": {
+      "log_collection": [
+        { "location": "/var/log/crowdsec.log", "log_format": "syslog" },
+        { "location": "/var/log/crowdsec-api.log", "log_format": "syslog" }
+      ]
+    },
     "install": {
       "enabled": true
     }

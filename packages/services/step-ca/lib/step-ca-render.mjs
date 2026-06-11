@@ -64,6 +64,8 @@ ConditionFileNotEmpty=${base}/password.txt
 Type=simple
 User=step
 Group=step
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 Environment=STEPPATH=${base}
 WorkingDirectory=${base}
 ExecStart=/usr/bin/step-ca ${base}/config/ca.json --password-file=${base}/password.txt

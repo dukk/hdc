@@ -253,6 +253,7 @@ export function dailyRecipeSteps() {
   }
 
   steps.push(maintainService("pi-hole", ["--skip-core-update"]));
+  steps.push(maintainService("mosquitto", ["--skip-cert-renew"]));
   steps.push(maintainService("nagios"));
   steps.push(maintainService("ollama", ["--skip-models"]));
   steps.push(maintainService("lms", ["--skip-models"]));

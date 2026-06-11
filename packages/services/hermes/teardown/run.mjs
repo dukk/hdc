@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Teardown Hermes Agent Proxmox LXC deployments.
+ * Teardown Hermes Agent Proxmox LXC or QEMU deployments.
  *
  * Usage: hdc run service hermes teardown -- [--instance a | --system-id hermes-a]
  *        hdc run service hermes teardown -- [--dry-run] [--yes] [--skip-compose-down]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,10 +14,11 @@ import { stderr as errout } from "node:process";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
-import { stopAndDestroyLxc } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
+import { stopAndDestroyLxc, stopAndDestroyQemu } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { resolveHermesDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
-import { composeDownInCt, resolvePveSshForHost } from "../lib/hermes-install.mjs";
+import { composeDownInCt, composeDownOnGuest, resolvePveSshForHost } from "../lib/hermes-install.mjs";
 import { confirmTeardown, teardownDryRun } from "../../ollama/lib/teardown-confirm.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
@@ -51,12 +53,12 @@ function readCfg() {
  * @param {Record<string, string>} flags
  */
 async function teardownOne(deployment, flags) {
-  const { mode, systemId, proxmox: px, install } = deployment;
+  const { mode, systemId, proxmox: px, configure, install } = deployment;
   const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
   const dryRun = teardownDryRun(flags);
   const skipComposeDown = flagGet(flags, "skip-compose-down", "skip_compose_down") !== undefined;
 
-  if (mode !== "proxmox-lxc") {
+  if (mode !== "proxmox-lxc" && mode !== "proxmox-qemu") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
   }
 
@@ -69,7 +71,15 @@ async function teardownOne(deployment, flags) {
   }
 
   const lxc = isObject(px.lxc) ? px.lxc : {};
-  const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+  const qemu = isObject(px.qemu) ? px.qemu : {};
+  const vmid =
+    mode === "proxmox-qemu"
+      ? typeof qemu.vmid === "number"
+        ? qemu.vmid
+        : Number(qemu.vmid)
+      : typeof lxc.vmid === "number"
+        ? lxc.vmid
+        : Number(lxc.vmid);
   if (!Number.isFinite(vmid) || vmid <= 0) {
     return { ok: false, system_id: systemId, host_id: hostId, message: "invalid vmid" };
   }
@@ -147,10 +157,25 @@ async function teardownOne(deployment, flags) {
 
   if (!skipComposeDown) {
     try {
-      const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
       const installCfg = isObject(install) ? install : {};
-      errout.write(`[hdc] ${target} ${verb}: stopping Docker Compose in CT ${vmid} …\n`);
-      composeDownInCt(pveSsh.user, pveSsh.host, vmid, installCfg);
+      if (mode === "proxmox-qemu") {
+        const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+        const sshUser = resolveGuestSshUser(sshCfg.user);
+        const ip = typeof qemu.ip === "string" ? qemu.ip.trim() : "";
+        const sshHost =
+          typeof sshCfg.host === "string" && sshCfg.host.trim()
+            ? sshCfg.host.trim()
+            : ip.split("/")[0];
+        if (sshHost) {
+          errout.write(`[hdc] ${target} ${verb}: stopping Docker Compose on ${sshUser}@${sshHost} …\n`);
+          const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+          composeDownOnGuest(exec, installCfg);
+        }
+      } else {
+        const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+        errout.write(`[hdc] ${target} ${verb}: stopping Docker Compose in CT ${vmid} …\n`);
+        composeDownInCt(pveSsh.user, pveSsh.host, vmid, installCfg);
+      }
     } catch (e) {
       errout.write(
         `[hdc] ${target} ${verb}: compose down warning: ${String(/** @type {Error} */ (e).message || e)}\n`,
@@ -159,14 +184,25 @@ async function teardownOne(deployment, flags) {
   }
 
   try {
-    await stopAndDestroyLxc({
-      apiBase: auth.host.apiBase,
-      authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-      node: located.node,
-      vmid,
-      log: logLine,
-    });
+    if (mode === "proxmox-qemu") {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: logLine,
+      });
+    } else {
+      await stopAndDestroyLxc({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: logLine,
+      });
+    }
   } catch (e) {
     const msg = String(/** @type {Error} */ (e).message || e);
     errout.write(`[hdc] ${target} ${verb}: ${systemId} destroy failed: ${msg}\n`);
@@ -189,12 +225,12 @@ async function teardownOne(deployment, flags) {
     destroyed: true,
     vmid,
     node: located.node,
-    message: `lxc ${vmid} destroyed`,
+    message: mode === "proxmox-qemu" ? `qemu ${vmid} destroyed` : `lxc ${vmid} destroyed`,
   };
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: tear down Hermes LXC (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: tear down Hermes guest (stderr log; JSON on stdout).\n`);
 
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(

@@ -28,6 +28,9 @@
       "host": "192.0.2.48"
     }
   },
+  "wazuh": {
+    "log_collection": [{ "location": "/var/log/mail.log", "log_format": "syslog" }]
+  },
   "postfix": {
     "myhostname": "postfix-relay.lan.example",
     "myorigin": "example.com",

@@ -88,6 +88,7 @@ async function main() {
     argv: process.argv.slice(2),
     payload,
     ok,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   });
   process.exitCode = ok ? 0 : 1;
 }

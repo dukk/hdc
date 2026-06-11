@@ -310,6 +310,7 @@ export function renderComposeYaml() {
       - .env
     volumes:
       - ./config:/app/config
+      - ./icons:/app/public/icons
     environment:
       HOMEPAGE_ALLOWED_HOSTS: \${HOMEPAGE_ALLOWED_HOSTS}
 

@@ -80,7 +80,7 @@ export function createVaultAccess(deps) {
    * @param {UnlockOptions} [opts]
    * @returns {Promise<string | null>} `null` only if the vault file is missing and `createIfMissing` is false.
    */
-  async function unlock(opts = {}) {
+  async function unlockLocal(opts = {}) {
     const createIfMissing = opts.createIfMissing !== false;
     if (cachedPassphrase !== null) return cachedPassphrase;
 
@@ -150,11 +150,25 @@ export function createVaultAccess(deps) {
   }
 
   /**
+   * Unlock secrets for the active backend (Vaultwarden session or local vault).
+   *
+   * @param {UnlockOptions} [opts]
+   * @returns {Promise<string | null>}
+   */
+  async function unlock(opts = {}) {
+    if (backendMode() === "vaultwarden") {
+      await unlockVaultwarden();
+      return null;
+    }
+    return unlockLocal(opts);
+  }
+
+  /**
    * @param {UnlockOptions} [unlockOpts]
    * @returns {Promise<Record<string, string> | null>} `null` if the vault is missing and was not created (`createIfMissing: false`).
    */
   async function readLocalSecrets(unlockOpts = {}) {
-    const pass = await unlock(unlockOpts);
+    const pass = await unlockLocal(unlockOpts);
     if (pass === null) return null;
     const f = vaultPath();
     if (!deps.existsSync(f)) return {};
@@ -233,7 +247,7 @@ export function createVaultAccess(deps) {
       }
       return;
     }
-    const pass = await unlock();
+    const pass = await unlockLocal();
     writeVault(vaultPath(), pass, secrets);
   }
 
@@ -245,7 +259,7 @@ export function createVaultAccess(deps) {
     let data = await readLocalSecrets({});
     if (data === null) data = {};
     data[key] = value;
-    const pass = await unlock();
+    const pass = await unlockLocal();
     writeVault(vaultPath(), pass, data);
   }
 
@@ -292,7 +306,7 @@ export function createVaultAccess(deps) {
       data = await readLocalSecrets({});
       if (data === null) data = {};
       data[key] = value;
-      const pass = await unlock();
+      const pass = await unlockLocal();
       writeVault(vaultPath(), pass, data);
       return value;
     }
@@ -400,7 +414,7 @@ export function createVaultAccess(deps) {
       if (data === null) return false;
       if (!(key in data)) return false;
       delete data[key];
-      const pass = await unlock();
+      const pass = await unlockLocal();
       writeVault(vaultPath(), pass, data);
       return true;
     }
@@ -423,7 +437,7 @@ export function createVaultAccess(deps) {
         let data = await readLocalSecrets({ createIfMissing: false });
         if (data === null || !(key in data)) return false;
         delete data[key];
-        const pass = await unlock();
+        const pass = await unlockLocal();
         writeVault(vaultPath(), pass, data);
         return true;
       }

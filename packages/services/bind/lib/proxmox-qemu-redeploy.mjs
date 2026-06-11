@@ -231,9 +231,33 @@ export async function migrateQemuGuest(opts) {
   log(`QEMU ${vmid} migrated to ${targetNode}.`);
 }
 
+async function getQemuRuntimeStatus(opts) {
+  const { apiBase, authorization, rejectUnauthorized, node, vmid } = opts;
+  const path = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/status/current`;
+  const body = await pveJsonRequest(
+    "GET",
+    apiBase,
+    path,
+    authorization,
+    rejectUnauthorized,
+    undefined,
+  );
+  const data = pveData(body);
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const status = /** @type {Record<string, unknown>} */ (data).status;
+    if (typeof status === "string") return status.trim();
+  }
+  return "";
+}
+
 export async function startQemuGuest(opts) {
   const { apiBase, authorization, rejectUnauthorized, node, vmid } = opts;
   const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const current = await getQemuRuntimeStatus({ apiBase, authorization, rejectUnauthorized, node, vmid });
+  if (current === "running") {
+    log(`QEMU ${vmid} on ${node} already running — skip start.`);
+    return;
+  }
   const path = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/status/start`;
   log(`Starting QEMU ${vmid} on ${node} …`);
   const body = await pveJsonRequest(

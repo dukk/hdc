@@ -9,7 +9,9 @@ import {
   buildInstallScript,
   buildMaintainScript,
   buildReverseProxyConfScript,
+  buildTimezoneConfScript,
   installDir,
+  normalizeTimezone,
   normalizeGitRef,
   resolveAdminUrl,
 } from "./mailcow-render.mjs";
@@ -27,6 +29,43 @@ export { resolvePveSshForHost };
  * @param {Record<string, unknown>} install
  * @param {string} label
  */
+/**
+ * @param {(script: string) => { status: number }} runScript
+ * @param {Record<string, unknown>} mailcow
+ * @param {Record<string, unknown>} install
+ * @param {string} label
+ * @param {{ restartCompose?: boolean }} [opts]
+ */
+function applyTimezoneConf(runScript, mailcow, install, label, opts = {}) {
+  const dir = installDir(install);
+  const tz = normalizeTimezone(mailcow);
+  const restartCompose = opts.restartCompose !== false;
+
+  errout.write(`[hdc] mailcow ${label}: applying timezone ${tz} …\n`);
+  const tzScript = buildTimezoneConfScript(dir, mailcow);
+  const tzResult = runScript(tzScript);
+  if (tzResult.status !== 0) {
+    return {
+      ok: false,
+      message: `timezone update failed (exit ${tzResult.status})`,
+    };
+  }
+
+  if (!restartCompose) {
+    return { ok: true, skipped: false, timezone: tz };
+  }
+
+  const escapedDir = dir.replace(/'/g, `'\\''`);
+  const restart = runScript(`set -euo pipefail\ncd '${escapedDir}'\ndocker compose up -d`);
+  if (restart.status !== 0) {
+    return {
+      ok: false,
+      message: `timezone compose restart failed (exit ${restart.status})`,
+    };
+  }
+  return { ok: true, skipped: false, timezone: tz };
+}
+
 function applyReverseProxyConf(runScript, mailcow, install, label) {
   const dir = installDir(install);
   const reverseProxy = buildReverseProxyConfScript(dir, mailcow);
@@ -102,6 +141,15 @@ export async function installMailcowOnHost(exec, mailcow, install, secrets, data
     };
   }
 
+  const tz = applyTimezoneConf((script) => exec.run(script), mailcow, install, "install");
+  if (!tz.ok) {
+    return {
+      ok: false,
+      method: "mailcow-dockerized",
+      message: tz.message || "timezone apply failed",
+    };
+  }
+
   const ipOut = exec.run("hostname -I | awk '{print $1}'");
   const guestIp = ipOut.status === 0 ? ipOut.stdout.trim().split(/\s+/)[0] || null : null;
   errout.write(`[hdc] mailcow install: completed on ${guestIp ?? "guest"}.\n`);
@@ -158,6 +206,20 @@ export async function installMailcowInCt(user, pveHost, vmid, mailcow, install, 
     };
   }
 
+  const tz = applyTimezoneConf(
+    (script) => pctExec(user, pveHost, vmid, script),
+    mailcow,
+    install,
+    "install",
+  );
+  if (!tz.ok) {
+    return {
+      ok: false,
+      method: "mailcow-dockerized",
+      message: tz.message || "timezone apply failed",
+    };
+  }
+
   const ip = readCtPrimaryIp(user, pveHost, vmid);
   errout.write(`[hdc] mailcow install: completed on CT ${vmid}.\n`);
   return {
@@ -183,6 +245,12 @@ export async function maintainMailcowStackOnHost(exec, mailcow, install, opts = 
   const rp = applyReverseProxyConf((script) => exec.run(script), mailcow, install, "maintain");
   if (!rp.ok) {
     return { ok: false, message: rp.message || "reverse-proxy apply failed" };
+  }
+  const tz = applyTimezoneConf((script) => exec.run(script), mailcow, install, "maintain", {
+    restartCompose: false,
+  });
+  if (!tz.ok) {
+    return { ok: false, message: tz.message || "timezone apply failed" };
   }
   const inner = buildMaintainScript(dir, opts);
   const r = exec.run(inner);
@@ -225,6 +293,16 @@ export async function maintainMailcowStackInCt(user, pveHost, vmid, mailcow, ins
   );
   if (!rp.ok) {
     return { ok: false, message: rp.message || "reverse-proxy apply failed" };
+  }
+  const tz = applyTimezoneConf(
+    (script) => pctExec(user, pveHost, vmid, script),
+    mailcow,
+    install,
+    "maintain",
+    { restartCompose: false },
+  );
+  if (!tz.ok) {
+    return { ok: false, message: tz.message || "timezone apply failed" };
   }
   const inner = buildMaintainScript(dir, opts);
   const r = pctExec(user, pveHost, vmid, inner);

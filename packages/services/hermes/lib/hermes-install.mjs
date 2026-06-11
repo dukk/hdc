@@ -4,6 +4,7 @@ import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import { dashboardPort } from "./deployments.mjs";
+import { buildConfigYamlScript, renderHermesConfigYaml } from "./hermes-config-render.mjs";
 import {
   buildDataDirScript,
   composeDir,
@@ -21,9 +22,14 @@ export { resolvePveSshForHost };
  * @param {string} envContent
  * @param {string} composeTagEnv
  * @param {Record<string, unknown>} install
+ * @param {string} [configYaml]
  */
-export function buildInstallScript(composeDirPath, composeYaml, envContent, composeTagEnv, install) {
+export function buildInstallScript(composeDirPath, composeYaml, envContent, composeTagEnv, install, configYaml) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
+  const configBlock =
+    typeof configYaml === "string" && configYaml.trim()
+      ? buildConfigYamlScript(install, configYaml)
+      : "";
 
   return [
     "set -euo pipefail",
@@ -40,6 +46,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, comp
     "fi",
     "systemctl enable --now docker",
     buildDataDirScript(install),
+    configBlock,
     `mkdir -p '${dir}'`,
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
@@ -62,14 +69,19 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, comp
  * @param {string} envContent
  * @param {string} composeTagEnv
  * @param {Record<string, unknown>} install
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; configYaml?: string }} [opts]
  */
 export function buildMaintainScript(composeDirPath, envContent, composeTagEnv, install, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
+  const configBlock =
+    typeof opts.configYaml === "string" && opts.configYaml.trim()
+      ? buildConfigYamlScript(install, opts.configYaml)
+      : "";
   const lines = [
     "set -euo pipefail",
     `test -f '${dir}/docker-compose.yml'`,
     buildDataDirScript(install),
+    configBlock,
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
@@ -161,6 +173,61 @@ function secretsToEnvInput(secrets) {
 }
 
 /**
+ * @param {Record<string, unknown>} hermes
+ */
+function renderConfigForHermes(hermes) {
+  try {
+    return renderHermesConfigYaml(hermes);
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    throw new Error(`hermes config.yaml render failed: ${msg}`);
+  }
+}
+
+/**
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} exec
+ * @param {Record<string, unknown>} hermes
+ * @param {Record<string, unknown>} install
+ * @param {Awaited<ReturnType<import("./vault-secrets.mjs").resolveHermesSecrets>>} secrets
+ * @param {{ maintain?: boolean; skipUpgrade?: boolean; waitDashboard?: boolean }} [opts]
+ */
+async function runHermesStackOnGuest(exec, hermes, install, secrets, opts = {}) {
+  const configYaml = renderConfigForHermes(hermes);
+  const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
+  const composeYaml = renderComposeYaml(hermes, install);
+  const composeTagEnv = renderComposeEnvFile(hermes);
+  const dir = composeDir(install);
+
+  const inner = opts.maintain
+    ? buildMaintainScript(dir, envContent, composeTagEnv, install, {
+        skipUpgrade: opts.skipUpgrade,
+        configYaml,
+      })
+    : buildInstallScript(dir, composeYaml, envContent, composeTagEnv, install, configYaml);
+
+  const r = exec.run(inner, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    return { ok: false, method: "docker-compose", message: detail };
+  }
+
+  if (opts.waitDashboard !== false) {
+    const port = dashboardPort(hermes);
+    const waitScript = buildWaitDashboardScript(port);
+    const w = exec.run(waitScript, { capture: true });
+    if (w.status !== 0) {
+      return {
+        ok: false,
+        method: "docker-compose",
+        message: "Hermes dashboard HTTP did not become ready",
+      };
+    }
+  }
+
+  return { ok: true, method: "docker-compose", message: opts.skipUpgrade ? "stack refreshed" : "installed" };
+}
+
+/**
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
@@ -176,11 +243,12 @@ export async function installHermesInCt(user, pveHost, vmid, hermes, install, se
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
 
+  const configYaml = renderConfigForHermes(hermes);
   const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
   const composeYaml = renderComposeYaml(hermes, install);
   const composeTagEnv = renderComposeEnvFile(hermes);
   const dir = composeDir(install);
-  const inner = buildInstallScript(dir, composeYaml, envContent, composeTagEnv, install);
+  const inner = buildInstallScript(dir, composeYaml, envContent, composeTagEnv, install, configYaml);
 
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
@@ -212,6 +280,30 @@ export async function installHermesInCt(user, pveHost, vmid, hermes, install, se
 }
 
 /**
+ * @param {object} opts
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} opts.exec
+ * @param {Record<string, unknown>} opts.hermes
+ * @param {Record<string, unknown>} opts.install
+ * @param {Awaited<ReturnType<import("./vault-secrets.mjs").resolveHermesSecrets>>} opts.secrets
+ */
+export async function installHermesInQemu(opts) {
+  const { exec, hermes, install, secrets, guestIp = null } = opts;
+  errout.write(`[hdc] hermes install: Docker Compose on ${exec.label} …\n`);
+
+  const result = await runHermesStackOnGuest(exec, hermes, install, secrets, { waitDashboard: true });
+  if (!result.ok) return result;
+
+  const dashboardUrl = resolveDashboardUrl(hermes, guestIp);
+  errout.write(`[hdc] hermes install: completed on ${exec.label}.\n`);
+  return {
+    ok: true,
+    method: "docker-compose",
+    message: "installed",
+    dashboard_url: dashboardUrl,
+  };
+}
+
+/**
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
@@ -228,11 +320,13 @@ export async function maintainHermesInCt(user, pveHost, vmid, hermes, install, s
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
+  const configYaml = renderConfigForHermes(hermes);
   const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
   const composeTagEnv = renderComposeEnvFile(hermes);
   const dir = composeDir(install);
   const inner = buildMaintainScript(dir, envContent, composeTagEnv, install, {
     skipUpgrade: opts.skipUpgrade,
+    configYaml,
   });
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
@@ -240,6 +334,39 @@ export async function maintainHermesInCt(user, pveHost, vmid, hermes, install, s
   }
 
   return { ok: true, message: "stack refreshed" };
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} opts.exec
+ * @param {Record<string, unknown>} opts.hermes
+ * @param {Record<string, unknown>} opts.install
+ * @param {Awaited<ReturnType<import("./vault-secrets.mjs").resolveHermesSecrets>>} opts.secrets
+ * @param {{ skipUpgrade?: boolean }} [opts.maintainOpts]
+ */
+export async function maintainHermesInQemu(opts) {
+  const { exec, hermes, install, secrets, maintainOpts = {} } = opts;
+  errout.write(`[hdc] hermes maintain: refreshing stack on ${exec.label} …\n`);
+
+  const result = await runHermesStackOnGuest(exec, hermes, install, secrets, {
+    maintain: true,
+    skipUpgrade: maintainOpts.skipUpgrade,
+    waitDashboard: false,
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message || "maintain failed" };
+  }
+  return { ok: true, message: "stack refreshed" };
+}
+
+/**
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} exec
+ * @param {Record<string, unknown>} install
+ */
+export function composeDownOnGuest(exec, install) {
+  const dir = composeDir(install);
+  const inner = buildComposeDownScript(dir);
+  exec.run(inner, { capture: true });
 }
 
 /**

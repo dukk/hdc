@@ -41,9 +41,37 @@ export function sshRemote(user, host, remoteCommand, opts = {}) {
  * @param {{ capture?: boolean }} [opts]
  */
 export function pctExec(user, pveHost, vmid, innerCommand, opts = {}) {
-  const escaped = innerCommand.replace(/'/g, `'\\''`);
+  const script = String(innerCommand ?? "");
+  if (opts.stdin || script.length > 8000) {
+    return pctExecScript(user, pveHost, vmid, script, opts);
+  }
+  const escaped = script.replace(/'/g, `'\\''`);
   const remote = `pct exec ${vmid} -- bash -lc '${escaped}'`;
   return sshRemote(user, pveHost, remote, opts);
+}
+
+/**
+ * Run a multi-line script inside an LXC via `pct exec … bash -s` (stdin).
+ * Use for large payloads that exceed SSH command-line limits.
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {string} innerCommand
+ * @param {{ capture?: boolean }} [opts]
+ */
+export function pctExecScript(user, pveHost, vmid, innerCommand, opts = {}) {
+  const capture = Boolean(opts.capture);
+  const remote = `pct exec ${vmid} -- bash -s`;
+  const r = spawnSync("ssh", [...SSH_OPTS, `${user}@${pveHost}`, remote], {
+    encoding: "utf8",
+    input: String(innerCommand ?? ""),
+    stdio: capture ? ["pipe", "pipe", "pipe"] : ["pipe", "inherit", "inherit"],
+  });
+  return {
+    status: r.status ?? 1,
+    stdout: capture ? String(r.stdout ?? "") : "",
+    stderr: capture ? String(r.stderr ?? "") : "",
+  };
 }
 
 /**
