@@ -131,7 +131,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `azure`, `gcp-oauth`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `azure-compute`, `gcp-oauth`, `gcp-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
 - **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
@@ -916,12 +916,12 @@ Example: `node tools/hdc/cli.mjs run service paperless-ngx deploy -- --instance 
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox QEMU on configured host (e.g. `pve-h`): import HAOS OVA qcow2, USB passthrough for Zigbee/Z-Wave (`deployments[]`; `--instance a`, `--destroy-existing`, `--usb-id`, `--no-wait-http`) |
-| `maintain` | HTTP probe on port 8123; `--reapply-usb` to refresh USB mapping |
+| `deploy` | Proxmox QEMU on configured host (e.g. `pve-h`): import HAOS OVA qcow2, USB passthrough for Zigbee/Z-Wave; when `public_url` is HTTPS, sync nginx-waf `trusted_proxies` into HAOS `configuration.yaml` (`deployments[]`; `--instance a`, `--destroy-existing`, `--usb-id`, `--no-wait-http`, `--skip-reverse-proxy`) |
+| `maintain` | Sync nginx-waf `trusted_proxies` when `public_url` is HTTPS; HTTP probe on port 8123; `--reapply-usb` to refresh USB mapping; `--skip-reverse-proxy` to skip |
 | `query` | Config summary; `--live` for Proxmox guest + HTTP probe |
 | `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. nginx-waf may already point `ha.dukk.org` at `http://10.0.0.30:8123`. No vault secrets for v1.
+Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override). No vault secrets for v1.
 
 Example: `node tools/hdc/cli.mjs run service homeassistant deploy -- --instance a --destroy-existing`
 
@@ -955,14 +955,19 @@ node tools/hdc/cli.mjs run service kali-desktop deploy -- --instance a
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox QEMU on `pve-b` (or configured host): Win11 from ISO + generated `autounattend.xml`, OVMF/TPM/VirtIO, OEM MSDM/SLIC passthrough (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-oem`, `--skip-install`, `--wait-install`) |
+| `deploy` | **Template:** `--build-template` — verified ISO install + Sysprep + Proxmox template on configured `proxmox.template.vmid`. **Instance:** `proxmox-qemu-clone` (default) full clone + specialize autounattend + OEM MSDM/SLIC; or `proxmox-qemu-iso` one-shot ISO install. OVMF/TPM/VirtIO; `disk_format: raw` on `local-lvm` (`deployments[]`; `--instance a`, `--destroy-existing`, `--skip-oem`, `--skip-install`, `--wait-install`, `--refresh-iso`, `--force-rebuild-template`) |
 | `maintain` | Re-dump and re-apply OEM ACPI tables + SMBIOS on the guest |
 | `query` | Config summary; `--live` for VM power state and OEM probe on hypervisor |
 | `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Vault: `HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD` (required). Place Windows 11 and virtio-win ISOs on the node (`proxmox.iso.windows_volid`, `virtio_volid`). **One** OEM-licensed Windows VM per hypervisor.
+Vault: `HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD` (required). Windows + virtio-win ISOs on the node (`proxmox.iso.windows_volid`, `virtio_volid`); optional `download_url` + `sha256` verify. VirtIO URL: `…/stable-virtio/virtio-win.iso`. **One** OEM-licensed Windows VM per hypervisor (OEM on clone deploy, not template builder).
 
-Example: `node tools/hdc/cli.mjs run service windows-desktop deploy -- --instance a --wait-install`
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run service windows-desktop deploy -- --build-template --destroy-existing --wait-install
+node tools/hdc/cli.mjs run service windows-desktop deploy -- --instance a --wait-install
+```
 
 ## Nextcloud in this repo
 
@@ -1114,6 +1119,66 @@ node tools/hdc/cli.mjs run infrastructure proxmox maintain -- --expand-guest-roo
 
 **Resource planning** (CPU, RAM, storage, bridges): follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](.cursor/skills/proxmox-resource-planning/SKILL.md) and [`.cursor/rules/proxmox-resource-planning.mdc`](.cursor/rules/proxmox-resource-planning.mdc).
 
+## Azure compute in this repo
+
+- **Config:** [`packages/infrastructure/azure-compute/config.json`](packages/infrastructure/azure-compute/config.json) (copy from [`config.example.json`](packages/infrastructure/azure-compute/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/azure-compute.config.schema.json`](tools/hdc/schema/azure-compute.config.schema.json).
+- **Docs:** [`docs/manually-deployed/azure-compute.md`](docs/manually-deployed/azure-compute.md).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Azure VM or ACI from `deployments[]`; cost estimate (Retail Prices API) + confirmation before provision (`--dry-run`, `--yes`, `--accept-unknown-cost`) |
+| `maintain` | Reconcile tags / ACI; cost confirm on container reconcile |
+| `query` | Config summary; `--live` for ARM state + cost snapshot |
+| `teardown` | Destroy VM or ACI (`--dry-run`, `--yes`) |
+
+Env: `HDC_AZURE_COMPUTE_SUBSCRIPTION_ID`, `HDC_AZURE_COMPUTE_TENANT_ID`, `HDC_AZURE_COMPUTE_CLIENT_ID`. Vault: `HDC_AZURE_COMPUTE_CLIENT_SECRET`. Modes: `azure-vm`, `azure-aci`. HostProvisioner: [`azure-compute-host-provisioner.mjs`](packages/infrastructure/azure-compute/lib/azure-compute-host-provisioner.mjs).
+
+Example: `node tools/hdc/cli.mjs run infrastructure azure-compute deploy -- --instance a --dry-run`
+
+## GCP compute in this repo
+
+- **Config:** [`packages/infrastructure/gcp-compute/config.json`](packages/infrastructure/gcp-compute/config.json) (copy from [`config.example.json`](packages/infrastructure/gcp-compute/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/gcp-compute.config.schema.json`](tools/hdc/schema/gcp-compute.config.schema.json).
+- **Docs:** [`docs/manually-deployed/gcp-compute.md`](docs/manually-deployed/gcp-compute.md).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | GCE VM or Cloud Run from `deployments[]`; cost estimate + confirmation before provision |
+| `maintain` | Reconcile labels / Cloud Run revision; cost confirm on serverless reconcile |
+| `query` | Config summary; `--live` for API state + cost snapshot |
+| `teardown` | Destroy VM or Cloud Run service (`--dry-run`, `--yes`) |
+
+Env: `HDC_GCP_COMPUTE_PROJECT_ID`. Vault: `HDC_GCP_COMPUTE_SERVICE_ACCOUNT_JSON`. Modes: `gcp-vm`, `gcp-cloud-run`. HostProvisioner: [`gcp-compute-host-provisioner.mjs`](packages/infrastructure/gcp-compute/lib/gcp-compute-host-provisioner.mjs).
+
+Example: `node tools/hdc/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run`
+
+## AWS infrastructure in this repo
+
+- **Config:** [`packages/infrastructure/aws/config.json`](packages/infrastructure/aws/config.json) (copy from [`config.example.json`](packages/infrastructure/aws/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/aws.config.schema.json`](tools/hdc/schema/aws.config.schema.json).
+- **Docs:** [`docs/manually-deployed/aws.md`](docs/manually-deployed/aws.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff VPC, subnets, security groups, IAM, EC2, EBS, S3, ECS vs config; `--import --yes` writes hdc-private snapshot |
+| `deploy` | Plan → monthly cost estimate → operator confirm → create managed resources (`--dry-run`, `--yes`, `--skip-cost-confirm`) |
+| `maintain` | Reconcile drift; billable creates trigger cost gate; `--prune` removes live resources not in config |
+| `teardown` | Destroy by `--resource <id>` or `--all` (`--yes` required non-interactive) |
+
+Env: `HDC_AWS_ACCESS_KEY_ID` in `.env`. Vault: `HDC_AWS_SECRET_ACCESS_KEY` (required); optional `HDC_AWS_SESSION_TOKEN`. Deploy/maintain write **Cost estimate** sections to operation reports via [`packages/lib/cost-report.mjs`](packages/lib/cost-report.mjs).
+
+Service packages may use `aws-ec2` / `aws-ecs` deploy modes (pilot: **scanopy**) via [`packages/infrastructure/aws/lib/aws-host-provisioner.mjs`](packages/infrastructure/aws/lib/aws-host-provisioner.mjs).
+
+Examples:
+
+```bash
+node tools/hdc/cli.mjs run infrastructure aws query --
+node tools/hdc/cli.mjs run infrastructure aws deploy -- --dry-run
+node tools/hdc/cli.mjs run infrastructure aws deploy -- --yes
+node tools/hdc/cli.mjs run infrastructure aws maintain --
+```
+
 ## Azure app registrations in this repo
 
 - **Config:** [`packages/infrastructure/azure/config.json`](packages/infrastructure/azure/config.json) (copy from [`config.example.json`](packages/infrastructure/azure/config.example.json); keep local config in hdc-private).
@@ -1183,6 +1248,25 @@ node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-page-rule
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --dry-run
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone dukk.org --prune
 ```
+
+## Cloudflare Workers and Pages in this repo
+
+- **Config:** [`packages/infrastructure/cloudflare-workers/config.json`](packages/infrastructure/cloudflare-workers/config.json) (copy from [`config.example.json`](packages/infrastructure/cloudflare-workers/config.example.json); keep local config and project trees in hdc-private).
+- **Schema:** [`tools/hdc/schema/cloudflare-workers.config.schema.json`](tools/hdc/schema/cloudflare-workers.config.schema.json).
+- **Docs:** [`docs/manually-deployed/cloudflare-workers.md`](docs/manually-deployed/cloudflare-workers.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | List Workers scripts, routes, Pages projects; diff vs config; `--import --yes` bootstraps `workers[]` / `pages[]` (JSON on stdout) |
+| `deploy` | `wrangler deploy` / `wrangler pages deploy` per managed entry; push secrets from vault via API |
+| `maintain` | Sync routes + secrets from config; optional `--redeploy` to refresh code |
+| `teardown` | `wrangler delete` / `wrangler pages project delete` (`--yes` required) |
+
+Token: `HDC_CLOUDFLARE_API_TOKEN` (shared with DNS package). Account id: `HDC_CLOUDFLARE_ACCOUNT_ID` or `cloudflare_workers.account_id` (required). Install **wrangler** v4+ globally or per project.
+
+Project source lives under hdc-private `packages/infrastructure/cloudflare-workers/workers/<id>/` and `pages/<id>/`.
+
+Example: `node tools/hdc/cli.mjs run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer`
 
 ## Synology NAS in this repo
 

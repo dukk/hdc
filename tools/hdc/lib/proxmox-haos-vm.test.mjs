@@ -20,6 +20,19 @@ describe("resolveHaosImportedDiskVolume", () => {
     expect(vol).toBe("local-lvm:vm-121-disk-1");
   });
 
+  it("prefers scsi0 root disk when attached (post boot-disk repair)", () => {
+    const vol = resolveHaosImportedDiskVolume(
+      {
+        efidisk0: "local-lvm:vm-121-disk-2,efitype=4m,size=4M",
+        scsi0: "local-lvm:vm-121-disk-1,discard=on",
+        unused0: "local-lvm:vm-121-disk-0",
+      },
+      "local-lvm",
+      121,
+    );
+    expect(vol).toBe("local-lvm:vm-121-disk-1");
+  });
+
   it("detects scsi0 wrongly attached to the EFI disk", () => {
     const vol = resolveHaosImportedDiskVolume(
       {

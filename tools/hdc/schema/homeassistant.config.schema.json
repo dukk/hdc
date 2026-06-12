@@ -9,7 +9,12 @@
       "type": "object",
       "properties": {
         "release": { "type": "string", "minLength": 1 },
-        "public_url": { "type": "string" }
+        "public_url": { "type": "string" },
+        "trusted_proxies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Optional override for nginx-waf LAN IPs; default resolves vm-nginx-waf-a/b from inventory"
+        }
       }
     },
     "defaults": { "type": "object" },
@@ -27,7 +32,11 @@
             "type": "object",
             "properties": {
               "release": { "type": "string" },
-              "public_url": { "type": "string" }
+              "public_url": { "type": "string" },
+              "trusted_proxies": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
             }
           },
           "proxmox": {

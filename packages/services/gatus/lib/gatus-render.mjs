@@ -68,6 +68,11 @@ function renderEndpoint(ep) {
     lines.push("    conditions:");
     lines.push(yamlStringList(conditions, 6));
   }
+  const client = isObject(ep.client) ? ep.client : null;
+  if (client && client.insecure === true) {
+    lines.push("    client:");
+    lines.push("      insecure: true");
+  }
   return lines.join("\n");
 }
 

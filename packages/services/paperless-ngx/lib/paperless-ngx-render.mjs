@@ -280,8 +280,21 @@ export function renderPaperlessEnv(cfg, secrets, ctIp = null) {
 /**
  * @param {{ tikaEnabled?: boolean }} [opts]
  */
+/**
+ * @param {string} tag
+ */
+function postgresDataMountPath(tag) {
+  const major = Number.parseInt(String(tag).replace(/^[^0-9]*/, ""), 10);
+  if (Number.isFinite(major) && major >= 18) {
+    return "/var/lib/postgresql";
+  }
+  return "/var/lib/postgresql/data";
+}
+
 export function renderComposeYaml(opts = {}) {
   const withTika = opts.tikaEnabled !== false;
+  const postgresTag = opts.postgresImageTag ?? "18";
+  const pgDataMount = postgresDataMountPath(postgresTag);
 
   const webDepends = withTika
     ? `    depends_on:
@@ -326,7 +339,7 @@ export function renderComposeYaml(opts = {}) {
     image: docker.io/library/postgres:\${POSTGRES_IMAGE_TAG}
     restart: unless-stopped
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:${pgDataMount}
     environment:
       POSTGRES_DB: \${POSTGRES_DB}
       POSTGRES_USER: \${POSTGRES_USER}

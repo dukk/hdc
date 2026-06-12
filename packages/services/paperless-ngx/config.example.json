@@ -1,8 +1,20 @@
 {
   "schema_version": 2,
   "defaults": {
-    "mode": "proxmox-lxc",
+    "mode": "proxmox-qemu",
     "proxmox": {
+      "network": {
+        "gateway": "10.0.0.1"
+      },
+      "qemu": {
+        "template_vmid": 9024,
+        "storage": "local-lvm",
+        "full": 1,
+        "bridge": "vmbr0",
+        "memory_mb": 6144,
+        "cores": 4,
+        "rootfs_gb": 64
+      },
       "lxc": {
         "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
         "storage": "local-lvm",
@@ -49,9 +61,20 @@
       "system_id": "paperless-ngx-a",
       "proxmox": {
         "host_id": "REPLACE_PVE_NODE",
+        "qemu": {
+          "vmid": 0,
+          "template_vmid": 9024,
+          "ip": "10.0.0.0/24",
+          "hostname": "paperless-ngx-a"
+        },
         "lxc": {
           "vmid": 0,
           "hostname": "paperless-ngx-a"
+        }
+      },
+      "configure": {
+        "ssh": {
+          "host": "10.0.0.0"
         }
       }
     }

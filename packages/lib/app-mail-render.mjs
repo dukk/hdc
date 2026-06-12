@@ -84,6 +84,32 @@ export function docusealMailEnvLines(docuseal) {
 }
 
 /**
+ * SMTP env lines for Twenty docker .env when mail.enabled.
+ * @param {Record<string, unknown>} twenty
+ */
+export function twentyMailEnvLines(twenty) {
+  const mail = mailBlockFromService(twenty);
+  const relay = loadMailRelayAppSettings();
+  const recipients = resolveMailRecipients(mail, { from: relay.from });
+  if (!recipients) return [];
+
+  const fromName =
+    typeof mail?.from_name === "string" && mail.from_name.trim()
+      ? mail.from_name.trim()
+      : "Twenty CRM";
+
+  return [
+    "EMAIL_DRIVER=smtp",
+    `EMAIL_SMTP_HOST=${relay.host}`,
+    `EMAIL_SMTP_PORT=${relay.port}`,
+    `EMAIL_FROM_ADDRESS=${recipients.from}`,
+    `EMAIL_FROM_NAME=${fromName.replace(/[\n\r"\\]/g, "")}`,
+    "EMAIL_SMTP_USER=",
+    "EMAIL_SMTP_PASSWORD=",
+  ];
+}
+
+/**
  * SMTP env lines for Vikunja docker .env when mail.enabled.
  * @param {Record<string, unknown>} vikunja
  */

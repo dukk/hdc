@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertNoProductKeyInUnattend,
+  renderAutounattendCloneXml,
   renderAutounattendXml,
 } from "../../../packages/services/windows-desktop/lib/windows-unattend.mjs";
 
@@ -23,5 +24,19 @@ describe("windows-unattend", () => {
     expect(() => assertNoProductKeyInUnattend("<ProductKey>xxx</ProductKey>")).toThrow(
       /ProductKey/,
     );
+  });
+
+  it("renderAutounattendCloneXml is specialize-only", () => {
+    const xml = renderAutounattendCloneXml({
+      computerName: "win11-a",
+      adminUsername: "Administrator",
+      adminPassword: "Secret123!",
+      locale: "en-US",
+      network: { ipCidr: "10.0.0.180/24", gateway: "10.0.0.1", dnsServers: ["10.0.0.2"] },
+    });
+    expect(xml).toContain("<ComputerName>win11-a</ComputerName>");
+    expect(xml).not.toContain("DiskConfiguration");
+    expect(xml).not.toContain("ImageInstall");
+    assertNoProductKeyInUnattend(xml);
   });
 });

@@ -8,7 +8,7 @@ import {
   discoverLocalSshMaterial,
   sshBashLc,
 } from "../../../../tools/hdc/lib/ssh-host-access.mjs";
-import { resolvePveSshForHost } from "../../ollama/lib/lxc-password.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 
 /**
  * @param {object} opts

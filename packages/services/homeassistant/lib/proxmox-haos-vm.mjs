@@ -88,16 +88,21 @@ function volumeRefOnly(diskRef) {
  * @returns {string} volume ref e.g. local-lvm:vm-121-disk-1
  */
 export function resolveHaosImportedDiskVolume(config, storage, vmid) {
+  const efiVol = volumeRefOnly(config.efidisk0);
+  const scsiVol = volumeRefOnly(config.scsi0);
+  const prefix = `${storage}:vm-${vmid}-disk-`;
+
+  // scsi0 is the running HAOS root disk after boot-disk repair.
+  if (scsiVol && scsiVol !== efiVol) {
+    return scsiVol;
+  }
+
   for (let i = 0; i < 8; i++) {
     const raw = config[`unused${i}`];
     if (typeof raw === "string" && raw.trim()) {
       return volumeRefOnly(raw);
     }
   }
-
-  const efiVol = volumeRefOnly(config.efidisk0);
-  const scsiVol = volumeRefOnly(config.scsi0);
-  const prefix = `${storage}:vm-${vmid}-disk-`;
 
   // Broken deploy attached scsi0 to the EFI vars disk (disk-0); HAOS import is disk-1.
   if (efiVol && scsiVol && scsiVol === efiVol) {

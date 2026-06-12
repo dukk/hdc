@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { ensureGuestLinuxBaseline } from "../../../lib/guest-linux-baseline.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
@@ -20,6 +21,7 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolvePaperlessNgxDeployments } from "../lib/deployments.mjs";
 import {
   maintainPaperlessNgxInCt,
+  maintainPaperlessNgxInQemu,
   resolvePveSshForHost,
 } from "../lib/paperless-ngx-install.mjs";
 import { createPaperlessNgxVaultAccess } from "../lib/vault-deps.mjs";
@@ -60,7 +62,7 @@ function readCfg() {
  * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
 async function maintainOne(deployment, flags, secrets, vaultAccess) {
-  const { systemId, proxmox: px, paperless_ngx, install } = deployment;
+  const { systemId, mode, proxmox: px, configure, paperless_ngx, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
 
   if (!isObject(px)) {
@@ -71,6 +73,52 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     return { ok: false, system_id: systemId, message: "missing host_id" };
   }
 
+  const paperlessCfg = isObject(paperless_ngx) ? paperless_ngx : {};
+  const installCfg = isObject(install) ? install : {};
+  const log = provisionLogFromConsole(console);
+
+  if (mode === "proxmox-qemu") {
+    const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+    const q = isObject(px.qemu) ? px.qemu : {};
+    const sshUser = resolveGuestSshUser(sshCfg.user);
+    const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+    const sshHost =
+      typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : ip.split("/")[0];
+    if (!sshHost) {
+      return { ok: false, system_id: systemId, message: "configure.ssh.host or proxmox.qemu.ip required" };
+    }
+
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${sshUser}@${sshHost} …\n`);
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    const result = await maintainPaperlessNgxInQemu({
+      exec,
+      paperless: paperlessCfg,
+      install: installCfg,
+      secrets,
+      maintainOpts: { skipUpgrade },
+    });
+    const baseline = await ensureGuestLinuxBaseline({
+      exec,
+      log,
+      flags,
+      vaultAccess,
+      deployment,
+      proxmoxPackageRoot: proxmoxRoot,
+    });
+    return {
+      ok: result.ok && baseline.ok,
+      system_id: systemId,
+      host_id: hostId,
+      mode,
+      skip_upgrade: skipUpgrade,
+      tika_enabled: result.tika_enabled ?? null,
+      url: result.url ?? null,
+      upstream_url: result.upstream_url ?? null,
+      message: result.message,
+      ...guestBaselineResultFields(baseline),
+    };
+  }
+
   const lxc = isObject(px.lxc) ? px.lxc : {};
   const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
   if (!Number.isFinite(vmid) || vmid <= 0) {
@@ -79,8 +127,6 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-  const paperlessCfg = isObject(paperless_ngx) ? paperless_ngx : {};
-  const installCfg = isObject(install) ? install : {};
   const result = await maintainPaperlessNgxInCt(
     pveSsh.user,
     pveSsh.host,
@@ -91,7 +137,6 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     { skipUpgrade },
   );
 
-  const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
     user: pveSsh.user,
     host: pveSsh.host,
@@ -111,6 +156,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     ok: result.ok && baseline.ok,
     system_id: systemId,
     host_id: hostId,
+    mode,
     vmid,
     skip_upgrade: skipUpgrade,
     tika_enabled: result.tika_enabled ?? null,

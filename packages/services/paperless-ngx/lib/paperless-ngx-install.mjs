@@ -1,10 +1,12 @@
 import { stderr as errout } from "node:process";
 
+import { growRootFilesystemScript } from "../../../lib/qemu-rootfs-resize.mjs";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import {
   composeDir,
+  normalizePostgresImageTag,
   renderComposeYaml,
   renderDotEnv,
   renderPaperlessEnv,
@@ -42,15 +44,18 @@ export function buildInstallScript(composeDirPath, composeYaml, dotEnv, paperles
   const dir = composeDirPath.replace(/'/g, `'\\''`);
 
   return [
+    growRootFilesystemScript(),
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update -qq",
     "apt-get install -y -qq ca-certificates curl gnupg",
-    "if ! command -v docker >/dev/null 2>&1; then",
+    "if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then",
     "  install -m 0755 -d /etc/apt/keyrings",
-    "  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc",
-    "  chmod a+r /etc/apt/keyrings/docker.asc",
-    '  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME:-$VERSION_ID}) stable" > /etc/apt/sources.list.d/docker.list',
+    "  if [ ! -f /etc/apt/keyrings/docker.asc ]; then",
+    "    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc",
+    "    chmod a+r /etc/apt/keyrings/docker.asc",
+    '    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME:-$VERSION_ID}) stable" > /etc/apt/sources.list.d/docker.list',
+    "  fi",
     "  apt-get update -qq",
     "  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin",
     "fi",
@@ -146,7 +151,10 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  */
 function renderStackFiles(paperless, secrets, ctIp) {
   const withTika = tikaEnabled(paperless);
-  const composeYaml = renderComposeYaml({ tikaEnabled: withTika });
+  const composeYaml = renderComposeYaml({
+    tikaEnabled: withTika,
+    postgresImageTag: normalizePostgresImageTag(paperless),
+  });
   const dotEnv = renderDotEnv(paperless, secrets);
   const paperlessEnv = renderPaperlessEnv(paperless, secrets, ctIp);
   return { composeYaml, dotEnv, paperlessEnv, withTika };
@@ -251,4 +259,92 @@ export function composeDownInCt(user, pveHost, vmid, install) {
   const dir = composeDir(install);
   const inner = buildComposeDownScript(dir);
   pctExec(user, pveHost, vmid, inner);
+}
+
+/**
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} exec
+ * @param {Record<string, unknown>} paperless
+ * @param {Record<string, unknown>} install
+ * @param {{ secretKey: string; dbPassword: string; adminPassword?: string | null }} secrets
+ * @param {string | null} guestIp
+ * @param {{ maintain?: boolean; skipUpgrade?: boolean }} [opts]
+ */
+async function runPaperlessStackOnGuest(exec, paperless, install, secrets, guestIp, opts = {}) {
+  const { composeYaml, dotEnv, paperlessEnv, withTika } = renderStackFiles(paperless, secrets, guestIp);
+  const dir = composeDir(install);
+  const uid = usermapUid(paperless);
+  const gid = usermapGid(paperless);
+  const inner = opts.maintain
+    ? buildMaintainScript(dir, composeYaml, dotEnv, paperlessEnv, uid, gid, {
+        skipUpgrade: opts.skipUpgrade,
+      })
+    : buildInstallScript(dir, composeYaml, dotEnv, paperlessEnv, uid, gid);
+
+  const r = exec.run(inner, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    return { ok: false, method: "docker-compose", message: detail };
+  }
+
+  return {
+    ok: true,
+    method: "docker-compose",
+    message: opts.maintain ? (opts.skipUpgrade ? "restarted" : "images refreshed") : "installed",
+    tika_enabled: withTika,
+    url: resolveWebUrl(paperless, guestIp),
+    upstream_url: resolveUpstreamUrl(guestIp, paperless),
+    guest_ip: guestIp,
+  };
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} opts.exec
+ * @param {Record<string, unknown>} opts.paperless
+ * @param {Record<string, unknown>} opts.install
+ * @param {{ secretKey: string; dbPassword: string; adminPassword?: string | null }} opts.secrets
+ * @param {string | null} [opts.guestIp]
+ */
+export async function installPaperlessNgxInQemu(opts) {
+  const { exec, paperless, install, secrets, guestIp = null } = opts;
+  errout.write(`[hdc] paperless-ngx install: Docker Compose on ${exec.label} …\n`);
+
+  const result = await runPaperlessStackOnGuest(exec, paperless, install, secrets, guestIp);
+  if (!result.ok) return result;
+
+  errout.write(`[hdc] paperless-ngx install: completed on ${exec.label} (tika_enabled=${result.tika_enabled}).\n`);
+  return result;
+}
+
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} opts.exec
+ * @param {Record<string, unknown>} opts.paperless
+ * @param {Record<string, unknown>} opts.install
+ * @param {{ secretKey: string; dbPassword: string; adminPassword?: string | null }} opts.secrets
+ * @param {{ skipUpgrade?: boolean }} [opts.maintainOpts]
+ */
+export async function maintainPaperlessNgxInQemu(opts) {
+  const { exec, paperless, install, secrets, maintainOpts = {} } = opts;
+  errout.write(`[hdc] paperless-ngx maintain: refreshing stack on ${exec.label} …\n`);
+
+  const guestIp = null;
+  const result = await runPaperlessStackOnGuest(exec, paperless, install, secrets, guestIp, {
+    maintain: true,
+    skipUpgrade: maintainOpts.skipUpgrade,
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message || "maintain failed" };
+  }
+  return result;
+}
+
+/**
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} exec
+ * @param {Record<string, unknown>} install
+ */
+export function composeDownOnGuest(exec, install) {
+  const dir = composeDir(install);
+  const inner = buildComposeDownScript(dir);
+  exec.run(inner, { capture: true });
 }

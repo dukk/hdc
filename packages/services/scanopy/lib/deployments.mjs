@@ -103,7 +103,13 @@ function validateDeployments(deployments) {
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
-    if (mode === "proxmox-lxc" || mode === "" || !mode) {
+    if (mode === "aws-ecs") {
+      const aws = isObject(d.aws) ? d.aws : {};
+      const clusterId = typeof aws.cluster_id === "string" ? aws.cluster_id.trim() : "";
+      if (!clusterId) {
+        throw new Error(`${sid}: aws.cluster_id required for aws-ecs`);
+      }
+    } else if (mode === "proxmox-lxc" || mode === "" || !mode) {
       const px = isObject(d.proxmox) ? d.proxmox : {};
       const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
       if (!hostId) {

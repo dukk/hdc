@@ -29,7 +29,10 @@
             "pattern": "^vm-(win11|windows)-[a-z]+$"
           },
           "hostname": { "type": "string" },
-          "mode": { "type": "string", "enum": ["proxmox-qemu-iso"] },
+          "mode": {
+            "type": "string",
+            "enum": ["proxmox-qemu-iso", "proxmox-qemu-clone"]
+          },
           "proxmox": { "type": "object", "additionalProperties": true },
           "configure": { "type": "object", "additionalProperties": true }
         }

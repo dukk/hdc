@@ -33,6 +33,35 @@
           "url": "tcp://192.0.2.53:53",
           "interval": "1m",
           "conditions": ["[CONNECTED] == true"]
+        },
+        {
+          "name": "bind-a-dns",
+          "group": "dns",
+          "url": "tcp://192.0.2.2:53",
+          "interval": "1m",
+          "conditions": ["[CONNECTED] == true"]
+        },
+        {
+          "name": "bind-b-dns",
+          "group": "dns",
+          "url": "tcp://192.0.2.3:53",
+          "interval": "1m",
+          "conditions": ["[CONNECTED] == true"]
+        },
+        {
+          "name": "step-ca",
+          "group": "infrastructure",
+          "url": "https://192.0.2.190/health",
+          "interval": "5m",
+          "conditions": ["[STATUS] == 200"],
+          "client": { "insecure": true }
+        },
+        {
+          "name": "greenbone",
+          "group": "security",
+          "url": "tcp://192.0.2.204:9392",
+          "interval": "5m",
+          "conditions": ["[CONNECTED] == true"]
         }
       ],
       "config_yaml_extra": null,

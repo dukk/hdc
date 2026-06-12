@@ -9,15 +9,17 @@ import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import {
   listPaperlessNgxDeploymentSummaries,
   normalizePaperlessNgxConfig,
   resolvePaperlessNgxDeployments,
 } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/paperless-ngx-install.mjs";
-import { queryPaperlessNgxInCt } from "../lib/query-status.mjs";
+import { queryPaperlessNgxInCt, queryPaperlessNgxOnGuest } from "../lib/query-status.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -90,27 +92,59 @@ async function main() {
       for (const d of selected) {
         const px = isObject(d.proxmox) ? d.proxmox : {};
         const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
-        const lxc = isObject(px.lxc) ? px.lxc : {};
-        const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
-        if (!hostId || !Number.isFinite(vmid)) {
+        if (!hostId) {
           liveResults.push({
             system_id: d.systemId,
             ok: false,
-            message: "missing host_id or vmid",
+            message: "missing host_id",
           });
           continue;
         }
-        errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} vmid ${vmid} …\n`);
         try {
-          const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-          const status = await queryPaperlessNgxInCt(
-            pveSsh.user,
-            pveSsh.host,
-            vmid,
-            d.paperless_ngx,
-            d.install,
-          );
-          liveResults.push({ system_id: d.systemId, ok: true, ...status });
+          if (d.mode === "proxmox-qemu") {
+            const sshCfg = isObject(d.configure) && isObject(d.configure.ssh) ? d.configure.ssh : {};
+            const q = isObject(px.qemu) ? px.qemu : {};
+            const sshUser = resolveGuestSshUser(sshCfg.user);
+            const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+            const sshHost =
+              typeof sshCfg.host === "string" && sshCfg.host.trim()
+                ? sshCfg.host.trim()
+                : ip.split("/")[0];
+            const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+            if (!sshHost) {
+              liveResults.push({
+                system_id: d.systemId,
+                ok: false,
+                message: "configure.ssh.host or proxmox.qemu.ip required",
+              });
+              continue;
+            }
+            errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} ${sshUser}@${sshHost} …\n`);
+            const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+            const status = await queryPaperlessNgxOnGuest(exec, d.paperless_ngx, d.install, sshHost);
+            liveResults.push({ system_id: d.systemId, ok: true, vmid, ...status });
+          } else {
+            const lxc = isObject(px.lxc) ? px.lxc : {};
+            const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
+            if (!Number.isFinite(vmid)) {
+              liveResults.push({
+                system_id: d.systemId,
+                ok: false,
+                message: "missing vmid",
+              });
+              continue;
+            }
+            errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} vmid ${vmid} …\n`);
+            const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+            const status = await queryPaperlessNgxInCt(
+              pveSsh.user,
+              pveSsh.host,
+              vmid,
+              d.paperless_ngx,
+              d.install,
+            );
+            liveResults.push({ system_id: d.systemId, ok: true, ...status });
+          }
         } catch (e) {
           liveResults.push({
             system_id: d.systemId,

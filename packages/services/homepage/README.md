@@ -39,6 +39,8 @@ Edit `homepage/services.yaml` (and optional `settings.yaml` / `bookmarks.yaml` /
 
 Trivy and WireGuard have no browser UI in this deployment; omit them from the dashboard or link only via `siteMonitor` if you add a health endpoint.
 
+Non-HTTP services (BIND, databases, mail relays, etc.) do not answer HTTP — `siteMonitor` will always show a red dot. Use `ping` with the service IP for the Homepage status indicator (ICMP host reachability). Services with no web UI (step-ca) or HTTPS to a bare IP with a hostname certificate (step-ca, Wazuh, Greenbone, Proxmox) also fail `siteMonitor` from the Homepage container; use `ping` there too and rely on Proxmox widgets or Gatus for service-level checks. For actual service-port health and alerting, add Gatus endpoints (for example `tcp://10.0.0.2:53` for BIND, `https://10.0.0.190/health` with `client.insecure` for step-ca) in [`packages/services/gatus/config.json`](../gatus/config.example.json).
+
 ## Custom icons
 
 Most tiles use [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) names (kebab-case, optional `.png` suffix). Examples: `draw-io.png`, `isc-bind9.png`, `immich.png`.

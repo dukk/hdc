@@ -38,8 +38,10 @@ Shared capabilities: hypervisors, SaaS APIs, NAS, and network controllers. Sever
 
 | Package | CLI id | Summary | Config | Access |
 |---------|--------|---------|--------|--------|
+| [aws](infrastructure/aws/README.md) | `aws` | AWS VPC, EC2, ECS, S3, EBS | [config.example.json](infrastructure/aws/config.example.json) | AWS API; cost estimate before deploy |
 | [azure](infrastructure/azure/README.md) | `azure` | Azure app registrations | [config.example.json](infrastructure/azure/config.example.json) | Microsoft Graph API / Entra portal |
 | [cloudflare](infrastructure/cloudflare/README.md) | `cloudflare` | Cloudflare | [config.example.json](infrastructure/cloudflare/config.example.json) | Cloudflare API (DNS, page rules, email routing) |
+| [cloudflare-workers](infrastructure/cloudflare-workers/README.md) | `cloudflare-workers` | Cloudflare Workers and Pages | [config.example.json](infrastructure/cloudflare-workers/config.example.json) | Wrangler deploy; Workers routes/secrets and Pages projects |
 | [gcp-oauth](infrastructure/gcp-oauth/README.md) | `gcp-oauth` | GCP OAuth (Google Auth Platform) | [config.example.json](infrastructure/gcp-oauth/config.example.json) | Google Cloud Console OAuth credentials |
 | [proxmox](infrastructure/proxmox/README.md) | `proxmox` | Proxmox virtualization | [config.example.json](infrastructure/proxmox/config.example.json) | Proxmox UI `https://<hypervisor>:8006`; LXC/QEMU deploy, cluster query |
 | [smtp2go](infrastructure/smtp2go/README.md) | `smtp2go` | SMTP2GO | [config.example.json](infrastructure/smtp2go/config.example.json) | SMTP2GO REST API; outbound mail via postfix-relay |

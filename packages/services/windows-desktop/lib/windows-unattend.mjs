@@ -20,7 +20,7 @@ function xmlEscape(s) {
  * @param {string} [opts.virtioDriverPath] WinPE driver path on virtio ISO (e.g. E:\vioscsi\w11\amd64)
  * @returns {string}
  */
-export function renderAutounattendXml(opts) {
+function buildSpecializeAndOobeXml(opts) {
   const {
     computerName,
     adminUsername,
@@ -28,7 +28,6 @@ export function renderAutounattendXml(opts) {
     locale,
     timeZone = "UTC",
     network,
-    virtioDriverPath = "E:\\vioscsi\\w11\\amd64",
   } = opts;
 
   /** @type {string[]} */
@@ -94,6 +93,75 @@ export function renderAutounattendXml(opts) {
         </Password>
       </LocalAccount>
     </LocalAccounts>`;
+
+  return `
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      ${specializeParts.join("\n      ")}
+      ${localAccount}
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>${xmlEscape(adminUsername)}</Username>
+        <Password>
+          <Value>${xmlEscape(adminPassword)}</Value>
+          <PlainText>true</PlainText>
+        </Password>
+      </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Install VirtIO guest tools</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path E:\\virtio-win-gt-x64.msi) { Start-Process msiexec.exe -ArgumentList '/i','E:\\virtio-win-gt-x64.msi','/qn','/norestart' -Wait }"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Description>Install QEMU guest agent</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path E:\\guest-agent\\qemu-ga-x86_64.msi) { Start-Process msiexec.exe -ArgumentList '/i','E:\\guest-agent\\qemu-ga-x86_64.msi','/qn','/norestart' -Wait }"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>`;
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.computerName
+ * @param {string} opts.adminUsername
+ * @param {string} opts.adminPassword
+ * @param {string} opts.locale
+ * @param {string} [opts.timeZone] defaults UTC
+ * @param {{ ipCidr?: string; gateway?: string; dnsServers?: string[] }} [opts.network]
+ * @param {string} [opts.virtioDriverPath] WinPE driver path on virtio ISO (e.g. E:\vioscsi\w11\amd64)
+ * @returns {string}
+ */
+export function renderAutounattendXml(opts) {
+  const {
+    computerName,
+    adminUsername,
+    adminPassword,
+    locale,
+    timeZone = "UTC",
+    network,
+    virtioDriverPath = "E:\\vioscsi\\w11\\amd64",
+  } = opts;
+
+  const tail = buildSpecializeAndOobeXml({
+    computerName,
+    adminUsername,
+    adminPassword,
+    locale,
+    timeZone,
+    network,
+  });
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -167,42 +235,25 @@ export function renderAutounattendXml(opts) {
         </PathAndCredentials>
       </DriverPaths>
     </component>
-  </settings>
-  <settings pass="specialize">
-    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-      ${specializeParts.join("\n      ")}
-      ${localAccount}
-    </component>
-  </settings>
-  <settings pass="oobeSystem">
-    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-      <OOBE>
-        <HideEULAPage>true</HideEULAPage>
-        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
-        <ProtectYourPC>3</ProtectYourPC>
-      </OOBE>
-      <AutoLogon>
-        <Enabled>true</Enabled>
-        <Username>${xmlEscape(adminUsername)}</Username>
-        <Password>
-          <Value>${xmlEscape(adminPassword)}</Value>
-          <PlainText>true</PlainText>
-        </Password>
-      </AutoLogon>
-      <FirstLogonCommands>
-        <SynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Description>Install VirtIO guest tools</Description>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path E:\\virtio-win-gt-x64.msi) { Start-Process msiexec.exe -ArgumentList '/i','E:\\virtio-win-gt-x64.msi','/qn','/norestart' -Wait }"</CommandLine>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <Description>Install QEMU guest agent</Description>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path E:\\guest-agent\\qemu-ga-x86_64.msi) { Start-Process msiexec.exe -ArgumentList '/i','E:\\guest-agent\\qemu-ga-x86_64.msi','/qn','/norestart' -Wait }"</CommandLine>
-        </SynchronousCommand>
-      </FirstLogonCommands>
-    </component>
-  </settings>
+  </settings>${tail}
+</unattend>
+`;
+}
+
+/**
+ * Specialize-only autounattend for clones from a sysprep template (no disk wipe / ImageInstall).
+ * @param {object} opts
+ * @param {string} opts.computerName
+ * @param {string} opts.adminUsername
+ * @param {string} opts.adminPassword
+ * @param {string} opts.locale
+ * @param {string} [opts.timeZone]
+ * @param {{ ipCidr?: string; gateway?: string; dnsServers?: string[] }} [opts.network]
+ */
+export function renderAutounattendCloneXml(opts) {
+  const tail = buildSpecializeAndOobeXml(opts);
+  return `<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">${tail}
 </unattend>
 `;
 }

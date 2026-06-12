@@ -19,6 +19,7 @@ import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/pro
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
+import { createAwsEcsHostProvisioner } from "../../../infrastructure/aws/lib/aws-host-provisioner.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 
@@ -94,6 +95,42 @@ async function deployOne(deployment, flags, log, runOpts) {
 
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
   logDeployInventoryStatus(target, verb, inv);
+
+  if (mode === "aws-ecs") {
+    const awsBlock = isObject(deployment.aws) ? deployment.aws : {};
+    const awsConfigPath = join(root, "packages", "infrastructure", "aws");
+    let awsBase = {};
+    try {
+      const loaded = tryLoadPackageConfigFromPackageRoot(awsConfigPath, {
+        exampleRel: "packages/infrastructure/aws/config.example.json",
+      });
+      if (loaded) awsBase = loaded.data;
+    } catch {
+      // optional shared aws config
+    }
+    const prov = createAwsEcsHostProvisioner({}, awsBase, flags);
+    const port = typeof scanopy.port === "number" ? scanopy.port : 60072;
+    const provisionResult = await prov.createContainer(log, {
+      name: systemId,
+      parameters: {
+        cluster_id: awsBlock.cluster_id ?? "ecs-main",
+        docker_image: "scanopy/scanopy:latest",
+        container_port: port,
+        host_port: port,
+        subnet_ids: awsBlock.subnet_ids,
+        security_group_ids: awsBlock.security_group_ids,
+        cpu: awsBlock.cpu,
+        memory: awsBlock.memory,
+      },
+    });
+    return {
+      ok: provisionResult.ok,
+      system_id: systemId,
+      mode,
+      result: provisionResult,
+      message: provisionResult.message,
+    };
+  }
 
   if (mode !== "proxmox-lxc") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };

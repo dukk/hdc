@@ -74,3 +74,64 @@ export async function queryPaperlessNgxInCt(user, pveHost, vmid, paperless, inst
     url: publicUrl || (ctIp ? `http://${ctIp}:${port}` : null),
   };
 }
+
+/**
+ * @param {ReturnType<typeof import("../../postfix-relay/lib/postfix-relay-configure.mjs").createConfigureExec>} exec
+ * @param {Record<string, unknown>} paperless
+ * @param {Record<string, unknown>} install
+ * @param {string | null} [guestIp]
+ */
+export async function queryPaperlessNgxOnGuest(exec, paperless, install, guestIp = null) {
+  const cfg = isObject(paperless) ? paperless : {};
+  const port = hostPort(cfg);
+  const dir = composeDir(isObject(install) ? install : {});
+  let publicUrl = null;
+  try {
+    const parsed = parsePublicUrl(cfg);
+    publicUrl = parsed ? parsed.origin.replace(/\/+$/, "") : null;
+  } catch {
+    publicUrl = null;
+  }
+
+  const docker = exec.run("systemctl is-active docker 2>/dev/null || echo inactive", {
+    capture: true,
+  });
+  const composePs = exec.run(
+    `test -d ${JSON.stringify(dir)} && cd ${JSON.stringify(dir)} && docker compose ps --format json 2>/dev/null || docker compose ps 2>/dev/null || echo '[]'`,
+    { capture: true },
+  );
+
+  let resolvedIp = guestIp;
+  if (!resolvedIp) {
+    const ip = exec.run("hostname -I | awk '{print $1}'", { capture: true });
+    resolvedIp = ip.status === 0 ? ip.stdout.trim().split(/\s+/)[0] || null : null;
+  }
+
+  let httpOk = null;
+  let httpError = null;
+  if (docker.stdout.trim() === "active") {
+    const probeUrl = `http://127.0.0.1:${port}/`;
+    const h = exec.run(
+      `curl -sf --max-time 10 ${JSON.stringify(probeUrl)} -o /dev/null && echo ok || echo fail`,
+      { capture: true },
+    );
+    if (h.status === 0 && h.stdout.trim() === "ok") {
+      httpOk = true;
+    } else {
+      httpOk = false;
+      httpError = h.stderr.trim() || h.stdout.trim() || `exit ${h.status}`;
+    }
+  }
+
+  return {
+    docker_active: docker.stdout.trim(),
+    compose_ps: composePs.stdout.trim() || null,
+    guest_ip: resolvedIp,
+    public_url: publicUrl,
+    http_ok: httpOk,
+    http_error: httpError,
+    host_port: port,
+    upstream_url: resolvedIp ? `http://${resolvedIp}:${port}` : null,
+    url: publicUrl || (resolvedIp ? `http://${resolvedIp}:${port}` : null),
+  };
+}

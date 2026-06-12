@@ -1,22 +1,26 @@
 #!/usr/bin/env node
 /**
- * Deploy paperless-ngx on Proxmox LXC (Docker Compose + PostgreSQL + Redis).
+ * Deploy paperless-ngx on Proxmox LXC or QEMU Ubuntu VM (Docker Compose + PostgreSQL + Redis).
  *
  * Usage: hdc run service paperless-ngx deploy -- [--instance a | --system-id paperless-ngx-a] [--skip-install]
- *        hdc run service paperless-ngx deploy -- [--skip-existing | --redeploy-existing]
+ *        hdc run service paperless-ngx deploy -- [--skip-existing | --redeploy-existing | --destroy-existing]
  */
+import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { lxcHostnameFromSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
+import { growRootFilesystemInGuest } from "../../../lib/qemu-rootfs-resize.mjs";
 import { deployTargetInventory, logDeployInventoryStatus } from "../../../lib/deploy-inventory.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import { ensureQemuGuestAgentOnDeploy } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
 import { guestResourceOptsFromBlock } from "../../../infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import { waitForCloneTaskAndEnableAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
 import { waitForLxcCreateTaskAndApplyResources } from "../../../infrastructure/proxmox/lib/proxmox-lxc-post-create.mjs";
 import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
@@ -24,16 +28,27 @@ import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmo
 
 import { resolvePaperlessNgxDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
+import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import {
   installPaperlessNgxInCt,
+  installPaperlessNgxInQemu,
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/paperless-ngx-install.mjs";
+import {
+  applyQemuCloudInit,
+  cloneQemuGuest,
+  locateGuest,
+  startQemuGuest,
+  stopAndDestroyQemu,
+  waitForQemuGuestSshAfterBoot,
+} from "../../ollama/lib/proxmox-qemu-redeploy.mjs";
 import { hostPort, resolveUpstreamUrl, resolveWebUrl } from "../lib/paperless-ngx-render.mjs";
 import {
   ensureLxcDockerApparmorWorkaround,
   pctRestart,
   pctSetFeatures,
+  sshRemote,
 } from "../../../lib/pve-pct-remote.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
@@ -81,7 +96,278 @@ function shouldInstall(install) {
 function existingGuestPolicy(flags) {
   if (flagGet(flags, "skip-existing") !== undefined) return "skip";
   if (flagGet(flags, "redeploy-existing") !== undefined) return "redeploy";
+  if (flagGet(flags, "destroy-existing") !== undefined) return "destroy";
   return "prompt";
+}
+
+function skipProvisionFlag(flags) {
+  return flagGet(flags, "skip-provision") !== undefined;
+}
+
+/**
+ * @param {ReturnType<typeof resolvePaperlessNgxDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ secretKey: string; dbPassword: string; adminPassword?: string | null }} secrets
+ */
+async function deployQemuOne(deployment, flags, log, secrets) {
+  const { mode, systemId, hostname, proxmox: px, configure, paperless_ngx, install } = deployment;
+
+  const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
+  logDeployInventoryStatus(target, verb, inv);
+
+  if (!isObject(px)) {
+    return { ok: false, system_id: systemId, message: "bad proxmox config" };
+  }
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  if (!hostId) {
+    return { ok: false, system_id: systemId, message: "missing host_id" };
+  }
+
+  errout.write(
+    `[hdc] ${target} ${verb}: ${JSON.stringify(systemId)} proxmox-qemu on ${JSON.stringify(hostId)} …\n`,
+  );
+  const auth = await authorizeProxmoxForHost({ packageRoot: proxmoxRoot, hostId });
+
+  const q = isObject(px.qemu) ? px.qemu : {};
+  const net = isObject(px.network) ? px.network : {};
+  const vmid = typeof q.vmid === "number" ? q.vmid : Number(q.vmid);
+  const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
+  const ip = typeof q.ip === "string" ? q.ip.trim() : "";
+  const gateway =
+    typeof net.gateway === "string" && net.gateway.trim()
+      ? net.gateway.trim()
+      : typeof q.gateway === "string"
+        ? q.gateway.trim()
+        : "10.0.0.1";
+  const guestName =
+    hostname ||
+    (typeof q.hostname === "string" && q.hostname.trim()
+      ? q.hostname.trim()
+      : systemId.replace(/^vm-/, ""));
+
+  if (!Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || templateVmid <= 0 || !ip) {
+    return { ok: false, system_id: systemId, host_id: hostId, message: "invalid qemu vmid, template_vmid, or ip" };
+  }
+
+  const located = await locateGuest(auth.host.apiBase, auth.authorization, auth.rejectUnauthorized, vmid);
+  const policy = existingGuestPolicy(flags);
+  let skipProv = skipProvisionFlag(flags);
+
+  if (located) {
+    let action = policy;
+    if (policy === "prompt") {
+      action = await promptExistingGuestAction(systemId, vmid, located.node, located.name);
+    }
+    if (action === "skip") {
+      errout.write(`[hdc] ${target} ${verb}: skipping ${systemId} (vmid ${vmid} already exists).\n`);
+      return {
+        ok: true,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        skipped: true,
+        message: "guest already exists",
+        guest: { vmid, node: located.node, name: located.name },
+      };
+    }
+    if (action === "destroy" || policy === "destroy") {
+      await stopAndDestroyQemu({
+        apiBase: auth.host.apiBase,
+        authorization: auth.authorization,
+        rejectUnauthorized: auth.rejectUnauthorized,
+        node: located.node,
+        vmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+    } else {
+      errout.write(
+        `[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} exists — redeploy (provision skipped, install only).\n`,
+      );
+      skipProv = true;
+    }
+  }
+
+  /** @type {import("../../../lib/host-provisioner.mjs").ProvisionResult | null} */
+  let provisionResult = null;
+  /** @type {Record<string, unknown> | null} */
+  let installResult = null;
+  let cloneNode = located?.node ?? auth.host.pveNode;
+  let guestVmid = vmid;
+
+  if (!skipProv) {
+    const prov = createProxmoxHostProvisioner({
+      apiBase: auth.host.apiBase,
+      pveNode: auth.host.pveNode,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
+
+    provisionResult = await cloneQemuGuest({
+      log,
+      provisioner: prov,
+      name: guestName,
+      vmid,
+      templateVmid,
+      parameters: { ...q, vmid, template_vmid: templateVmid },
+    });
+
+    if (!provisionResult.ok) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+      };
+    }
+
+    const cloneInfo = await waitForCloneTaskAndEnableAgent(
+      provisionResult,
+      auth,
+      vmid,
+      (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      guestResourceOptsFromBlock(q, flags),
+    );
+    cloneNode = cloneInfo.node;
+    guestVmid = cloneInfo.vmid;
+
+    const rootfsGb = typeof q.rootfs_gb === "number" ? q.rootfs_gb : Number(q.rootfs_gb);
+    const resizeNode = cloneNode || auth.host.pveNode;
+    const pveSsh = resolvePveSshForHost(proxmoxRoot, resizeNode);
+    if (Number.isFinite(rootfsGb) && rootfsGb > 0) {
+      errout.write(
+        `[hdc] ${target} ${verb}: extending scsi0 by ${rootfsGb}G on vmid ${guestVmid} via ${resizeNode} …\n`,
+      );
+      const resize = sshRemote(pveSsh.user, pveSsh.host, `qm resize ${guestVmid} scsi0 +${rootfsGb}G`, {
+        capture: true,
+      });
+      if (resize.status !== 0) {
+        const detail = `${resize.stderr}${resize.stdout}`.trim() || `exit ${resize.status}`;
+        throw new Error(`qm resize failed: ${detail}`);
+      }
+    }
+
+    await applyQemuCloudInit({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      hostname: guestName,
+      ipCidr: ip,
+      gateway,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  } else if (located) {
+    provisionResult = {
+      ok: true,
+      message: `QEMU ${vmid} already present on ${located.node}`,
+      details: { vmid, node: located.node, type: "qemu", skipped_provision: true },
+    };
+    cloneNode = located.node;
+    guestVmid = vmid;
+    await startQemuGuest({
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  }
+
+  const sshCfg = isObject(configure) && isObject(configure.ssh) ? configure.ssh : {};
+  let sshUser = resolveGuestSshUser(sshCfg.user);
+  const guestIp = ip.split("/")[0];
+  const sshHost =
+    typeof sshCfg.host === "string" && sshCfg.host.trim() ? sshCfg.host.trim() : guestIp;
+
+  const paperlessCfg = isObject(paperless_ngx) ? paperless_ngx : {};
+  const installCfg = isObject(install) ? install : {};
+
+  if (shouldInstall(installCfg)) {
+    const sshWait = await waitForQemuGuestSshAfterBoot({
+      user: sshUser,
+      host: sshHost,
+      apiBase: auth.host.apiBase,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      node: cloneNode,
+      vmid: guestVmid,
+      freshClone: !skipProv,
+      proxmoxPackageRoot: proxmoxRoot,
+      flags,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    sshUser = sshWait.user;
+
+    await ensureQemuGuestAgentOnDeploy({
+      apiBase: auth.host.apiBase,
+      node: cloneNode,
+      vmid: guestVmid,
+      authorization: auth.authorization,
+      rejectUnauthorized: auth.rejectUnauthorized,
+      sshUser,
+      sshHost,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+
+    const exec = createConfigureExec("ssh", { user: sshUser, host: sshHost });
+    try {
+      growRootFilesystemInGuest({
+        exec,
+        log: { info: (msg) => errout.write(`[hdc] ${target} ${verb}: ${msg}\n`) },
+      });
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+        message: msg,
+      };
+    }
+    installResult = await installPaperlessNgxInQemu({
+      exec,
+      paperless: paperlessCfg,
+      install: installCfg,
+      secrets,
+      guestIp,
+    });
+  } else {
+    installResult = { ok: true, message: "skipped" };
+    errout.write(`[hdc] ${target} ${verb}: install skipped for ${systemId}.\n`);
+  }
+
+  const ok = provisionResult?.ok !== false && installResult?.ok !== false;
+
+  return {
+    ok,
+    system_id: systemId,
+    host_id: hostId,
+    mode,
+    redeploy: skipProv,
+    ip: guestIp,
+    url: resolveWebUrl(paperlessCfg, guestIp),
+    upstream_url: resolveUpstreamUrl(guestIp, paperlessCfg) ?? installResult?.upstream_url ?? null,
+    host_port: hostPort(paperlessCfg),
+    tika_enabled: installResult?.tika_enabled ?? null,
+    result: provisionResult,
+    install: installResult,
+    ssh: { user: sshUser, host: sshHost },
+  };
 }
 
 /**
@@ -90,15 +376,11 @@ function existingGuestPolicy(flags) {
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
  * @param {{ ctPasswordCache?: { value: string | null }; secrets: { secretKey: string; dbPassword: string; adminPassword?: string | null } }} runOpts
  */
-async function deployOne(deployment, flags, log, runOpts) {
+async function deployLxcOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, paperless_ngx, install } = deployment;
 
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
   logDeployInventoryStatus(target, verb, inv);
-
-  if (mode !== "proxmox-lxc") {
-    return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
-  }
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -363,8 +645,24 @@ async function deployOne(deployment, flags, log, runOpts) {
   };
 }
 
+/**
+ * @param {ReturnType<typeof resolvePaperlessNgxDeployments>[number]} deployment
+ * @param {Record<string, string>} flags
+ * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
+ * @param {{ ctPasswordCache?: { value: string | null }; secrets: { secretKey: string; dbPassword: string; adminPassword?: string | null } }} runOpts
+ */
+async function deployOne(deployment, flags, log, runOpts) {
+  if (deployment.mode === "proxmox-qemu") {
+    return deployQemuOne(deployment, flags, log, runOpts.secrets);
+  }
+  if (deployment.mode === "proxmox-lxc") {
+    return deployLxcOne(deployment, flags, log, runOpts);
+  }
+  return { ok: false, system_id: deployment.systemId, message: `unsupported mode ${deployment.mode}` };
+}
+
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: paperless-ngx LXC via Proxmox (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: paperless-ngx via Proxmox (stderr log; JSON on stdout).\n`);
 
   if (!existsSync(ensurePackageConfig().path)) {
     const inv = deployTargetInventory(root, target);

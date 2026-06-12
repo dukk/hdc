@@ -45,6 +45,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "shlink",
   "solidtime",
   "stirling-pdf",
+  "twenty",
   "unleash",
   "uptime-kuma",
   "vaultwarden",
@@ -177,7 +178,17 @@ export function dailyRecipeSteps() {
     note: "DSM and package upgrades",
   });
 
-  for (const id of ["cloudflare", "unifi-network", "azure", "gcp-oauth", "openrouter"]) {
+  for (const id of [
+    "cloudflare",
+    "cloudflare-workers",
+    "unifi-network",
+    "azure",
+    "azure-compute",
+    "aws",
+    "gcp-oauth",
+    "gcp-compute",
+    "openrouter",
+  ]) {
     steps.push({
       tier: "infrastructure",
       id,

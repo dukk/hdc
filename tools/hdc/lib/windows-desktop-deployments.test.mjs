@@ -6,17 +6,18 @@ import {
 } from "../../../packages/services/windows-desktop/lib/deployments.mjs";
 
 const sampleCfg = {
-  schema_version: 1,
+  schema_version: 2,
   windows_desktop: { admin_vault_key: "HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD" },
   defaults: {
-    mode: "proxmox-qemu-iso",
+    mode: "proxmox-qemu-clone",
     proxmox: {
       host_id: "pve-b",
-      qemu: { storage: "local-lvm", iso_storage: "local" },
+      qemu: { storage: "local-lvm", iso_storage: "local", disk_format: "raw" },
       iso: {
         windows_volid: "local:iso/win.iso",
         virtio_volid: "local:iso/virtio-win.iso",
       },
+      template: { vmid: 9001, name: "win11-template" },
       oem: { enabled: true },
     },
   },
@@ -41,6 +42,8 @@ describe("windows-desktop deployments", () => {
     expect(d).toHaveLength(1);
     expect(d[0].systemId).toBe("vm-win11-a");
     expect(d[0].proxmox.hostId).toBe("pve-b");
+    expect(d[0].mode).toBe("proxmox-qemu-clone");
+    expect(d[0].proxmox.template.vmid).toBe(9001);
   });
 
   it("parseIsoVolid splits storage and path", () => {

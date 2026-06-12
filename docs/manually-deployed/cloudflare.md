@@ -1,6 +1,6 @@
 # Cloudflare (hdc)
 
-Public DNS zones, Page Rules, and Email Routing rules are managed with the **cloudflare** infrastructure package (`packages/infrastructure/cloudflare/`). Internal zones remain on BIND (`packages/services/bind/`).
+Public DNS zones, Page Rules, and Email Routing rules are managed with the **cloudflare** infrastructure package (`packages/infrastructure/cloudflare/`). **Workers** and **Pages** deploy is a separate package: [`cloudflare-workers.md`](cloudflare-workers.md). Internal zones remain on BIND (`packages/services/bind/`).
 
 ## API token
 

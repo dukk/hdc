@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "azure": {
+      "subscription_id": "<HDC_AZURE_COMPUTE_SUBSCRIPTION_ID>",
+      "resource_group": "hdc-compute",
+      "location": "eastus",
+      "tags": {
+        "managed-by": "hdc"
+      }
+    }
+  },
+  "deployments": [
+    {
+      "id": "a",
+      "system_id": "virt-azure-compute-a",
+      "mode": "azure-vm",
+      "azure": {
+        "vm_size": "Standard_B2s",
+        "image": {
+          "publisher": "Canonical",
+          "offer": "0001-com-ubuntu-server-jammy",
+          "sku": "22_04-lts-gen2",
+          "version": "latest"
+        },
+        "os_disk_gb": 64,
+        "admin_username": "hdc",
+        "public_ip": true
+      }
+    },
+    {
+      "id": "b",
+      "system_id": "virt-azure-aci-a",
+      "mode": "azure-aci",
+      "azure": {
+        "cpu": 1,
+        "memory_gb": 2,
+        "containers": [
+          {
+            "name": "app",
+            "image": "mcr.microsoft.com/azuredocs/aci-helloworld:latest",
+            "ports": [80]
+          }
+        ]
+      }
+    }
+  ]
+}

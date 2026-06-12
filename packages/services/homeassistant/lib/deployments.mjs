@@ -130,6 +130,9 @@ export function expandDeployment(d, normalized) {
 
   const release = typeof ha.release === "string" ? ha.release.trim() : "";
   const publicUrl = typeof ha.public_url === "string" ? ha.public_url.trim() : "";
+  const trustedProxies = Array.isArray(ha.trusted_proxies)
+    ? ha.trusted_proxies.map((v) => String(v).trim()).filter(Boolean)
+    : [];
 
   const gateway =
     typeof net.gateway === "string" && net.gateway.trim()
@@ -150,7 +153,7 @@ export function expandDeployment(d, normalized) {
     systemId,
     mode: "proxmox-qemu-haos",
     hostname,
-    homeassistant: { release, publicUrl },
+    homeassistant: { release, publicUrl, trustedProxies },
     proxmox: {
       hostId: String(px.host_id).trim(),
       qemu: {

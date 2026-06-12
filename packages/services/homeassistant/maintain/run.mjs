@@ -3,7 +3,8 @@
  * Maintain Home Assistant OS QEMU VM (USB passthrough + HTTP health).
  *
  * Usage: hdc run service homeassistant maintain -- [--instance a]
- *        [--reapply-usb] [--repair-boot-disk] [--fix-serial-console] [--repair-secure-boot] [--skip-http]
+ *        [--reapply-usb] [--repair-boot-disk] [--fix-serial-console] [--repair-secure-boot]
+ *        [--skip-http] [--skip-reverse-proxy] [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +30,7 @@ import {
   repairHaosSerialConsole,
 } from "../lib/proxmox-haos-vm.mjs";
 import { probeHomeAssistantHttp } from "../lib/query-status.mjs";
+import { maybeApplyHaosReverseProxyConfig } from "../lib/reverse-proxy-apply.mjs";
 import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -161,7 +163,7 @@ async function maintainOne(deployment, flags) {
     });
   }
 
-  if (reapplyUsb || usbOverride || q.usb.length) {
+  if (reapplyUsb || usbOverride) {
     const usbDevices = await resolveUsbDevicesForDeploy({
       user: pveSsh.user,
       host: pveSsh.host,
@@ -190,6 +192,31 @@ async function maintainOne(deployment, flags) {
       log,
     });
     extra.usb = usbDevices.map((u) => u.id);
+  }
+
+  if (flagGet(flags, "skip-reverse-proxy") === undefined) {
+    try {
+      const reverseProxy = await maybeApplyHaosReverseProxyConfig({
+        repoRoot: root,
+        deployment,
+        auth,
+        node: located.node,
+        sshUser: pveSsh.user,
+        sshHost: pveSsh.host,
+        dryRun: flagGet(flags, "dry-run") !== undefined,
+        log,
+      });
+      extra.reverse_proxy = reverseProxy;
+      if (reverseProxy.http && reverseProxy.http.ok === false) {
+        errout.write(
+          `[hdc] ${target} ${verb}: HTTP probe after reverse-proxy update failed — check HA logs.\n`,
+        );
+      }
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: reverse-proxy config failed: ${msg}\n`);
+      return { ok: false, system_id: deployment.systemId, message: msg, ...extra };
+    }
   }
 
   if (flagGet(flags, "skip-http") === undefined) {

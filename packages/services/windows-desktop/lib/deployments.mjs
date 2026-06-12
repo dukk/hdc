@@ -1,5 +1,5 @@
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
-import { instanceLetterFromSystemId, vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import { vmSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -82,8 +82,8 @@ function validateDeployments(deployments) {
     ids.add(sid);
 
     const mode = typeof d.mode === "string" ? d.mode.trim() : "proxmox-qemu-iso";
-    if (mode !== "proxmox-qemu-iso") {
-      throw new Error(`${sid}: mode must be proxmox-qemu-iso`);
+    if (mode !== "proxmox-qemu-iso" && mode !== "proxmox-qemu-clone") {
+      throw new Error(`${sid}: mode must be proxmox-qemu-iso or proxmox-qemu-clone`);
     }
     const px = isObject(d.proxmox) ? d.proxmox : {};
     const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
@@ -93,9 +93,40 @@ function validateDeployments(deployments) {
       typeof iso.windows_volid === "string" ? iso.windows_volid.trim() : "";
     const virtioIso =
       typeof iso.virtio_volid === "string" ? iso.virtio_volid.trim() : "";
-    if (!winIso) throw new Error(`${sid}: proxmox.iso.windows_volid required`);
-    if (!virtioIso) throw new Error(`${sid}: proxmox.iso.virtio_volid required`);
+    if (mode === "proxmox-qemu-iso") {
+      if (!winIso) throw new Error(`${sid}: proxmox.iso.windows_volid required`);
+      if (!virtioIso) throw new Error(`${sid}: proxmox.iso.virtio_volid required`);
+    }
   }
+}
+
+/**
+ * @param {ReturnType<typeof normalizeWindowsDesktopConfig>} normalized
+ */
+export function resolveTemplateConfig(normalized) {
+  const defaultsPx = isObject(normalized.defaults.proxmox) ? normalized.defaults.proxmox : {};
+  const template = isObject(defaultsPx.template) ? defaultsPx.template : {};
+  const hostId =
+    (typeof template.host_id === "string" && template.host_id.trim()) ||
+    (typeof defaultsPx.host_id === "string" && defaultsPx.host_id.trim()) ||
+    "";
+  const vmidRaw = template.vmid;
+  const vmid =
+    vmidRaw === null || vmidRaw === undefined || vmidRaw === ""
+      ? 9001
+      : Number(vmidRaw);
+  if (!Number.isFinite(vmid) || vmid < 100) {
+    throw new Error("defaults.proxmox.template.vmid must be a positive integer");
+  }
+  return {
+    hostId,
+    vmid,
+    name:
+      (typeof template.name === "string" && template.name.trim()) || "win11-template",
+    builderHostname:
+      (typeof template.builder_hostname === "string" && template.builder_hostname.trim()) ||
+      "WIN11-BUILD",
+  };
 }
 
 /**
@@ -148,6 +179,10 @@ function expandDeployment(entry, normalized) {
     ...(isObject(defaultsPx.oem) ? defaultsPx.oem : {}),
     ...(isObject(px.oem) ? px.oem : {}),
   };
+  const template = {
+    ...(isObject(defaultsPx.template) ? defaultsPx.template : {}),
+    ...(isObject(px.template) ? px.template : {}),
+  };
 
   const hostId =
     (typeof px.host_id === "string" && px.host_id.trim()) ||
@@ -172,10 +207,19 @@ function expandDeployment(entry, normalized) {
       network: net,
       iso,
       oem,
+      template,
     },
     configure: isObject(entry.configure) ? entry.configure : {},
     windowsDesktop: normalized.windowsDesktop,
   };
+}
+
+/**
+ * @param {string} systemId
+ */
+function instanceLetterFromSystemId(systemId) {
+  const m = /^vm-(?:win11|windows)-([a-z]+)$/.exec(String(systemId ?? "").trim());
+  return m ? m[1] : "";
 }
 
 /**

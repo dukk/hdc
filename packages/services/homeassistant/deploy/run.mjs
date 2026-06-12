@@ -4,7 +4,7 @@
  *
  * Usage: hdc run service homeassistant deploy -- [--instance a | --system-id vm-homeassistant-a]
  *        [--destroy-existing] [--skip-provision] [--skip-existing | --redeploy-existing]
- *        [--usb-id vvvv:pppp] [--no-wait-http] [--skip-first-boot-restart]
+ *        [--usb-id vvvv:pppp] [--no-wait-http] [--skip-first-boot-restart] [--skip-reverse-proxy]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +32,7 @@ import { resolveHomeassistantDeployments } from "../lib/deployments.mjs";
 import { maybeRestartHaosAfterFirstBoot } from "../lib/haos-first-boot.mjs";
 import { provisionHaosQemuVm } from "../lib/proxmox-haos-vm.mjs";
 import { waitForHomeAssistantHttp } from "../lib/query-status.mjs";
+import { maybeApplyHaosReverseProxyConfig } from "../lib/reverse-proxy-apply.mjs";
 import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -254,6 +255,35 @@ async function deployOne(deployment, flags, log) {
         system_id: deployment.systemId,
         needs_static_ip: true,
         message: String(httpWait.error || "HTTP probe failed"),
+        ...extra,
+      };
+    }
+  }
+
+  if (flagGet(flags, "skip-reverse-proxy") === undefined && deployment.homeassistant.publicUrl) {
+    try {
+      const reverseProxy = await maybeApplyHaosReverseProxyConfig({
+        repoRoot: root,
+        deployment,
+        auth,
+        node,
+        sshUser: pveSsh.user,
+        sshHost: pveSsh.host,
+        log: logLine,
+      });
+      extra.reverse_proxy = reverseProxy;
+      if (reverseProxy.skipped && reverseProxy.reason === "no_trusted_proxies") {
+        errout.write(
+          `[hdc] ${target} ${verb}: skipped reverse-proxy config — add vm-nginx-waf-* inventory IPs or homeassistant.trusted_proxies in config.\n`,
+        );
+      }
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: reverse-proxy config failed: ${msg}\n`);
+      return {
+        ok: false,
+        system_id: deployment.systemId,
+        message: msg,
         ...extra,
       };
     }

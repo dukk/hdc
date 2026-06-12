@@ -1,9 +1,12 @@
 import { stderr as errout } from "node:process";
 
 import { enableQemuAgentInConfig } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import { pingQemuGuestAgent } from "../../../infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs";
 import { pveFormBody, pveJsonRequest, waitForPveTask } from "../../../infrastructure/proxmox/lib/pve-http.mjs";
 import { extractPveUpid } from "../../../infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 import { startQemuGuest, stopQemuGuest } from "../../bind/lib/proxmox-qemu-redeploy.mjs";
+import { resolveDiskFormat, scsi0VolumeSpec } from "./disk-format.mjs";
 
 /**
  * @param {string} volid
@@ -31,6 +34,7 @@ export function ideMediaFromVolid(volid) {
  * @param {string} opts.autounattendIsoVolid
  * @param {string} [opts.cpu]
  * @param {string} [opts.tpmVersion]
+ * @param {"raw" | "qcow2"} [opts.diskFormat]
  * @param {(line: string) => void} [opts.log]
  */
 export async function createWindows11QemuVm(opts) {
@@ -53,6 +57,7 @@ export async function createWindows11QemuVm(opts) {
     autounattendIsoVolid,
     cpu = "host",
     tpmVersion = "v2.0",
+    diskFormat = resolveDiskFormat({}, storage),
   } = opts;
 
   const createPath = `/nodes/${encodeURIComponent(node)}/qemu`;
@@ -80,7 +85,7 @@ export async function createWindows11QemuVm(opts) {
   const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
   /** @type {Record<string, string | number>} */
   const fields = {
-    scsi0: `${storage}:${diskGb},format=qcow2`,
+    scsi0: scsi0VolumeSpec(storage, diskGb, diskFormat),
     ide0: ideMediaFromVolid(windowsIsoVolid),
     ide1: ideMediaFromVolid(virtioIsoVolid),
     ide2: ideMediaFromVolid(autounattendIsoVolid),
@@ -155,5 +160,113 @@ export async function waitForWindowsInstallWindow(opts) {
   log(`Install wait timed out after ${Math.round(timeoutMs / 60_000)} minutes.`);
   return { ok: true, completed: false, timedOut: true };
 }
+
+/**
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {number} opts.vmid
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function detachInstallIsos(opts) {
+  const { apiBase, node, vmid, authorization, rejectUnauthorized } = opts;
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
+  log(`Detaching install ISOs from VM ${vmid} …`);
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({
+      delete: "ide0,ide1,ide2",
+      boot: "order=scsi0",
+    }),
+  );
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {number} opts.vmid
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {string} opts.autounattendIsoVolid
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function attachAutounattendIso(opts) {
+  const { apiBase, node, vmid, authorization, rejectUnauthorized, autounattendIsoVolid } = opts;
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/config`;
+  log(`Attaching autounattend ISO to VM ${vmid} …`);
+  await pveJsonRequest(
+    "PUT",
+    apiBase,
+    configPath,
+    authorization,
+    rejectUnauthorized,
+    pveFormBody({
+      ide2: ideMediaFromVolid(autounattendIsoVolid),
+      boot: "order=scsi0;ide2",
+    }),
+  );
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.apiBase
+ * @param {string} opts.node
+ * @param {number} opts.vmid
+ * @param {string} opts.authorization
+ * @param {boolean} opts.rejectUnauthorized
+ * @param {number} opts.timeoutMs
+ * @param {(line: string) => void} [opts.log]
+ */
+export async function waitForQemuGuestAgent(opts) {
+  const { apiBase, node, vmid, authorization, rejectUnauthorized, timeoutMs } = opts;
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const deadline = Date.now() + timeoutMs;
+  log(`Waiting for QEMU guest agent on VM ${vmid} …`);
+  while (Date.now() < deadline) {
+    const ping = await pingQemuGuestAgent(apiBase, node, vmid, authorization, rejectUnauthorized);
+    if (ping.ok) {
+      log(`Guest agent responding on VM ${vmid}.`);
+      return { ok: true };
+    }
+    await new Promise((r) => setTimeout(r, 15_000));
+  }
+  throw new Error(`QEMU guest agent not responding on VM ${vmid} within ${Math.round(timeoutMs / 60_000)} min`);
+}
+
+/**
+ * Run Sysprep inside a Windows guest via hypervisor `qm guest exec`.
+ * @param {object} opts
+ * @param {string} opts.sshUser
+ * @param {string} opts.sshHost
+ * @param {number} opts.vmid
+ * @param {(line: string) => void} [opts.log]
+ */
+export function runWindowsSysprep(opts) {
+  const { sshUser, sshHost, vmid } = opts;
+  const log = opts.log ?? ((line) => errout.write(`${line}\n`));
+  const sysprep =
+    "C:\\\\Windows\\\\System32\\\\Sysprep\\\\Sysprep.exe /generalize /oobe /shutdown /quiet";
+  log(`Running Sysprep on VM ${vmid} …`);
+  const remote = `qm guest exec ${vmid} -- ${sysprep}`;
+  const r = sshRemote(sshUser, sshHost, remote, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr ?? ""}${r.stdout ?? ""}`.trim() || `exit ${r.status ?? "?"}`;
+    throw new Error(
+      `Sysprep failed on VM ${vmid}: ${detail.slice(0, 800)} — run manually in Proxmox console if needed`,
+    );
+  }
+  return { ok: true };
+}
+
+export { resolveDiskFormat, scsi0VolumeSpec };
 
 export { startQemuGuest, stopQemuGuest };

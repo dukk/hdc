@@ -15,7 +15,7 @@ import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/pro
 import { locateGuest } from "../../bind/lib/proxmox-qemu-redeploy.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-import { resolvePveSshForHost } from "../../ollama/lib/lxc-password.mjs";
+import { resolvePveSshForHost } from "../../ollama/lib/ollama-install.mjs";
 
 import { resolveWindowsDesktopDeployments } from "../lib/deployments.mjs";
 import { ensureOemLicenseForVm } from "../lib/oem-apply.mjs";

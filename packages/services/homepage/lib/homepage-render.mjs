@@ -304,6 +304,8 @@ export function renderComposeYaml() {
     image: ghcr.io/gethomepage/homepage:\${HOMEPAGE_IMAGE_TAG}
     container_name: homepage
     restart: unless-stopped
+    cap_add:
+      - NET_RAW
     ports:
       - "\${HOMEPAGE_HOST_PORT}:3000"
     env_file:

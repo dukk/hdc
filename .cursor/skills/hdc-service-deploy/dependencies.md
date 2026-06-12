@@ -46,7 +46,7 @@ Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-wa
 | pi-hole | LAN DNS | — | — | — | — | after BIND |
 | bind | infrastructure | — | — | — | — | — |
 | nginx-waf | infrastructure | — | uses bind for DNS-01 | — | optional | after BIND |
-| homeassistant | LAN / ha.dukk.org | — | often manual IP in HA UI | may exist | optional | after BIND |
+| homeassistant | LAN / ha.dukk.org | — | often manual IP in HA UI; **trusted_proxies** on WAF IPs after nginx-waf | may exist | optional | after BIND |
 | postgresql, redis, kafka, etc. | internal | — | optional | — | — | optional |
 
 ## Patterns by exposure
@@ -64,6 +64,7 @@ Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-wa
 4. **nginx-waf:** add `sites[]` entry with `proxy_pass` to `http://<guest-ip>:<port>`; `client_ip: cloudflare` when behind Cloudflare.
 5. **cloudflare:** A record to WAF WAN IP (proxied) if used.
 6. **nagios:** `run service nagios maintain --` after BIND has the A record.
+7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../packages/services/homeassistant/README.md). Without this, `https://ha.dukk.org` returns **400**.
 
 See [vaultwarden README](../../../packages/services/vaultwarden/README.md) and [n8n README](../../../packages/services/n8n/README.md) for step lists.
 
