@@ -37,8 +37,11 @@ import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
-import { resolveHomepagePiholeWidgetEnv } from "../lib/homepage-pihole-widget.mjs";
-import { resolveHomepageProxmoxWidgetEnv } from "../lib/homepage-proxmox-widget.mjs";
+import {
+  homepageWidgetPackageRoots,
+  runHomepageServicesLint,
+} from "../lib/homepage-maintain-preflight.mjs";
+import { resolveAllHomepageWidgetEnv } from "../lib/homepage-widget-env.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -55,7 +58,7 @@ function ensurePackageConfig() {
 }
 
 const root = repoRoot();
-const piholeRoot = join(root, "packages", "services", "pi-hole");
+const widgetRoots = homepageWidgetPackageRoots(root);
 const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
 
 /** @param {unknown} v */
@@ -321,22 +324,18 @@ async function deployOne(deployment, flags, log, runOpts) {
   /** @type {string[]} */
   let widgetEnvLines = [];
   try {
+    runHomepageServicesLint(homepageCfg, packageRoot);
     if (runOpts.vaultAccess) {
-      const proxmoxWidgetEnv = await resolveHomepageProxmoxWidgetEnv({
+      const widgetEnv = await resolveAllHomepageWidgetEnv({
         homepage: homepageCfg,
-        proxmoxPackageRoot: proxmoxRoot,
         vaultAccess: runOpts.vaultAccess,
         env: process.env,
         spawnSync: (runOpts.cliDeps ?? createNodeCliDeps()).spawnSync,
         readLineQuestion: (runOpts.cliDeps ?? createNodeCliDeps()).readLineQuestion,
+        ...widgetRoots,
       });
-      if (proxmoxWidgetEnv) widgetEnvLines.push(...proxmoxWidgetEnv.lines);
+      widgetEnvLines = widgetEnv.lines;
     }
-    const piholeWidgetEnv = await resolveHomepagePiholeWidgetEnv({
-      homepage: homepageCfg,
-      piholePackageRoot: piholeRoot,
-    });
-    if (piholeWidgetEnv) widgetEnvLines.push(...piholeWidgetEnv.lines);
   } catch (e) {
     return {
       ok: false,

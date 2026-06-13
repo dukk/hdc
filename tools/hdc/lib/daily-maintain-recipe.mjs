@@ -219,6 +219,8 @@ export function dailyRecipeSteps() {
   for (const id of DOCKER_COMPOSE_MAINTAIN_IDS) {
     if (id === "safeline") {
       steps.push(maintainService(id, ["--skip-sites"]));
+    } else if (id === "uptime-kuma") {
+      steps.push(maintainService(id, ["--skip-monitors"]));
     } else {
       steps.push(maintainService(id));
     }

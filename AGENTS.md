@@ -216,13 +216,18 @@ Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpasswor
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Proxmox LXC provision + Uptime Kuma install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Upgrade when `uptime_kuma.release` is behind latest (or pinned tag); `--skip-upgrade` for restart/health only |
-| `query` | `systemctl`, HTTP probe, installed version via `pct exec` |
+| `maintain` | Upgrade when `uptime_kuma.release` is behind latest (or pinned tag); reconcile `monitors[]` via Socket.IO (`--skip-monitors`, `--prune`, `--dry-run`, `--monitor <id>`); `--skip-upgrade` for restart/health only |
+| `query` | Guest `systemctl`/HTTP probe; monitor drift vs live (`--live`); `--import-from-homepage --yes` seeds `monitors[]` from homepage `services.yaml`; `--import --yes` pulls live monitor IDs |
 | `teardown` | Destroy LXC (`--dry-run`, `--yes`, `--instance`) |
 
-No vault secrets required for v1 — complete first-run admin setup in the web UI after deploy. Optional future: `HDC_UPTIME_KUMA_API_TOKEN` for API query.
+Complete first-run admin setup in the web UI after deploy. Monitor automation uses `HDC_UPTIME_KUMA_USERNAME` (`.env`) and vault `HDC_UPTIME_KUMA_PASSWORD` (Socket.IO login). Uptime Kuma API keys are read-only (metrics) and cannot create monitors.
 
-Example: `node tools/hdc/cli.mjs run service uptime-kuma deploy --`
+Example:
+
+```bash
+node tools/hdc/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
+node tools/hdc/cli.mjs run service uptime-kuma maintain --
+```
 
 ## SolidTime in this repo
 
@@ -1446,6 +1451,30 @@ npm run test
 
 Before merging substantive CLI changes, run `npm run test:coverage` and keep thresholds green ([`vitest.config.mjs`](vitest.config.mjs)).
 
+## Agent team (Cursor subagents)
+
+Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`:
+
+| Agent | Role |
+| --- | --- |
+| [`hdc-manager`](.cursor/agents/hdc-manager.md) | Task queue triage, delegation, Discord/email escalation |
+| [`hdc-monitor`](.cursor/agents/hdc-monitor.md) | Uptime Kuma, Nagios, Proxmox health digests |
+| [`hdc-sre`](.cursor/agents/hdc-sre.md) | Approved deploy/maintain, package and CLI changes |
+| [`hdc-security-expert`](.cursor/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
+| [`hdc-security-architect`](.cursor/agents/hdc-security-architect.md) | Read-only security proposals |
+| [`hdc-network-architect`](.cursor/agents/hdc-network-architect.md) | Read-only network/DNS proposals |
+| [`hdc-research`](.cursor/agents/hdc-research.md) | Tool research briefs |
+
+Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/SKILL.md), [`hdc-manager`](.cursor/skills/hdc-manager/SKILL.md), [`hdc-monitor`](.cursor/skills/hdc-monitor/SKILL.md), [`hdc-security`](.cursor/skills/hdc-security/SKILL.md).
+
+**Operations state (hdc-private):** `operations/task-queue.json`, `operations/delegation-policy.md`, `operations/reports/`, `operations/proposals/`.
+
+**Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`).
+
+**Scheduled runs:** hdc-runner cron (query jobs) + Cursor Automations drafts in [`.cursor/automations/`](.cursor/automations/README.md).
+
+Legacy alias: [`hdc-ops`](.cursor/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
+
 ## Deeper context (pointers)
 
 | Topic | Location |
@@ -1453,5 +1482,6 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 | Automation conventions | [`.cursor/rules/hdc-automation.mdc`](.cursor/rules/hdc-automation.mdc) |
 | Inventory naming | [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc) |
 | Nagios + manual docs | [`.cursor/rules/hdc-nagios-monitoring.mdc`](.cursor/rules/hdc-nagios-monitoring.mdc) |
-| Operator workflow | [`.cursor/skills/hdc-ops/SKILL.md`](.cursor/skills/hdc-ops/SKILL.md), [`.cursor/agents/hdc-ops.md`](.cursor/agents/hdc-ops.md) |
+| Agent team | [`.cursor/skills/hdc-agent-team/SKILL.md`](.cursor/skills/hdc-agent-team/SKILL.md), [`.cursor/agents/`](.cursor/agents/) |
+| Operator workflow | [`.cursor/skills/hdc-ops/SKILL.md`](.cursor/skills/hdc-ops/SKILL.md), [`.cursor/agents/hdc-sre.md`](.cursor/agents/hdc-sre.md) |
 | Human README | [README.md](README.md) |

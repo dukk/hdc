@@ -6,24 +6,9 @@ import {
   instanceLetterFromSystemId,
   normalizePiHoleConfig,
 } from "../../pi-hole/lib/deployments.mjs";
+import { ipFromIpConfig, isObject } from "./homepage-widget-utils.mjs";
 
-/** @param {unknown} v */
-function isObject(v) {
-  return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
-/**
- * @param {string} ipConfig
- * @returns {string | null}
- */
-export function ipFromIpConfig(ipConfig) {
-  const raw = typeof ipConfig === "string" ? ipConfig.trim() : "";
-  if (!raw || /^dhcp$/i.test(raw)) return null;
-  const addrPart = raw.split(",")[0]?.trim() ?? "";
-  const ip = addrPart.split("/")[0]?.trim() ?? "";
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return null;
-  return ip;
-}
+export { ipFromIpConfig };
 
 /**
  * @param {string} letter

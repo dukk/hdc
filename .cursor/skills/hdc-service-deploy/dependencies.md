@@ -32,16 +32,16 @@ Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-wa
 
 | Service | Default exposure | synology-nas | bind | nginx-waf / nginx | cloudflare | nagios |
 |---------|------------------|:------------:|:----:|:-----------------:|:----------:|:------:|
-| searxng | LAN | — | optional | optional (if public URL) | optional | after BIND |
-| yacy | LAN | — | optional | optional | optional | after BIND |
+| searxng | LAN HTTPS | — | yes | yes | — | after BIND |
+| yacy | LAN HTTPS | — | yes | yes | — | after BIND |
 | vaultwarden | HTTPS (`domain` in config) | — | yes | yes (`:80` upstream) | optional | after BIND |
 | n8n | HTTPS (`public_url`) | — | yes | yes (`:5678`, WebSockets) | optional | after BIND |
 | immich | HTTPS | yes (synology-docker mode) | yes | yes (`:2283`) | optional | after BIND |
 | postiz | HTTPS | — | yes | yes | optional | after BIND |
-| open-webui | LAN / optional public | — | optional | optional | optional | after BIND |
+| open-webui | LAN HTTPS (`internal-lan`) | — | yes | yes (`:3000`, WebSockets) | — | after BIND |
 | nextcloud | HTTPS (AIO UI) | — | yes | yes | optional | after BIND |
-| scanopy | LAN | — | optional | optional | optional | after BIND |
-| uptime-kuma | LAN | — | optional | optional | optional | after BIND |
+| scanopy | LAN HTTPS | — | yes | yes | — | after BIND |
+| uptime-kuma | LAN HTTPS | — | yes | yes (`:3001`, WebSockets) | — | after BIND |
 | gatus | LAN | — | optional | optional | optional | after BIND |
 | pi-hole | LAN DNS | — | — | — | — | after BIND |
 | bind | infrastructure | — | — | — | — | — |
@@ -51,10 +51,24 @@ Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-wa
 
 ## Patterns by exposure
 
-### LAN-only (no public hostname)
+### LAN HTTPS via nginx-waf (`internal-lan`)
 
-- Deploy + inventory IP update + `query --live` is usually enough.
-- Offer BIND/nginx/cloudflare only if the user wants a hostname or TLS later.
+For LAN browser UIs and HTTP APIs on `*.hdc.dukk.org` that must **not** be reachable from the public internet:
+
+1. Set `public_url` in service config (`https://<name>.hdc.dukk.org`).
+2. Deploy service; note CT/VM IP and **listen port** from output.
+3. **bind:** keep `*-a` A record on the guest IP for SSH/Nagios; add or flip short-name **CNAME** to `nginx-waf-a.hdc.dukk.org.` (when the friendly hostname is not the `*-a` record, e.g. `uptime-kuma` → WAF). When the web hostname **is** `*-a` (e.g. `nagios-a`, `ollama-a`), replace that A record with a CNAME to `nginx-waf-a` instead.
+4. **nginx-waf:** add `sites[]` with `listen: [80, 443]`, `upstream: http://<guest-ip>:<port>` (or `https://` for TLS-native backends), `host_names`, `tls`, `locations[].websocket: true` when needed, and `"policies": ["internal-lan", { "type": "modsecurity", "enabled": false }]`. Do **not** set `client_ip: cloudflare`.
+5. **homepage / inventory:** update dashboard `href` and `web_ui` to the HTTPS hostname (no port); keep `siteMonitor` on direct guest IP for health checks.
+6. Service **maintain** to re-push compose/env when `public_url` affects runtime config.
+7. **nagios** `maintain` after BIND changes if host checks should follow updated records.
+
+Reference sites: `glances`, `paperless-ngx`, `twenty`, `uptime-kuma`, `n8n`, `open-webui` in hdc-private `nginx-waf` config.
+
+### LAN-only (no nginx-waf)
+
+- Deploy + inventory IP update + `query --live` is enough when no friendly HTTPS hostname is needed.
+- DNS (BIND port 53, Pi-hole), SMTP, MQTT, and non-HTTP protocols stay on guests — do not proxy through nginx-waf.
 
 ### Public HTTPS via nginx-waf
 

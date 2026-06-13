@@ -4,6 +4,7 @@
  *
  * Usage: hdc run service homepage query -- [--instance a]
  *        hdc run service homepage query -- --live
+ *        hdc run service homepage query -- --lint
  */
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,8 @@ import {
 import { resolvePveSshForHost } from "../lib/homepage-install.mjs";
 import { queryHomepageInCt } from "../lib/query-status.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { lintHomepageServicesFromConfig } from "../lib/homepage-services-lint.mjs";
+import { loadHomepageConfigFiles } from "../lib/homepage-config-load.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -57,6 +60,7 @@ async function main() {
   const cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;
+  const lintOnly = flagGet(flags, "lint") !== undefined;
 
   errout.write(`[hdc] ${target} ${verb}: config ${rel} ${loaded.ok ? "loaded" : "not loaded"}.\n`);
 
@@ -65,6 +69,30 @@ async function main() {
   /** @type {string | null} */
   let configError = null;
   let schemaVersion = null;
+
+  /** @type {Record<string, unknown> | null} */
+  let lintResult = null;
+
+  if (cfg && lintOnly) {
+    try {
+      const deployment = resolveHomepageDeployments(cfg, flags)[0];
+      const homepage = deployment?.homepage && isObject(deployment.homepage) ? deployment.homepage : {};
+      const loaded = loadHomepageConfigFiles(homepage, packageRoot);
+      lintResult = lintHomepageServicesFromConfig(homepage, loaded.servicesYaml, packageRoot);
+      for (const warning of lintResult.warnings) {
+        errout.write(`[hdc] homepage lint WARN: ${warning}\n`);
+      }
+      if (!lintResult.ok) {
+        for (const err of lintResult.errors) {
+          errout.write(`[hdc] homepage lint ERROR: ${err}\n`);
+        }
+      } else {
+        errout.write(`[hdc] homepage lint OK (${lintResult.service_count} service tile(s)).\n`);
+      }
+    } catch (e) {
+      configError = String(/** @type {Error} */ (e).message || e);
+    }
+  }
 
   if (cfg) {
     try {
@@ -117,7 +145,7 @@ async function main() {
   }
 
   const payload = {
-    ok: !configError && (loaded.ok || loaded.missing),
+    ok: !configError && (loaded.ok || loaded.missing) && (lintResult ? lintResult.ok : true),
     target,
     verb,
     config_path: rel,
@@ -126,12 +154,13 @@ async function main() {
     schema_version: schemaVersion,
     config_error: configError,
     deployments,
+    lint: lintOnly ? lintResult : undefined,
     live,
     live_results: live ? liveResults : undefined,
   };
 
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  process.exitCode = configError ? 1 : 0;
+  process.exitCode = configError || (lintResult && !lintResult.ok) ? 1 : 0;
 }
 
 main().catch((e) => {

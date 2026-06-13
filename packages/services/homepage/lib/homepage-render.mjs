@@ -1,3 +1,5 @@
+import { proxmoxWidgetEnabled } from "./homepage-proxmox-widget.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -281,6 +283,19 @@ export function renderHomepageConfigFiles(homepage) {
 }
 
 /**
+ * When true, inject NODE_TLS_REJECT_UNAUTHORIZED=0 for Proxmox widget/siteMonitor HTTPS
+ * against self-signed PVE node certs (default on when proxmox_widget is enabled).
+ * @param {Record<string, unknown>} homepage
+ */
+export function proxmoxWidgetTlsInsecure(homepage) {
+  if (!proxmoxWidgetEnabled(homepage)) return false;
+  const widget = homepage.proxmox_widget;
+  if (!isObject(widget)) return true;
+  if (widget.tls_insecure === false || widget.tls_insecure === 0) return false;
+  return true;
+}
+
+/**
  * @param {Record<string, unknown>} homepage
  */
 export function renderHomepageEnv(homepage, widgetLines = []) {
@@ -288,6 +303,7 @@ export function renderHomepageEnv(homepage, widgetLines = []) {
   const port = hostPort(homepage);
   const hosts = allowedHosts(homepage);
 
+  /** @type {string[]} */
   const lines = [
     "# hdc-generated — docker compose",
     `HOMEPAGE_IMAGE_TAG=${tag}`,
@@ -295,13 +311,31 @@ export function renderHomepageEnv(homepage, widgetLines = []) {
     `HOMEPAGE_ALLOWED_HOSTS=${hosts}`,
     ...widgetLines,
   ];
+  if (proxmoxWidgetTlsInsecure(homepage)) {
+    lines.push("NODE_TLS_REJECT_UNAUTHORIZED=0");
+  }
   return `${lines.join("\n")}\n`;
+}
+
+export function renderDockerfile() {
+  return `# hdc-generated — extends upstream gethomepage with iputils for ICMP ping
+ARG HOMEPAGE_BASE_TAG=latest
+FROM ghcr.io/gethomepage/homepage:\${HOMEPAGE_BASE_TAG}
+USER root
+RUN apk add --no-cache iputils
+USER node
+`;
 }
 
 export function renderComposeYaml() {
   return `services:
   homepage:
-    image: ghcr.io/gethomepage/homepage:\${HOMEPAGE_IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        HOMEPAGE_BASE_TAG: \${HOMEPAGE_IMAGE_TAG}
+    image: hdc-homepage:\${HOMEPAGE_IMAGE_TAG}
     container_name: homepage
     restart: unless-stopped
     cap_add:

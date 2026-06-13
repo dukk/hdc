@@ -7,6 +7,34 @@
   "required": ["schema_version", "deployments"],
   "properties": {
     "schema_version": { "type": "integer", "minimum": 2 },
+    "uptime_kuma_auth": {
+      "type": "object",
+      "properties": {
+        "api_url": { "type": "string", "format": "uri" },
+        "username_env": { "type": "string" },
+        "password_vault_key": { "type": "string" }
+      }
+    },
+    "monitors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "managed"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "uptime_kuma_id": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["http", "ping"] },
+          "url": { "type": "string" },
+          "hostname": { "type": "string" },
+          "group": { "type": "string" },
+          "interval": { "type": "integer", "minimum": 20, "maximum": 86400 },
+          "ignore_tls": { "type": "boolean" },
+          "managed": { "type": "boolean" },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
     "defaults": { "type": "object" },
     "deployments": {
       "type": "array",
@@ -23,7 +51,8 @@
             "properties": {
               "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
               "node_version": { "type": "string" },
-              "release": { "type": "string" }
+              "release": { "type": "string" },
+              "public_url": { "type": "string", "format": "uri" }
             }
           },
           "install": {

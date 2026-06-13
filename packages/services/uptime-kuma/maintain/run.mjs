@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/guest-baseline-report.mjs";
 /**
- * Maintain Uptime Kuma (upgrade or restart).
+ * Maintain Uptime Kuma (upgrade or restart) and reconcile monitors.
  *
- * Usage: hdc run service uptime-kuma maintain -- [--instance a | --system-id uptime-kuma-a] [--skip-upgrade] [--skip-clamav]
+ * Usage: hdc run service uptime-kuma maintain -- [--instance a | --system-id uptime-kuma-a]
+ *        [--skip-upgrade] [--skip-clamav] [--skip-monitors] [--prune] [--dry-run] [--monitor <id>]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -19,8 +20,9 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/uptime-kuma-install.mjs";
 import { maintainUptimeKumaInCt } from "../lib/uptime-kuma-maintain.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runUptimeKumaMonitorSync } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -88,7 +90,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
 }
 
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: Uptime Kuma upgrade/restart (stderr log; JSON on stdout).\n`);
+  errout.write(`[hdc] ${target} ${verb}: Uptime Kuma upgrade/restart + monitor sync (stderr log; JSON on stdout).\n`);
 
   if (!existsSync(ensurePackageConfig().path)) {
     errout.write(`[hdc] ${target} ${verb}: missing packages/services/uptime-kuma/config.json\n`);
@@ -127,8 +129,32 @@ async function main() {
     }
   }
 
-  const ok = instances.every((r) => r.ok);
-  const payload = { ok, target, verb, count: instances.length, instances };
+  /** @type {Record<string, unknown> | null} */
+  let monitorSync = null;
+  try {
+    monitorSync = await runUptimeKumaMonitorSync({
+      packageRoot,
+      cfgRaw: cfg,
+      flags,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    errout.write(`[hdc] ${target} ${verb}: monitor sync failed: ${msg}\n`);
+    monitorSync = { ok: false, error: msg, results: [] };
+  }
+
+  const guestOk = instances.every((r) => r.ok);
+  const monitorsOk = monitorSync?.ok !== false;
+  const ok = guestOk && monitorsOk;
+  const payload = {
+    ok,
+    target,
+    verb,
+    count: instances.length,
+    instances,
+    monitor_sync: monitorSync,
+  };
   runOperationReportTail({
     packageRoot,
     repoRoot: root,
@@ -149,4 +175,3 @@ main().catch((e) => {
   );
   process.exitCode = 1;
 });
-

@@ -56,6 +56,10 @@
                     "type": "array",
                     "items": { "type": "string", "minLength": 1 },
                     "description": "Proxmox host ids for per-node widget URL env vars."
+                  },
+                  "tls_insecure": {
+                    "type": "boolean",
+                    "description": "When true (default), set NODE_TLS_REJECT_UNAUTHORIZED=0 in the Homepage container for self-signed PVE HTTPS."
                   }
                 },
                 "additionalProperties": false
@@ -73,6 +77,84 @@
                     "type": "array",
                     "items": { "type": "string", "minLength": 1 },
                     "description": "Instance letters (a, b) or system_ids (pi-hole-a); empty = all deployments."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "immich_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] }
+                },
+                "additionalProperties": false
+              },
+              "glances_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] }
+                },
+                "additionalProperties": false
+              },
+              "homeassistant_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "token_vault_key": {
+                    "type": "string",
+                    "description": "Vault key for HA long-lived access token (default HDC_HOMEPAGE_HA_TOKEN)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "plex_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "url": {
+                    "type": "string",
+                    "description": "Plex Media Server base URL (default http://10.0.0.9:32400)."
+                  },
+                  "token_vault_key": {
+                    "type": "string",
+                    "description": "Vault key for Plex token (default HDC_HOMEPAGE_PLEX_TOKEN)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "audiobookshelf_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "token_vault_key": {
+                    "type": "string",
+                    "description": "Vault key for Audiobookshelf admin API token (default HDC_HOMEPAGE_AUDIOBOOKSHELF_TOKEN)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "uptime_kuma_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Uptime Kuma status page slug (URL path after /status/)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "crowdsec_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "token_vault_key": {
+                    "type": "string",
+                    "description": "Vault key for LAPI password (default HDC_HOMEPAGE_CROWDSEC_LAPI_PASSWORD)."
+                  },
+                  "machine_id": {
+                    "type": "string",
+                    "description": "CrowdSec machine_id for widget username (default localhost)."
                   }
                 },
                 "additionalProperties": false

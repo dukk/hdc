@@ -29,9 +29,10 @@ node tools/hdc/cli.mjs run service open-webui query -- --live
 
 ## After deploy
 
-1. **Web UI:** `http://<guest-ip>:3000` (or `open_webui.host_port` from config).
-2. **First run:** create the admin account in the browser.
-3. Confirm backends in the UI match `ollama_backends[]` URLs (must reach Ollama on the LAN).
+1. **Web UI (direct):** `http://<guest-ip>:3000` (or `open_webui.host_port` from config).
+2. **LAN HTTPS (recommended):** set `open_webui.public_url` to `https://open-webui.hdc.dukk.org`, add nginx-waf site with `internal-lan` (upstream to guest port, WebSockets), flip BIND CNAME `open-webui` → `nginx-waf-a`, then `bind maintain` + `nginx-waf maintain`.
+3. **First run:** create the admin account in the browser.
+4. Confirm backends in the UI match `ollama_backends[]` URLs (must reach Ollama on the LAN).
 
 ## Related
 

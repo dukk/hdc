@@ -4,6 +4,13 @@
         href: https://immich.dukk.org
         description: Photos & videos
         siteMonitor: https://immich.dukk.org
+        showStats: true
+        widget:
+          type: immich
+          url: "{{HOMEPAGE_VAR_IMMICH_URL}}"
+          key: "{{HOMEPAGE_VAR_IMMICH_KEY}}"
+          version: 2
+          fields: ["photos", "videos", "storage"]
     - Vaultwarden:
         icon: vaultwarden.png
         href: https://vault.dukk.org

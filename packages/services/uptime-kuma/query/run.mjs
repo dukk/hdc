@@ -1,20 +1,29 @@
 #!/usr/bin/env node
 /**
- * Query Uptime Kuma instance status.
+ * Query Uptime Kuma instance status and monitor drift.
  *
  * Usage: hdc run service uptime-kuma query -- [--instance a | --system-id uptime-kuma-a]
+ *        hdc run service uptime-kuma query -- [--live] [--import] [--import-from-homepage] [--yes]
  */
+import { createInterface } from "node:readline/promises";
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { stderr as errout } from "node:process";
+import { stdin as input, stderr as errout } from "node:process";
 
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
 import { readCtPrimaryIp, resolvePveSshForHost } from "../lib/uptime-kuma-install.mjs";
-import { queryUptimeKumaInCt } from "../lib/uptime-kuma-query.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-
+import { queryUptimeKumaInCt } from "../lib/uptime-kuma-query.mjs";
+import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { normalizeUptimeKumaMonitorConfig } from "../lib/uptime-kuma-config.mjs";
+import { collectUptimeKumaMonitorState, fetchLiveUptimeKumaMonitors } from "../lib/uptime-kuma-collect.mjs";
+import {
+  importHomepageMonitorsToConfig,
+  importUptimeKumaMonitorsToConfig,
+} from "../lib/uptime-kuma-import.mjs";
+import { createUptimeKumaClientFromConfig } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -38,7 +47,8 @@ function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-function readCfg() {
+function readCfg(forceReload = false) {
+  if (forceReload) _pkgConfig = null;
   return ensurePackageConfig().data;
 }
 
@@ -69,6 +79,19 @@ function primaryIpFromSystem(sidecar) {
     if (ip) return ip;
   }
   return null;
+}
+
+/**
+ * @param {string} question
+ */
+async function confirm(question) {
+  const rl = createInterface({ input, output: errout });
+  try {
+    const answer = await rl.question(question);
+    return /^y(es)?$/i.test(String(answer).trim());
+  } finally {
+    rl.close();
+  }
 }
 
 /**
@@ -124,8 +147,129 @@ async function main() {
     return;
   }
 
-  const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const liveFlag = flags.live === "1";
+  const doImport = flags.import === "1";
+  const importHomepage = flags["import-from-homepage"] === "1";
+  const yes = flags.yes === "1";
+
+  let cfg = readCfg();
+
+  if (importHomepage) {
+    errout.write("[hdc] uptime-kuma query: import monitors from homepage/services.yaml …\n");
+    if (!yes) {
+      const ok = await confirm("Merge monitors[] from homepage services.yaml into config? [y/N] ");
+      if (!ok) {
+        errout.write("[hdc] uptime-kuma query: aborted (use --yes to skip prompt).\n");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    importHomepageMonitorsToConfig({
+      packageRoot,
+      repoRoot: root,
+      log: (line) => errout.write(`[hdc] uptime-kuma query: ${line}\n`),
+    });
+    cfg = readCfg(true);
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          ok: true,
+          target,
+          verb,
+          import_from_homepage: true,
+          monitor_count: normalizeUptimeKumaMonitorConfig(cfg).monitors.length,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    return;
+  }
+
+  const monitorCfg = normalizeUptimeKumaMonitorConfig(cfg);
+  /** @type {Record<string, unknown> | null} */
+  let monitorState = null;
+  /** @type {Record<string, unknown> | null} */
+  let importResult = null;
+
+  if (doImport || liveFlag || monitorCfg.monitors.length > 0) {
+    try {
+      const { client } = await createUptimeKumaClientFromConfig({
+        packageRoot,
+        cfgRaw: cfg,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      try {
+        const liveMonitors = await fetchLiveUptimeKumaMonitors(client, (line) =>
+          errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+        );
+
+        if (doImport) {
+          if (!yes) {
+            const ok = await confirm(
+              `Replace monitors[] with ${liveMonitors.monitors.length} live monitor(s)? [y/N] `,
+            );
+            if (!ok) {
+              errout.write("[hdc] uptime-kuma query: aborted (use --yes to skip prompt).\n");
+              process.exitCode = 1;
+              return;
+            }
+          }
+          importResult = importUptimeKumaMonitorsToConfig({
+            packageRoot,
+            live: liveMonitors,
+            log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+          });
+          cfg = readCfg(true);
+        }
+
+        const updatedMonitorCfg = normalizeUptimeKumaMonitorConfig(cfg);
+        monitorState = collectUptimeKumaMonitorState(updatedMonitorCfg, liveMonitors);
+
+        if (liveFlag) {
+          process.stdout.write(
+            `${JSON.stringify(
+              {
+                ok: true,
+                target,
+                verb,
+                live: true,
+                live_monitor_count: liveMonitors.monitors.length,
+                monitors: liveMonitors.monitors.map((m) => ({
+                  id: m.id,
+                  uptime_kuma_id: m.uptime_kuma_id,
+                  name: m.name,
+                  type: m.type,
+                  url: m.url,
+                  hostname: m.hostname,
+                })),
+                monitor_drift: monitorState,
+                import: importResult,
+              },
+              null,
+              2,
+            )}\n`,
+          );
+          process.exitCode = monitorState.has_drift && !doImport ? 1 : 0;
+          return;
+        }
+      } finally {
+        await client.disconnect();
+      }
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: monitor API unavailable: ${msg}\n`);
+      if (doImport || liveFlag) {
+        process.stdout.write(
+          `${JSON.stringify({ ok: false, target, verb, message: msg }, null, 2)}\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+    }
+  }
+
   let deployments;
   try {
     deployments = resolveUptimeKumaDeployments(cfg, flags, { skipInstall: true });
@@ -150,10 +294,24 @@ async function main() {
     }
   }
 
-  const ok = instances.every((r) => r.ok);
+  const guestOk = instances.every((r) => r.ok);
+  const drift = monitorState?.has_drift === true;
+  const ok = guestOk && !drift;
+
   process.stdout.write(
     `${JSON.stringify(
-      { ok, target, verb, generated_at: new Date().toISOString(), count: instances.length, instances },
+      {
+        ok,
+        target,
+        verb,
+        generated_at: new Date().toISOString(),
+        count: instances.length,
+        instances,
+        monitor_count: monitorCfg.monitors.length,
+        managed_monitor_count: monitorCfg.monitors.filter((m) => m.managed).length,
+        monitor_drift: monitorState,
+        import: importResult,
+      },
       null,
       2,
     )}\n`,

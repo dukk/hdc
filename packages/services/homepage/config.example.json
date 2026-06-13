@@ -39,6 +39,30 @@
         "enabled": true,
         "version": 6,
         "instances": ["a", "b"]
+      },
+      "immich_widget": { "enabled": true },
+      "glances_widget": { "enabled": true },
+      "homeassistant_widget": {
+        "enabled": true,
+        "token_vault_key": "HDC_HOMEPAGE_HA_TOKEN"
+      },
+      "plex_widget": {
+        "enabled": true,
+        "url": "http://10.0.0.9:32400",
+        "token_vault_key": "HDC_HOMEPAGE_PLEX_TOKEN"
+      },
+      "audiobookshelf_widget": {
+        "enabled": true,
+        "token_vault_key": "HDC_HOMEPAGE_AUDIOBOOKSHELF_TOKEN"
+      },
+      "uptime_kuma_widget": {
+        "enabled": true,
+        "slug": "hdc"
+      },
+      "crowdsec_widget": {
+        "enabled": true,
+        "token_vault_key": "HDC_HOMEPAGE_CROWDSEC_LAPI_PASSWORD",
+        "machine_id": "localhost"
       }
     },
     "install": {

@@ -8,6 +8,7 @@ import { buildIconWriteScriptLines, loadHomepageIcons } from "./homepage-icons.m
 import {
   composeDir,
   renderComposeYaml,
+  renderDockerfile,
   renderHomepageEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
@@ -33,13 +34,23 @@ function writeConfigFileHerdoc(dir, relPath, content) {
 }
 
 /**
+ * @param {string} dir
+ * @param {string} content
+ */
+function writeDockerfileHerdoc(dir, content) {
+  const full = `${dir}/Dockerfile`.replace(/'/g, `'\\''`);
+  return [`cat > '${full}' <<'HDCDOCKERFILE'`, content.trimEnd(), "HDCDOCKERFILE"];
+}
+
+/**
  * @param {string} composeDirPath
  * @param {string} composeYaml
+ * @param {string} dockerfileContent
  * @param {string} envContent
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
  * @param {{ name: string; b64: string }[]} [icons]
  */
-export function buildInstallScript(composeDirPath, composeYaml, envContent, configFiles, icons = []) {
+export function buildInstallScript(composeDirPath, composeYaml, dockerfileContent, envContent, configFiles, icons = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -68,6 +79,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
     `mkdir -p '${dir}'`,
     ...configWrites,
     ...buildIconWriteScriptLines(composeDirPath, icons),
+    ...writeDockerfileHerdoc(dir, dockerfileContent),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
@@ -75,7 +87,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
     envContent.trimEnd(),
     "HDCENV",
     `cd '${dir}'`,
-    "docker compose pull",
+    "docker compose build --pull",
     "docker compose up -d",
     "docker compose ps",
   ].join("\n");
@@ -85,10 +97,12 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
  * @param {string} composeDirPath
  * @param {string} envContent
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
+ * @param {string} composeYaml
+ * @param {string} dockerfileContent
  * @param {{ skipUpgrade?: boolean }} [opts]
  * @param {{ name: string; b64: string }[]} [icons]
  */
-export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, opts = {}, icons = []) {
+export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, dockerfileContent, opts = {}, icons = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -104,6 +118,7 @@ export function buildMaintainScript(composeDirPath, envContent, configFiles, com
     `mkdir -p '${dir}'`,
     ...configWrites,
     ...buildIconWriteScriptLines(composeDirPath, icons),
+    ...writeDockerfileHerdoc(dir, dockerfileContent),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
@@ -113,7 +128,9 @@ export function buildMaintainScript(composeDirPath, envContent, configFiles, com
     `cd '${dir}'`,
   ];
   if (!opts.skipUpgrade) {
-    lines.push("docker compose pull");
+    lines.push("docker compose build --pull");
+  } else {
+    lines.push("docker compose build");
   }
   lines.push("docker compose up -d --force-recreate", "docker compose ps");
   return lines.join("\n");
@@ -163,10 +180,11 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
 
   const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
   const composeYaml = renderComposeYaml();
+  const dockerfileContent = renderDockerfile();
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
-  const inner = buildInstallScript(dir, composeYaml, envContent, configFiles, icons);
+  const inner = buildInstallScript(dir, composeYaml, dockerfileContent, envContent, configFiles, icons);
 
   const r = pctExec(user, pveHost, vmid, inner, { stdin: true });
   if (r.status !== 0) {
@@ -213,7 +231,8 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
   const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
   const composeYaml = renderComposeYaml();
-  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, opts, icons);
+  const dockerfileContent = renderDockerfile();
+  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, dockerfileContent, opts, icons);
   const r = pctExec(user, pveHost, vmid, inner, { stdin: true, capture: true });
   if (r.status !== 0) {
     const detail = `${r.stderr}${r.stdout}`.trim();

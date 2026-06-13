@@ -12,6 +12,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "marked": "^15.0.12"
+    "marked": "^15.0.12",
+    "socket.io-client": "^4.8.3"
   }
 }
