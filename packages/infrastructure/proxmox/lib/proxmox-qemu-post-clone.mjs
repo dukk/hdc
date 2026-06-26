@@ -2,6 +2,7 @@ import { waitForPveTask } from "./pve-http.mjs";
 import { applyQemuGuestResources } from "./proxmox-guest-resources.mjs";
 import { applyGuestBootOptions } from "./proxmox-guest-startup.mjs";
 import { enableQemuAgentInConfig } from "./proxmox-qemu-guest-agent-install.mjs";
+import { ensureGuestPackageTag } from "./proxmox-guest-tags.mjs";
 import { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
 
 export { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
@@ -99,6 +100,16 @@ export async function waitForCloneTaskAndEnableAgent(provisionResult, auth, vmid
     rejectUnauthorized: auth.rejectUnauthorized,
     log,
   });
+
+  const packageId = provisionResult.details?.hdc_package_id;
+  if (typeof packageId === "string" && packageId.trim()) {
+    await ensureGuestPackageTag({
+      guestType: "qemu",
+      ...statusOpts,
+      packageId,
+      log,
+    });
+  }
 
   return { node: cloneNode, vmid: guestVmid };
 }

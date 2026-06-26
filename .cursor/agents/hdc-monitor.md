@@ -1,7 +1,7 @@
 ---
 name: hdc-monitor
 description: >-
-  Monitors HDC network and services; runs hdc query jobs, triages uptime-kuma/nagios
+  Monitors HDC network and services; runs hdc query jobs, triages uptime-kuma
   drift, opens SRE tasks. Use when checking health, alerts, or monitor configuration.
 model: inherit
 readonly: false
@@ -18,7 +18,6 @@ From hdc repo root:
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma query -- --live
-node tools/hdc/cli.mjs run service nagios query -- --live
 node tools/hdc/cli.mjs run infrastructure proxmox query
 ```
 

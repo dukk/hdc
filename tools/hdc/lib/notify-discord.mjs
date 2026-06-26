@@ -15,9 +15,12 @@ import { stderr, stdout } from "node:process";
 import { loadDotenv } from "../env.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import { createNodeCliDeps } from "./node-cli-deps.mjs";
-
-const WEBHOOK_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
-const MAX_CONTENT = 1900;
+import {
+  formatDiscordContent,
+  OPS_DISCORD_WEBHOOK_KEY,
+  postDiscordWebhook,
+  resolveOpsDiscordWebhookUrl,
+} from "./ops-discord-notify.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..", "..");
@@ -43,33 +46,6 @@ function parseArgs(argv) {
   return out;
 }
 
-/**
- * @param {string} title
- * @param {string} message
- */
-function formatContent(title, message) {
-  const header = `**${title.trim() || "HDC Ops"}**`;
-  const body = message.trim();
-  const text = body ? `${header}\n\n${body}` : header;
-  return text.length > MAX_CONTENT ? `${text.slice(0, MAX_CONTENT - 3)}...` : text;
-}
-
-/**
- * @param {string} url
- * @param {string} content
- */
-async function postWebhook(url, content) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
-  if (!res.ok) {
-    const snippet = (await res.text()).slice(0, 200);
-    throw new Error(`Discord webhook HTTP ${res.status}: ${snippet}`);
-  }
-}
-
 async function main() {
   const { title, message, dryRun } = parseArgs(process.argv.slice(2));
   if (!message.trim()) {
@@ -77,7 +53,7 @@ async function main() {
     process.exit(2);
   }
 
-  const content = formatContent(title, message);
+  const content = formatDiscordContent(title, message);
 
   if (dryRun) {
     stdout.write(`${JSON.stringify({ ok: true, dry_run: true, content_length: content.length })}\n`);
@@ -88,20 +64,19 @@ async function main() {
 
   const deps = createNodeCliDeps();
   const vault = createVaultAccess(vaultDepsFromCli(deps));
-  const url = String(
-    deps.env[WEBHOOK_KEY] ??
-      (await vault.getSecret(WEBHOOK_KEY, { optional: true })) ??
-      "",
-  ).trim();
+  const url = await resolveOpsDiscordWebhookUrl({
+    env: deps.env,
+    getSecret: (key, opts) => vault.getSecret(key, opts),
+  });
 
   if (!url) {
     stderr.write(
-      `notify-discord: set ${WEBHOOK_KEY} in vault (node tools/hdc/cli.mjs secrets set ${WEBHOOK_KEY})\n`,
+      `notify-discord: set ${OPS_DISCORD_WEBHOOK_KEY} in vault (node tools/hdc/cli.mjs secrets set ${OPS_DISCORD_WEBHOOK_KEY})\n`,
     );
     process.exit(1);
   }
 
-  await postWebhook(url, content);
+  await postDiscordWebhook(url, content);
   stderr.write("notify-discord: sent\n");
   stdout.write(JSON.stringify({ ok: true }) + "\n");
 }

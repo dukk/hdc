@@ -23,8 +23,17 @@ import {
 
 describe("operation-report", () => {
   it("parseOperationReportArgv handles --no-report and --report", () => {
-    const p = parseOperationReportArgv(["--dry-run", "--no-report", "--report", "/tmp/x.md", "--instance", "a"]);
+    const p = parseOperationReportArgv([
+      "--dry-run",
+      "--no-report",
+      "--no-discord-notify",
+      "--report",
+      "/tmp/x.md",
+      "--instance",
+      "a",
+    ]);
     expect(p.noReport).toBe(true);
+    expect(p.noDiscordNotify).toBe(true);
     expect(p.dryRun).toBe(true);
     expect(p.reportPathArg).toBe("/tmp/x.md");
     expect(p.argvFlags).toContain("--dry-run");

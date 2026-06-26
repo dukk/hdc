@@ -1,6 +1,7 @@
 import { waitForPveTask } from "./pve-http.mjs";
 import { applyLxcGuestResources } from "./proxmox-guest-resources.mjs";
 import { applyGuestBootOptions } from "./proxmox-guest-startup.mjs";
+import { ensureGuestPackageTag } from "./proxmox-guest-tags.mjs";
 import { extractPveUpid } from "./proxmox-qemu-post-clone.mjs";
 import { resolveProvisionVmid } from "./proxmox-vmid-conflict.mjs";
 
@@ -71,6 +72,16 @@ export async function waitForLxcCreateTaskAndApplyResources(
       guestType: "lxc",
       ...statusOpts,
       boot: resourceOpts.boot,
+      log,
+    });
+  }
+
+  const packageId = provisionResult.details?.hdc_package_id;
+  if (typeof packageId === "string" && packageId.trim()) {
+    await ensureGuestPackageTag({
+      guestType: "lxc",
+      ...statusOpts,
+      packageId,
       log,
     });
   }

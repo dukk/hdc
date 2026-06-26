@@ -172,7 +172,9 @@ function formEncode(fields) {
  * @returns {import("../../../lib/host-provisioner.mjs").HostProvisioner}
  */
 export function createProxmoxHostProvisioner(ctx) {
-  const { apiBase, pveNode, authorization, rejectUnauthorized } = ctx;
+  const { apiBase, pveNode, authorization, rejectUnauthorized, packageId } = ctx;
+  const hdcPackageId =
+    typeof packageId === "string" && packageId.trim() ? packageId.trim() : "";
 
   return {
     backendId: "proxmox",
@@ -252,7 +254,13 @@ export function createProxmoxHostProvisioner(ctx) {
         return {
           ok: true,
           message: `LXC ${vmid} create requested on node ${pveNode}`,
-          details: { vmid, node: pveNode, type: "lxc", task: data },
+          details: {
+            vmid,
+            node: pveNode,
+            type: "lxc",
+            task: data,
+            ...(hdcPackageId ? { hdc_package_id: hdcPackageId } : {}),
+          },
         };
       } catch (e) {
         const msg = /** @type {Error} */ (e).message || String(e);
@@ -321,6 +329,7 @@ export function createProxmoxHostProvisioner(ctx) {
             config_host_node: pveNode,
             type: "qemu",
             task: data,
+            ...(hdcPackageId ? { hdc_package_id: hdcPackageId } : {}),
           },
         };
       } catch (e) {

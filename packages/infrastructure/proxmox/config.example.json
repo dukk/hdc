@@ -197,6 +197,10 @@
         "postfix-relay": 3
       }
     },
+    "guest_tags": {
+      "enabled": true,
+      "manage_from_deployments": true
+    },
     "guest_agents": {
       "crowdsec": {
         "enabled": true,

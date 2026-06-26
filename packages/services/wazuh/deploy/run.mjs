@@ -166,8 +166,7 @@ async function deployLxcOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-    });
+      rejectUnauthorized: auth.rejectUnauthorized,    });
     const hostname = (typeof lxc.hostname === "string" && lxc.hostname.trim()) || lxcHostnameFromSystemId(systemId) || "wazuh";
     const memoryMb = typeof lxc.memory_mb === "number" ? lxc.memory_mb : Number(lxc.memory_mb);
     const cores = typeof lxc.cores === "number" ? lxc.cores : Number(lxc.cores);
@@ -343,6 +342,7 @@ async function deployQemuOne(deployment, flags, log, runOpts) {
     pveNode: auth.host.pveNode,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
+    packageId: target,
   });
 
   const provisionResult = await cloneQemuGuest({

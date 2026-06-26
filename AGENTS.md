@@ -669,20 +669,19 @@ Example: `node tools/hdc/cli.mjs run service greenbone deploy --`
 
 ## Nagios in this repo
 
-- **Config:** [`packages/services/nagios/config.json`](packages/services/nagios/config.json) (copy from [`config.example.json`](packages/services/nagios/config.example.json); keep local config out of git).
-- **BIND source:** `bind_config_path` (default `packages/services/bind/config.json`) — forward-zone A records become Nagios hosts with PING checks.
-- **Inventory:** [`inventory/manual/systems/nagios-a.json`](inventory/manual/systems/nagios-a.json), [`nagios-b.json`](inventory/manual/systems/nagios-b.json), [`nagios-c.json`](inventory/manual/systems/nagios-c.json); service sidecar [`inventory/manual/services/nagios.json`](inventory/manual/services/nagios.json); hypervisors [`hypervisor-b.json`](inventory/manual/systems/hypervisor-b.json), [`hypervisor-c.json`](inventory/manual/systems/hypervisor-c.json), [`hypervisor-d.json`](inventory/manual/systems/hypervisor-d.json).
+**Not deployed** (package and scripts retained for optional restore). Copy [`config.example.json`](packages/services/nagios/config.example.json) to hdc-private `config.json` and restore inventory sidecars to re-enable.
+
+- **Config:** [`packages/services/nagios/config.example.json`](packages/services/nagios/config.example.json) (live config in hdc-private when deployed).
+- **BIND source:** `bind_config_path` — forward-zone A records become Nagios hosts with PING checks.
 - **Schema:** [`tools/hdc/schema/nagios.config.schema.json`](tools/hdc/schema/nagios.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC on `hypervisor-b` / `hypervisor-c` / `hypervisor-d` at `192.0.2.120`–`122`, apt `nagios4`, push generated `conf.d/hdc-generated.cfg` from BIND (`deployments[]`; `--instance a\|b\|c`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Regenerate from BIND and push to all or selected instances; `--apply-upgrades` for apt upgrade |
+| `deploy` | Proxmox LXC, apt `nagios4`, push generated config from BIND (`deployments[]`; `--instance a\|b\|c`) |
+| `maintain` | Regenerate from BIND and push to instances |
 | `query` | Deployment summary + BIND host counts; `--live` for systemd/config per CT |
 
-No vault secrets for v1. Web UI: `http://192.0.2.120/nagios4` (and `.121`, `.122`) after deploy.
-
-Example: `node tools/hdc/cli.mjs run service nagios deploy --`
+Example: `node tools/hdc/cli.mjs run service nagios deploy -- --instance a`
 
 ## Hermes Agent in this repo
 
@@ -1488,7 +1487,7 @@ Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
-**Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`).
+**Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
 
 **Scheduled runs:** hdc-runner cron (query jobs) + Cursor Automations drafts in [`.cursor/automations/`](.cursor/automations/README.md).
 

@@ -151,6 +151,7 @@ export async function deployWindowsCloneInstance(opts) {
     node,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
+    packageId: target,
   });
 
   const cloneResult = await cloneQemuGuest({

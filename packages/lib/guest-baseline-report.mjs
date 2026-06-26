@@ -48,6 +48,8 @@ export function adminUserOkFromBaseline(baseline) {
  */
 export function mergeGuestBaselineIntoResult(existing, baseline) {
   existing.guest_resources = baseline.guest_resources;
+  existing.guest_startup = baseline.guest_startup;
+  existing.guest_tags = baseline.guest_tags;
   existing.hdc_user = baseline.hdc_user;
   existing.admin_user = baseline.admin_user;
   existing.clamav = baseline.clamav;
@@ -103,6 +105,8 @@ export function guestBaselineUsersOk(baseline) {
 export function guestBaselineResultFields(baseline) {
   return {
     guest_resources: baseline.guest_resources,
+    guest_startup: baseline.guest_startup,
+    guest_tags: baseline.guest_tags,
     hdc_user: baseline.hdc_user,
     admin_user: baseline.admin_user,
     clamav: baseline.clamav,

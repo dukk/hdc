@@ -205,7 +205,8 @@ async function deployFromConfig(cfg, systemId, flags, log, vault) {
         pveNode: auth.host.pveNode,
         authorization: auth.authorization,
         rejectUnauthorized: auth.rejectUnauthorized,
-      });
+        packageId: target,
+  });
       /** @type {Record<string, unknown>} */
       const parameters = { ...lxc, password: rootPassword };
       provisionResult = await prov.createContainer(log, {

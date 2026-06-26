@@ -276,6 +276,7 @@ async function deployDirector(deployment, flags, global, authPass, normalized, l
     pveNode: auth.host.pveNode,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
+    packageId: target,
   });
 
   const provisionResult = await cloneQemuGuest({

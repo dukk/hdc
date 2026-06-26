@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { preferredPackageReportPath } from "../../../../tools/hdc/lib/private-repo.mjs";
+import { maybeNotifyOpsDiscordFromProxmoxMaintain } from "../../../../tools/hdc/lib/ops-discord-notify.mjs";
 import {
   CRIT_PCT,
   WARN_PCT,
@@ -57,6 +58,7 @@ export function createMaintainReportContext(argv) {
     skipReplication: argv.includes("--skip-replication"),
     skipHa: argv.includes("--skip-ha"),
     skipStartup: argv.includes("--skip-startup"),
+    skipGuestTags: argv.includes("--skip-guest-tags"),
     skipLocalLvm: argv.includes("--skip-local-lvm"),
     skipOsUpdates: argv.includes("--skip-os-updates"),
     skipLoadReport: argv.includes("--skip-load-report"),
@@ -68,6 +70,7 @@ export function createMaintainReportContext(argv) {
     noBuildQemu: argv.includes("--no-build-qemu"),
     noPrune: argv.includes("--no-prune"),
     noReport: argv.includes("--no-report"),
+    noDiscordNotify: argv.includes("--no-discord-notify"),
   };
   const reportIdx = argv.indexOf("--report");
   if (reportIdx >= 0 && argv[reportIdx + 1]) {
@@ -632,6 +635,7 @@ export function writeMaintainReportFile(opts) {
   const dir = dirname(outPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(outPath, markdown, "utf8");
+  maybeNotifyOpsDiscordFromProxmoxMaintain(ctx);
   return outPath;
 }
 

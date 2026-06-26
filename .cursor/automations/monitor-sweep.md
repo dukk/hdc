@@ -12,7 +12,6 @@ From the hdc repo root, run:
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma query -- --live
-node tools/hdc/cli.mjs run service nagios query -- --live
 node tools/hdc/cli.mjs run infrastructure proxmox query
 ```
 

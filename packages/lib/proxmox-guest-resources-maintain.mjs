@@ -10,17 +10,10 @@ import {
   fetchClusterVmResources,
   locateVmidInCluster,
 } from "../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+import { proxmoxGuestTypeFromMode } from "../infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
 import { flagGet } from "./parse-argv-flags.mjs";
 
-/**
- * @param {unknown} mode
- * @returns {"lxc"|"qemu"|null}
- */
-export function proxmoxGuestTypeFromMode(mode) {
-  if (mode === "proxmox-lxc") return "lxc";
-  if (mode === "proxmox-qemu") return "qemu";
-  return null;
-}
+export { proxmoxGuestTypeFromMode };
 
 /**
  * @param {unknown} deployment

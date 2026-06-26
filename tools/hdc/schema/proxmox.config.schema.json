@@ -112,6 +112,7 @@
         "replication": { "$ref": "#/$defs/provision_replication" },
         "ha": { "$ref": "#/$defs/provision_ha" },
         "startup": { "$ref": "#/$defs/provision_startup" },
+        "guest_tags": { "$ref": "#/$defs/provision_guest_tags" },
         "api_token": { "$ref": "#/$defs/provision_api_token" },
         "service_accounts": {
           "type": "array",
@@ -632,6 +633,20 @@
           "type": "object",
           "additionalProperties": { "type": "number" },
           "description": "Package id to startup order map (e.g. bind: 1, nginx-waf: 2, postfix-relay: 3)."
+        }
+      }
+    },
+    "provision_guest_tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "integer"],
+          "description": "When false, maintain skips guest package tag ensure (default true)."
+        },
+        "manage_from_deployments": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), scan service deployments and ensure each Proxmox guest has a tag matching the service package id."
         }
       }
     },

@@ -19,40 +19,11 @@ import {
 import { locateGuestByNameInCluster } from "./proxmox-backup-maintain.mjs";
 import { loadProxmoxMaintainConfig } from "./proxmox-package-config.mjs";
 import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
-import {
-  applyGuestBootOptions,
-  formatProxmoxStartupString,
-  parseGuestBootOptions,
-} from "./proxmox-guest-startup.mjs";
-import { proxmoxGuestTypeFromMode } from "./proxmox-guest-tags.mjs";
+import { ensureGuestPackageTag, proxmoxGuestTypeFromMode } from "./proxmox-guest-tags.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
-/**
- * @param {unknown} cfg
- */
-export function startupMaintainEnabledFromConfig(cfg) {
-  if (!isProxmoxConfigObject(cfg)) return true;
-  const provision = cfg.provision;
-  if (!isObject(provision)) return true;
-  const startup = provision.startup;
-  if (!isObject(startup)) return true;
-  return startup.enabled !== false && startup.enabled !== 0;
-}
-
-/**
- * @param {unknown} cfg
- */
-export function startupManageFromDeployments(cfg) {
-  if (!isProxmoxConfigObject(cfg)) return true;
-  const provision = cfg.provision;
-  if (!isObject(provision)) return true;
-  const startup = provision.startup;
-  if (!isObject(startup)) return true;
-  return startup.manage_from_deployments !== false && startup.manage_from_deployments !== 0;
 }
 
 /**
@@ -66,20 +37,42 @@ function shallowMergeObjects(a, b) {
 }
 
 /**
+ * @param {unknown} cfg
+ */
+export function guestTagsMaintainEnabledFromConfig(cfg) {
+  if (!isProxmoxConfigObject(cfg)) return true;
+  const provision = cfg.provision;
+  if (!isObject(provision)) return true;
+  const guestTags = provision.guest_tags;
+  if (!isObject(guestTags)) return true;
+  return guestTags.enabled !== false && guestTags.enabled !== 0;
+}
+
+/**
+ * @param {unknown} cfg
+ */
+export function guestTagsManageFromDeployments(cfg) {
+  if (!isProxmoxConfigObject(cfg)) return true;
+  const provision = cfg.provision;
+  if (!isObject(provision)) return true;
+  const guestTags = provision.guest_tags;
+  if (!isObject(guestTags)) return true;
+  return guestTags.manage_from_deployments !== false && guestTags.manage_from_deployments !== 0;
+}
+
+/**
  * @param {unknown} deployment
  * @param {unknown} defaults
  * @param {string} packageId
- * @param {unknown} proxmoxCfg
  * @returns {{
  *   systemId: string;
  *   hostId: string;
  *   guestType: "lxc"|"qemu";
  *   vmid: number | null;
  *   lookupName: string;
- *   boot: NonNullable<ReturnType<typeof parseGuestBootOptions>>;
  * } | null}
  */
-export function deploymentStartupRow(deployment, defaults, packageId, proxmoxCfg) {
+export function deploymentTagRow(deployment, defaults, packageId) {
   if (!isObject(deployment)) return null;
 
   const systemId = typeof deployment.system_id === "string" ? deployment.system_id.trim() : "";
@@ -105,9 +98,6 @@ export function deploymentStartupRow(deployment, defaults, packageId, proxmoxCfg
         : null;
   if (!isObject(block)) return null;
 
-  const boot = parseGuestBootOptions(block, proxmoxCfg, packageId);
-  if (!boot?.startup) return null;
-
   /** @type {number | null} */
   let vmid = null;
   if (typeof block.vmid === "number" && block.vmid > 0) vmid = block.vmid;
@@ -115,7 +105,10 @@ export function deploymentStartupRow(deployment, defaults, packageId, proxmoxCfg
   const lookupName =
     (typeof deployment.hostname === "string" && deployment.hostname.trim()) ||
     (typeof block.hostname === "string" && block.hostname.trim()) ||
+    (typeof block.name === "string" && block.name.trim()) ||
     systemId;
+
+  if (!packageId.trim()) return null;
 
   return {
     systemId: systemId || lookupName,
@@ -123,16 +116,14 @@ export function deploymentStartupRow(deployment, defaults, packageId, proxmoxCfg
     guestType,
     vmid,
     lookupName,
-    boot,
   };
 }
 
 /**
  * @param {string} root
- * @param {unknown} proxmoxCfg
  */
-export function collectStartupTargetsFromPackages(root, proxmoxCfg) {
-  /** @type {Map<string, ReturnType<typeof deploymentStartupRow> & { packageId: string }>} */
+export function collectTagTargetsFromPackages(root) {
+  /** @type {Map<string, ReturnType<typeof deploymentTagRow> & { packageId: string }>} */
   const bySystem = new Map();
   const servicesDir = join(root, "packages", "services");
   let entries = [];
@@ -170,7 +161,7 @@ export function collectStartupTargetsFromPackages(root, proxmoxCfg) {
     }
 
     for (const d of rows) {
-      const row = deploymentStartupRow(d, defaults, pkgId, proxmoxCfg);
+      const row = deploymentTagRow(d, defaults, pkgId);
       if (!row) continue;
       bySystem.set(row.systemId, { ...row, packageId: pkgId });
     }
@@ -210,32 +201,32 @@ function hostIdToClusterKeyFromConfig(cfg) {
  * @param {boolean} opts.dryRun
  * @param {import("../../../../tools/hdc/lib/vault-access.mjs").ReturnType<import("../../../../tools/hdc/lib/vault-access.mjs").createVaultAccess>} [opts.vault]
  */
-export async function runProxmoxGuestStartupMaintain(opts) {
+export async function runProxmoxGuestTagsMaintain(opts) {
   const { packageRoot, log, warn, dryRun, vault } = opts;
   const root = opts.repoRoot || defaultRepoRoot();
-  const loaded = loadProxmoxMaintainConfig(packageRoot, warn, "Guest startup maintain");
+  const loaded = loadProxmoxMaintainConfig(packageRoot, warn, "Guest tags maintain");
   if (!loaded) {
     return { ok: true, skipped: false, results: [] };
   }
   const cfg = loaded.data;
 
-  if (!startupMaintainEnabledFromConfig(cfg)) {
-    log("guest startup maintain: disabled in provision.startup.enabled — skip.");
+  if (!guestTagsMaintainEnabledFromConfig(cfg)) {
+    log("guest tags maintain: disabled in provision.guest_tags.enabled — skip.");
     return { ok: true, skipped: false, results: [] };
   }
 
-  if (!startupManageFromDeployments(cfg)) {
-    log("guest startup maintain: manage_from_deployments false — skip.");
+  if (!guestTagsManageFromDeployments(cfg)) {
+    log("guest tags maintain: manage_from_deployments false — skip.");
     return { ok: true, skipped: false, results: [] };
   }
 
-  const targets = collectStartupTargetsFromPackages(root, cfg);
+  const targets = collectTagTargetsFromPackages(root);
   if (!targets.length) {
-    warn("guest startup maintain: no startup targets found in service package configs — skip.");
+    warn("guest tags maintain: no tag targets found in service package configs — skip.");
     return { ok: true, skipped: false, results: [] };
   }
 
-  log(`guest startup maintain: ${targets.length} target(s)${dryRun ? " [dry-run]" : ""}.`);
+  log(`guest tags maintain: ${targets.length} target(s)${dryRun ? " [dry-run]" : ""}.`);
 
   const configPath = join(packageRoot, "config.json");
   const configRel = "packages/infrastructure/proxmox/config.json";
@@ -247,7 +238,7 @@ export async function runProxmoxGuestStartupMaintain(opts) {
   const hostCluster = hostIdToClusterKeyFromConfig(cfg);
   const clusterKeys = [...byCluster.keys()].sort();
   if (!clusterKeys.length) {
-    warn(`guest startup maintain: no hypervisors in ${configRel}.`);
+    warn(`guest tags maintain: no hypervisors in ${configRel}.`);
     return { ok: false, skipped: false, results: [] };
   }
 
@@ -264,7 +255,7 @@ export async function runProxmoxGuestStartupMaintain(opts) {
     if (!clusterTargets.length) continue;
 
     const lead = members[0];
-    log(`Cluster ${JSON.stringify(clusterKey)}: reconcile ${clusterTargets.length} guest startup order(s) …`);
+    log(`Cluster ${JSON.stringify(clusterKey)}: reconcile ${clusterTargets.length} guest package tag(s) …`);
 
     const configCluster = clusterConfigByKey(cfg, clusterKey);
     const auth = await authorizeProxmoxForClusterMembers({
@@ -346,12 +337,11 @@ export async function runProxmoxGuestStartupMaintain(opts) {
       }
 
       row.vmid = vmid;
-      const startupStr = formatProxmoxStartupString(target.boot.startup);
-      row.desired = { onboot: target.boot.onboot ?? 1, startup: startupStr };
+      row.desired = { tag: target.packageId };
 
       if (dryRun) {
         log(
-          `[${target.systemId}] [dry-run] would set ${target.guestType} ${vmid}: onboot=${row.desired.onboot} startup=${startupStr}`,
+          `[${target.systemId}] [dry-run] would ensure ${target.guestType} ${vmid} tag ${JSON.stringify(target.packageId)}`,
         );
         row.ok = true;
         row.action = "dry-run";
@@ -360,14 +350,14 @@ export async function runProxmoxGuestStartupMaintain(opts) {
       }
 
       try {
-        const applied = await applyGuestBootOptions({
+        const applied = await ensureGuestPackageTag({
           guestType: target.guestType,
           apiBase: auth.host.apiBase,
           authorization: auth.authorization,
           rejectUnauthorized: auth.rejectUnauthorized,
           node,
           vmid,
-          boot: target.boot,
+          packageId: target.packageId,
           log: (line) => log(`[${target.systemId}] ${line}`),
         });
         row.ok = applied.ok;
@@ -379,7 +369,7 @@ export async function runProxmoxGuestStartupMaintain(opts) {
         row.ok = false;
         row.action = "error";
         row.error = String(/** @type {Error} */ (e).message || e);
-        warn(`[${target.systemId}] startup apply failed: ${row.error}`);
+        warn(`[${target.systemId}] tag apply failed: ${row.error}`);
         results.push(row);
       }
     }

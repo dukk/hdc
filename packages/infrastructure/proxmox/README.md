@@ -13,7 +13,7 @@ HDC automation for Proxmox VE hypervisors: API provisioning (LXC/QEMU), host mai
 | Verb | Purpose |
 |------|---------|
 | `deploy` | Subcommands: create LXC, clone QEMU VM, list templates |
-| `maintain` | Host hygiene: templates, firewall, API token, service accounts, upgrades, scheduled backups, replication, HA, guest startup order, guest-agent report |
+| `maintain` | Host hygiene: templates, firewall, API token, service accounts, upgrades, scheduled backups, replication, HA, guest startup order, guest package tags, guest-agent report |
 | `query` | Cluster/guest snapshot (JSON on stdout) |
 
 ```bash
@@ -198,6 +198,27 @@ Service examples set explicit startup on bind (`order: 1`), nginx-waf (`order: 2
 3. Verify in Proxmox UI: VM/CT → Options → Start/Shutdown order.
 
 Flags: `--skip-startup`, `--dry-run`.
+
+## Guest package tags
+
+`proxmox maintain` ensures each hdc-managed Proxmox guest has a **tag** matching the service package id (`pi-hole`, `bind`, `nginx-waf`, …) when `provision.guest_tags.enabled` is true (default). Existing tags are preserved (additive only).
+
+### Config
+
+```json
+"guest_tags": {
+  "enabled": true,
+  "manage_from_deployments": true
+}
+```
+
+- **Deploy:** service `deploy` passes `packageId` into `createProxmoxHostProvisioner`; post-create helpers apply the tag after LXC/QEMU provision.
+- **Maintain:** scans resolved `packages/services/*/config.json` deployments (hdc-private) and PUTs missing tags.
+- **Per-service maintain:** guest Linux baseline calls the same tag sync when `packageId` is set.
+
+Infrastructure `proxmox deploy` accepts optional `--package <service-id>` for manual creates.
+
+Flags: `--skip-guest-tags`, `--dry-run`.
 
 ## Service accounts (`provision.service_accounts[]`)
 

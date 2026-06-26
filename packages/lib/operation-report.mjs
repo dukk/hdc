@@ -5,6 +5,7 @@ import {
 } from "./guest-baseline-report.mjs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import { maybeNotifyOpsDiscordFromOperationReport } from "../../tools/hdc/lib/ops-discord-notify.mjs";
 import { preferredPackageReportPath } from "../../tools/hdc/lib/private-repo.mjs";
 import {
   accessNodesFromSystem,
@@ -58,10 +59,11 @@ const SECRET_KEY_RE =
 
 /**
  * @param {string[]} argv
- * @returns {{ noReport: boolean; reportPathArg: string | undefined; dryRun: boolean; argvFlags: string[] }}
+ * @returns {{ noReport: boolean; noDiscordNotify: boolean; reportPathArg: string | undefined; dryRun: boolean; argvFlags: string[] }}
  */
 export function parseOperationReportArgv(argv) {
   const noReport = argv.includes("--no-report");
+  const noDiscordNotify = argv.includes("--no-discord-notify");
   const dryRun = argv.includes("--dry-run");
   const reportIdx = argv.indexOf("--report");
   const reportPathArg =
@@ -77,7 +79,7 @@ export function parseOperationReportArgv(argv) {
     }
     argvFlags.push(a);
   }
-  return { noReport, reportPathArg, dryRun, argvFlags };
+  return { noReport, noDiscordNotify, reportPathArg, dryRun, argvFlags };
 }
 
 /**
@@ -97,6 +99,7 @@ export function createOperationReportContext(opts) {
   const flags = {
     dryRun: parsed.dryRun,
     noReport: parsed.noReport,
+    noDiscordNotify: parsed.noDiscordNotify,
     ...(opts.extraFlags ?? {}),
   };
   if (parsed.reportPathArg) flags.reportPath = parsed.reportPathArg;
@@ -729,5 +732,6 @@ export function finalizeOperationReport(opts) {
     repoRoot,
   });
   if (written) log(`report ${written}`);
+  maybeNotifyOpsDiscordFromOperationReport(ctx);
   return written;
 }

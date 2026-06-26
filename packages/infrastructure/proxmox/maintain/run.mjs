@@ -45,6 +45,7 @@
  *   --skip-guest-firewall  Skip Proxmox guest firewall rules on managed vmids
  *   --skip-mail-relay      Skip Postfix satellite (internal mail relay) on hypervisors
  *   --no-report            Do not write markdown report file
+ *   --no-discord-notify    Skip Discord #hdc-ops notification for this run
  *   --report <path>        Override markdown report output path
  *   --skip-templates       Skip Ubuntu LTS template verify/build
  */
@@ -57,6 +58,7 @@ import { createNodeCliDeps } from "../../../../tools/hdc/lib/node-cli-deps.mjs";
 import { CliExit } from "../../../../tools/hdc/lib/cli-exit.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../../../tools/hdc/lib/vault-access.mjs";
+import { maybeNotifyOpsDiscordFromProxmoxMaintain } from "../../../../tools/hdc/lib/ops-discord-notify.mjs";
 import {
   hostOsRebootWaitMsFromConfig,
   runProxmoxHostOsMaintain,
@@ -71,6 +73,7 @@ import { runProxmoxNotificationsMaintain } from "../lib/proxmox-notifications-ma
 import { runProxmoxReplicationMaintain } from "../lib/proxmox-replication-maintain.mjs";
 import { runProxmoxHaMaintain } from "../lib/proxmox-ha-maintain.mjs";
 import { runProxmoxGuestStartupMaintain } from "../lib/proxmox-guest-startup-maintain.mjs";
+import { runProxmoxGuestTagsMaintain } from "../lib/proxmox-guest-tags-maintain.mjs";
 import { runProxmoxLocalLvmMaintain } from "../lib/proxmox-local-lvm-maintain.mjs";
 import { runProxmoxSshKeysMaintain } from "../lib/proxmox-ssh-keys-maintain.mjs";
 import {
@@ -181,6 +184,7 @@ async function main() {
   const skipReplication = argv.includes("--skip-replication");
   const skipHa = argv.includes("--skip-ha");
   const skipStartup = argv.includes("--skip-startup");
+  const skipGuestTags = argv.includes("--skip-guest-tags");
   const skipLocalLvm = argv.includes("--skip-local-lvm");
   const skipApiToken = argv.includes("--skip-api-token");
   const skipServiceAccounts = argv.includes("--skip-service-accounts");
@@ -219,6 +223,8 @@ async function main() {
     !skipBackups ||
     !skipReplication ||
     !skipHa ||
+    !skipStartup ||
+    !skipGuestTags ||
     !skipSshKeys ||
     !skipApiToken ||
     !skipServiceAccounts ||
@@ -729,6 +735,58 @@ async function main() {
       });
     }
 
+    if (!skipGuestTags) {
+      try {
+        const tagsResult = await runProxmoxGuestTagsMaintain({
+          packageRoot,
+          repoRoot: repoRoot(),
+          log,
+          warn,
+          dryRun,
+          vault,
+        });
+        if (!tagsResult.ok) exitCode = 1;
+        /** @type {string[]} */
+        const tagsNotes = [];
+        for (const row of tagsResult.results ?? []) {
+          const systemId = typeof row.systemId === "string" ? row.systemId : "?";
+          const action = typeof row.action === "string" ? row.action : "?";
+          const vmid = row.vmid !== undefined ? String(row.vmid) : "";
+          const packageId = typeof row.packageId === "string" ? row.packageId : "";
+          const status = row.ok === false ? "failed" : action;
+          tagsNotes.push(`${systemId} vmid=${vmid} tag=${packageId} ${status}`);
+        }
+        recordStep(reportCtx, {
+          id: "guest-tags",
+          title: "Guest package tags",
+          ran: true,
+          ok: tagsResult.ok !== false,
+          notes: tagsNotes.length ? tagsNotes : undefined,
+        });
+      } catch (e) {
+        if (e instanceof CliExit) {
+          exitCode = exitCode || e.code;
+        } else {
+          log(`guest tags maintain fatal: ${/** @type {Error} */ (e).stack || e}`);
+          exitCode = 1;
+        }
+        recordStep(reportCtx, {
+          id: "guest-tags",
+          title: "Guest package tags",
+          ran: true,
+          ok: false,
+          notes: [String(/** @type {Error} */ (e).message || e)],
+        });
+      }
+    } else {
+      recordStep(reportCtx, {
+        id: "guest-tags",
+        title: "Guest package tags",
+        ran: false,
+        skipReason: "--skip-guest-tags",
+      });
+    }
+
     if (!skipLocalLvm) {
       try {
         const localLvmResult = await runProxmoxLocalLvmMaintain({
@@ -1155,6 +1213,8 @@ async function main() {
       } catch (e) {
         warn(`Failed to write maintain report: ${/** @type {Error} */ (e).message || e}`);
       }
+    } else {
+      maybeNotifyOpsDiscordFromProxmoxMaintain(reportCtx);
     }
   }
 

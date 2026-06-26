@@ -1,7 +1,7 @@
 ---
 name: hdc-monitor
 description: >-
-  HDC monitoring runbook: uptime-kuma, nagios, proxmox cluster snapshot, digest and
+  HDC monitoring runbook: uptime-kuma, proxmox cluster snapshot, digest and
   task queue updates. Use with hdc-monitor subagent or monitor automations.
 disable-model-invocation: true
 ---
@@ -14,7 +14,6 @@ From hdc repo root:
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma query -- --live
-node tools/hdc/cli.mjs run service nagios query -- --live
 node tools/hdc/cli.mjs run infrastructure proxmox query
 ```
 
@@ -36,14 +35,6 @@ node tools/hdc/cli.mjs run service uptime-kuma query -- --import-from-homepage -
 
 Only run maintain with Manager approval unless reconciling monitors already in config.
 
-## Nagios
-
-Hosts are generated from BIND A records at deploy/maintain time:
-
-```bash
-node tools/hdc/cli.mjs run service nagios maintain --
-```
-
 ## Evidence sources
 
 - Prior digest: `hdc-private/operations/reports/monitor-*.md`
@@ -63,7 +54,6 @@ node tools/hdc/cli.mjs run service nagios maintain --
 
 ## Drift
 - uptime-kuma: …
-- nagios: …
 
 ## Tasks enqueued
 - <task-id>: …

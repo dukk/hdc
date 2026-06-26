@@ -230,6 +230,7 @@ async function deployOne(deployment, dbPassword, flags, log) {
     pveNode: auth.host.pveNode,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
+    packageId: target,
   });
 
   const provisionResult = await cloneQemuGuest({

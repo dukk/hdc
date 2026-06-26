@@ -236,7 +236,8 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         pveNode: auth.host.pveNode,
         authorization: auth.authorization,
         rejectUnauthorized: auth.rejectUnauthorized,
-      });
+        packageId: target,
+  });
       const lxcHostname =
         (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
         hostname ||
@@ -389,7 +390,8 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         pveNode: auth.host.pveNode,
         authorization: auth.authorization,
         rejectUnauthorized: auth.rejectUnauthorized,
-      });
+        packageId: target,
+  });
 
       provisionResult = await cloneQemuGuest({
         log,

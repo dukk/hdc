@@ -1,10 +1,14 @@
 ---
-description: When adding or editing manually deployed HDC docs, wire Nagios monitoring inventory and hdc package ids (automation_targets).
+description: >-
+  ARCHIVED — Nagios is not deployed (2026-06). Reference only if restoring the nagios
+  package. When re-enabled, wire monitoring inventory and hdc package ids.
 globs: inventory/**/*,docs/manually-deployed/**/*
 alwaysApply: false
 ---
 
-# Nagios monitoring for manual inventory
+# Nagios monitoring for manual inventory (archived)
+
+> **Status:** Nagios servers were decommissioned; package scripts remain in `packages/services/nagios/`. Restore from `config.example.json` before following this rule.
 
 - Monitored **hosts** are generated from **BIND forward A records** in `packages/services/bind/config.json` at `nagios deploy` / `maintain` time — you do not need per-host Nagios entries in inventory for DNS-named systems.
 - Nagios runs on LXC guests `nagios-a` / `nagios-b` / `nagios-c` (IPs in **Monitoring** group — `hdc-private/operations/ip-allocations.md`; hosts on `hypervisor-b` / `hypervisor-c` / `hypervisor-d`). Add `"nagios"` to `automation_targets` on those system sidecars (and `"proxmox"` for Proxmox provision).

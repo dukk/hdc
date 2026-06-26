@@ -3,8 +3,8 @@
  * Proxmox deploy — create LXC or clone QEMU guests via API (see `packages/infrastructure/proxmox/config.json` + vault token).
  *
  * Usage (after `hdc run infrastructure proxmox deploy --`):
- *   create-container --host <inventory-id> --vmid <n> --hostname <name> [--memory-mb N] [--cores N] [--reboot] …
- *   create-vm --host <id> --vmid <newid> --template-vmid <src> --name <guest-name> [--memory-mb N] [--cores N] [--reboot] …
+ *   create-container --host <inventory-id> --vmid <n> --hostname <name> [--package <service-id>] [--memory-mb N] [--cores N] [--reboot] …
+ *   create-vm --host <id> --vmid <newid> --template-vmid <src> --name <guest-name> [--package <service-id>] [--memory-mb N] [--cores N] [--reboot] …
  *   list-templates --host <id>   (QEMU templates in the cluster — use vmid for --template-vmid)
  *
  * Defaults for LXC/QEMU sizing may come from `provision.lxc` / `provision.qemu` in config.json.
@@ -155,6 +155,7 @@ async function main() {
     pveNode: auth.host.pveNode,
     authorization: auth.authorization,
     rejectUnauthorized: auth.rejectUnauthorized,
+    packageId: flagGet(flags, "package", "package-id", "package_id") || undefined,
   });
 
   const { cfg: proxmoxCfg, lxc: defLxc, qemu: defQemu } = provisionDefaults();

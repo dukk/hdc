@@ -31,6 +31,7 @@ import { promptExistingGuestAction } from "../../postgresql/lib/prompt-existing.
 import { resolveHomeassistantDeployments } from "../lib/deployments.mjs";
 import { maybeRestartHaosAfterFirstBoot } from "../lib/haos-first-boot.mjs";
 import { provisionHaosQemuVm } from "../lib/proxmox-haos-vm.mjs";
+import { ensureGuestPackageTag } from "../../../infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
 import { waitForHomeAssistantHttp } from "../lib/query-status.mjs";
 import { maybeApplyHaosReverseProxyConfig } from "../lib/reverse-proxy-apply.mjs";
 import { resolveUsbDevicesForDeploy } from "../lib/usb-preflight.mjs";
@@ -176,6 +177,17 @@ async function deployOne(deployment, flags, log) {
     rootfsGb: q.rootfsGb,
     sshUser: pveSsh.user,
     sshHost: pveSsh.host,
+    log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+  });
+
+  await ensureGuestPackageTag({
+    guestType: "qemu",
+    apiBase: auth.host.apiBase,
+    authorization: auth.authorization,
+    rejectUnauthorized: auth.rejectUnauthorized,
+    node,
+    vmid,
+    packageId: target,
     log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
   });
 

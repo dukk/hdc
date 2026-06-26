@@ -192,8 +192,7 @@ async function deployOne(deployment, flags, log, vault) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,
-    });
+      rejectUnauthorized: auth.rejectUnauthorized,    });
 
     provisionResult = await cloneQemuGuest({
       log,
