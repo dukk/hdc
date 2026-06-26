@@ -100,6 +100,7 @@ Additional gethomepage service widgets resolve credentials at maintain time and 
 | `audiobookshelf_widget` | Audiobookshelf | `HDC_HOMEPAGE_AUDIOBOOKSHELF_TOKEN` |
 | `uptime_kuma_widget` | Uptime Kuma | `slug` (status page slug) |
 | `crowdsec_widget` | CrowdSec | `HDC_HOMEPAGE_CROWDSEC_LAPI_PASSWORD`; optional `machine_id` |
+| `unifi_widget` | UniFi | `HDC_UNIFI_NETWORK_API_KEY` (shared with unifi-network); URL/site from unifi-network config |
 
 1. Enable the `*_widget` block in homepage `config.json`.
 2. Add matching `widget:` blocks in `homepage/services.yaml` with `{{HOMEPAGE_VAR_*}}` placeholders.

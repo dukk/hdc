@@ -5,17 +5,27 @@ import {
 
 /** @typedef {{
  *   id: string;
- *   uptime_kuma_id: number | null;
  *   name: string;
  *   type: string;
  *   url: string | null;
  *   hostname: string | null;
  *   group: string | null;
+ *   tags: string[];
  *   interval: number;
  *   ignore_tls: boolean;
  *   managed: boolean;
  *   notes: string | null;
  * }} ConfigMonitor */
+
+/** @typedef {ConfigMonitor & {
+ *   uptime_kuma_id: number;
+ *   parent_uptime_kuma_id?: number | null;
+ * }} LiveMonitor */
+
+/** @typedef {{
+ *   name: string;
+ *   color?: string | null;
+ * }} ConfigTag */
 
 /**
  * @param {unknown} v
@@ -59,6 +69,128 @@ export function shouldIgnoreTlsForUrl(url) {
   } catch {
     return false;
   }
+}
+
+/**
+ * @param {unknown} description
+ */
+export function groupFromDescription(description) {
+  const m = /^Group:\s*(.+)$/.exec(String(description ?? "").trim());
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * @param {Record<string, unknown>[]} rows
+ */
+export function buildMonitorByIdMap(rows) {
+  /** @type {Map<number, Record<string, unknown>>} */
+  const map = new Map();
+  for (const row of rows) {
+    const id = parseUptimeKumaId(row.id);
+    if (id != null) map.set(id, row);
+  }
+  return map;
+}
+
+/**
+ * @param {number} monitorId
+ * @param {Map<number, Record<string, unknown>>} monitorById
+ */
+export function resolveGroupFromParent(monitorId, monitorById) {
+  let current = monitorById.get(monitorId);
+  const visited = new Set();
+  while (current) {
+    const parentId = parseUptimeKumaId(current.parent);
+    if (parentId == null || visited.has(parentId)) break;
+    visited.add(parentId);
+    const parent = monitorById.get(parentId);
+    if (!parent) break;
+    if (parent.type === "group") {
+      return {
+        group: String(parent.name ?? "").trim(),
+        parent_uptime_kuma_id: parentId,
+      };
+    }
+    current = parent;
+  }
+  return { group: null, parent_uptime_kuma_id: null };
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+export function tagNamesFromRow(row) {
+  const tags = Array.isArray(row.tags) ? row.tags : [];
+  return tags
+    .map((t) => {
+      if (typeof t === "string") return t.trim();
+      if (isObject(t) && typeof t.name === "string") return t.name.trim();
+      return "";
+    })
+    .filter(Boolean)
+    .sort();
+}
+
+/**
+ * @param {Record<string, unknown>[]} rows
+ * @param {ConfigTag[]} [existingTags]
+ */
+export function collectTagsCatalogFromRows(rows, existingTags = []) {
+  /** @type {Map<string, ConfigTag>} */
+  const byName = new Map();
+  for (const tag of existingTags) {
+    if (typeof tag.name === "string" && tag.name.trim()) {
+      byName.set(tag.name.trim().toLowerCase(), {
+        name: tag.name.trim(),
+        color: typeof tag.color === "string" ? tag.color : null,
+      });
+    }
+  }
+  for (const row of rows) {
+    const tags = Array.isArray(row.tags) ? row.tags : [];
+    for (const t of tags) {
+      if (!isObject(t) || typeof t.name !== "string" || !t.name.trim()) continue;
+      const name = t.name.trim();
+      const key = name.toLowerCase();
+      if (!byName.has(key)) {
+        byName.set(key, {
+          name,
+          color: typeof t.color === "string" ? t.color : null,
+        });
+      }
+    }
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * @param {string[] | undefined | null} a
+ * @param {string[] | undefined | null} b
+ */
+function tagsEqual(a, b) {
+  const left = [...(a ?? [])].sort();
+  const right = [...(b ?? [])].sort();
+  if (left.length !== right.length) return false;
+  return left.every((v, i) => v === right[i]);
+}
+
+/**
+ * @param {ConfigMonitor} entry
+ * @param {LiveMonitor[]} liveMonitors
+ */
+export function findLiveMonitor(entry, liveMonitors) {
+  const byId = liveMonitors.find((m) => m.id === entry.id);
+  if (byId) return byId;
+  const key = entry.name.trim().toLowerCase();
+  return liveMonitors.find((m) => m.name.trim().toLowerCase() === key) ?? null;
+}
+
+/**
+ * @param {ConfigMonitor} entry
+ * @param {LiveMonitor[]} liveMonitors
+ */
+export function configMonitorMatchesLive(entry, liveMonitors) {
+  return findLiveMonitor(entry, liveMonitors) != null;
 }
 
 /**
@@ -116,18 +248,30 @@ export function resolveUptimeKumaApiUrl(raw, defaults = {}, deployment = {}) {
 export function normalizeUptimeKumaMonitorConfig(raw) {
   const authRaw = isObject(raw?.uptime_kuma_auth) ? raw.uptime_kuma_auth : {};
 
+  /** @type {ConfigTag[]} */
+  const tags = Array.isArray(raw?.tags)
+    ? raw.tags
+        .filter((t) => isObject(t) && typeof t.name === "string" && t.name.trim())
+        .map((t) => ({
+          name: String(t.name).trim(),
+          color: typeof t.color === "string" ? t.color : null,
+        }))
+    : [];
+
   /** @type {ConfigMonitor[]} */
   const monitors = Array.isArray(raw?.monitors)
     ? raw.monitors
         .filter((m) => isObject(m) && typeof m.id === "string" && m.id.trim())
         .map((m) => ({
           id: String(m.id).trim(),
-          uptime_kuma_id: parseUptimeKumaId(m.uptime_kuma_id),
           name: typeof m.name === "string" && m.name.trim() ? m.name.trim() : String(m.id),
           type: String(m.type ?? "http").trim(),
           url: typeof m.url === "string" && m.url.trim() ? m.url.trim() : null,
           hostname: typeof m.hostname === "string" && m.hostname.trim() ? m.hostname.trim() : null,
           group: typeof m.group === "string" && m.group.trim() ? m.group.trim() : null,
+          tags: Array.isArray(m.tags)
+            ? m.tags.filter((t) => typeof t === "string" && t.trim()).map((t) => String(t).trim())
+            : [],
           interval: Number(m.interval ?? 60) || 60,
           ignore_tls: m.ignore_tls === true,
           managed: m.managed === true,
@@ -145,24 +289,23 @@ export function normalizeUptimeKumaMonitorConfig(raw) {
       typeof authRaw.password_vault_key === "string" && authRaw.password_vault_key.trim()
         ? authRaw.password_vault_key.trim()
         : UPTIME_KUMA_PASSWORD_VAULT_KEY,
+    tags,
     monitors,
     monitorsById: new Map(monitors.map((m) => [m.id, m])),
-    monitorsByUptimeKumaId: new Map(
-      monitors.filter((m) => m.uptime_kuma_id != null).map((m) => [/** @type {number} */ (m.uptime_kuma_id), m]),
-    ),
   };
 }
 
 /**
  * @param {ConfigMonitor} cfg
- * @param {ConfigMonitor} live
+ * @param {LiveMonitor} live
  */
 export function monitorHasDrift(cfg, live) {
-  if ((cfg.uptime_kuma_id ?? null) !== (live.uptime_kuma_id ?? null)) return true;
   if (cfg.name !== live.name) return true;
   if (cfg.type !== live.type) return true;
   if ((cfg.url ?? null) !== (live.url ?? null)) return true;
   if ((cfg.hostname ?? null) !== (live.hostname ?? null)) return true;
+  if ((cfg.group ?? null) !== (live.group ?? null)) return true;
+  if (!tagsEqual(cfg.tags, live.tags)) return true;
   if (cfg.interval !== live.interval) return true;
   if (cfg.ignore_tls !== live.ignore_tls) return true;
   return false;
@@ -171,35 +314,105 @@ export function monitorHasDrift(cfg, live) {
 /**
  * @param {Record<string, unknown>} row
  * @param {ConfigMonitor | null} [existing]
+ * @param {Map<number, Record<string, unknown>>} [monitorById]
+ * @param {{ importManagedDefault?: boolean; log?: (line: string) => void }} [opts]
+ * @returns {ConfigMonitor | null}
  */
-export function liveMonitorRowToConfig(row, existing = null) {
+export function liveMonitorRowToConfig(row, existing = null, monitorById = new Map(), opts = {}) {
+  const log = opts.log ?? (() => {});
   const uptime_kuma_id = parseUptimeKumaId(row.id);
   if (uptime_kuma_id == null) return null;
 
   const type = typeof row.type === "string" ? row.type.trim() : "http";
+  if (type === "group") return null;
+  if (!["http", "ping"].includes(type)) {
+    log(`skip import monitor id=${uptime_kuma_id} type=${type} (only http and ping supported)`);
+    return null;
+  }
+
   const name =
     typeof row.name === "string" && row.name.trim() ? row.name.trim() : `monitor-${uptime_kuma_id}`;
 
+  const fromParent = resolveGroupFromParent(uptime_kuma_id, monitorById);
+  const descriptionGroup = groupFromDescription(row.description);
+  const group =
+    existing?.group ?? fromParent.group ?? descriptionGroup ?? null;
+  const rowTags = tagNamesFromRow(row);
+  const tags = existing?.tags?.length ? existing.tags : rowTags;
+
+  const importManagedDefault = opts.importManagedDefault !== false;
+
   return {
     id: existing?.id ?? slugifyMonitorId(name),
-    uptime_kuma_id,
     name,
     type,
     url: typeof row.url === "string" && row.url.trim() ? row.url.trim() : null,
     hostname: typeof row.hostname === "string" && row.hostname.trim() ? row.hostname.trim() : null,
-    group: existing?.group ?? null,
+    group,
+    tags,
     interval: Number(row.interval ?? 60) || 60,
     ignore_tls: row.ignoreTls === true || row.ignore_tls === true,
-    managed: existing?.managed ?? false,
+    managed: existing?.managed ?? (importManagedDefault ? true : false),
     notes: existing?.notes ?? null,
   };
 }
 
 /**
+ * @param {Record<string, unknown>} row
+ * @param {ConfigMonitor | null} [existing]
+ * @param {Map<number, Record<string, unknown>>} [monitorById]
+ * @param {{ log?: (line: string) => void }} [opts]
+ * @returns {LiveMonitor | null}
+ */
+export function liveMonitorRowToLive(row, existing = null, monitorById = new Map(), opts = {}) {
+  const cfg = liveMonitorRowToConfig(row, existing, monitorById, opts);
+  if (!cfg) return null;
+  const uptime_kuma_id = parseUptimeKumaId(row.id);
+  if (uptime_kuma_id == null) return null;
+  const fromParent = resolveGroupFromParent(uptime_kuma_id, monitorById);
+  return {
+    ...cfg,
+    uptime_kuma_id,
+    parent_uptime_kuma_id: fromParent.parent_uptime_kuma_id,
+  };
+}
+
+/**
+ * @param {string} name
+ * @param {boolean} [forEdit]
+ * @param {number | null} [id]
+ */
+export function groupMonitorToSocketPayload(name, forEdit = false, id = null) {
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    type: "group",
+    name,
+    interval: 60,
+    retryInterval: 60,
+    maxretries: 1,
+    resendInterval: 0,
+    upsideDown: false,
+    notificationIDList: {},
+    active: true,
+    description: "",
+    conditions: [],
+    accepted_statuscodes: ["200-299"],
+    kafkaProducerBrokers: [],
+    kafkaProducerSaslOptions: { mechanism: "None" },
+    rabbitmqNodes: [],
+    dns_resolve_type: "A",
+    dns_resolve_server: "1.1.1.1",
+  };
+  if (forEdit && id != null) payload.id = id;
+  return payload;
+}
+
+/**
  * @param {ConfigMonitor} entry
  * @param {boolean} [forEdit]
+ * @param {{ parentId?: number | null; liveId?: number | null }} [opts]
  */
-export function monitorToSocketPayload(entry, forEdit = false) {
+export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
   /** @type {Record<string, unknown>} */
   const payload = {
     type: entry.type,
@@ -211,19 +424,29 @@ export function monitorToSocketPayload(entry, forEdit = false) {
     upsideDown: false,
     notificationIDList: {},
     active: true,
-    description: entry.group ? `Group: ${entry.group}` : entry.notes ?? "",
+    description: entry.notes ?? "",
     httpBodyEncoding: "json",
+    conditions: [],
+    accepted_statuscodes: ["200-299"],
+    kafkaProducerBrokers: [],
+    kafkaProducerSaslOptions: { mechanism: "None" },
+    rabbitmqNodes: [],
+    dns_resolve_type: "A",
+    dns_resolve_server: "1.1.1.1",
   };
 
-  if (forEdit && entry.uptime_kuma_id != null) {
-    payload.id = entry.uptime_kuma_id;
+  if (forEdit && opts.liveId != null) {
+    payload.id = opts.liveId;
+  }
+
+  if (opts.parentId != null) {
+    payload.parent = opts.parentId;
   }
 
   if (entry.type === "http") {
     payload.url = entry.url ?? "";
     payload.method = "GET";
     payload.maxredirects = 10;
-    payload.accepted_statuscodes = ["200-299"];
     payload.ignoreTls = entry.ignore_tls === true;
     payload.expiryNotification = false;
     payload.authMethod = "";

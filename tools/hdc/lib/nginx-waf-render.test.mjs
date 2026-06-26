@@ -8,6 +8,7 @@ import {
   renderModsecurityMainConf,
   renderProxyHeaders,
   renderDefaultCatchAllVhost,
+  renderSiteUploadDirectives,
   renderSiteVhost,
   renderTrustedGeo,
   renderTrustedGeoForPolicy,
@@ -349,5 +350,36 @@ describe("nginx-waf render", () => {
     expect(vhost).toContain("server_name _;");
     expect(vhost).toContain("modsecurity off;");
     expect(vhost).toContain("try_files /index.html =404;");
+  });
+
+  it("renderSiteUploadDirectives emits per-site body size and proxy timeouts", () => {
+    const directives = renderSiteUploadDirectives({
+      client_max_body_size: "3g",
+      proxy_read_timeout: "1800s",
+      proxy_connect_timeout: "60s",
+    });
+    expect(directives).toContain("client_max_body_size 3g;");
+    expect(directives).toContain("proxy_read_timeout 1800s;");
+    expect(directives).toContain("proxy_connect_timeout 60s;");
+    expect(renderSiteUploadDirectives({})).toBe("");
+  });
+
+  it("renderSiteVhost includes upload directives on HTTPS when set on site", () => {
+    const vhost = renderWithCatalog({
+      ...sampleSite,
+      client_max_body_size: "3g",
+      proxy_read_timeout: "1800s",
+    });
+    expect(vhost).toContain("client_max_body_size 3g;");
+    expect(vhost).toContain("proxy_read_timeout 1800s;");
+    const httpsIdx = vhost.indexOf("listen 443 ssl");
+    const bodySizeIdx = vhost.indexOf("client_max_body_size 3g;");
+    expect(bodySizeIdx).toBeGreaterThan(httpsIdx);
+  });
+
+  it("renderSiteVhost omits upload directives when not set on site", () => {
+    const vhost = renderWithCatalog(sampleSite);
+    expect(vhost).not.toContain("client_max_body_size");
+    expect(vhost).not.toMatch(/proxy_read_timeout \d/);
   });
 });

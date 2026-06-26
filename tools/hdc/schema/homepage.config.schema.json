@@ -158,6 +158,21 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "unifi_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "api_key_vault_key": {
+                    "type": "string",
+                    "description": "Vault key for UniFi Integration API key (default HDC_UNIFI_NETWORK_API_KEY)."
+                  },
+                  "site": {
+                    "type": "string",
+                    "description": "Optional site name override; default from unifi-network default_site_id."
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "required": ["allowed_hosts", "config_files"]

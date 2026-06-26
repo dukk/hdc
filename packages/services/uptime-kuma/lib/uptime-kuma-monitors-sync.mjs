@@ -1,13 +1,21 @@
-import { monitorHasDrift, monitorToSocketPayload } from "./uptime-kuma-config.mjs";
+import {
+  findLiveMonitor,
+  groupMonitorToSocketPayload,
+  monitorHasDrift,
+  monitorToSocketPayload,
+  parseUptimeKumaId,
+} from "./uptime-kuma-config.mjs";
 
 /**
  * @typedef {import('./uptime-kuma-config.mjs').ConfigMonitor} ConfigMonitor
+ * @typedef {import('./uptime-kuma-config.mjs').LiveMonitor} LiveMonitor
+ * @typedef {import('./uptime-kuma-config.mjs').ConfigTag} ConfigTag
  */
 
 /**
  * @param {object} opts
  * @param {ConfigMonitor} opts.entry
- * @param {ConfigMonitor | null} opts.live
+ * @param {LiveMonitor | null} opts.live
  */
 export function planMonitorSync(opts) {
   const { entry, live } = opts;
@@ -16,7 +24,7 @@ export function planMonitorSync(opts) {
     return {
       action: /** @type {"skip"} */ ("skip"),
       id: entry.id,
-      uptime_kuma_id: entry.uptime_kuma_id,
+      uptime_kuma_id: live?.uptime_kuma_id ?? null,
       reason: "not managed",
       unchanged: true,
     };
@@ -35,7 +43,7 @@ export function planMonitorSync(opts) {
     return {
       action: /** @type {"type_mismatch"} */ ("type_mismatch"),
       id: entry.id,
-      uptime_kuma_id: entry.uptime_kuma_id,
+      uptime_kuma_id: live.uptime_kuma_id,
       config_type: entry.type,
       live_type: live.type,
       unchanged: false,
@@ -46,7 +54,7 @@ export function planMonitorSync(opts) {
     return {
       action: /** @type {"edit"} */ ("edit"),
       id: entry.id,
-      uptime_kuma_id: entry.uptime_kuma_id ?? live.uptime_kuma_id,
+      uptime_kuma_id: live.uptime_kuma_id,
       unchanged: false,
     };
   }
@@ -54,7 +62,7 @@ export function planMonitorSync(opts) {
   return {
     action: /** @type {"unchanged"} */ ("unchanged"),
     id: entry.id,
-    uptime_kuma_id: entry.uptime_kuma_id ?? live.uptime_kuma_id,
+    uptime_kuma_id: live.uptime_kuma_id,
     unchanged: true,
   };
 }
@@ -63,7 +71,7 @@ export function planMonitorSync(opts) {
  * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
  * @param {ReturnType<typeof planMonitorSync>} plan
  * @param {ConfigMonitor} entry
- * @param {{ dryRun?: boolean; log?: (line: string) => void }} [opts]
+ * @param {{ dryRun?: boolean; log?: (line: string) => void; parentId?: number | null; liveId?: number | null }} [opts]
  */
 export async function applyMonitorSync(client, plan, entry, opts = {}) {
   const dryRun = Boolean(opts.dryRun);
@@ -82,7 +90,12 @@ export async function applyMonitorSync(client, plan, entry, opts = {}) {
 
   if (plan.action === "unchanged") {
     log(`unchanged monitor ${entry.id}`);
-    return { ok: true, action: "unchanged", id: entry.id };
+    return {
+      ok: true,
+      action: "unchanged",
+      id: entry.id,
+      uptime_kuma_id: plan.uptime_kuma_id,
+    };
   }
 
   if (plan.action === "add") {
@@ -91,7 +104,7 @@ export async function applyMonitorSync(client, plan, entry, opts = {}) {
         log(`dry-run: would add monitor ${entry.id} (${entry.name})`);
         return { ok: true, action: "add", id: entry.id, dryRun: true };
       }
-      const payload = monitorToSocketPayload(entry, false);
+      const payload = monitorToSocketPayload(entry, false, { parentId: opts.parentId ?? null });
       const resp = await client.addMonitor(payload);
       const newId = resp.monitorID ?? resp.monitorId ?? null;
       log(`added monitor ${entry.id} (uptime_kuma_id=${newId ?? "unknown"})`);
@@ -109,14 +122,19 @@ export async function applyMonitorSync(client, plan, entry, opts = {}) {
         log(`dry-run: would edit monitor ${entry.id}`);
         return { ok: true, action: "edit", id: entry.id, dryRun: true };
       }
-      const editEntry = {
-        ...entry,
-        uptime_kuma_id: entry.uptime_kuma_id ?? plan.uptime_kuma_id,
-      };
-      const payload = monitorToSocketPayload(editEntry, true);
+      const liveId = opts.liveId ?? plan.uptime_kuma_id;
+      const payload = monitorToSocketPayload(entry, true, {
+        parentId: opts.parentId ?? null,
+        liveId,
+      });
       await client.editMonitor(payload);
       log(`updated monitor ${entry.id}`);
-      return { ok: true, action: "edit", id: entry.id };
+      return {
+        ok: true,
+        action: "edit",
+        id: entry.id,
+        uptime_kuma_id: liveId,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log(`failed edit monitor ${entry.id}: ${msg}`);
@@ -178,13 +196,289 @@ export async function applyMonitorDelete(client, plan, opts = {}) {
  * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
  * @param {ConfigMonitor[]} monitors
  * @param {Awaited<ReturnType<import('./uptime-kuma-collect.mjs').fetchLiveUptimeKumaMonitors>>} live
- * @param {{ dryRun?: boolean; prune?: boolean; monitorFilter?: string | null; log?: (line: string) => void }} opts
+ * @param {{ dryRun?: boolean; log?: (line: string) => void }} opts
+ */
+async function ensureGroupMonitors(client, monitors, live, opts) {
+  const log = opts.log ?? (() => {});
+  const dryRun = Boolean(opts.dryRun);
+
+  const groupNames = [
+    ...new Set(
+      monitors.filter((m) => m.managed && m.group).map((m) => /** @type {string} */ (m.group)),
+    ),
+  ];
+
+  /** @type {Map<string, number>} */
+  const cache = new Map();
+
+  const liveGroupByName = new Map(
+    live.raw.monitorRows
+      .filter((r) => r.type === "group")
+      .map((r) => {
+        const id = parseUptimeKumaId(r.id);
+        return [String(r.name ?? "").trim().toLowerCase(), id];
+      })
+      .filter(([, id]) => id != null),
+  );
+
+  for (const name of groupNames) {
+    const key = name.toLowerCase();
+    let groupId = liveGroupByName.get(key) ?? cache.get(name) ?? null;
+
+    if (groupId == null) {
+      if (dryRun) {
+        log(`dry-run: would create group monitor "${name}"`);
+        cache.set(name, -1);
+        continue;
+      }
+      try {
+        const resp = await client.addMonitor(groupMonitorToSocketPayload(name));
+        groupId = parseUptimeKumaId(resp.monitorID ?? resp.monitorId);
+        if (groupId != null) {
+          log(`created group monitor "${name}" (uptime_kuma_id=${groupId})`);
+          liveGroupByName.set(key, groupId);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log(`failed create group "${name}": ${msg}`);
+      }
+    }
+
+    if (groupId != null && groupId > 0) {
+      cache.set(name, groupId);
+    }
+  }
+
+  return cache;
+}
+
+/**
+ * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
+ * @param {ConfigTag[]} tagCatalog
+ * @param {{ dryRun?: boolean; log?: (line: string) => void }} opts
+ */
+async function ensureTags(client, tagCatalog, opts) {
+  const log = opts.log ?? (() => {});
+  const dryRun = Boolean(opts.dryRun);
+
+  /** @type {Map<string, number>} */
+  const byName = new Map();
+
+  if (!dryRun) {
+    const liveTags = await client.getTags();
+    for (const tag of liveTags) {
+      if (typeof tag.name === "string" && tag.name.trim()) {
+        const id = parseUptimeKumaId(tag.id);
+        if (id != null) byName.set(tag.name.trim().toLowerCase(), id);
+      }
+    }
+  }
+
+  for (const tag of tagCatalog) {
+    const key = tag.name.toLowerCase();
+    if (byName.has(key)) continue;
+    if (dryRun) {
+      log(`dry-run: would create tag "${tag.name}"`);
+      continue;
+    }
+    try {
+      const created = await client.addTag({
+        name: tag.name,
+        color: tag.color ?? "#2563eb",
+      });
+      const id = parseUptimeKumaId(created.id);
+      if (id != null) {
+        byName.set(key, id);
+        log(`created tag "${tag.name}" (id=${id})`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log(`failed create tag "${tag.name}": ${msg}`);
+    }
+  }
+
+  return byName;
+}
+
+/** @param {Map<string, number>} tagIdsByName */
+function buildTagIdToName(tagIdsByName) {
+  /** @type {Map<number, string>} */
+  const map = new Map();
+  for (const [name, id] of tagIdsByName.entries()) {
+    if (id != null && id > 0) map.set(id, name);
+  }
+  return map;
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} row
+ * @param {Map<number, string>} tagIdToName
+ * @returns {{ tagId: number; name: string; value: string }[]}
+ */
+export function tagAssignmentsFromMonitorRow(row, tagIdToName) {
+  if (!row || !Array.isArray(row.tags)) return [];
+  /** @type {{ tagId: number; name: string; value: string }[]} */
+  const assignments = [];
+  for (const t of row.tags) {
+    if (t === null || typeof t !== "object") continue;
+    const tagId = parseUptimeKumaId(/** @type {Record<string, unknown>} */ (t).tag_id ?? /** @type {Record<string, unknown>} */ (t).tagId);
+    if (tagId == null || tagId <= 0) continue;
+    const value =
+      typeof /** @type {Record<string, unknown>} */ (t).value === "string"
+        ? /** @type {Record<string, unknown>} */ (t).value
+        : "";
+    const nameFromRow =
+      typeof /** @type {Record<string, unknown>} */ (t).name === "string"
+        ? String(/** @type {Record<string, unknown>} */ (t).name).trim().toLowerCase()
+        : "";
+    const name = nameFromRow || tagIdToName.get(tagId) || "";
+    if (!name) continue;
+    assignments.push({ tagId, name, value });
+  }
+  return assignments;
+}
+
+/**
+ * Tag names that would remain on a monitor after prune (first assignment per desired name).
+ * @param {Record<string, unknown> | null | undefined} rawRow
+ * @param {Map<number, string>} tagIdToName
+ * @param {string[]} configTagNames
+ */
+export function liveTagNamesAfterPrune(rawRow, tagIdToName, configTagNames) {
+  const desired = new Set(
+    configTagNames
+      .filter((t) => typeof t === "string" && t.trim())
+      .map((t) => String(t).trim().toLowerCase()),
+  );
+  const assignments = tagAssignmentsFromMonitorRow(rawRow, tagIdToName);
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {string[]} */
+  const names = [];
+  for (const assignment of assignments) {
+    if (!desired.has(assignment.name)) continue;
+    if (kept.has(assignment.name)) continue;
+    kept.add(assignment.name);
+    names.push(assignment.name);
+  }
+  return names;
+}
+
+/**
+ * @param {string[] | undefined | null} liveTagNames
+ */
+function liveTagNameSet(liveTagNames) {
+  return new Set(
+    (liveTagNames ?? [])
+      .filter((t) => typeof t === "string" && t.trim())
+      .map((t) => String(t).trim().toLowerCase()),
+  );
+}
+
+/**
+ * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
+ * @param {ConfigMonitor} entry
+ * @param {number | null | undefined} monitorId
+ * @param {Map<string, number>} tagIdsByName
+ * @param {{ dryRun?: boolean; log?: (line: string) => void; liveTagNames?: string[] }} opts
+ */
+export async function applyMonitorTags(client, entry, monitorId, tagIdsByName, opts = {}) {
+  const log = opts.log ?? (() => {});
+  const dryRun = Boolean(opts.dryRun);
+
+  if (!monitorId || monitorId <= 0 || !entry.tags?.length) return;
+
+  const present = liveTagNameSet(opts.liveTagNames);
+
+  for (const tagName of entry.tags) {
+    const key = tagName.toLowerCase();
+    if (present.has(key)) {
+      log(`skip tag "${tagName}" on ${entry.id}: already on monitor`);
+      continue;
+    }
+    const tagId = tagIdsByName.get(key);
+    if (!tagId || tagId <= 0) {
+      log(`skip tag "${tagName}" on ${entry.id}: tag not found in Uptime Kuma`);
+      continue;
+    }
+    if (dryRun) {
+      log(`dry-run: would apply tag "${tagName}" to monitor ${entry.id}`);
+      present.add(key);
+      continue;
+    }
+    try {
+      await client.addMonitorTag(tagId, monitorId, "");
+      present.add(key);
+      log(`applied tag "${tagName}" to monitor ${entry.id}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log(`failed apply tag "${tagName}" to ${entry.id}: ${msg}`);
+    }
+  }
+}
+
+/**
+ * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
+ * @param {ConfigMonitor} entry
+ * @param {number | null | undefined} monitorId
+ * @param {Map<string, number>} tagIdsByName
+ * @param {{ dryRun?: boolean; log?: (line: string) => void; rawRow?: Record<string, unknown> | null }} opts
+ */
+export async function pruneMonitorTags(client, entry, monitorId, tagIdsByName, opts = {}) {
+  const log = opts.log ?? (() => {});
+  const dryRun = Boolean(opts.dryRun);
+
+  if (!monitorId || monitorId <= 0) return;
+
+  const desired = new Set(
+    (entry.tags ?? [])
+      .filter((t) => typeof t === "string" && t.trim())
+      .map((t) => String(t).trim().toLowerCase()),
+  );
+  const tagIdToName = buildTagIdToName(tagIdsByName);
+  const assignments = tagAssignmentsFromMonitorRow(opts.rawRow ?? null, tagIdToName);
+  if (!assignments.length) return;
+
+  /** @type {Set<string>} */
+  const kept = new Set();
+
+  for (const assignment of assignments) {
+    const inConfig = desired.has(assignment.name);
+    const duplicate = kept.has(assignment.name);
+    const remove = !inConfig || duplicate;
+    if (!remove) {
+      kept.add(assignment.name);
+      continue;
+    }
+    const reason = !inConfig ? "not in config" : "duplicate";
+    if (dryRun) {
+      log(
+        `dry-run: would remove tag "${assignment.name}" from monitor ${entry.id} (${reason})`,
+      );
+      continue;
+    }
+    try {
+      await client.deleteMonitorTag(assignment.tagId, monitorId, assignment.value);
+      log(`removed tag "${assignment.name}" from monitor ${entry.id} (${reason})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log(`failed remove tag "${assignment.name}" from ${entry.id}: ${msg}`);
+    }
+  }
+}
+
+/**
+ * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
+ * @param {ConfigMonitor[]} monitors
+ * @param {Awaited<ReturnType<import('./uptime-kuma-collect.mjs').fetchLiveUptimeKumaMonitors>>} live
+ * @param {{ dryRun?: boolean; prune?: boolean; monitorFilter?: string | null; tagCatalog?: ConfigTag[]; log?: (line: string) => void }} opts
  */
 export async function syncUptimeKumaMonitors(client, monitors, live, opts = {}) {
   const log = opts.log ?? (() => {});
   const dryRun = Boolean(opts.dryRun);
   const prune = Boolean(opts.prune);
   const monitorFilter = opts.monitorFilter ?? null;
+  const tagCatalog = opts.tagCatalog ?? [];
 
   let selected = monitors.filter((m) => m.managed);
   if (monitorFilter) {
@@ -194,33 +488,68 @@ export async function syncUptimeKumaMonitors(client, monitors, live, opts = {}) 
     selected = [one];
   }
 
-  const liveByUr = new Map(
-    live.monitors.filter((m) => m.uptime_kuma_id != null).map((m) => [m.uptime_kuma_id, m]),
-  );
-  const liveByName = new Map(live.monitors.map((m) => [m.name.toLowerCase(), m]));
+  const groupIdByName = await ensureGroupMonitors(client, selected, live, { dryRun, log });
+
+  const tagIdsByName = await ensureTags(client, tagCatalog, { dryRun, log });
 
   /** @type {Record<string, unknown>[]} */
   const results = [];
 
   for (const entry of selected) {
-    let liveRow =
-      entry.uptime_kuma_id != null ? liveByUr.get(entry.uptime_kuma_id) ?? null : null;
-    if (!liveRow) {
-      liveRow = liveByName.get(entry.name.toLowerCase()) ?? null;
-    }
+    const liveRow = findLiveMonitor(entry, live.monitors);
+
+    const parentId =
+      entry.group && groupIdByName.has(entry.group)
+        ? groupIdByName.get(entry.group)
+        : null;
+
     const plan = planMonitorSync({ entry, live: liveRow });
     log(`monitor ${entry.id}: plan action=${plan.action}`);
-    const result = await applyMonitorSync(client, plan, entry, { dryRun, log });
+    const result = await applyMonitorSync(client, plan, entry, {
+      dryRun,
+      log,
+      parentId: parentId && parentId > 0 ? parentId : null,
+      liveId: liveRow?.uptime_kuma_id ?? plan.uptime_kuma_id ?? null,
+    });
+
+    const monitorId =
+      parseUptimeKumaId(result.uptime_kuma_id) ??
+      liveRow?.uptime_kuma_id ??
+      null;
+
+    const rawRow =
+      monitorId != null
+        ? live.raw.monitorRows.find((r) => parseUptimeKumaId(r.id) === monitorId) ?? null
+        : null;
+
+    if (result.ok && monitorId) {
+      const tagIdToName = buildTagIdToName(tagIdsByName);
+      if (prune) {
+        await pruneMonitorTags(client, entry, monitorId, tagIdsByName, {
+          dryRun,
+          log,
+          rawRow,
+        });
+      }
+      const liveTagNames = prune
+        ? liveTagNamesAfterPrune(rawRow, tagIdToName, entry.tags ?? [])
+        : (liveRow?.tags ?? []);
+      if (entry.tags?.length) {
+        await applyMonitorTags(client, entry, monitorId, tagIdsByName, {
+          dryRun,
+          log,
+          liveTagNames,
+        });
+      }
+    }
+
     results.push(result);
   }
 
   if (prune) {
     const hasManaged = monitors.some((m) => m.managed);
-    const configUrIds = new Set(
-      monitors.map((m) => m.uptime_kuma_id).filter((id) => id != null),
-    );
     for (const liveRow of live.monitors) {
-      if (liveRow.uptime_kuma_id == null || configUrIds.has(liveRow.uptime_kuma_id)) continue;
+    if (monitors.some((entry) => findLiveMonitor(entry, [liveRow]))) continue;
       const plan = planMonitorDelete({ uptimeKumaId: liveRow.uptime_kuma_id, managed: hasManaged });
       if (plan.action === "skip") continue;
       log(`prune monitor ${liveRow.name} (uptime_kuma_id=${liveRow.uptime_kuma_id})`);

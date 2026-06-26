@@ -1,4 +1,4 @@
-import { env } from "node:process";
+import { env, stderr as errout } from "node:process";
 
 import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 
@@ -10,24 +10,6 @@ export const UPTIME_KUMA_PASSWORD_VAULT_KEY = "HDC_UPTIME_KUMA_PASSWORD";
  */
 export function createUptimeKumaVaultAccess() {
   return createPackageVaultAccess();
-}
-
-/**
- * @param {ReturnType<typeof createPackageVaultAccess>} vault
- * @param {string} vaultKey
- */
-async function resolveFromVault(vault, vaultKey) {
-  await vault.unlock({});
-  try {
-    const secrets = await vault.readSecrets({ createIfMissing: false });
-    const fromVault = secrets?.[vaultKey];
-    if (typeof fromVault === "string" && fromVault.trim()) {
-      return fromVault.trim();
-    }
-  } catch {
-    // Vault missing, locked, or unavailable
-  }
-  return null;
 }
 
 /**
@@ -50,10 +32,15 @@ export async function resolveUptimeKumaPassword(
   vault,
   passwordVaultKey = UPTIME_KUMA_PASSWORD_VAULT_KEY,
 ) {
-  const fromVault = await resolveFromVault(vault, passwordVaultKey);
-  if (fromVault) return fromVault;
+  errout.write(`[hdc] uptime-kuma: reading vault key ${passwordVaultKey} …\n`);
+  await vault.unlock({});
+  const fromVault = await vault.getSecret(passwordVaultKey, { optional: true });
+  if (typeof fromVault === "string" && fromVault.trim()) {
+    return fromVault.trim();
+  }
   throw new Error(
-    `${passwordVaultKey} is not set. Run: node tools/hdc/cli.mjs secrets set ${passwordVaultKey}`,
+    `${passwordVaultKey} is not set. Run: node tools/hdc/cli.mjs secrets set ${passwordVaultKey} ` +
+      `(check active backend with: node tools/hdc/cli.mjs env; verify with: node tools/hdc/cli.mjs secrets get ${passwordVaultKey})`,
   );
 }
 

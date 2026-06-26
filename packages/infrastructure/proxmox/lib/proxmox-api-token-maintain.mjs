@@ -77,11 +77,11 @@ export function pveumCreateOrRegenerateTokenScript(userid, tokenid) {
   const tGrep = shellSingleQuote(tokenid);
   return [
     `if pveum user token list ${u} --output-format json 2>/dev/null | grep -qF ${tGrep}; then`,
-    `pveum user token modify ${u} ${t} --regenerate 1 --privsep 1 --output-format json`,
-    `else`,
-    `pveum user token add ${u} ${t} --privsep 1 --output-format json`,
-    `fi`,
-  ].join("; ");
+    `  pveum user token modify ${u} ${t} --regenerate 1 --privsep 1 --output-format json`,
+    "else",
+    `  pveum user token add ${u} ${t} --privsep 1 --output-format json`,
+    "fi",
+  ].join("\n");
 }
 
 /**

@@ -7,10 +7,13 @@ import {
   normalizeUptimeKumaMonitorConfig,
   resolveUptimeKumaApiUrl,
 } from "./uptime-kuma-config.mjs";
+import { normalizeUptimeKumaStatusPageConfig } from "./uptime-kuma-status-page-config.mjs";
 import { normalizeUptimeKumaConfig as normalizeDeployments } from "./deployments.mjs";
 import { createUptimeKumaClient } from "./uptime-kuma-api.mjs";
 import { fetchLiveUptimeKumaMonitors } from "./uptime-kuma-collect.mjs";
+import { fetchLiveUptimeKumaStatusPages } from "./uptime-kuma-status-page-collect.mjs";
 import { syncUptimeKumaMonitors } from "./uptime-kuma-monitors-sync.mjs";
+import { syncUptimeKumaStatusPages } from "./uptime-kuma-status-pages-sync.mjs";
 import {
   createUptimeKumaVaultAccess,
   resolveUptimeKumaCredentials,
@@ -42,11 +45,12 @@ export function resolvePackageApiUrl(packageRoot, cfgRaw) {
  * @param {string} opts.packageRoot
  * @param {Record<string, unknown>} cfgRaw
  * @param {(line: string) => void} opts.log
+ * @param {ReturnType<typeof createUptimeKumaVaultAccess>} [opts.vaultAccess]
  */
 export async function createUptimeKumaClientFromConfig(opts) {
   const monitorCfg = normalizeUptimeKumaMonitorConfig(opts.cfgRaw);
   const apiUrl = resolvePackageApiUrl(opts.packageRoot, opts.cfgRaw);
-  const vault = createUptimeKumaVaultAccess();
+  const vault = opts.vaultAccess ?? createUptimeKumaVaultAccess();
   const creds = await resolveUptimeKumaCredentials(vault, {
     usernameEnv: monitorCfg.usernameEnv,
     passwordVaultKey: monitorCfg.passwordVaultKey,
@@ -65,39 +69,105 @@ export async function createUptimeKumaClientFromConfig(opts) {
  * @param {Record<string, unknown>} cfgRaw
  * @param {Record<string, string>} flags
  * @param {(line: string) => void} opts.log
+ * @param {ReturnType<typeof createUptimeKumaVaultAccess>} [opts.vaultAccess]
  */
 export async function runUptimeKumaMonitorSync(opts) {
+  const sync = await runUptimeKumaSync(opts);
+  return sync.monitor_sync;
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.packageRoot
+ * @param {Record<string, unknown>} cfgRaw
+ * @param {Record<string, string>} flags
+ * @param {(line: string) => void} opts.log
+ * @param {ReturnType<typeof createUptimeKumaVaultAccess>} [opts.vaultAccess]
+ */
+export async function runUptimeKumaSync(opts) {
   const monitorFilter = flagGet(opts.flags, "monitor");
   const skipMonitors = opts.flags["skip-monitors"] === "1";
+  const skipStatusPages = opts.flags["skip-status-pages"] === "1";
   const dryRun = opts.flags["dry-run"] === "1";
   const prune = opts.flags.prune === "1";
 
-  if (skipMonitors) {
-    opts.log("skip monitors (--skip-monitors)");
-    return { ok: true, skipped: true, results: [] };
-  }
-
   const monitorCfg = normalizeUptimeKumaMonitorConfig(opts.cfgRaw);
-  if (!monitorCfg.monitors.length) {
-    opts.log("no monitors[] in config — skip monitor sync");
-    return { ok: true, skipped: true, results: [] };
+  const statusPageCfg = normalizeUptimeKumaStatusPageConfig(opts.cfgRaw);
+
+  /** @type {Record<string, unknown>} */
+  let monitorSync = { ok: true, skipped: true, results: [] };
+  /** @type {Record<string, unknown>} */
+  let statusPageSync = { ok: true, skipped: true, results: [] };
+
+  const needsClient =
+    (!skipMonitors && monitorCfg.monitors.length > 0) ||
+    (!skipStatusPages && statusPageCfg.status_pages.length > 0);
+
+  if (!needsClient) {
+    if (skipMonitors) opts.log("skip monitors (--skip-monitors)");
+    else if (!monitorCfg.monitors.length) opts.log("no monitors[] in config — skip monitor sync");
+    if (skipStatusPages) opts.log("skip status pages (--skip-status-pages)");
+    else if (!statusPageCfg.status_pages.length) {
+      opts.log("no status_pages[] in config — skip status page sync");
+    }
+    return { ok: true, monitor_sync: monitorSync, status_page_sync: statusPageSync };
   }
 
-  const { client } = await createUptimeKumaClientFromConfig({
+  const { client, apiUrl } = await createUptimeKumaClientFromConfig({
     packageRoot: opts.packageRoot,
     cfgRaw: opts.cfgRaw,
     log: opts.log,
+    vaultAccess: opts.vaultAccess,
   });
 
   try {
-    const live = await fetchLiveUptimeKumaMonitors(client, opts.log);
-    const sync = await syncUptimeKumaMonitors(client, monitorCfg.monitors, live, {
-      dryRun,
-      prune,
-      monitorFilter,
-      log: opts.log,
-    });
-    return sync;
+    await client.login();
+
+    /** @type {Awaited<ReturnType<typeof fetchLiveUptimeKumaMonitors>> | null} */
+    let liveMonitors = null;
+
+    if (!skipMonitors && monitorCfg.monitors.length) {
+      liveMonitors = await fetchLiveUptimeKumaMonitors(client, opts.log, { skipLogin: true });
+      monitorSync = await syncUptimeKumaMonitors(client, monitorCfg.monitors, liveMonitors, {
+        dryRun,
+        prune,
+        monitorFilter,
+        tagCatalog: monitorCfg.tags,
+        log: opts.log,
+      });
+    } else if (skipMonitors) {
+      opts.log("skip monitors (--skip-monitors)");
+    } else {
+      opts.log("no monitors[] in config — skip monitor sync");
+    }
+
+    if (!skipStatusPages && statusPageCfg.status_pages.length) {
+      if (!liveMonitors) {
+        liveMonitors = await fetchLiveUptimeKumaMonitors(client, opts.log, { skipLogin: true });
+      }
+      const livePages = await fetchLiveUptimeKumaStatusPages(
+        client,
+        apiUrl,
+        liveMonitors.monitors,
+        opts.log,
+        { skipLogin: true },
+      );
+      statusPageSync = await syncUptimeKumaStatusPages(
+        client,
+        statusPageCfg.status_pages,
+        livePages,
+        monitorCfg.monitors,
+        liveMonitors.monitors,
+        { dryRun, log: opts.log },
+      );
+    } else if (skipStatusPages) {
+      opts.log("skip status pages (--skip-status-pages)");
+    } else {
+      opts.log("no status_pages[] in config — skip status page sync");
+    }
+
+    const ok = monitorSync.ok !== false && statusPageSync.ok !== false;
+    return { ok, monitor_sync: monitorSync, status_page_sync: statusPageSync };
   } finally {
     await client.disconnect();
   }

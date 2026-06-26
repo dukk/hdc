@@ -18,12 +18,19 @@ import { readCtPrimaryIp, resolvePveSshForHost } from "../lib/uptime-kuma-instal
 import { queryUptimeKumaInCt } from "../lib/uptime-kuma-query.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { normalizeUptimeKumaMonitorConfig } from "../lib/uptime-kuma-config.mjs";
+import { normalizeUptimeKumaStatusPageConfig } from "../lib/uptime-kuma-status-page-config.mjs";
 import { collectUptimeKumaMonitorState, fetchLiveUptimeKumaMonitors } from "../lib/uptime-kuma-collect.mjs";
+import {
+  collectUptimeKumaStatusPageState,
+  fetchLiveUptimeKumaStatusPages,
+} from "../lib/uptime-kuma-status-page-collect.mjs";
 import {
   importHomepageMonitorsToConfig,
   importUptimeKumaMonitorsToConfig,
 } from "../lib/uptime-kuma-import.mjs";
-import { createUptimeKumaClientFromConfig } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
+import {
+  createUptimeKumaClientFromConfig,
+} from "../lib/uptime-kuma-monitor-sync-runner.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
@@ -188,27 +195,39 @@ async function main() {
   }
 
   const monitorCfg = normalizeUptimeKumaMonitorConfig(cfg);
+  const statusPageCfg = normalizeUptimeKumaStatusPageConfig(cfg);
   /** @type {Record<string, unknown> | null} */
   let monitorState = null;
   /** @type {Record<string, unknown> | null} */
+  let statusPageState = null;
+  /** @type {Record<string, unknown> | null} */
   let importResult = null;
 
-  if (doImport || liveFlag || monitorCfg.monitors.length > 0) {
+  if (doImport || liveFlag || monitorCfg.monitors.length > 0 || statusPageCfg.status_pages.length > 0) {
     try {
-      const { client } = await createUptimeKumaClientFromConfig({
+      const { client, apiUrl } = await createUptimeKumaClientFromConfig({
         packageRoot,
         cfgRaw: cfg,
         log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
       });
       try {
+        await client.login();
         const liveMonitors = await fetchLiveUptimeKumaMonitors(client, (line) =>
           errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+          { skipLogin: true },
+        );
+        const liveStatusPages = await fetchLiveUptimeKumaStatusPages(
+          client,
+          apiUrl,
+          liveMonitors.monitors,
+          (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+          { skipLogin: true },
         );
 
         if (doImport) {
           if (!yes) {
             const ok = await confirm(
-              `Replace monitors[] with ${liveMonitors.monitors.length} live monitor(s)? [y/N] `,
+              `Replace monitors[] and status_pages[] with ${liveMonitors.monitors.length} live monitor(s) and ${liveStatusPages.statusPages.length} status page(s)? [y/N] `,
             );
             if (!ok) {
               errout.write("[hdc] uptime-kuma query: aborted (use --yes to skip prompt).\n");
@@ -219,13 +238,16 @@ async function main() {
           importResult = importUptimeKumaMonitorsToConfig({
             packageRoot,
             live: liveMonitors,
+            liveStatusPages,
             log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
           });
           cfg = readCfg(true);
         }
 
         const updatedMonitorCfg = normalizeUptimeKumaMonitorConfig(cfg);
+        const updatedStatusPageCfg = normalizeUptimeKumaStatusPageConfig(cfg);
         monitorState = collectUptimeKumaMonitorState(updatedMonitorCfg, liveMonitors);
+        statusPageState = collectUptimeKumaStatusPageState(updatedStatusPageCfg, liveStatusPages);
 
         if (liveFlag) {
           process.stdout.write(
@@ -236,6 +258,7 @@ async function main() {
                 verb,
                 live: true,
                 live_monitor_count: liveMonitors.monitors.length,
+                live_status_page_count: liveStatusPages.statusPages.length,
                 monitors: liveMonitors.monitors.map((m) => ({
                   id: m.id,
                   uptime_kuma_id: m.uptime_kuma_id,
@@ -244,14 +267,23 @@ async function main() {
                   url: m.url,
                   hostname: m.hostname,
                 })),
+                status_pages: liveStatusPages.statusPages.map((p) => ({
+                  id: p.id,
+                  slug: p.slug,
+                  title: p.title,
+                  group_count: p.groups.length,
+                })),
                 monitor_drift: monitorState,
+                status_page_drift: statusPageState,
                 import: importResult,
               },
               null,
               2,
             )}\n`,
           );
-          process.exitCode = monitorState.has_drift && !doImport ? 1 : 0;
+          const drift =
+            (monitorState.has_drift && !doImport) || (statusPageState.has_drift && !doImport);
+          process.exitCode = drift ? 1 : 0;
           return;
         }
       } finally {
@@ -295,7 +327,8 @@ async function main() {
   }
 
   const guestOk = instances.every((r) => r.ok);
-  const drift = monitorState?.has_drift === true;
+  const drift =
+    monitorState?.has_drift === true || statusPageState?.has_drift === true;
   const ok = guestOk && !drift;
 
   process.stdout.write(
@@ -309,7 +342,10 @@ async function main() {
         instances,
         monitor_count: monitorCfg.monitors.length,
         managed_monitor_count: monitorCfg.monitors.filter((m) => m.managed).length,
+        configured_status_page_count: statusPageCfg.status_pages.length,
+        managed_status_page_count: statusPageCfg.status_pages.filter((p) => p.managed).length,
         monitor_drift: monitorState,
+        status_page_drift: statusPageState,
         import: importResult,
       },
       null,

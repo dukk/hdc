@@ -91,7 +91,10 @@
             },
             "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
             "cloudflare_ipv4": { "type": "boolean" },
-            "client_ip": { "enum": ["remote_addr", "cloudflare"] }
+            "client_ip": { "enum": ["remote_addr", "cloudflare"] },
+            "client_max_body_size": { "type": "string" },
+            "proxy_read_timeout": { "type": "string" },
+            "proxy_connect_timeout": { "type": "string" }
           }
         }
       }
@@ -199,6 +202,9 @@
         },
         "client_ip": { "enum": ["remote_addr", "cloudflare"] },
         "trusted_cidrs": { "type": "array", "items": { "type": "string" } },
+        "client_max_body_size": { "type": "string" },
+        "proxy_read_timeout": { "type": "string" },
+        "proxy_connect_timeout": { "type": "string" },
         "policies": {
           "type": "array",
           "items": { "$ref": "#/$defs/policyRef" }

@@ -38,6 +38,33 @@ describe("twenty render", () => {
     expect(yaml).toContain("server-local-data:");
   });
 
+  it("renderComposeYaml wires env_file on server and worker", () => {
+    const yaml = renderComposeYaml();
+    expect(yaml.match(/env_file:/g)?.length).toBe(2);
+    expect(yaml).toContain("- .env");
+  });
+
+  it("renderTwentyEnv emits SMTP relay vars when mail.enabled", () => {
+    const env = renderTwentyEnv(
+      {
+        ...baseCfg,
+        public_url: "https://twenty.hdc.dukk.org",
+        mail: {
+          enabled: true,
+          to: "ops@hdc.dukk.org",
+          from: "noreply@hdc.dukk.org",
+        },
+      },
+      secrets,
+      "10.0.0.162",
+    );
+    expect(env).toContain("EMAIL_DRIVER=smtp");
+    expect(env).toContain("EMAIL_SMTP_HOST=postfix-relay.hdc.dukk.org");
+    expect(env).toContain("EMAIL_SMTP_PORT=25");
+    expect(env).toContain("EMAIL_FROM_ADDRESS=noreply@hdc.dukk.org");
+    expect(env).toContain("EMAIL_FROM_NAME=Twenty CRM");
+  });
+
   it("generateTwentyDbPassword is hex-only", () => {
     const pw = generateTwentyDbPassword();
     expect(pw).toMatch(/^[0-9a-f]+$/);

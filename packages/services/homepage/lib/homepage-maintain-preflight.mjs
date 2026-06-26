@@ -34,5 +34,6 @@ export function homepageWidgetPackageRoots(root) {
     audiobookshelfPackageRoot: join(root, "packages", "services", "audiobookshelf"),
     uptimeKumaPackageRoot: join(root, "packages", "services", "uptime-kuma"),
     crowdsecPackageRoot: join(root, "packages", "services", "crowdsec"),
+    unifiNetworkPackageRoot: join(root, "packages", "infrastructure", "unifi-network"),
   };
 }

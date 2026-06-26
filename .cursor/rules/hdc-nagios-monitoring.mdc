@@ -7,7 +7,7 @@ alwaysApply: false
 # Nagios monitoring for manual inventory
 
 - Monitored **hosts** are generated from **BIND forward A records** in `packages/services/bind/config.json` at `nagios deploy` / `maintain` time — you do not need per-host Nagios entries in inventory for DNS-named systems.
-- Nagios runs on LXC guests `nagios-a` / `nagios-b` / `nagios-c` (`192.0.2.120`–`122` on `hypervisor-b` / `hypervisor-c` / `hypervisor-d`). Add `"nagios"` to `automation_targets` on those system sidecars (and `"proxmox"` for Proxmox provision).
+- Nagios runs on LXC guests `nagios-a` / `nagios-b` / `nagios-c` (IPs in **Monitoring** group — `hdc-private/operations/ip-allocations.md`; hosts on `hypervisor-b` / `hypervisor-c` / `hypervisor-d`). Add `"nagios"` to `automation_targets` on those system sidecars (and `"proxmox"` for Proxmox provision).
 - For **new forward A records**, update BIND config and run `node tools/hdc/cli.mjs run service nagios maintain --` (or `deploy`) — not hypervisor `nagios.central` / NRPE.
 - Optional: add matching A records in BIND (`nagios-a.hdc.example.invalid`, etc.) for human-friendly DNS; not required for checks.
 - After inventory edits, validate JSON against schemas under `tools/hdc/schema/` (planned `docs lint` is not wired in the CLI yet).

@@ -72,3 +72,15 @@
           version: 6
           key: "{{HOMEPAGE_VAR_PIHOLE_A_KEY}}"
           fields: ["queries", "blocked", "blocked_percent", "gravity"]
+    - UniFi:
+        icon: unifi.png
+        href: https://unifi.hdc.dukk.org
+        description: Gateway · UDM
+        ping: 10.0.0.1
+        showStats: true
+        widget:
+          type: unifi
+          url: "{{HOMEPAGE_VAR_UNIFI_URL}}"
+          key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
+          site: "{{HOMEPAGE_VAR_UNIFI_SITE}}"
+          fields: ["uptime", "wan", "wlan_users", "wlan_devices"]

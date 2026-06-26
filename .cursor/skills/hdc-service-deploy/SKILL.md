@@ -16,7 +16,7 @@ End-to-end workflow for **configure → plan → approve → deploy → validate
 
 ## Hard rules
 
-1. **Never invent** hostnames, IPs, bridges, VLANs, vmids, or credentials — use inventory, hdc-private config, BIND zones, or ask the user.
+1. **Never invent** hostnames, IPs, bridges, VLANs, vmids, or credentials — use `hdc-private/operations/ip-allocations.md`, inventory, hdc-private config, BIND zones, or ask the user.
 2. **Write `plan.md` and wait for explicit approval** before any `deploy` / `maintain` that changes infrastructure or live DNS/proxy config.
 3. **Dependencies are opt-in** — list them in the plan; run only what the user approved ([dependencies.md](dependencies.md)).
 4. **Secrets:** vault key **names** only in plans and chat; use `readLineQuestion(..., { mask: true })` when prompting; never log values.
@@ -57,7 +57,7 @@ Use **AskQuestion** when available; otherwise ask in chat. Batch into **1–2 ro
 | **Service id** | Manifest id (e.g. `searxng`, `vaultwarden`) or new slug |
 | **Deploy backend** | `proxmox-lxc`, `proxmox-qemu`, `proxmox-qemu-haos`, `proxmox-qemu-iso`, `synology-docker`, `configure-only` |
 | **Proxmox node** | `proxmox.host_id` / inventory `hosted_on_system_id` (e.g. `hypervisor-a`) |
-| **Static IP** | CIDR + gateway; check BIND forward zones in hdc-private `packages/services/bind/config.json` for a free name/IP |
+| **Static IP** | CIDR + gateway; read `hdc-private/operations/ip-allocations.md` — pick the matching IP group and **Next free** address; cross-check BIND (`packages/services/bind/config.json`) and inventory |
 | **Instance letter** | `-a`, `-b` — [hdc-inventory-naming](../../../.cursor/rules/hdc-inventory-naming.mdc) |
 | **Public HTTPS?** | LAN-only vs `https://` hostname — drives dependency section |
 
@@ -74,10 +74,11 @@ Use **AskQuestion** when available; otherwise ask in chat. Batch into **1–2 ro
 
 Before writing the plan:
 
-1. Read public `packages/services/<id>/` (manifest, example config, README).
-2. Read hdc-private overrides: `packages/services/<id>/config.json`, `inventory/manual/systems/<system-id>.json`, `inventory/manual/services/<id>.json`.
-3. `node tools/hdc/cli.mjs run service <id> query --` (add `--live` if safe and useful).
-4. Proxmox capacity unknown → **proxmox-resource-planning** or `run infrastructure proxmox query --`.
+1. Read `hdc-private/operations/ip-allocations.md` — classify workload IP group and note **Next free** candidate.
+2. Read public `packages/services/<id>/` (manifest, example config, README).
+3. Read hdc-private overrides: `packages/services/<id>/config.json`, `inventory/manual/systems/<system-id>.json`, `inventory/manual/services/<id>.json`.
+4. `node tools/hdc/cli.mjs run service <id> query --` (add `--live` if safe and useful).
+5. Proxmox capacity unknown → **proxmox-resource-planning** or `run infrastructure proxmox query --`.
 
 Do **not** run `deploy` in this phase.
 
@@ -112,7 +113,7 @@ Do **not** run `deploy` in this phase.
 node tools/hdc/cli.mjs run service <id> deploy -- [--instance a] [package flags]
 ```
 
-**On success:** note IP, ports, and report path on stderr (`packages/services/<id>/reports/deploy-*.md` in hdc-private).
+**On success:** note IP, ports, and report path on stderr (`packages/services/<id>/reports/deploy-*.md` in hdc-private). Update `hdc-private/operations/ip-allocations.md` assignment row for the new static IP.
 
 **On failure:**
 
@@ -137,7 +138,7 @@ node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone <zone>
 node tools/hdc/cli.mjs run service nagios maintain --
 ```
 
-Use upstream from deploy output (e.g. `http://10.0.0.x:5678`). For nginx-waf behind Cloudflare, set `client_ip: cloudflare` on the site when appropriate.
+Use upstream from deploy output (e.g. `http://<ct-ip>:5678`). For nginx-waf behind Cloudflare, set `client_ip: cloudflare` on the site when appropriate.
 
 If the user approved only deploy in section 10, **skip this phase** and remind them what remains.
 

@@ -218,6 +218,8 @@ services:
       - server-local-data:/app/packages/twenty-server/.local-storage
     ports:
       - "\${TWENTY_HOST_PORT}:3000"
+    env_file:
+      - .env
     environment:
       NODE_PORT: 3000
       PG_DATABASE_URL: postgres://\${PG_DATABASE_USER}:\${PG_DATABASE_PASSWORD}@\${PG_DATABASE_HOST}:\${PG_DATABASE_PORT}/\${PG_DATABASE_NAME}
@@ -249,6 +251,8 @@ services:
     volumes:
       - server-local-data:/app/packages/twenty-server/.local-storage
     command: ["yarn", "worker:prod"]
+    env_file:
+      - .env
     environment:
       PG_DATABASE_URL: postgres://\${PG_DATABASE_USER}:\${PG_DATABASE_PASSWORD}@\${PG_DATABASE_HOST}:\${PG_DATABASE_PORT}/\${PG_DATABASE_NAME}
       SERVER_URL: \${SERVER_URL}

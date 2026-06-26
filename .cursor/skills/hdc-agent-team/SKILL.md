@@ -14,6 +14,7 @@ disable-model-invocation: true
 | --- | --- |
 | `operations/task-queue.json` | Canonical work queue |
 | `operations/delegation-policy.md` | Approval rules |
+| `operations/ip-allocations.md` | IP group boundaries and next-free addresses (Servers network — see file) |
 | `operations/reports/` | Monitor, security, research digests |
 | `operations/proposals/security/` | Security architect output |
 | `operations/proposals/network/` | Network architect output |
@@ -61,7 +62,7 @@ Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT` in `.env`
 
 ## Rules
 
-- **Never invent** hostnames, IPs, VLANs, or credentials — use inventory and package configs.
+- **Never invent** hostnames, IPs, VLANs, or credentials — use `operations/ip-allocations.md`, inventory, and package configs.
 - **Secrets:** env var names only; values in vault (`node tools/hdc/cli.mjs secrets set …`).
 - **CLI:** `node tools/hdc/cli.mjs` from hdc repo root (Windows: `hdc.cmd`).
 - **Destructive work** requires task status `approved` per `delegation-policy.md`.

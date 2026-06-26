@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "uptime_kuma_auth": {
     "api_url": "http://10.0.0.105:3001",
     "username_env": "HDC_UPTIME_KUMA_USERNAME",
@@ -12,6 +12,7 @@
       "type": "http",
       "url": "http://10.0.0.4/admin",
       "group": "Infrastructure",
+      "tags": ["critical"],
       "interval": 60,
       "managed": true
     },
@@ -23,6 +24,33 @@
       "group": "Infrastructure",
       "interval": 60,
       "managed": true
+    }
+  ],
+  "tags": [
+    {
+      "name": "critical",
+      "color": "#dc2626"
+    }
+  ],
+  "status_pages": [
+    {
+      "id": "public",
+      "slug": "public",
+      "title": "HDC Public Status",
+      "theme": "auto",
+      "published": true,
+      "show_tags": true,
+      "managed": true,
+      "groups": [
+        {
+          "name": "Infrastructure",
+          "weight": 1,
+          "monitors": [
+            { "id": "pi-hole-a" },
+            { "id": "bind-a" }
+          ]
+        }
+      ]
     }
   ],
   "defaults": {

@@ -21,12 +21,15 @@
 
 | Field | Value |
 |-------|-------|
+| IP group | `{{ip_group}}` (from `hdc-private/operations/ip-allocations.md`) |
 | Static IP (CIDR) | `{{ip_cidr}}` |
 | Gateway | `{{gateway}}` |
 | Bridge | `{{bridge}}` |
 | DNS hostname | `{{hostname}}` |
 | Service port | `{{host_port}}` |
 | BIND A record | {{planned_or_existing}} |
+
+Cross-check chosen IP against BIND and inventory before approval.
 
 ---
 

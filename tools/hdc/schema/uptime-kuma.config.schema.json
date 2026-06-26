@@ -6,7 +6,7 @@
   "additionalProperties": true,
   "required": ["schema_version", "deployments"],
   "properties": {
-    "schema_version": { "type": "integer", "minimum": 2 },
+    "schema_version": { "type": "integer", "minimum": 4 },
     "uptime_kuma_auth": {
       "type": "object",
       "properties": {
@@ -22,16 +22,85 @@
         "required": ["id", "name", "type", "managed"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-          "uptime_kuma_id": { "type": "integer", "minimum": 1 },
           "name": { "type": "string", "minLength": 1 },
           "type": { "enum": ["http", "ping"] },
           "url": { "type": "string" },
           "hostname": { "type": "string" },
           "group": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
           "interval": { "type": "integer", "minimum": 20, "maximum": 86400 },
           "ignore_tls": { "type": "boolean" },
           "managed": { "type": "boolean" },
           "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "color": { "type": "string" }
+        }
+      }
+    },
+    "status_pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "slug", "title", "managed"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": ["string", "null"] },
+          "theme": { "type": "string" },
+          "published": { "type": "boolean" },
+          "show_tags": { "type": "boolean" },
+          "show_powered_by": { "type": "boolean" },
+          "show_certificate_expiry": { "type": "boolean" },
+          "show_only_last_heartbeat": { "type": "boolean" },
+          "auto_refresh_interval": { "type": "integer", "minimum": 5 },
+          "custom_css": { "type": "string" },
+          "footer_text": { "type": ["string", "null"] },
+          "rss_title": { "type": ["string", "null"] },
+          "domain_names": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "icon": { "type": "string" },
+          "analytics_id": { "type": ["string", "null"] },
+          "analytics_script_url": { "type": ["string", "null"] },
+          "analytics_type": { "type": ["string", "null"] },
+          "managed": { "type": "boolean" },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "monitors"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "weight": { "type": "integer", "minimum": 1 },
+                "monitors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                      "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+                      "send_url": { "type": "boolean" },
+                      "url": { "type": ["string", "null"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

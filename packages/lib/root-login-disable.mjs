@@ -20,7 +20,7 @@ export function remoteDisableRootLoginBash(adminUsername) {
     `printf '%s\\n' 'PermitRootLogin no' > ${ROOT_SSH_DROPIN}`,
     "chmod 644 /etc/ssh/sshd_config.d/99-hdc-disable-root.conf",
     "passwd -l root",
-    "if systemctl list-unit-files ssh.service >/dev/null 2>&1; then systemctl reload ssh; elif systemctl list-unit-files sshd.service >/dev/null 2>&1; then systemctl reload sshd; else service ssh reload; fi",
+    "if systemctl is-active --quiet ssh 2>/dev/null; then systemctl reload ssh; elif systemctl is-active --quiet sshd 2>/dev/null; then systemctl reload sshd; fi",
   ].join("; ");
 }
 

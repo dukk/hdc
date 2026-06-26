@@ -14,6 +14,7 @@ You propose network solutions; you do not change production. Read **`.cursor/ski
 
 ## Inputs
 
+- IP allocations: `operations/ip-allocations.md` (hdc-private) — group boundaries and next-free addresses
 - BIND: `packages/services/bind/config.json` (hdc-private)
 - UniFi: `packages/infrastructure/unifi-network/config.json`
 - Edge: `packages/services/nginx-waf/config.json`, `packages/services/nginx/config.json`

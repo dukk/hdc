@@ -4,7 +4,7 @@ import { guestBaselineResultFields, guestBaselineUsersOk } from "../../../lib/gu
  * Maintain Uptime Kuma (upgrade or restart) and reconcile monitors.
  *
  * Usage: hdc run service uptime-kuma maintain -- [--instance a | --system-id uptime-kuma-a]
- *        [--skip-upgrade] [--skip-clamav] [--skip-monitors] [--prune] [--dry-run] [--monitor <id>]
+ *        [--skip-upgrade] [--skip-clamav] [--skip-monitors] [--skip-status-pages] [--prune] [--dry-run] [--monitor <id>]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -22,7 +22,7 @@ import { resolvePveSshForHost } from "../lib/uptime-kuma-install.mjs";
 import { maintainUptimeKumaInCt } from "../lib/uptime-kuma-maintain.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-import { runUptimeKumaMonitorSync } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
+import { runUptimeKumaSync } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -130,30 +130,37 @@ async function main() {
   }
 
   /** @type {Record<string, unknown> | null} */
-  let monitorSync = null;
+  let syncResult = null;
   try {
-    monitorSync = await runUptimeKumaMonitorSync({
+    syncResult = await runUptimeKumaSync({
       packageRoot,
       cfgRaw: cfg,
       flags,
+      vaultAccess,
       log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
     });
   } catch (e) {
     const msg = String(/** @type {Error} */ (e).message || e);
-    errout.write(`[hdc] ${target} ${verb}: monitor sync failed: ${msg}\n`);
-    monitorSync = { ok: false, error: msg, results: [] };
+    errout.write(`[hdc] ${target} ${verb}: sync failed: ${msg}\n`);
+    syncResult = {
+      ok: false,
+      error: msg,
+      monitor_sync: { ok: false, error: msg, results: [] },
+      status_page_sync: { ok: false, error: msg, results: [] },
+    };
   }
 
   const guestOk = instances.every((r) => r.ok);
-  const monitorsOk = monitorSync?.ok !== false;
-  const ok = guestOk && monitorsOk;
+  const syncOk = syncResult?.ok !== false;
+  const ok = guestOk && syncOk;
   const payload = {
     ok,
     target,
     verb,
     count: instances.length,
     instances,
-    monitor_sync: monitorSync,
+    monitor_sync: syncResult?.monitor_sync ?? null,
+    status_page_sync: syncResult?.status_page_sync ?? null,
   };
   runOperationReportTail({
     packageRoot,

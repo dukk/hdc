@@ -8,6 +8,7 @@ import { resolveHomepageImmichWidgetEnv } from "./homepage-immich-widget.mjs";
 import { resolveHomepagePiholeWidgetEnv } from "./homepage-pihole-widget.mjs";
 import { resolveHomepagePlexWidgetEnv } from "./homepage-plex-widget.mjs";
 import { resolveHomepageProxmoxWidgetEnv } from "./homepage-proxmox-widget.mjs";
+import { resolveHomepageUnifiWidgetEnv } from "./homepage-unifi-widget.mjs";
 import { resolveHomepageUptimeKumaWidgetEnv } from "./homepage-uptime-kuma-widget.mjs";
 
 /**
@@ -27,6 +28,7 @@ import { resolveHomepageUptimeKumaWidgetEnv } from "./homepage-uptime-kuma-widge
  * @param {string} opts.audiobookshelfPackageRoot
  * @param {string} opts.uptimeKumaPackageRoot
  * @param {string} opts.crowdsecPackageRoot
+ * @param {string} opts.unifiNetworkPackageRoot
  * @returns {Promise<{ lines: string[]; meta: Record<string, unknown> }>}
  */
 export async function resolveAllHomepageWidgetEnv(opts) {
@@ -45,6 +47,7 @@ export async function resolveAllHomepageWidgetEnv(opts) {
     audiobookshelfPackageRoot,
     uptimeKumaPackageRoot,
     crowdsecPackageRoot,
+    unifiNetworkPackageRoot,
   } = opts;
 
   errout.write("[hdc] homepage: resolving service widget env …\n");
@@ -151,6 +154,21 @@ export async function resolveAllHomepageWidgetEnv(opts) {
       vault_key: crowdsec.vault_key,
       url: crowdsec.url,
       machine_id: crowdsec.machine_id,
+    };
+  }
+
+  const unifi = await resolveHomepageUnifiWidgetEnv({
+    homepage,
+    unifiNetworkPackageRoot,
+    vaultAccess,
+    dryRun,
+  });
+  if (unifi) {
+    lines.push(...unifi.lines);
+    meta.unifi_widget = {
+      vault_key: unifi.vault_key,
+      url: unifi.url,
+      site: unifi.site,
     };
   }
 

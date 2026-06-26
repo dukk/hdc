@@ -68,7 +68,7 @@ export async function runProxmoxMailRelayMaintain(opts) {
   }
 
   const { identities } = discoverLocalSshMaterial();
-  const plog = provisionLogFromConsole({ info: log, warn });
+  const plog = provisionLogFromConsole(console);
 
   /** @type {Record<string, unknown>[]} */
   const hosts = [];

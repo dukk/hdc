@@ -600,6 +600,32 @@ server {
 }
 
 /**
+ * Per-site upload/proxy timeout overrides (server block); omitted when unset.
+ * @param {Record<string, unknown>} site
+ * @returns {string}
+ */
+export function renderSiteUploadDirectives(site) {
+  /** @type {string[]} */
+  const lines = [];
+  const bodySize =
+    typeof site.client_max_body_size === "string" && site.client_max_body_size.trim()
+      ? site.client_max_body_size.trim()
+      : "";
+  const readTimeout =
+    typeof site.proxy_read_timeout === "string" && site.proxy_read_timeout.trim()
+      ? site.proxy_read_timeout.trim()
+      : "";
+  const connectTimeout =
+    typeof site.proxy_connect_timeout === "string" && site.proxy_connect_timeout.trim()
+      ? site.proxy_connect_timeout.trim()
+      : "";
+  if (bodySize) lines.push(`    client_max_body_size ${bodySize};`);
+  if (readTimeout) lines.push(`    proxy_read_timeout ${readTimeout};`);
+  if (connectTimeout) lines.push(`    proxy_connect_timeout ${connectTimeout};`);
+  return lines.length ? `\n${lines.join("\n")}` : "";
+}
+
+/**
  * @param {object} opts
  * @param {Record<string, unknown>} opts.site
  * @param {boolean} opts.modsecurityEnabled
@@ -692,6 +718,8 @@ export function renderSiteVhost(opts) {
   const modsecGloballyOn = modsecurityEnabled && sitePlan.modsecurity?.enabled !== false;
   const http2Enabled = resolveTlsHttp2Enabled(tls, site, sitePlan, modsecurityEnabled);
   const http2ListenSuffix = http2Enabled ? " http2" : "";
+  const uploadDirectives = renderSiteUploadDirectives(site);
+  const httpProxiesOn80 = deferTlsUntilCertExists || !httpRedirect;
 
   const renderLoc = (loc, index) => {
     const { parsed, blockName } = resolveLocUpstream(loc, index);
@@ -764,7 +792,7 @@ export function renderSiteVhost(opts) {
     blocks.push(`server {
     listen 80;
     listen [::]:80;
-    server_name ${names.join(" ")};${serverDirectivesHttp80}
+    server_name ${names.join(" ")};${serverDirectivesHttp80}${httpProxiesOn80 ? uploadDirectives : ""}
 ${acme}${cloudflareRealIp}${httpServe}
 }
 `);
@@ -774,7 +802,7 @@ ${acme}${cloudflareRealIp}${httpServe}
     blocks.push(`server {
     listen 443 ssl${http2ListenSuffix};
     listen [::]:443 ssl${http2ListenSuffix};
-    server_name ${names.join(" ")};${serverDirectives}
+    server_name ${names.join(" ")};${serverDirectives}${uploadDirectives}
     ssl_certificate /etc/letsencrypt/live/${certName}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${certName}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
@@ -785,7 +813,7 @@ ${cloudflareRealIp}${locBlocks.join("\n")}
   } else if (!listen.includes(80)) {
     blocks.push(`server {
     listen ${listen[0]};
-    server_name ${names.join(" ")};${serverDirectives}
+    server_name ${names.join(" ")};${serverDirectives}${uploadDirectives}
 ${locBlocks.join("\n")}
 }
 `);

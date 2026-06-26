@@ -55,12 +55,12 @@ export function homepageServiceToMonitor(service, groupName) {
   if (siteMonitor) {
     return {
       id,
-      uptime_kuma_id: null,
       name: service.name,
       type: "http",
       url: siteMonitor,
       hostname: null,
       group,
+      tags: [],
       interval: 60,
       ignore_tls: shouldIgnoreTlsForUrl(siteMonitor),
       managed: true,
@@ -70,12 +70,12 @@ export function homepageServiceToMonitor(service, groupName) {
 
   return {
     id,
-    uptime_kuma_id: null,
     name: service.name,
     type: "ping",
     url: null,
     hostname: ping,
     group,
+    tags: [],
     interval: 60,
     ignore_tls: false,
     managed: true,
@@ -152,10 +152,6 @@ export function mergeHomepageMonitorsIntoConfig(imported, existingMonitors) {
     if (!existing || !isObject(existing)) return entry;
     return {
       ...entry,
-      uptime_kuma_id:
-        typeof existing.uptime_kuma_id === "number"
-          ? existing.uptime_kuma_id
-          : entry.uptime_kuma_id,
       managed: existing.managed === false ? false : true,
       notes: typeof existing.notes === "string" ? existing.notes : entry.notes,
       interval: Number(existing.interval ?? entry.interval) || entry.interval,

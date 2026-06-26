@@ -217,10 +217,10 @@ Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpasswor
 | --- | --- |
 | `deploy` | Proxmox LXC provision + Uptime Kuma install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
 | `maintain` | Upgrade when `uptime_kuma.release` is behind latest (or pinned tag); reconcile `monitors[]` via Socket.IO (`--skip-monitors`, `--prune`, `--dry-run`, `--monitor <id>`); `--skip-upgrade` for restart/health only |
-| `query` | Guest `systemctl`/HTTP probe; monitor drift vs live (`--live`); `--import-from-homepage --yes` seeds `monitors[]` from homepage `services.yaml`; `--import --yes` pulls live monitor IDs |
+| `query` | Guest `systemctl`/HTTP probe; monitor drift vs live (`--live`); `--import-from-homepage --yes` seeds `monitors[]` from homepage `services.yaml`; `--import --yes` pulls live monitors/tags/status pages into config (name/slug keyed; no UK database IDs) |
 | `teardown` | Destroy LXC (`--dry-run`, `--yes`, `--instance`) |
 
-Complete first-run admin setup in the web UI after deploy. Monitor automation uses `HDC_UPTIME_KUMA_USERNAME` (`.env`) and vault `HDC_UPTIME_KUMA_PASSWORD` (Socket.IO login). Uptime Kuma API keys are read-only (metrics) and cannot create monitors.
+Complete first-run admin setup in the web UI after deploy. Monitor automation uses `HDC_UPTIME_KUMA_USERNAME` (`.env`) and vault `HDC_UPTIME_KUMA_PASSWORD` (Socket.IO login). Uptime Kuma API keys are read-only (metrics) and cannot create monitors. Config schema v4 keys monitors by hdc `id` + `name`, tags by `name`, groups by `group`, and status pages by `slug`; UK database IDs are resolved at sync/query time only.
 
 Example:
 
@@ -543,6 +543,23 @@ Example: `node tools/hdc/cli.mjs run service plex query -- --live`
 Set `gatus.version` (e.g. `v5.36.0`) and `gatus.endpoints[]` in config. Alerting secrets may use `${ENV}` in `config_yaml_extra` (store values in vault; no `env_required` for v1).
 
 Example: `node tools/hdc/cli.mjs run service gatus deploy --`
+
+## Globalping in this repo
+
+- **Config:** [`packages/services/globalping/config.json`](packages/services/globalping/config.json) (copy from [`config.example.json`](packages/services/globalping/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/globalping-a.json`](inventory/manual/systems/globalping-a.json); service sidecar [`inventory/manual/services/globalping.json`](inventory/manual/services/globalping.json).
+- **Schema:** [`tools/hdc/schema/globalping.config.schema.json`](tools/hdc/schema/globalping.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 512 MiB RAM, 8 GiB rootfs) + Docker Globalping probe (`globalping/globalping-probe:latest`, host network; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from vault; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `globalping-probe` container status |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Monitoring IP range: see **Monitoring** group in `hdc-private/operations/ip-allocations.md`. Vault: `HDC_GLOBALPING_ADOPTION_TOKEN` (Globalping dashboard adoption token → `GP_ADOPTION_TOKEN`). No nginx-waf — outbound probe only. Confirm adoption at https://dash.globalping.io/probes after deploy.
+
+Example: `node tools/hdc/cli.mjs run service globalping deploy -- --instance a`
 
 ## CrowdSec in this repo
 
@@ -1467,7 +1484,9 @@ Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordin
 
 Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/SKILL.md), [`hdc-manager`](.cursor/skills/hdc-manager/SKILL.md), [`hdc-monitor`](.cursor/skills/hdc-monitor/SKILL.md), [`hdc-security`](.cursor/skills/hdc-security/SKILL.md).
 
-**Operations state (hdc-private):** `operations/task-queue.json`, `operations/delegation-policy.md`, `operations/reports/`, `operations/proposals/`.
+**Operations state (hdc-private):** `operations/task-queue.json`, `operations/delegation-policy.md`, `operations/ip-allocations.md`, `operations/reports/`, `operations/proposals/`.
+
+**IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
 **Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`).
 

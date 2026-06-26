@@ -63,6 +63,10 @@
         "enabled": true,
         "token_vault_key": "HDC_HOMEPAGE_CROWDSEC_LAPI_PASSWORD",
         "machine_id": "localhost"
+      },
+      "unifi_widget": {
+        "enabled": true,
+        "api_key_vault_key": "HDC_UNIFI_NETWORK_API_KEY"
       }
     },
     "install": {

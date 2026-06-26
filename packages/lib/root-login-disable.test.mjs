@@ -20,6 +20,9 @@ describe("root-login-disable", () => {
     expect(script).toContain("PermitRootLogin no");
     expect(script).toContain(ROOT_SSH_DROPIN);
     expect(script).toContain("passwd -l root");
+    expect(script).toContain("systemctl is-active --quiet ssh");
+    expect(script).toContain("systemctl reload ssh");
+    expect(script).not.toContain("list-unit-files");
   });
 
   it("ensureRootDisabled skips when hdc or admin skipped", () => {
