@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "defaults": {
+    "mode": "proxmox-lxc",
+    "proxmox": {
+      "lxc": {
+        "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+        "storage": "local-lvm",
+        "rootfs_gb": 32,
+        "memory_mb": 8192,
+        "cores": 4,
+        "bridge": "vmbr0",
+        "ip_config": "dhcp",
+        "unprivileged": 0,
+        "features": "nesting=1,keyctl=1",
+        "onboot": 1
+      }
+    },
+    "paperclip": {
+      "image_tag": "v2026.618.0",
+      "postgres_image_tag": "17-alpine",
+      "host_port": 3100,
+      "deployment_mode": "authenticated",
+      "deployment_exposure": "private",
+      "telemetry_disabled": true,
+      "better_auth_secret_vault_key": "HDC_PAPERCLIP_BETTER_AUTH_SECRET",
+      "db_password_vault_key": "HDC_PAPERCLIP_DB_PASSWORD"
+    },
+    "install": {
+      "enabled": true,
+      "compose_dir": "/opt/paperclip"
+    }
+  },
+  "deployments": [
+    {
+      "system_id": "paperclip-a",
+      "proxmox": {
+        "host_id": "hypervisor-a",
+        "lxc": {
+          "vmid": 0,
+          "hostname": "paperclip-a"
+        }
+      }
+    }
+  ]
+}

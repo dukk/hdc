@@ -27,19 +27,17 @@
       "meta_root": "/opt/hdc-runner",
       "node_version": "22",
       "bw_version": "2025.11.0",
-      "env": {
-        "HDC_SECRET_BACKEND": "vaultwarden",
-        "HDC_VAULTWARDEN_URL": "https://vault.example.invalid",
-        "HDC_VAULTWARDEN_EMAIL": "you@example.invalid",
-        "HDC_VAULTWARDEN_ORGANIZATION_ID": "",
-        "HDC_VAULTWARDEN_ORGANIZATION_NAME": "HDC",
-        "HDC_VAULTWARDEN_COLLECTION_ID": ""
-      },
+      "env": {},
       "mail": {
         "enabled": true,
         "to": "ops@example.invalid",
         "from": "noreply@example.invalid",
         "subject_prefix": "[HDC]",
+        "on_failure_only": false
+      },
+      "discord": {
+        "enabled": true,
+        "title_prefix": "[HDC]",
         "on_failure_only": false
       },
       "schedules": [
@@ -48,7 +46,8 @@
           "cron": "0 3 * * *",
           "cli": ["maintain", "daily"],
           "cli_args": ["--skip-clients"],
-          "mail": { "enabled": true, "on_failure_only": false }
+          "mail": { "enabled": true, "on_failure_only": false },
+          "discord": { "enabled": true, "on_failure_only": false }
         },
         {
           "id": "bind-maintain-weekly",

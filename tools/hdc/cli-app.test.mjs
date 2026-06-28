@@ -101,7 +101,7 @@ describe("runCli", () => {
     expect(h).toMatch(/printf.*\|\s*hdc secrets set/);
   });
 
-  it("env command lists HDC_ variables with secrets redacted", async () => {
+  it("env command lists global HDC_ variables with secrets redacted", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     mkdirSync(join(root, "packages"), { recursive: true });
     const capture = { logLines: [], errorLines: [], warnLines: [] };
@@ -109,17 +109,17 @@ describe("runCli", () => {
       root,
       capture,
       envVars: {
+        HDC_TLS_INSECURE: "1",
+        HDC_VAULT_PASSPHRASE: "supersecret",
         HDC_PROXMOX_TLS_INSECURE: "1",
-        HDC_LEAK_TEST_TOKEN: "supersecret",
-        HDC_PLAIN: "visible",
       },
     });
     expect(await runCli(["env"], deps)).toBe(0);
     const out = capture.logLines.join("\n");
     expect(out).toContain(".env");
-    expect(out).toContain("HDC_PROXMOX_TLS_INSECURE=1");
-    expect(out).toContain("HDC_PLAIN=visible");
-    expect(out).toMatch(/HDC_LEAK_TEST_TOKEN=\(set, \d+ chars\)/);
+    expect(out).toContain("HDC_TLS_INSECURE=1");
+    expect(out).not.toContain("HDC_PROXMOX_TLS_INSECURE");
+    expect(out).toMatch(/HDC_VAULT_PASSPHRASE=\(set, \d+ chars\)/);
     expect(out).not.toContain("supersecret");
   });
 

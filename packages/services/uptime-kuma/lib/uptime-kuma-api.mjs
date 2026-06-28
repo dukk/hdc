@@ -393,5 +393,44 @@ export function createUptimeKumaClient(baseUrl, auth) {
         });
       });
     },
+
+    /**
+     * @returns {Promise<Record<string, unknown>[]>}
+     */
+    async getNotificationList() {
+      const resp = await emitWithCallback("getNotificationList");
+      const list = resp.notificationList ?? resp.notifications ?? [];
+      if (Array.isArray(list)) return list;
+      if (list && typeof list === "object") return Object.values(list);
+      return [];
+    },
+
+    /**
+     * @param {Record<string, unknown>} config
+     */
+    async addNotification(config) {
+      return emitWithCallback("addNotification", {
+        notification: JSON.stringify(config),
+        notificationID: null,
+      });
+    },
+
+    /**
+     * @param {Record<string, unknown>} config
+     * @param {number} notificationId
+     */
+    async editNotification(config, notificationId) {
+      return emitWithCallback("addNotification", {
+        notification: JSON.stringify(config),
+        notificationID: notificationId,
+      });
+    },
+
+    /**
+     * @param {number} notificationId
+     */
+    async testNotification(notificationId) {
+      return emitWithCallback("testNotification", notificationId);
+    },
   };
 }

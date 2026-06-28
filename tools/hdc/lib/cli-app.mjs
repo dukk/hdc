@@ -24,6 +24,12 @@ import { CliExit } from "./cli-exit.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
 import { collectHdcEnvRows } from "./hdc-env-report.mjs";
 import {
+  bootstrapGlobalEnv,
+  buildPackageRunEnv,
+  collectGlobalEnvKeys,
+  resolveEnvIncludes,
+} from "./package-env.mjs";
+import {
   clearVaultPassphraseProcessCache,
   createVaultAccess,
   vaultDepsFromCli,
@@ -37,6 +43,7 @@ import {
 } from "./secrets-export.mjs";
 import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultwarden-sync.mjs";
 import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
+import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
 
 /**
@@ -221,15 +228,16 @@ then a verb (${VERBS.join(", ")}). Package scripts live under packages/<tier-dir
     const c = helpExe(deps);
     deps.log(`env — show HDC_* environment variables
 
-Prints every variable in the current process whose name starts with ${JSON.stringify("HDC_")},
-sorted by name. Values that look like secrets (names containing PASSWORD, TOKEN, etc.) are not
-shown in full — only length — so you can safely copy this output into chats or tickets.
+Prints global variables from root .env by default (vault, secret backend, HDC_PRIVATE_ROOT, …).
+Use --package <tier>/<id> or --run <tier> <id> to show the effective merged set for a package run
+(includes env_includes and auto-proxmox when config uses Proxmox modes).
 
-The repo ${JSON.stringify(".env")} file is loaded at CLI startup for most commands, but only for keys
-that are not already defined in the parent environment (see ${c} secrets path and vault docs).
+Values that look like secrets are redacted (length only).
 
 Examples:
   ${c} env
+  ${c} env --run service pi-hole
+  ${c} env --package infrastructure/proxmox
 `);
     return;
   }
@@ -722,7 +730,7 @@ function die(deps, msg, code = 1) {
  */
 function bootstrapEnv(deps) {
   const root = deps.repoRoot();
-  deps.loadDotenv(deps.join(root, ".env"), false);
+  bootstrapGlobalEnv(deps, root);
   return root;
 }
 
@@ -758,6 +766,27 @@ async function cmdSecretsExport(deps, sub, rest) {
         `secrets dump: invalid --key ${JSON.stringify(k)} (letters, digits, underscore)`,
       );
     }
+  }
+
+  if (parsed.mode === "get" && parsed.key) {
+    if (isLocalOnlyVaultKey(parsed.key) && !parsed.includeBootstrap) {
+      die(deps, `secrets get: unknown key(s): ${parsed.key}`);
+    }
+    const value = await access.getSecret(parsed.key, { optional: true });
+    if (!value) {
+      die(deps, `secrets get: unknown key(s): ${parsed.key}`);
+    }
+    try {
+      const { written, destination } = writeSecretExport(deps, { [parsed.key]: value }, parsed);
+      if (parsed.dryRun) {
+        deps.log(`[dry-run] would export ${written} secret(s)`);
+      } else {
+        deps.log(`wrote ${written} secret(s) to ${destination}`);
+      }
+    } catch (e) {
+      die(deps, /** @type {Error} */ (e).message);
+    }
+    return;
   }
 
   const all = await access.readSecrets({ createIfMissing: false });
@@ -949,17 +978,82 @@ async function cmdUsers(deps, argv) {
 }
 
 /**
+ * @param {string[]} argv
+ * @returns {{ packageRun: { tier: string; id: string } | null; rest: string[] }}
+ */
+function parseEnvArgv(argv) {
+  /** @type {{ tier: string; id: string } | null} */
+  let packageRun = null;
+  const rest = [...argv];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "--run" && rest[i + 1] && rest[i + 2]) {
+      packageRun = { tier: rest[i + 1], id: rest[i + 2] };
+      rest.splice(i, 3);
+      i--;
+      continue;
+    }
+    if (a === "--package" && rest[i + 1]) {
+      const spec = rest[i + 1];
+      const slash = spec.indexOf("/");
+      if (slash <= 0) {
+        throw new Error("--package needs <tier>/<id> (e.g. service/pi-hole)");
+      }
+      packageRun = { tier: spec.slice(0, slash), id: spec.slice(slash + 1) };
+      rest.splice(i, 2);
+      i--;
+    }
+  }
+  if (rest.length) {
+    throw new Error(`env: unknown argument(s): ${rest.join(" ")}`);
+  }
+  return { packageRun, rest };
+}
+
+/**
  * @param {CliDeps} deps
  * @param {string} root
+ * @param {string[]} argv
  */
-function cmdEnv(deps, root) {
+function cmdEnv(deps, root, argv = []) {
+  let packageRun = null;
+  try {
+    packageRun = parseEnvArgv(argv).packageRun;
+  } catch (e) {
+    die(deps, /** @type {Error} */ (e).message);
+  }
+
+  if (packageRun) {
+    const manifests = discoverManifests(deps.packagesDir(root));
+    const m = manifestByTierAndId(manifests, packageRun.tier, packageRun.id);
+    if (!m) {
+      die(deps, `env: no package ${packageRun.tier}/${packageRun.id}`);
+    }
+    const includes = resolveEnvIncludes(m, root, deps.env);
+    const pkgRel = deps.relative(root, deps.join(m.dir, ".env")).replace(/\\/g, "/");
+    deps.log(
+      `Effective HDC_* for ${packageRun.tier}/${manifestId(m)} (global + ${includes.length ? `includes: ${includes.join(", ")} + ` : ""}${pkgRel}; redacted).`,
+    );
+    const runEnv = buildPackageRunEnv(deps, root, m);
+    const rows = collectHdcEnvRows(runEnv);
+    if (!rows.length) {
+      deps.log("(none set)");
+      return;
+    }
+    for (const { key, display } of rows) {
+      deps.log(`${key}=${display}`);
+    }
+    return;
+  }
+
   const relDotenv = deps.relative(root, deps.join(root, ".env")).replace(/\\/g, "/");
   const dotenvPath = deps.join(root, ".env");
   const dotenvPresent = deps.existsSync(dotenvPath);
   deps.log(
-    `HDC_* variables in the CLI process environment (.env: ${relDotenv} ${dotenvPresent ? "exists" : "missing"}; load skips keys already set outside .env).`,
+    `Global HDC_* variables (.env: ${relDotenv} ${dotenvPresent ? "exists" : "missing"}; per-package: packages/<tier>/<id>/.env).`,
   );
-  const rows = collectHdcEnvRows(deps.env);
+  const globalKeys = new Set(collectGlobalEnvKeys(deps.env));
+  const rows = collectHdcEnvRows(deps.env).filter((r) => globalKeys.has(r.key));
   if (!rows.length) {
     deps.log("(none set)");
     return;
@@ -1016,8 +1110,9 @@ function cmdRun(deps, root, argv) {
   if ("error" in inv) die(deps, `run: ${inv.error}`);
   const { packageId, platform, verb } = inv;
   if (verb !== "query") {
+    const runEnv = buildPackageRunEnv(deps, root, m);
     for (const key of envRequired(m)) {
-      if (!deps.env[key]) {
+      if (!runEnv[key]) {
         deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
       }
     }
@@ -1028,10 +1123,11 @@ function cmdRun(deps, root, argv) {
   const script = deps.join(cwd, spec.script);
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
   const pipeStdoutJson = verb === "query" || verb === "deploy" || verb === "teardown";
+  const runEnv = buildPackageRunEnv(deps, root, m);
   const r = deps.spawnSync(deps.execPath, [script, ...extra], {
     cwd,
     stdio: pipeStdoutJson ? ["inherit", "pipe", "inherit"] : "inherit",
-    env: deps.env,
+    env: runEnv,
     shell: false,
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
@@ -1072,7 +1168,7 @@ export async function runCli(argv, deps) {
       return 0;
     }
     if (cmd === "env") {
-      cmdEnv(deps, root);
+      cmdEnv(deps, root, rest);
       return 0;
     }
     if (cmd === "run") {

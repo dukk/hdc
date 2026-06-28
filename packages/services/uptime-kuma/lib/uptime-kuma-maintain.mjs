@@ -1,13 +1,13 @@
 import { stderr as errout } from "node:process";
 
-import { pctExec } from "../../../lib/pve-pct-remote.mjs";
+import { pctExec, sshRemote } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import {
   compareVersions,
   normalizeReleaseTag,
   resolveReleaseTarget,
 } from "./uptime-kuma-release.mjs";
-import { CHROMIUM_SYMLINK_SHELL, readInstalledReleaseTag } from "./uptime-kuma-install.mjs";
+import { CHROMIUM_SYMLINK_SHELL, readInstalledReleaseTag, readInstalledReleaseTagOverSsh } from "./uptime-kuma-install.mjs";
 
 /**
  * @param {string} tag
@@ -114,6 +114,80 @@ export async function maintainUptimeKumaInCt(user, pveHost, vmid, uptimeKuma, op
   );
   const inner = buildUpgradeScript(targetTag, tarballUrl);
   const r = pctExec(user, pveHost, vmid, inner);
+  if (r.status !== 0) {
+    return {
+      ok: false,
+      message: `upgrade failed (exit ${r.status})`,
+      upgraded: false,
+      installed: current,
+      target: targetTag,
+    };
+  }
+  return {
+    ok: true,
+    message: "upgraded",
+    upgraded: true,
+    installed: current,
+    target: targetTag,
+  };
+}
+
+/**
+ * @param {string} host
+ * @param {string} user
+ * @param {Record<string, unknown>} uptimeKuma
+ * @param {{ skipUpgrade?: boolean }} [opts]
+ */
+export async function maintainUptimeKumaOverSsh(host, user, uptimeKuma, opts = {}) {
+  errout.write(`[hdc] uptime-kuma maintain: ${user}@${host} …\n`);
+
+  if (opts.skipUpgrade) {
+    const r = sshRemote(user, host, buildHealthCheckScript());
+    if (r.status !== 0) {
+      return { ok: false, message: `health check failed (exit ${r.status})`, upgraded: false };
+    }
+    return { ok: true, message: "restarted", upgraded: false };
+  }
+
+  const installed = readInstalledReleaseTagOverSsh(host, user);
+  const releaseSpec =
+    typeof uptimeKuma.release === "string" && uptimeKuma.release.trim()
+      ? uptimeKuma.release.trim()
+      : "latest";
+
+  let targetTag;
+  let tarballUrl;
+  try {
+    const resolved = await resolveReleaseTarget(releaseSpec);
+    targetTag = normalizeReleaseTag(resolved.tag);
+    tarballUrl = resolved.tarballUrl;
+  } catch (e) {
+    return { ok: false, message: String(/** @type {Error} */ (e).message || e), upgraded: false };
+  }
+
+  const current = installed ? normalizeReleaseTag(installed) : null;
+  if (current && compareVersions(current, targetTag) >= 0) {
+    const r = sshRemote(user, host, buildHealthCheckScript());
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        message: `restart failed (exit ${r.status})`,
+        upgraded: false,
+        installed: current,
+        target: targetTag,
+      };
+    }
+    return {
+      ok: true,
+      message: "up to date",
+      upgraded: false,
+      installed: current,
+      target: targetTag,
+    };
+  }
+
+  const inner = buildUpgradeScript(targetTag, tarballUrl);
+  const r = sshRemote(user, host, inner);
   if (r.status !== 0) {
     return {
       ok: false,

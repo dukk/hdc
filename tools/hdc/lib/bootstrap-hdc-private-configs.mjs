@@ -1,10 +1,60 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 
 import { bootstrapPackageConfigFromExample } from "./package-config.mjs";
 import { hdcPrivateRoot } from "./private-repo.mjs";
-
 const PACKAGE_BASES = ["packages/infrastructure", "packages/services", "packages/clients"];
+
+/**
+ * @param {string} publicRoot
+ * @param {string} destRel repo-relative `.env` path
+ * @param {string} exampleRel repo-relative `.env.example` path
+ * @param {{ env?: NodeJS.ProcessEnv; force?: boolean; dryRun?: boolean; privateRoot?: string | null; log?: (line: string) => void }} [opts]
+ */
+export function bootstrapPackageEnvFromExample(publicRoot, destRel, exampleRel, opts = {}) {
+  const env = opts.env ?? process.env;
+  const force = Boolean(opts.force);
+  const dryRun = Boolean(opts.dryRun);
+  const logFn = opts.log;
+  const rel = destRel.replace(/\\/g, "/");
+  const example = exampleRel.replace(/\\/g, "/");
+
+  /** @type {string} */
+  let destPath;
+  let destExists = false;
+
+  if (opts.privateRoot) {
+    destPath = join(resolve(opts.privateRoot), rel);
+    destExists = existsSync(destPath);
+  } else {
+    const privateRoot = hdcPrivateRoot(publicRoot, env);
+    destPath = privateRoot ? join(privateRoot, rel) : join(publicRoot, rel);
+    destExists = existsSync(destPath);
+  }
+
+  const examplePath = join(publicRoot, example);
+  if (!existsSync(examplePath)) {
+    return { action: "missing_example", rel, exampleRel: example };
+  }
+
+  if (destExists && !force) {
+    if (logFn) logFn(`skip  ${rel}`);
+    return { action: "skipped", rel, path: destPath };
+  }
+
+  if (dryRun) {
+    const action = destExists ? "would_overwrite" : "would_create";
+    if (logFn) logFn(`${destExists ? "would overwrite" : "would create"}  ${rel}`);
+    return { action, rel, path: destPath };
+  }
+
+  mkdirSync(dirname(destPath), { recursive: true });
+  copyFileSync(examplePath, destPath);
+
+  const action = destExists ? "overwritten" : "created";
+  if (logFn) logFn(`${destExists ? "overwrite" : "create"}  ${rel}`);
+  return { action, rel, path: destPath };
+}
 
 /**
  * @param {string} rootDir
@@ -63,6 +113,33 @@ export function resolveBootstrapPrivateRoot(publicRoot, opts = {}) {
 }
 
 /**
+ * @param {{ action: string }} result
+ * @param {string} destRel
+ * @param {{ created: string[]; overwritten: string[]; skipped: string[]; wouldCreate: string[]; wouldOverwrite: string[] }} buckets
+ */
+function recordBootstrapResult(result, destRel, buckets) {
+  switch (result.action) {
+    case "created":
+      buckets.created.push(destRel);
+      break;
+    case "overwritten":
+      buckets.overwritten.push(destRel);
+      break;
+    case "skipped":
+      buckets.skipped.push(destRel);
+      break;
+    case "would_create":
+      buckets.wouldCreate.push(destRel);
+      break;
+    case "would_overwrite":
+      buckets.wouldOverwrite.push(destRel);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
  * @param {string} publicRoot
  * @param {{ dryRun?: boolean; force?: boolean; privateRoot?: string | null; env?: NodeJS.ProcessEnv; log?: (line: string) => void }} [opts]
  */
@@ -92,37 +169,37 @@ export function runBootstrapHdcPrivateConfigs(publicRoot, opts = {}) {
     if (!existsSync(absBase)) continue;
 
     walkFiles(absBase, absBase, (rel) => {
-      if (!rel.endsWith("config.example.json")) return;
+      if (rel.endsWith("config.example.json")) {
+        const destRel = join(base, rel.replace(/config\.example\.json$/, "config.json")).replace(/\\/g, "/");
+        const exampleRel = join(base, rel).replace(/\\/g, "/");
+        recordBootstrapResult(
+          bootstrapPackageConfigFromExample(publicRoot, destRel, exampleRel, {
+            env: opts.env,
+            force,
+            dryRun,
+            privateRoot,
+            log,
+          }),
+          destRel,
+          { created, overwritten, skipped, wouldCreate, wouldOverwrite },
+        );
+        return;
+      }
 
-      const destRel = join(base, rel.replace(/config\.example\.json$/, "config.json")).replace(/\\/g, "/");
-      const exampleRel = join(base, rel).replace(/\\/g, "/");
-
-      const result = bootstrapPackageConfigFromExample(publicRoot, destRel, exampleRel, {
-        env: opts.env,
-        force,
-        dryRun,
-        privateRoot,
-        log,
-      });
-
-      switch (result.action) {
-        case "created":
-          created.push(destRel);
-          break;
-        case "overwritten":
-          overwritten.push(destRel);
-          break;
-        case "skipped":
-          skipped.push(destRel);
-          break;
-        case "would_create":
-          wouldCreate.push(destRel);
-          break;
-        case "would_overwrite":
-          wouldOverwrite.push(destRel);
-          break;
-        default:
-          break;
+      if (rel.endsWith(".env.example")) {
+        const destRel = join(base, rel.replace(/\.env\.example$/, ".env")).replace(/\\/g, "/");
+        const exampleRel = join(base, rel).replace(/\\/g, "/");
+        recordBootstrapResult(
+          bootstrapPackageEnvFromExample(publicRoot, destRel, exampleRel, {
+            env: opts.env,
+            force,
+            dryRun,
+            privateRoot,
+            log,
+          }),
+          destRel,
+          { created, overwritten, skipped, wouldCreate, wouldOverwrite },
+        );
       }
     });
   }

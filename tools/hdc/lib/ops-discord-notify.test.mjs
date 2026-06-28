@@ -18,14 +18,56 @@ vi.mock("node:child_process", () => ({
 import {
   buildOperationReportDiscordSummary,
   buildProxmoxMaintainDiscordSummary,
+  DISCORD_SUPPRESS_NOTIFICATIONS_FLAG,
+  formatDiscordContent,
   maybeNotifyOpsDiscordFromOperationReport,
   maybeNotifyOpsDiscordFromProxmoxMaintain,
+  OPS_DISCORD_HOST_ENV,
   OPS_DISCORD_NOTIFY_ENV,
+  postDiscordWebhook,
   redactIpsFromText,
+  resolveOpsDiscordHost,
   sendOpsDiscordNotifyBestEffort,
 } from "./ops-discord-notify.mjs";
 
 describe("ops-discord-notify", () => {
+  describe("formatDiscordContent", () => {
+    it("includes host in header when provided", () => {
+      const content = formatDiscordContent("Pi-hole maintain — OK", "completed", {
+        host: "hdc-runner-a",
+      });
+      expect(content).toBe("**Pi-hole maintain — OK** · `hdc-runner-a`\n\ncompleted");
+    });
+
+    it("resolveOpsDiscordHost prefers HDC_OPS_DISCORD_HOST", () => {
+      const prev = process.env[OPS_DISCORD_HOST_ENV];
+      process.env[OPS_DISCORD_HOST_ENV] = "custom-host";
+      try {
+        expect(resolveOpsDiscordHost()).toBe("custom-host");
+      } finally {
+        if (prev === undefined) delete process.env[OPS_DISCORD_HOST_ENV];
+        else process.env[OPS_DISCORD_HOST_ENV] = prev;
+      }
+    });
+  });
+
+  describe("postDiscordWebhook", () => {
+    it("sets SUPPRESS_NOTIFICATIONS flag when silent", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await postDiscordWebhook("https://discord.example.invalid/webhook", "hello", {
+          suppressNotifications: true,
+        });
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(body.flags).toBe(DISCORD_SUPPRESS_NOTIFICATIONS_FLAG);
+        expect(body.content).toBe("hello");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
   describe("redactIpsFromText", () => {
     it("removes IPv4 and CIDR while preserving hostnames", () => {
       const input = "pi-hole-a at 10.0.0.5 and hypervisor-a 192.0.2.120/24 ok";
@@ -190,6 +232,17 @@ describe("ops-discord-notify", () => {
   describe("sendOpsDiscordNotifyBestEffort", () => {
     it("returns skipped for empty content", () => {
       expect(sendOpsDiscordNotifyBestEffort({ title: "", message: "" }).skipped).toBe(true);
+    });
+
+    it("forwards --silent to notify script", () => {
+      spawnSyncMock.mockClear();
+      sendOpsDiscordNotifyBestEffort({
+        title: "Job OK",
+        message: "done",
+        silent: true,
+      });
+      const args = spawnSyncMock.mock.calls[0]?.[1];
+      expect(args).toContain("--silent");
     });
   });
 

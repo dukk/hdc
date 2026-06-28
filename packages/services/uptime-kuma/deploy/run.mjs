@@ -26,10 +26,13 @@ import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import {
   installUptimeKumaInCt,
+  installUptimeKumaOverSsh,
   readCtPrimaryIp,
   resolvePveSshForHost,
   verifyUptimeKumaInCt,
+  verifyUptimeKumaOverSsh,
 } from "../lib/uptime-kuma-install.mjs";
+import { provisionOciVmForDeployment, waitForSsh } from "../lib/oci-vm-deploy.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -85,10 +88,67 @@ function existingGuestPolicy(flags) {
  * @param {{ ctPasswordCache?: { value: string | null } }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
-  const { mode, systemId, proxmox: px, uptimeKuma, install } = deployment;
+  const { mode, systemId, proxmox: px, uptimeKuma, install, configure, oci } = deployment;
 
   const inv = deployTargetInventory(root, target, { systemIdOverride: systemId });
   logDeployInventoryStatus(target, verb, inv);
+
+  if (mode === "oci-vm") {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${JSON.stringify(systemId)} mode ${JSON.stringify(mode)} …\n`,
+    );
+    const provisioned = await provisionOciVmForDeployment({ deployment, flags, log });
+    if (!provisioned.ok) {
+      return { ok: false, system_id: systemId, mode, message: provisioned.message };
+    }
+
+    const sshHost = provisioned.ssh_host;
+    const sshUser = provisioned.ssh_user;
+    if (!sshHost) {
+      return {
+        ok: false,
+        system_id: systemId,
+        mode,
+        message: "OCI VM provisioned but no public IP or configure.ssh.host — set SSH host in config",
+      };
+    }
+
+    const sshReady = await waitForSsh(sshHost, sshUser, (line) =>
+      errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    );
+    if (!sshReady) {
+      return { ok: false, system_id: systemId, mode, message: `SSH not ready on ${sshUser}@${sshHost}` };
+    }
+
+    const ukCfg = isObject(uptimeKuma) ? uptimeKuma : {};
+    let installResult;
+    if (shouldInstall(install)) {
+      installResult = await installUptimeKumaOverSsh(sshHost, sshUser, ukCfg);
+    } else {
+      installResult = { ok: true, method: "skipped", message: "skipped" };
+    }
+    if (!installResult.ok) {
+      return { ok: false, system_id: systemId, mode, install: installResult };
+    }
+
+    const configureResult = verifyUptimeKumaOverSsh(sshHost, sshUser);
+    const port =
+      typeof ukCfg.port === "number" && Number.isFinite(ukCfg.port)
+        ? ukCfg.port
+        : Number(ukCfg.port) || 3001;
+    return {
+      ok: configureResult.ok,
+      system_id: systemId,
+      mode,
+      ip: sshHost,
+      public_ip: provisioned.public_ip,
+      url: `http://${sshHost}:${port}`,
+      oci_instance_id: oci?.instance_id ?? null,
+      provision: provisioned.provision,
+      install: installResult,
+      configure: configureResult,
+    };
+  }
 
   if (mode !== "proxmox-lxc") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };
@@ -158,7 +218,8 @@ async function deployOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||

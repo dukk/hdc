@@ -4,6 +4,7 @@ import { isLocalOnlyVaultKey, isAutoSecretBackend, resolveSecretBackendMode } fr
 import {
   bwDeleteItem,
   bwGetPassword,
+  bwItemExistsInOrg,
   bwListItemNames,
   bwSetPassword,
   ensureBwUnlocked,
@@ -343,6 +344,18 @@ export function createVaultAccess(deps) {
       );
       const cur = bwGetPassword(vwCli, session, key);
       if (typeof cur === "string" && cur.length > 0) return cur;
+
+      if (isAutoSecretBackend(deps.env)) {
+        const localVal = await getSecretLocal(key, { ...options, optional: true });
+        if (localVal) {
+          if (bwItemExistsInOrg(vwCli, session, key)) {
+            deps.warn(
+              `Vaultwarden item ${key} exists in the HDC collection but has no password set; using local vault copy.`,
+            );
+          }
+          return localVal;
+        }
+      }
 
       if (optional) return "";
 

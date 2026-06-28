@@ -17,11 +17,15 @@ let processBwOrganizationId = null;
 /** @type {string | null} */
 let processBwCollectionId = null;
 
+/** @type {Array<{ id: string; name: string; organizationId?: string }> | null} */
+let processBwOrgItems = null;
+
 /** @internal Test helper */
 export function clearBwSessionProcessCache() {
   processBwSession = null;
   processBwOrganizationId = null;
   processBwCollectionId = null;
+  processBwOrgItems = null;
 }
 
 /**
@@ -542,23 +546,51 @@ function parseBwItemList(stdout) {
 /**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
+ * @param {string} organizationId
+ * @param {string} collectionId
+ * @returns {Array<{ id: string; name: string; organizationId?: string }>}
+ */
+function bwListOrgItems(deps, session, organizationId, collectionId) {
+  if (processBwOrgItems) return processBwOrgItems;
+  const r = spawnBw(deps, ["list", "items", "--collectionid", collectionId], { capture: true, session });
+  if (!r.ok || !r.stdout) return [];
+  const items = parseBwItemList(r.stdout);
+  processBwOrgItems = items
+    .map((it) => {
+      if (!it || typeof it !== "object" || typeof it.name !== "string" || typeof it.id !== "string") {
+        return null;
+      }
+      if (it.organizationId !== organizationId) return null;
+      return {
+        id: it.id,
+        name: it.name,
+        organizationId: typeof it.organizationId === "string" ? it.organizationId : undefined,
+      };
+    })
+    .filter((it) => it !== null);
+  return processBwOrgItems;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
  * @param {string} itemName
  * @param {string | null} organizationId null = personal vault only
  */
 function bwFindItemId(deps, session, itemName, organizationId) {
+  if (organizationId) {
+    const { collectionId } = resolveBwOrgContext(deps, session);
+    const items = bwListOrgItems(deps, session, organizationId, collectionId);
+    const exact = items.find((it) => it.name === itemName);
+    return exact ? exact.id : null;
+  }
   /** @type {string[]} */
   const args = ["list", "items", "--search", itemName];
-  if (organizationId) {
-    args.push("--organizationid", organizationId);
-  }
   const r = spawnBw(deps, args, { capture: true, session });
   if (!r.ok) return null;
   const items = parseBwItemList(r.stdout);
   const exact = items.find((it) => {
     if (!it || typeof it !== "object" || it.name !== itemName || typeof it.id !== "string") return false;
-    if (organizationId) {
-      return it.organizationId === organizationId;
-    }
     return !it.organizationId;
   });
   return exact && typeof exact.id === "string" ? exact.id : null;
@@ -599,6 +631,22 @@ function bwMoveItemToOrg(deps, session, itemId, organizationId, collectionId) {
 }
 
 /**
+ * Read hdc secret value from a Bitwarden item (login password or secure-note body).
+ * @param {Record<string, unknown>} item
+ * @returns {string | null}
+ */
+function extractSecretFromBwItem(item) {
+  const login = item.login && typeof item.login === "object" ? item.login : null;
+  if (login && typeof login.password === "string" && login.password.length > 0) {
+    return login.password;
+  }
+  if (typeof item.notes === "string" && item.notes.length > 0) {
+    return item.notes;
+  }
+  return null;
+}
+
+/**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
  * @param {string} itemName
@@ -609,12 +657,24 @@ export function bwGetPassword(deps, session, itemName) {
   const itemId = bwFindItemId(deps, session, itemName, organizationId);
   if (!itemId) return null;
   const r = spawnBw(deps, ["get", "password", itemId], { capture: true, session });
+  if (r.ok && r.stdout.length > 0) return r.stdout;
   if (!r.ok) {
     const msg = (r.stderr || r.stdout || "").toLowerCase();
     if (msg.includes("not found") || msg.includes("multiple objects")) return null;
+    if (msg.includes("no password available")) {
+      try {
+        return extractSecretFromBwItem(bwGetItem(deps, session, itemId));
+      } catch {
+        return null;
+      }
+    }
     throw new Error(`bw get password failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
   }
-  return r.stdout.length > 0 ? r.stdout : null;
+  try {
+    return extractSecretFromBwItem(bwGetItem(deps, session, itemId));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -626,6 +686,17 @@ export function bwGetPassword(deps, session, itemName) {
 export function bwItemExistsInOrg(deps, session, itemName) {
   const { organizationId } = resolveBwOrgContext(deps, session);
   return Boolean(bwFindItemId(deps, session, itemName, organizationId));
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemName
+ * @returns {boolean}
+ */
+export function bwItemHasSecret(deps, session, itemName) {
+  const value = bwGetPassword(deps, session, itemName);
+  return typeof value === "string" && value.length > 0;
 }
 
 /**
@@ -680,13 +751,10 @@ export function bwSetPassword(deps, session, itemName, value) {
  * @returns {string[]}
  */
 export function bwListItemNames(deps, session) {
-  const { organizationId } = resolveBwOrgContext(deps, session);
-  const r = spawnBw(deps, ["list", "items", "--organizationid", organizationId], { capture: true, session });
-  if (!r.ok || !r.stdout) return [];
-  const items = parseBwItemList(r.stdout);
-  return items
-    .map((it) => (it && typeof it === "object" && typeof it.name === "string" ? it.name : null))
-    .filter((n) => typeof n === "string" && n.length > 0)
+  const { organizationId, collectionId } = resolveBwOrgContext(deps, session);
+  return bwListOrgItems(deps, session, organizationId, collectionId)
+    .map((it) => it.name)
+    .filter((n) => n.length > 0)
     .sort();
 }
 

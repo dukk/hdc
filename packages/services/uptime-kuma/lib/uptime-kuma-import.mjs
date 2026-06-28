@@ -1,7 +1,7 @@
 import { stderr as errout } from "node:process";
 
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
-import { writeResolvedRepoJson } from "../../../../tools/hdc/lib/private-repo.mjs";
+import { writeUptimeKumaConfig } from "./uptime-kuma-config-write.mjs";
 import {
   importMonitorsFromHomepage,
   mergeHomepageMonitorsIntoConfig,
@@ -164,9 +164,11 @@ export function importUptimeKumaMonitorsToConfig(opts) {
     status_pages,
   };
 
-  writeResolvedRepoJson(resolved, next, { compactArrayKeys: UPTIME_KUMA_COMPACT_ARRAY_KEYS });
+  const { layout } = writeUptimeKumaConfig(resolved, next, {
+    compactArrayKeys: UPTIME_KUMA_COMPACT_ARRAY_KEYS,
+  });
   log(
-    `Wrote ${monitors.length} monitor(s), ${groupsInferred} group(s), ${tags.length} tag(s), ${status_pages.length} status page(s) (${statusPageGroups} page group(s), ${statusPageMonitorLinks} link(s)) to config (${source}: ${resolved.rel}).`,
+    `Wrote ${monitors.length} monitor(s), ${groupsInferred} group(s), ${tags.length} tag(s), ${status_pages.length} status page(s) (${statusPageGroups} page group(s), ${statusPageMonitorLinks} link(s)) to ${layout} config (${source}: ${resolved.rel}).`,
   );
 
   return {
@@ -225,8 +227,10 @@ export function importHomepageMonitorsToConfig(opts) {
     monitors,
   };
 
-  writeResolvedRepoJson(resolved, next, { compactArrayKeys: UPTIME_KUMA_COMPACT_ARRAY_KEYS });
-  log(`Wrote ${monitors.length} monitor(s) from homepage to config (${source}: ${resolved.rel}).`);
+  const { layout } = writeUptimeKumaConfig(resolved, next, {
+    compactArrayKeys: UPTIME_KUMA_COMPACT_ARRAY_KEYS,
+  });
+  log(`Wrote ${monitors.length} monitor(s) from homepage to ${layout} config (${source}: ${resolved.rel}).`);
 
   return {
     monitor_count: monitors.length,

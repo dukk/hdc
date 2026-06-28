@@ -5,6 +5,7 @@
  * Usage: hdc run service uptime-kuma teardown -- [--instance a | --system-id uptime-kuma-a]
  *        hdc run service uptime-kuma teardown -- [--dry-run] [--yes]
  */
+import { spawnSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -15,9 +16,11 @@ import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { stopAndDestroyLxc } from "../../../infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
 import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
+import { resolveOciInstanceForDeployment } from "../lib/oci-vm-deploy.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { confirmTeardown, teardownDryRun } from "../../ollama/lib/teardown-confirm.mjs";
-import { runOperationReportTail } from "../../../lib/operation-report.mjs";import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { runOperationReportTail } from "../../../lib/operation-report.mjs";
+import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -50,9 +53,54 @@ function readCfg() {
  * @param {Record<string, string>} flags
  */
 async function teardownOne(deployment, flags) {
-  const { mode, systemId, proxmox: px } = deployment;
+  const { mode, systemId, proxmox: px, oci } = deployment;
   const proxmoxRoot = join(root, "packages", "infrastructure", "proxmox");
   const dryRun = teardownDryRun(flags);
+
+  if (mode === "oci-vm") {
+    const ociRoot = join(root, "packages", "infrastructure", "oci-compute");
+    const loaded = loadPackageConfigFromPackageRoot(ociRoot, {
+      exampleRel: "packages/infrastructure/oci-compute/config.example.json",
+    });
+    const instance = resolveOciInstanceForDeployment(loaded.data, {
+      system_id: systemId,
+      oci,
+    });
+    const resourceId = instance.id;
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId} OCI resource ${resourceId} …\n`,
+    );
+    if (dryRun) {
+      return {
+        ok: true,
+        system_id: systemId,
+        mode,
+        dry_run: true,
+        resource_id: resourceId,
+        message: "dry-run",
+      };
+    }
+    const args = [
+      join(root, "tools", "hdc", "cli.mjs"),
+      "run",
+      "infrastructure",
+      "oci-compute",
+      "teardown",
+      "--",
+      "--resource",
+      resourceId,
+    ];
+    if (flags.yes === "1") args.push("--yes");
+    const r = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8" });
+    const ok = (r.status ?? 1) === 0;
+    return {
+      ok,
+      system_id: systemId,
+      mode,
+      resource_id: resourceId,
+      message: ok ? "oci instance destroyed" : String(r.stderr || r.stdout || "teardown failed"),
+    };
+  }
 
   if (mode !== "proxmox-lxc") {
     return { ok: false, system_id: systemId, message: `unsupported mode ${mode}` };

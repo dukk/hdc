@@ -13,6 +13,11 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "env_includes": {
+      "type": "array",
+      "description": "Other package ids whose .env layers load before this package on hdc run.",
+      "items": { "type": "string" }
+    },
     "inventory_docs": {
       "type": "array",
       "items": { "type": "string" }

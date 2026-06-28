@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,9 +20,40 @@ describe("bind-tsig", () => {
     const dir = mkdtempSync(join(tmpdir(), "bind-tsig-"));
     const path = join(dir, "config.json");
     const cfg = { schema_version: 2, bind: { primary_ip: "192.0.2.2" }, zones: [], deployments: [] };
-    writeBindTsigSecretToConfig(path, cfg, "abc123==");
+    writeFileSync(path, JSON.stringify(cfg));
+    writeBindTsigSecretToConfig(path, "abc123==");
     const written = JSON.parse(readFileSync(path, "utf8"));
     expect(written.bind.tsig_secret).toBe("abc123==");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writeBindTsigSecretToConfig preserves $hdc.include zones on disk", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bind-tsig-split-"));
+    const zonesDir = join(dir, "zones");
+    mkdirSync(zonesDir, { recursive: true });
+    writeFileSync(
+      join(zonesDir, "example.test.json"),
+      JSON.stringify({
+        id: "example.test",
+        zone_type: "forward",
+        records: [{ type: "A", name: "host", data: "10.0.0.1", ttl: 3600 }],
+      }),
+    );
+    const path = join(dir, "config.json");
+    writeFileSync(
+      path,
+      `${JSON.stringify({
+        schema_version: 2,
+        zones: [{ "$hdc.include": "zones/example.test.json" }],
+        bind: {},
+        deployments: [{ system_id: "vm-bind-a", role: "primary" }],
+      })}\n`,
+    );
+    writeBindTsigSecretToConfig(path, "split-layout-secret==");
+    const written = JSON.parse(readFileSync(path, "utf8"));
+    expect(written.bind.tsig_secret).toBe("split-layout-secret==");
+    expect(written.zones).toEqual([{ "$hdc.include": "zones/example.test.json" }]);
+    expect(written.zones[0].id).toBeUndefined();
     rmSync(dir, { recursive: true, force: true });
   });
 });

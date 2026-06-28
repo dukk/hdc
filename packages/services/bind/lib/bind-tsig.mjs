@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
+import { parseJsonc } from "../../../../tools/hdc/lib/json-config-preprocess.mjs";
+import { formatRepoJson } from "../../../../tools/hdc/lib/private-repo.mjs";
 import { TSIG_KEY_NAME } from "./bind-render.mjs";
 
 /** HMAC-SHA256 TSIG secret length (matches `dnssec-keygen -b 256`). */
@@ -22,16 +24,27 @@ export function generateBindTsigSecret() {
 }
 
 /**
+ * Patch bind.tsig_secret on disk without expanding $hdc.include zones.
  * @param {string} cfgPath
- * @param {Record<string, unknown>} cfg Full package config object.
  * @param {string} secret
+ * @param {Record<string, unknown>} [cfg] Optional expanded config to update in memory.
  */
-export function writeBindTsigSecretToConfig(cfgPath, cfg, secret) {
-  if (!isObject(cfg.bind)) {
-    cfg.bind = {};
+export function writeBindTsigSecretToConfig(cfgPath, secret, cfg) {
+  const onDisk = parseJsonc(readFileSync(cfgPath, "utf8"), cfgPath);
+  if (!isObject(onDisk)) {
+    throw new Error("bind config must be a JSON object");
   }
-  /** @type {Record<string, unknown>} */ (cfg.bind).tsig_secret = secret;
-  writeFileSync(cfgPath, `${JSON.stringify(cfg, null, 2)}\n`, "utf8");
+  if (!isObject(onDisk.bind)) {
+    onDisk.bind = {};
+  }
+  /** @type {Record<string, unknown>} */ (onDisk.bind).tsig_secret = secret;
+  writeFileSync(cfgPath, formatRepoJson(onDisk), "utf8");
+  if (cfg) {
+    if (!isObject(cfg.bind)) {
+      cfg.bind = {};
+    }
+    /** @type {Record<string, unknown>} */ (cfg.bind).tsig_secret = secret;
+  }
 }
 
 /**
@@ -69,7 +82,7 @@ export async function resolveBindTsigSecret(opts) {
 
   if (regenerate) {
     const secret = generateBindTsigSecret();
-    writeBindTsigSecretToConfig(cfgPath, cfg, secret);
+    writeBindTsigSecretToConfig(cfgPath, secret, cfg);
     await ensureVaultTsig(vault, vaultKey, secret);
     log(
       `generated new TSIG secret for key "${TSIG_KEY_NAME}"; saved to config.json (bind.tsig_secret) and vault ${vaultKey}`,
@@ -86,13 +99,13 @@ export async function resolveBindTsigSecret(opts) {
   const data = await vault.readSecrets({});
   const fromVault = data && typeof data[vaultKey] === "string" ? data[vaultKey].trim() : "";
   if (fromVault) {
-    writeBindTsigSecretToConfig(cfgPath, cfg, fromVault);
+    writeBindTsigSecretToConfig(cfgPath, fromVault, cfg);
     log(`TSIG secret loaded from vault ${vaultKey}; copied to config.json (bind.tsig_secret)`);
     return fromVault;
   }
 
   const secret = generateBindTsigSecret();
-  writeBindTsigSecretToConfig(cfgPath, cfg, secret);
+  writeBindTsigSecretToConfig(cfgPath, secret, cfg);
   await ensureVaultTsig(vault, vaultKey, secret);
   log(
     `generated new TSIG secret for key "${TSIG_KEY_NAME}"; saved to config.json (bind.tsig_secret) and vault ${vaultKey}`,

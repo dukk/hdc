@@ -11,6 +11,7 @@ import {
  *   hostname: string | null;
  *   group: string | null;
  *   tags: string[];
+ *   notifications: string[];
  *   interval: number;
  *   ignore_tls: boolean;
  *   managed: boolean;
@@ -200,9 +201,6 @@ export function configMonitorMatchesLive(entry, liveMonitors) {
  */
 export function resolveUptimeKumaApiUrl(raw, defaults = {}, deployment = {}) {
   const auth = isObject(raw?.uptime_kuma_auth) ? raw.uptime_kuma_auth : {};
-  if (typeof auth.api_url === "string" && auth.api_url.trim()) {
-    return auth.api_url.trim().replace(/\/$/, "");
-  }
 
   const defUk = isObject(defaults.uptime_kuma) ? defaults.uptime_kuma : {};
   const depUk = isObject(deployment.uptime_kuma) ? deployment.uptime_kuma : {};
@@ -212,6 +210,24 @@ export function resolveUptimeKumaApiUrl(raw, defaults = {}, deployment = {}) {
       : typeof defUk.port === "number" && Number.isFinite(defUk.port)
         ? defUk.port
         : Number(depUk.port) || Number(defUk.port) || 3001;
+
+  const configure = isObject(deployment.configure) ? deployment.configure : {};
+  const ssh = isObject(configure.ssh) ? configure.ssh : {};
+  const sshHost = typeof ssh.host === "string" ? ssh.host.trim() : "";
+  const apiUrlRaw = typeof auth.api_url === "string" ? auth.api_url.trim() : "";
+  if (apiUrlRaw) {
+    if (
+      sshHost &&
+      (auth.api_via_ssh === true || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(apiUrlRaw))
+    ) {
+      return apiUrlRaw.replace(/\/$/, "");
+    }
+    return apiUrlRaw.replace(/\/$/, "");
+  }
+
+  if (auth.api_via_ssh === true && sshHost) {
+    return `http://127.0.0.1:${port}`;
+  }
 
   const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
   const lxc = isObject(px.lxc) ? px.lxc : {};
@@ -271,6 +287,11 @@ export function normalizeUptimeKumaMonitorConfig(raw) {
           group: typeof m.group === "string" && m.group.trim() ? m.group.trim() : null,
           tags: Array.isArray(m.tags)
             ? m.tags.filter((t) => typeof t === "string" && t.trim()).map((t) => String(t).trim())
+            : [],
+          notifications: Array.isArray(m.notifications)
+            ? m.notifications
+                .filter((t) => typeof t === "string" && t.trim())
+                .map((t) => String(t).trim())
             : [],
           interval: Number(m.interval ?? 60) || 60,
           ignore_tls: m.ignore_tls === true,
@@ -410,7 +431,7 @@ export function groupMonitorToSocketPayload(name, forEdit = false, id = null) {
 /**
  * @param {ConfigMonitor} entry
  * @param {boolean} [forEdit]
- * @param {{ parentId?: number | null; liveId?: number | null }} [opts]
+ * @param {{ parentId?: number | null; liveId?: number | null; notificationIDList?: Record<string, boolean> }} [opts]
  */
 export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
   /** @type {Record<string, unknown>} */
@@ -422,7 +443,7 @@ export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
     maxretries: 1,
     resendInterval: 0,
     upsideDown: false,
-    notificationIDList: {},
+    notificationIDList: opts.notificationIDList ?? {},
     active: true,
     description: entry.notes ?? "",
     httpBodyEncoding: "json",

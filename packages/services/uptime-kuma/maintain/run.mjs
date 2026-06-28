@@ -18,8 +18,8 @@ import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
-import { resolvePveSshForHost } from "../lib/uptime-kuma-install.mjs";
-import { maintainUptimeKumaInCt } from "../lib/uptime-kuma-maintain.mjs";
+import { maintainUptimeKumaInCt, maintainUptimeKumaOverSsh } from "../lib/uptime-kuma-maintain.mjs";
+import { resolvePveSshForHost, resolveSshTargetFromConfigure } from "../lib/uptime-kuma-install.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { runUptimeKumaSync } from "../lib/uptime-kuma-monitor-sync-runner.mjs";
@@ -55,7 +55,20 @@ function readCfg() {
  * @param {Record<string, string>} flags
  */
 async function maintainOne(deployment, flags, vaultAccess) {
-  const { systemId, proxmox: px, uptimeKuma } = deployment;
+  const { systemId, mode, proxmox: px, uptimeKuma, configure } = deployment;
+  const skipUpgrade = flags["skip-upgrade"] !== undefined;
+  const ukCfg = isObject(uptimeKuma) ? uptimeKuma : {};
+
+  if (mode === "oci-vm") {
+    const ssh = resolveSshTargetFromConfigure(configure);
+    if (!ssh) {
+      return { ok: false, system_id: systemId, message: "configure.ssh.host required for oci-vm maintain" };
+    }
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${ssh.user}@${ssh.host} (oci-vm) …\n`);
+    const result = await maintainUptimeKumaOverSsh(ssh.host, ssh.user, ukCfg, { skipUpgrade });
+    return { system_id: systemId, mode, host: ssh.host, ...result, ok: result.ok };
+  }
+
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
   }
@@ -68,8 +81,6 @@ async function maintainOne(deployment, flags, vaultAccess) {
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
-  const skipUpgrade = flags["skip-upgrade"] !== undefined;
-  const ukCfg = isObject(uptimeKuma) ? uptimeKuma : {};
   const result = await maintainUptimeKumaInCt(pveSsh.user, pveSsh.host, vmid, ukCfg, { skipUpgrade });
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {

@@ -14,7 +14,7 @@ import { stdin as input, stderr as errout } from "node:process";
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolveUptimeKumaDeployments } from "../lib/deployments.mjs";
-import { readCtPrimaryIp, resolvePveSshForHost } from "../lib/uptime-kuma-install.mjs";
+import { readCtPrimaryIp, resolvePveSshForHost, resolveSshTargetFromConfigure, verifyUptimeKumaOverSsh } from "../lib/uptime-kuma-install.mjs";
 import { queryUptimeKumaInCt } from "../lib/uptime-kuma-query.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 import { normalizeUptimeKumaMonitorConfig } from "../lib/uptime-kuma-config.mjs";
@@ -105,7 +105,33 @@ async function confirm(question) {
  * @param {ReturnType<typeof resolveUptimeKumaDeployments>[number]} deployment
  */
 async function queryOne(deployment) {
-  const { systemId, proxmox: px, uptimeKuma } = deployment;
+  const { systemId, mode, proxmox: px, uptimeKuma, configure } = deployment;
+  const ukCfg = isObject(uptimeKuma) ? uptimeKuma : {};
+  const port =
+    typeof ukCfg.port === "number" && Number.isFinite(ukCfg.port)
+      ? ukCfg.port
+      : Number(ukCfg.port) || 3001;
+
+  if (mode === "oci-vm") {
+    const ssh = resolveSshTargetFromConfigure(configure);
+    const sidecar = loadManualSystemSidecar(root, systemId);
+    const ip = ssh?.host ?? primaryIpFromSystem(sidecar);
+    if (!ip) {
+      return { ok: false, system_id: systemId, mode, message: "configure.ssh.host or inventory IP required" };
+    }
+    const user = ssh?.user ?? "ubuntu";
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${user}@${ip} (oci-vm) …\n`);
+    const status = verifyUptimeKumaOverSsh(ip, user);
+    return {
+      system_id: systemId,
+      mode,
+      ip,
+      url: `http://${ip}:${port}`,
+      ok: status.ok,
+      status,
+    };
+  }
+
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
   }
@@ -123,12 +149,6 @@ async function queryOne(deployment) {
   if (!ip) {
     ip = readCtPrimaryIp(pveSsh.user, pveSsh.host, vmid);
   }
-
-  const ukCfg = isObject(uptimeKuma) ? uptimeKuma : {};
-  const port =
-    typeof ukCfg.port === "number" && Number.isFinite(ukCfg.port)
-      ? ukCfg.port
-      : Number(ukCfg.port) || 3001;
 
   const status = queryUptimeKumaInCt(pveSsh.user, pveSsh.host, vmid, port);
   return {

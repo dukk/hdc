@@ -13,8 +13,9 @@ Key blocks:
 | `hdc_runner.install_root` | Public hdc tree on guest (default `/opt/hdc`) |
 | `hdc_runner.private_root` | hdc-private mirror (default `/opt/hdc-private`) |
 | `hdc_runner.env` | Non-secret env vars (`HDC_SECRET_BACKEND`, `HDC_VAULTWARDEN_*`, org/collection IDs) |
-| `hdc_runner.schedules[]` | Cron + hdc CLI argv + optional mail overrides |
+| `hdc_runner.schedules[]` | Cron + hdc CLI argv + optional mail/discord overrides |
 | `hdc_runner.mail` | Default email recipient and subject prefix |
+| `hdc_runner.discord` | Discord #hdc-ops notifications (webhook from vault `HDC_OPS_DISCORD_WEBHOOK_URL`) |
 | `configure.ssh.host` | Guest IP for operator rsync (set after first deploy) |
 
 ## Deploy
@@ -58,6 +59,12 @@ sudo -u hdc node /opt/hdc-runner/bin/run-scheduled-job.mjs daily-maintain
 ## Email
 
 When mail is enabled, the job wrapper sends the operation report markdown as **multipart HTML** via local `sendmail` → postfix-relay. Requires guest baseline mail relay (applied automatically).
+
+## Discord
+
+When `discord.enabled` is true, the job wrapper posts a summary to the ops Discord channel via `tools/hdc/lib/notify-discord.mjs`. The webhook URL is read from Vaultwarden (`HDC_OPS_DISCORD_WEBHOOK_URL` in the HDC org collection — never put the URL in config). Per-schedule `discord` overrides mirror `mail` (`on_failure_only`, `title_prefix`) but can differ — for example Discord on every completion while email stays failure-only.
+
+Every ops Discord message includes the hostname of the machine running hdc (override with `HDC_OPS_DISCORD_HOST` in guest `.env`). Successful scheduled jobs post **silently** (Discord `SUPPRESS_NOTIFICATIONS` — visible in channel, no ping); failures ping normally.
 
 ## Query
 

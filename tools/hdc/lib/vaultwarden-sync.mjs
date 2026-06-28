@@ -1,6 +1,7 @@
 import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import {
   bwItemExistsInOrg,
+  bwItemHasSecret,
   bwSetPassword,
   ensureBwUnlocked,
   resolveBwOrgContext,
@@ -80,7 +81,8 @@ export async function pushLocalSecretsToVaultwarden(access, vwCli, options = {})
     if (typeof value !== "string" || value.length === 0) continue;
 
     const exists = bwItemExistsInOrg(vwCli, session, key);
-    if (skipExisting && !force && exists) {
+    const hasSecret = exists && bwItemHasSecret(vwCli, session, key);
+    if (skipExisting && !force && hasSecret) {
       result.skipped += 1;
       result.skippedKeys.push(key);
       vwCli.log(`[hdc] vaultwarden: skip ${key} (already in organization)`);

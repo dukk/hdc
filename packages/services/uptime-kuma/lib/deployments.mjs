@@ -103,7 +103,13 @@ function validateDeployments(deployments) {
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
-    if (mode === "proxmox-lxc" || mode === "" || !mode) {
+    if (mode === "oci-vm") {
+      const oci = isObject(d.oci) ? d.oci : {};
+      const instanceId = typeof oci.instance_id === "string" ? oci.instance_id.trim() : "";
+      if (!instanceId) {
+        throw new Error(`${sid}: oci.instance_id required for oci-vm`);
+      }
+    } else if (mode === "proxmox-lxc" || mode === "" || !mode) {
       const px = isObject(d.proxmox) ? d.proxmox : {};
       const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
       if (!hostId) {
@@ -114,8 +120,65 @@ function validateDeployments(deployments) {
       if (!Number.isFinite(vmid) || vmid <= 0) {
         throw new Error(`${sid}: proxmox.lxc.vmid must be a positive number`);
       }
+    } else {
+      throw new Error(`${sid}: unsupported mode ${JSON.stringify(mode)}`);
     }
   }
+}
+
+/**
+ * Per-deployment config slice for monitor/status-page/notification sync.
+ * Deployment-owned arrays replace root arrays when present on the deployment entry.
+ *
+ * @param {Record<string, unknown>} cfg
+ * @param {Record<string, unknown>} deployment
+ */
+export function resolveDeploymentConfigSlice(cfg, deployment) {
+  const defaults = isObject(cfg.defaults) ? cfg.defaults : {};
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(deployment, key);
+
+  /** @type {Record<string, unknown>} */
+  const auth = {};
+  if (isObject(cfg.uptime_kuma_auth)) deepMerge(auth, structuredClone(cfg.uptime_kuma_auth));
+  if (isObject(defaults.uptime_kuma_auth)) deepMerge(auth, structuredClone(defaults.uptime_kuma_auth));
+  if (isObject(deployment.uptime_kuma_auth)) deepMerge(auth, structuredClone(deployment.uptime_kuma_auth));
+
+  return {
+    system_id: deployment.system_id,
+    uptime_kuma_auth: auth,
+    monitors: hasOwn("monitors") ? deployment.monitors : (cfg.monitors ?? []),
+    tags: hasOwn("tags") ? deployment.tags : (cfg.tags ?? defaults.tags ?? []),
+    status_pages: hasOwn("status_pages") ? deployment.status_pages : (cfg.status_pages ?? []),
+    notifications: hasOwn("notifications")
+      ? deployment.notifications
+      : (cfg.notifications ?? defaults.notifications ?? []),
+    configure: isObject(deployment.configure)
+      ? deployment.configure
+      : isObject(defaults.configure)
+        ? defaults.configure
+        : {},
+    mode: typeof deployment.mode === "string" ? deployment.mode : "proxmox-lxc",
+    proxmox: isObject(deployment.proxmox) ? deployment.proxmox : null,
+    uptime_kuma: isObject(deployment.uptime_kuma) ? deployment.uptime_kuma : {},
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} cfg
+ * @param {Record<string, string>} flags
+ */
+export function resolveDeploymentConfigSlicesForSync(cfg, flags) {
+  const { defaults, deployments } = normalizeUptimeKumaConfig(cfg);
+  const selected = resolveUptimeKumaDeployments(cfg, flags, { skipInstall: true });
+  const selectedIds = new Set(selected.map((d) => d.systemId));
+  return deployments
+    .filter((d) => selectedIds.has(String(d.system_id)))
+    .map((d) => ({
+      systemId: String(d.system_id),
+      slice: resolveDeploymentConfigSlice(cfg, d),
+      defaults,
+      deployment: d,
+    }));
 }
 
 /**
@@ -204,6 +267,8 @@ function finalizeDeployment(d, skipInstallCli, skipInstallOpt) {
     systemId: String(d.system_id),
     mode,
     proxmox: isObject(d.proxmox) ? d.proxmox : null,
+    oci: isObject(d.oci) ? d.oci : null,
+    configure: isObject(d.configure) ? d.configure : {},
     uptimeKuma: isObject(d.uptime_kuma) ? d.uptime_kuma : {},
     install,
   };

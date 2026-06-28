@@ -49,6 +49,34 @@ function loadSchedule(scheduleId) {
   return sched;
 }
 
+/**
+ * @param {object} opts
+ * @param {boolean} opts.ok
+ * @param {string} opts.stderr
+ * @param {string} opts.stdout
+ * @param {string | null} opts.reportPath
+ * @returns {string}
+ */
+function buildDiscordMessage(opts) {
+  const MAX = 1200;
+  const { ok, stderr, stdout, reportPath } = opts;
+  if (reportPath && existsSync(reportPath)) {
+    try {
+      const md = readFileSync(reportPath, "utf8");
+      const excerpt = md.slice(0, MAX);
+      return excerpt.length < md.length ? `${excerpt}\n…` : excerpt;
+    } catch {
+      /* fall through */
+    }
+  }
+  const tail = `${stderr}${stdout}`.trim();
+  if (tail) {
+    const lines = tail.split(/\r?\n/).slice(-20).join("\n");
+    return lines.length > MAX ? lines.slice(-MAX) : lines;
+  }
+  return ok ? "completed" : "failed (no output captured)";
+}
+
 async function main() {
   const scheduleId = process.argv[2]?.trim();
   if (!scheduleId) {
@@ -95,13 +123,15 @@ async function main() {
   }
 
   const mail = schedule.resolved_mail ?? {};
+  const reportEmailUrl = pathToFileURL(
+    join(INSTALL_ROOT, "packages/lib/report-email.mjs"),
+  ).href;
+  const { parseReportPathFromStderr } = await import(reportEmailUrl);
+  const reportPath = parseReportPathFromStderr(stderr);
+
   const shouldMail = mail.enabled === true && (!mail.on_failure_only || !ok);
   if (shouldMail && mail.to) {
-    const reportEmailUrl = pathToFileURL(
-      join(INSTALL_ROOT, "packages/lib/report-email.mjs"),
-    ).href;
-    const { sendReportEmail, parseReportPathFromStderr } = await import(reportEmailUrl);
-    const reportPath = parseReportPathFromStderr(stderr);
+    const { sendReportEmail } = await import(reportEmailUrl);
     if (reportPath && existsSync(reportPath)) {
       const prefix = mail.subject_prefix || "[HDC]";
       const subject = `${prefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
@@ -117,6 +147,31 @@ async function main() {
       );
     } else {
       process.stderr.write(`[hdc-runner] job ${scheduleId}: no report file to email\n`);
+    }
+  }
+
+  const discord = schedule.resolved_discord ?? {};
+  const shouldDiscord = discord.enabled === true && (!discord.on_failure_only || !ok);
+  if (shouldDiscord) {
+    const opsDiscordUrl = pathToFileURL(
+      join(INSTALL_ROOT, "tools/hdc/lib/ops-discord-notify.mjs"),
+    ).href;
+    const { redactIpsFromText, sendOpsDiscordNotifyBestEffort } = await import(opsDiscordUrl);
+    const prefix = discord.title_prefix || "[HDC]";
+    const title = `${prefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
+    const message = buildDiscordMessage({ ok, stderr, stdout, reportPath });
+    const discordResult = sendOpsDiscordNotifyBestEffort({
+      title,
+      message: redactIpsFromText(message),
+      env: process.env,
+      silent: ok,
+    });
+    if (discordResult.skipped) {
+      process.stderr.write(`[hdc-runner] job ${scheduleId}: discord skipped\n`);
+    } else {
+      process.stderr.write(
+        `[hdc-runner] job ${scheduleId}: discord ${discordResult.ok ? "sent" : "failed"}${discordResult.error ? `: ${discordResult.error}` : ""}\n`,
+      );
     }
   }
 

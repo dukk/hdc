@@ -1,30 +1,13 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "uptime_kuma_auth": {
     "api_url": "http://10.0.0.105:3001",
     "username_env": "HDC_UPTIME_KUMA_USERNAME",
     "password_vault_key": "HDC_UPTIME_KUMA_PASSWORD"
   },
   "monitors": [
-    {
-      "id": "pi-hole-a",
-      "name": "Pi-hole A",
-      "type": "http",
-      "url": "http://10.0.0.4/admin",
-      "group": "Infrastructure",
-      "tags": ["critical"],
-      "interval": 60,
-      "managed": true
-    },
-    {
-      "id": "bind-a",
-      "name": "BIND A",
-      "type": "ping",
-      "hostname": "10.0.0.2",
-      "group": "Infrastructure",
-      "interval": 60,
-      "managed": true
-    }
+    { "$hdc.include": "monitors/pi-hole-a.json" },
+    { "$hdc.include": "monitors/bind-a.json" }
   ],
   "tags": [
     {
@@ -33,25 +16,7 @@
     }
   ],
   "status_pages": [
-    {
-      "id": "public",
-      "slug": "public",
-      "title": "HDC Public Status",
-      "theme": "auto",
-      "published": true,
-      "show_tags": true,
-      "managed": true,
-      "groups": [
-        {
-          "name": "Infrastructure",
-          "weight": 1,
-          "monitors": [
-            { "id": "pi-hole-a" },
-            { "id": "bind-a" }
-          ]
-        }
-      ]
-    }
+    { "$hdc.include": "status_pages/public.json" }
   ],
   "defaults": {
     "mode": "proxmox-lxc",
@@ -91,6 +56,43 @@
           "ip_config": "10.0.0.105/24,gw=10.0.0.1"
         }
       }
+    },
+    {
+      "system_id": "uptime-kuma-b",
+      "mode": "oci-vm",
+      "oci": {
+        "instance_id": "uptime-kuma-b"
+      },
+      "configure": {
+        "ssh": {
+          "host": "203.0.113.10",
+          "user": "ubuntu"
+        }
+      },
+      "uptime_kuma_auth": {
+        "api_url": "http://127.0.0.1:3001",
+        "api_via_ssh": true,
+        "username_env": "HDC_UPTIME_KUMA_USERNAME_B",
+        "password_vault_key": "HDC_UPTIME_KUMA_PASSWORD_B"
+      },
+      "notifications": [
+        {
+          "id": "hdc-ops-discord",
+          "name": "HDC Ops Discord",
+          "type": "discord",
+          "managed": true,
+          "discord_webhook_vault_key": "HDC_OPS_DISCORD_WEBHOOK_URL",
+          "discord_username": "Uptime Kuma",
+          "apply_to_monitors": true
+        }
+      ],
+      "monitors": [
+        { "$hdc.include": "monitors-public/immich.json" },
+        { "$hdc.include": "monitors-public/vaultwarden.json" }
+      ],
+      "status_pages": [
+        { "$hdc.include": "status_pages/public-edge.json" }
+      ]
     }
   ]
 }

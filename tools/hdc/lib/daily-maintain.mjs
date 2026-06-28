@@ -16,6 +16,9 @@ import { preferredNewFilePath } from "./private-repo.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import {
+  buildPackageRunEnv,
+} from "./package-env.mjs";
+import {
   buildDailyStepArgs,
   dailyRecipeSteps,
   filterDailyRecipeSteps,
@@ -322,10 +325,11 @@ export async function runDailyMaintain(deps, root, argv) {
     const started = Date.now();
     const pipeStdoutJson =
       step.verb === "query" || step.verb === "maintain";
+    const runEnv = buildPackageRunEnv(deps, root, resolved.m);
     const r = deps.spawnSync(deps.execPath, [resolved.script, ...args], {
       cwd: resolved.cwd,
       stdio: pipeStdoutJson ? ["inherit", "pipe", "inherit"] : "inherit",
-      env: deps.env,
+      env: runEnv,
       shell: false,
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,

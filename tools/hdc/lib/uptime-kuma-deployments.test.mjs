@@ -1,80 +1,46 @@
 import { describe, expect, it } from "vitest";
+
 import {
-  instanceFlagToSystemId,
-  listUptimeKumaDeploymentSummaries,
+  resolveDeploymentConfigSlice,
   normalizeUptimeKumaConfig,
-  resolveUptimeKumaDeployments,
 } from "../../../packages/services/uptime-kuma/lib/deployments.mjs";
+import { buildNotificationIdList } from "../../../packages/services/uptime-kuma/lib/uptime-kuma-notifications-sync.mjs";
 
-const sampleCfg = {
-  schema_version: 2,
-  defaults: {
-    mode: "proxmox-lxc",
-    proxmox: {
-      lxc: {
-        memory_mb: 1024,
-        cores: 1,
-        rootfs_gb: 4,
+describe("uptime-kuma per-deployment config", () => {
+  it("inherits root monitors when deployment has no monitors override", () => {
+    const cfg = normalizeUptimeKumaConfig({
+      schema_version: 5,
+      deployments: [{ system_id: "uptime-kuma-a", proxmox: { host_id: "pve-a", lxc: { vmid: 1 } } }],
+      monitors: [{ id: "a", name: "A", type: "http", url: "https://a", managed: true }],
+    });
+    const slice = resolveDeploymentConfigSlice(
+      { monitors: [{ id: "a", name: "A", type: "http", url: "https://a", managed: true }] },
+      cfg.deployments[0],
+    );
+    expect(slice.monitors).toHaveLength(1);
+  });
+
+  it("replaces monitors when deployment defines monitors", () => {
+    const slice = resolveDeploymentConfigSlice(
+      {
+        monitors: [{ id: "internal", name: "I", type: "http", url: "https://i", managed: true }],
+        deployments: [],
       },
-    },
-    uptime_kuma: {
-      port: 3001,
-      release: "latest",
-    },
-    install: { enabled: true },
-  },
-  deployments: [
-    {
-      system_id: "uptime-kuma-a",
-      proxmox: { host_id: "hypervisor-b", lxc: { vmid: 115 } },
-    },
-  ],
-};
-
-describe("uptime-kuma deployments", () => {
-  it("normalizes deployments[] with defaults merge", () => {
-    const { deployments } = normalizeUptimeKumaConfig(sampleCfg);
-    expect(deployments).toHaveLength(1);
-    expect(deployments[0].system_id).toBe("uptime-kuma-a");
-    expect(deployments[0].mode).toBe("proxmox-lxc");
-    expect(deployments[0].proxmox.host_id).toBe("hypervisor-b");
-    expect(deployments[0].uptime_kuma.port).toBe(3001);
+      {
+        system_id: "uptime-kuma-b",
+        monitors: [{ id: "public", name: "P", type: "http", url: "https://p", managed: true }],
+      },
+    );
+    expect(slice.monitors).toHaveLength(1);
+    expect(/** @type {Record<string, unknown>} */ (slice.monitors[0]).id).toBe("public");
   });
 
-  it("rejects invalid system_id pattern", () => {
-    expect(() =>
-      normalizeUptimeKumaConfig({
-        deployments: [{ system_id: "vm-uptime-kuma-a", proxmox: { host_id: "hypervisor-b", lxc: { vmid: 1 } } }],
-      }),
-    ).toThrow(/uptime-kuma/);
-  });
-
-  it("lists deployment summaries", () => {
-    const list = listUptimeKumaDeploymentSummaries(sampleCfg);
-    expect(list).toEqual([
-      expect.objectContaining({
-        system_id: "uptime-kuma-a",
-        host_id: "hypervisor-b",
-        vmid: 115,
-        install_enabled: true,
-        port: 3001,
-      }),
-    ]);
-  });
-
-  it("resolves single deployment by default", () => {
-    const list = resolveUptimeKumaDeployments(sampleCfg, {});
-    expect(list).toHaveLength(1);
-    expect(list[0].systemId).toBe("uptime-kuma-a");
-  });
-
-  it("instanceFlagToSystemId maps letter to full id", () => {
-    expect(instanceFlagToSystemId("a")).toBe("uptime-kuma-a");
-    expect(instanceFlagToSystemId("uptime-kuma-a")).toBe("uptime-kuma-a");
-  });
-
-  it("honors --skip-install", () => {
-    const list = resolveUptimeKumaDeployments(sampleCfg, { "skip-install": "1" });
-    expect(list.every((d) => d.install.enabled === false)).toBe(true);
+  it("builds notificationIDList from apply_to_monitors", () => {
+    const list = buildNotificationIdList(
+      [{ id: "discord", name: "D", type: "discord", managed: true, apply_to_monitors: true, discord_webhook_vault_key: "K", discord_username: null, discord_prefix_message: null }],
+      new Map([["discord", 3]]),
+      undefined,
+    );
+    expect(list).toEqual({ 3: true });
   });
 });

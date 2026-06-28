@@ -1,9 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const OPS_DISCORD_WEBHOOK_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
 export const OPS_DISCORD_NOTIFY_ENV = "HDC_OPS_DISCORD_NOTIFY";
+export const OPS_DISCORD_HOST_ENV = "HDC_OPS_DISCORD_HOST";
+export const DISCORD_SUPPRESS_NOTIFICATIONS_FLAG = 4096;
 const MAX_CONTENT = 1900;
 
 const IPV4_CIDR_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
@@ -28,12 +31,25 @@ export function redactIpsFromText(text) {
 }
 
 /**
- * @param {string} title
- * @param {string} message
+ * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
-export function formatDiscordContent(title, message) {
-  const header = `**${title.trim() || "HDC Ops"}**`;
+export function resolveOpsDiscordHost(env = process.env) {
+  const override = String(env[OPS_DISCORD_HOST_ENV] ?? "").trim();
+  if (override) return override;
+  return hostname();
+}
+
+/**
+ * @param {string} title
+ * @param {string} message
+ * @param {{ env?: NodeJS.ProcessEnv; host?: string }} [opts]
+ * @returns {string}
+ */
+export function formatDiscordContent(title, message, opts = {}) {
+  const host = opts.host ?? resolveOpsDiscordHost(opts.env);
+  const titlePart = title.trim() || "HDC Ops";
+  const header = host ? `**${titlePart}** · \`${host}\`` : `**${titlePart}**`;
   const body = message.trim();
   const text = body ? `${header}\n\n${body}` : header;
   return text.length > MAX_CONTENT ? `${text.slice(0, MAX_CONTENT - 3)}...` : text;
@@ -42,12 +58,18 @@ export function formatDiscordContent(title, message) {
 /**
  * @param {string} url
  * @param {string} content
+ * @param {{ suppressNotifications?: boolean }} [opts]
  */
-export async function postDiscordWebhook(url, content) {
+export async function postDiscordWebhook(url, content, opts = {}) {
+  /** @type {{ content: string; flags?: number }} */
+  const payload = { content };
+  if (opts.suppressNotifications) {
+    payload.flags = DISCORD_SUPPRESS_NOTIFICATIONS_FLAG;
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const snippet = (await res.text()).slice(0, 200);
@@ -221,6 +243,7 @@ export function opsDiscordNotifySkippedByFlags(flags) {
  * @param {string} opts.title
  * @param {string} opts.message
  * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {boolean} [opts.silent]
  * @returns {{ ok: boolean; skipped?: boolean; error?: string }}
  */
 export function sendOpsDiscordNotifyBestEffort(opts) {
@@ -229,8 +252,11 @@ export function sendOpsDiscordNotifyBestEffort(opts) {
   if (!title && !message) return { ok: false, skipped: true };
 
   const env = { ...(opts.env ?? process.env) };
+  /** @type {string[]} */
+  const args = [notifyDiscordScript, "--title", title, "--message", message];
+  if (opts.silent === true) args.push("--silent");
   try {
-    const r = spawnSync(process.execPath, [notifyDiscordScript, "--title", title, "--message", message], {
+    const r = spawnSync(process.execPath, args, {
       env,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],

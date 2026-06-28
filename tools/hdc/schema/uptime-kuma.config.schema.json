@@ -11,8 +11,26 @@
       "type": "object",
       "properties": {
         "api_url": { "type": "string", "format": "uri" },
+        "api_via_ssh": { "type": "boolean" },
         "username_env": { "type": "string" },
         "password_vault_key": { "type": "string" }
+      }
+    },
+    "notifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "managed"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["discord"] },
+          "managed": { "type": "boolean" },
+          "discord_webhook_vault_key": { "type": "string" },
+          "discord_username": { "type": "string" },
+          "discord_prefix_message": { "type": "string" },
+          "apply_to_monitors": { "type": "boolean" }
+        }
       }
     },
     "monitors": {
@@ -28,6 +46,10 @@
           "hostname": { "type": "string" },
           "group": { "type": "string" },
           "tags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "notifications": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
@@ -113,8 +135,48 @@
         "required": ["system_id"],
         "properties": {
           "system_id": { "type": "string", "pattern": "^uptime-kuma-[a-z]+$" },
-          "mode": { "enum": ["proxmox-lxc"] },
+          "mode": { "enum": ["proxmox-lxc", "oci-vm"] },
           "proxmox": { "type": "object" },
+          "oci": {
+            "type": "object",
+            "properties": {
+              "instance_id": { "type": "string" },
+              "subnet_id": { "type": "string" },
+              "nsg_ids": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "shape": { "type": "string" },
+              "boot_volume_gb": { "type": "integer", "minimum": 10 },
+              "image_ocid": { "type": "string" },
+              "assign_public_ip": { "type": "boolean" }
+            }
+          },
+          "configure": {
+            "type": "object",
+            "properties": {
+              "ssh": {
+                "type": "object",
+                "properties": {
+                  "host": { "type": "string" },
+                  "user": { "type": "string" }
+                }
+              }
+            }
+          },
+          "uptime_kuma_auth": {
+            "type": "object",
+            "properties": {
+              "api_url": { "type": "string" },
+              "api_via_ssh": { "type": "boolean" },
+              "username_env": { "type": "string" },
+              "password_vault_key": { "type": "string" }
+            }
+          },
+          "monitors": { "type": "array" },
+          "notifications": { "type": "array" },
+          "status_pages": { "type": "array" },
+          "tags": { "type": "array" },
           "uptime_kuma": {
             "type": "object",
             "properties": {

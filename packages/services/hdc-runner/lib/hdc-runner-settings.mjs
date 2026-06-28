@@ -29,11 +29,12 @@ export function normalizeHdcRunnerBlock(runnerBlock) {
       typeof r.bw_version === "string" && r.bw_version.trim() ? r.bw_version.trim() : "2026.5.0",
     env: isObject(r.env) ? { ...r.env } : {},
     mail: isObject(r.mail) ? { ...r.mail } : {},
+    discord: isObject(r.discord) ? { ...r.discord } : {},
     schedules: Array.isArray(r.schedules) ? r.schedules.filter(isObject) : [],
     sync: isObject(r.sync)
       ? { ...r.sync }
       : {
-          exclude: [".git", "node_modules", "**/reports", ".env", ".env.*", ".cursor", ".vscode"],
+          exclude: [".git", "node_modules", "**/reports", ".cursor", ".vscode"],
         },
   };
 }
@@ -52,6 +53,7 @@ export function hdcRunnerSettingsForDeployment(defaults, deployment) {
     ...over,
     env: { ...base.env, ...over.env },
     mail: { ...base.mail, ...over.mail },
+    discord: { ...base.discord, ...over.discord },
     sync: { ...base.sync, ...over.sync },
     schedules: over.schedules.length > 0 ? over.schedules : base.schedules,
   };
@@ -93,11 +95,45 @@ export function resolveScheduleMail(runner, schedule) {
   return { enabled, to, from, subject_prefix, on_failure_only };
 }
 
+const DEFAULT_DISCORD_WEBHOOK_VAULT_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
+
+/**
+ * @param {ReturnType<typeof normalizeHdcRunnerBlock>} runner
+ * @param {Record<string, unknown>} schedule
+ */
+export function resolveScheduleDiscord(runner, schedule) {
+  const globalDiscord = isObject(runner.discord) ? runner.discord : {};
+  const schedDiscord = isObject(schedule.discord) ? schedule.discord : {};
+  const enabled =
+    schedDiscord.enabled !== undefined
+      ? schedDiscord.enabled === true || schedDiscord.enabled === 1
+      : globalDiscord.enabled === true || globalDiscord.enabled === 1;
+  const title_prefix =
+    typeof schedDiscord.title_prefix === "string" && schedDiscord.title_prefix.trim()
+      ? schedDiscord.title_prefix.trim()
+      : typeof globalDiscord.title_prefix === "string"
+        ? globalDiscord.title_prefix.trim()
+        : "[HDC]";
+  const on_failure_only =
+    schedDiscord.on_failure_only !== undefined
+      ? schedDiscord.on_failure_only === true
+      : globalDiscord.on_failure_only === true;
+  const webhook_vault_key =
+    typeof schedDiscord.webhook_vault_key === "string" && schedDiscord.webhook_vault_key.trim()
+      ? schedDiscord.webhook_vault_key.trim()
+      : typeof globalDiscord.webhook_vault_key === "string" && globalDiscord.webhook_vault_key.trim()
+        ? globalDiscord.webhook_vault_key.trim()
+        : DEFAULT_DISCORD_WEBHOOK_VAULT_KEY;
+  return { enabled, title_prefix, on_failure_only, webhook_vault_key };
+}
+
 /**
  * @param {ReturnType<typeof normalizeHdcRunnerBlock>} runner
  */
 export function syncExcludePatterns(runner) {
   const sync = isObject(runner.sync) ? runner.sync : {};
   const ex = Array.isArray(sync.exclude) ? sync.exclude : [];
-  return ex.map((x) => String(x).trim()).filter(Boolean);
+  const patterns = ex.map((x) => String(x).trim()).filter(Boolean);
+  if (!patterns.includes("/.env")) patterns.push("/.env");
+  return patterns;
 }

@@ -5,6 +5,7 @@
  * Usage:
  *   node tools/hdc/lib/notify-discord.mjs --title "HDC" --message "Task foo needs approval"
  *   node tools/hdc/lib/notify-discord.mjs --message "body only" --dry-run
+ *   node tools/hdc/lib/notify-discord.mjs --message "done" --silent
  *
  * Secret: HDC_OPS_DISCORD_WEBHOOK_URL (vault or env). Never log the URL.
  */
@@ -29,16 +30,17 @@ const repoRoot = join(here, "..", "..", "..");
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-  /** @type {{ title: string, message: string, dryRun: boolean }} */
-  const out = { title: "HDC Ops", message: "", dryRun: false };
+  /** @type {{ title: string, message: string, dryRun: boolean, silent: boolean }} */
+  const out = { title: "HDC Ops", message: "", dryRun: false, silent: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--dry-run") out.dryRun = true;
+    else if (a === "--silent") out.silent = true;
     else if (a === "--title" && argv[i + 1]) out.title = String(argv[++i]);
     else if (a === "--message" && argv[i + 1]) out.message = String(argv[++i]);
     else if (a === "--help" || a === "-h") {
       stderr.write(
-        "usage: notify-discord.mjs --message <text> [--title <text>] [--dry-run]\n",
+        "usage: notify-discord.mjs --message <text> [--title <text>] [--dry-run] [--silent]\n",
       );
       process.exit(0);
     }
@@ -47,7 +49,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { title, message, dryRun } = parseArgs(process.argv.slice(2));
+  const { title, message, dryRun, silent } = parseArgs(process.argv.slice(2));
   if (!message.trim()) {
     stderr.write("notify-discord: --message is required\n");
     process.exit(2);
@@ -56,7 +58,9 @@ async function main() {
   const content = formatDiscordContent(title, message);
 
   if (dryRun) {
-    stdout.write(`${JSON.stringify({ ok: true, dry_run: true, content_length: content.length })}\n`);
+    stdout.write(
+      `${JSON.stringify({ ok: true, dry_run: true, content_length: content.length, content })}\n`,
+    );
     return;
   }
 
@@ -76,7 +80,7 @@ async function main() {
     process.exit(1);
   }
 
-  await postDiscordWebhook(url, content);
+  await postDiscordWebhook(url, content, { suppressNotifications: silent });
   stderr.write("notify-discord: sent\n");
   stdout.write(JSON.stringify({ ok: true }) + "\n");
 }

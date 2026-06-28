@@ -71,7 +71,7 @@ export function planMonitorSync(opts) {
  * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
  * @param {ReturnType<typeof planMonitorSync>} plan
  * @param {ConfigMonitor} entry
- * @param {{ dryRun?: boolean; log?: (line: string) => void; parentId?: number | null; liveId?: number | null }} [opts]
+ * @param {{ dryRun?: boolean; log?: (line: string) => void; parentId?: number | null; liveId?: number | null; notificationIDList?: Record<string, boolean> }} [opts]
  */
 export async function applyMonitorSync(client, plan, entry, opts = {}) {
   const dryRun = Boolean(opts.dryRun);
@@ -104,7 +104,10 @@ export async function applyMonitorSync(client, plan, entry, opts = {}) {
         log(`dry-run: would add monitor ${entry.id} (${entry.name})`);
         return { ok: true, action: "add", id: entry.id, dryRun: true };
       }
-      const payload = monitorToSocketPayload(entry, false, { parentId: opts.parentId ?? null });
+      const payload = monitorToSocketPayload(entry, false, {
+        parentId: opts.parentId ?? null,
+        notificationIDList: opts.notificationIDList,
+      });
       const resp = await client.addMonitor(payload);
       const newId = resp.monitorID ?? resp.monitorId ?? null;
       log(`added monitor ${entry.id} (uptime_kuma_id=${newId ?? "unknown"})`);
@@ -126,6 +129,7 @@ export async function applyMonitorSync(client, plan, entry, opts = {}) {
       const payload = monitorToSocketPayload(entry, true, {
         parentId: opts.parentId ?? null,
         liveId,
+        notificationIDList: opts.notificationIDList,
       });
       await client.editMonitor(payload);
       log(`updated monitor ${entry.id}`);
@@ -471,7 +475,7 @@ export async function pruneMonitorTags(client, entry, monitorId, tagIdsByName, o
  * @param {ReturnType<import('./uptime-kuma-api.mjs').createUptimeKumaClient>} client
  * @param {ConfigMonitor[]} monitors
  * @param {Awaited<ReturnType<import('./uptime-kuma-collect.mjs').fetchLiveUptimeKumaMonitors>>} live
- * @param {{ dryRun?: boolean; prune?: boolean; monitorFilter?: string | null; tagCatalog?: ConfigTag[]; log?: (line: string) => void }} opts
+ * @param {{ dryRun?: boolean; prune?: boolean; monitorFilter?: string | null; tagCatalog?: ConfigTag[]; notificationIDList?: Record<string, boolean>; notificationsByMonitor?: (entry: ConfigMonitor) => Record<string, boolean>; log?: (line: string) => void }} opts
  */
 export async function syncUptimeKumaMonitors(client, monitors, live, opts = {}) {
   const log = opts.log ?? (() => {});
@@ -505,11 +509,16 @@ export async function syncUptimeKumaMonitors(client, monitors, live, opts = {}) 
 
     const plan = planMonitorSync({ entry, live: liveRow });
     log(`monitor ${entry.id}: plan action=${plan.action}`);
+    const notificationIDList =
+      opts.notificationsByMonitor?.(entry) ??
+      opts.notificationIDList ??
+      {};
     const result = await applyMonitorSync(client, plan, entry, {
       dryRun,
       log,
       parentId: parentId && parentId > 0 ? parentId : null,
       liveId: liveRow?.uptime_kuma_id ?? plan.uptime_kuma_id ?? null,
+      notificationIDList,
     });
 
     const monitorId =

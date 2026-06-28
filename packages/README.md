@@ -39,6 +39,7 @@ Shared capabilities: hypervisors, SaaS APIs, NAS, and network controllers. Sever
 | Package | CLI id | Summary | Config | Access |
 |---------|--------|---------|--------|--------|
 | [aws](infrastructure/aws/README.md) | `aws` | AWS VPC, EC2, ECS, S3, EBS | [config.example.json](infrastructure/aws/config.example.json) | AWS API; cost estimate before deploy |
+| [oci-compute](infrastructure/oci-compute/README.md) | `oci-compute` | Oracle Cloud VCN, VMs, Container Instances | [config.example.json](infrastructure/oci-compute/config.example.json) | OCI API; cost estimate before deploy |
 | [azure](infrastructure/azure/README.md) | `azure` | Azure app registrations | [config.example.json](infrastructure/azure/config.example.json) | Microsoft Graph API / Entra portal |
 | [cloudflare](infrastructure/cloudflare/README.md) | `cloudflare` | Cloudflare | [config.example.json](infrastructure/cloudflare/config.example.json) | Cloudflare API (DNS, page rules, email routing) |
 | [cloudflare-workers](infrastructure/cloudflare-workers/README.md) | `cloudflare-workers` | Cloudflare Workers and Pages | [config.example.json](infrastructure/cloudflare-workers/config.example.json) | Wrangler deploy; Workers routes/secrets and Pages projects |

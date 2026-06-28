@@ -20,8 +20,10 @@ export const GUEST_BASELINE_SAFE_ARGS = ["--no-reboot", "--skip-resources", "--s
 
 /** @type {readonly string[]} */
 const DOCKER_COMPOSE_MAINTAIN_IDS = [
+  "affine",
   "cloudbeaver",
   "crowdsec",
+  "dawarich",
   "docuseal",
   "draw-io",
   "homepage",
@@ -32,11 +34,13 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "keycloak",
   "listmonk",
   "mailcow",
+  "memos",
   "n8n",
   "nextcloud",
   "open-webui",
   "openspeedtest",
   "paperless-ngx",
+  "paperclip",
   "glances",
   "greenbone",
   "hermes",
@@ -187,6 +191,7 @@ export function dailyRecipeSteps() {
     "aws",
     "gcp-oauth",
     "gcp-compute",
+    "oci-compute",
     "openrouter",
   ]) {
     steps.push({

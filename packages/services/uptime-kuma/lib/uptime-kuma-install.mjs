@@ -1,6 +1,7 @@
 import { stderr as errout } from "node:process";
 
-import { pctExec } from "../../../lib/pve-pct-remote.mjs";
+import { pctExec, sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { resolveGuestSshTargetWithFallback } from "../../../lib/guest-ssh-exec.mjs";
 import { resolvePveSshForHost, waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolveReleaseTarget } from "./uptime-kuma-release.mjs";
 
@@ -195,4 +196,108 @@ export function verifyUptimeKumaInCt(user, pveHost, vmid) {
     return { ok: false, message: "uptime-kuma service not active or package missing" };
   }
   return { ok: true, message: "service active" };
+}
+
+/**
+ * @param {string} host
+ * @param {string} user
+ */
+export function readInstalledReleaseTagOverSsh(host, user) {
+  const r = sshRemote(user, host, "cat /opt/uptime-kuma/.hdc-release-tag 2>/dev/null || true", {
+    capture: true,
+  });
+  if (r.status !== 0) return null;
+  const tag = r.stdout.trim();
+  return tag || null;
+}
+
+/**
+ * @param {string} host
+ * @param {string} user
+ */
+export function uptimeKumaInstalledOverSsh(host, user) {
+  const r = sshRemote(
+    user,
+    host,
+    "test -f /opt/uptime-kuma/package.json && systemctl is-active --quiet uptime-kuma",
+    { capture: true },
+  );
+  return r.status === 0;
+}
+
+/**
+ * @param {string} host
+ * @param {string} user
+ * @param {Record<string, unknown>} uptimeKuma
+ */
+export async function installUptimeKumaOverSsh(host, user, uptimeKuma) {
+  errout.write(`[hdc] uptime-kuma install: release + npm install on ${user}@${host} …\n`);
+
+  const releaseSpec =
+    typeof uptimeKuma.release === "string" && uptimeKuma.release.trim()
+      ? uptimeKuma.release.trim()
+      : "latest";
+  let tag;
+  let tarballUrl;
+  try {
+    const resolved = await resolveReleaseTarget(releaseSpec);
+    tag = resolved.tag;
+    tarballUrl = resolved.tarballUrl;
+    errout.write(
+      `[hdc] uptime-kuma install: using release ${JSON.stringify(tag)} (${resolved.source}) …\n`,
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      method: "tarball",
+      message: String(/** @type {Error} */ (e).message || e),
+    };
+  }
+
+  const inner = buildInstallScript(tag, tarballUrl, nodeMajor(uptimeKuma));
+  const r = sshRemote(user, host, inner);
+  if (r.status !== 0) {
+    return {
+      ok: false,
+      method: "tarball",
+      message: `install failed (exit ${r.status})`,
+      release: tag,
+    };
+  }
+  errout.write(`[hdc] uptime-kuma install: completed on ${host} (release ${tag}).\n`);
+  return { ok: true, method: "tarball", message: "installed", release: tag };
+}
+
+/**
+ * @param {string} host
+ * @param {string} user
+ */
+export function verifyUptimeKumaOverSsh(host, user) {
+  errout.write(`[hdc] uptime-kuma configure: verifying systemd on ${user}@${host} …\n`);
+  const r = sshRemote(
+    user,
+    host,
+    "systemctl is-active --quiet uptime-kuma && test -f /opt/uptime-kuma/package.json",
+    { capture: true },
+  );
+  if (r.status !== 0) {
+    return { ok: false, message: "uptime-kuma service not active or package missing" };
+  }
+  return { ok: true, message: "service active" };
+}
+
+/**
+ * @param {Record<string, unknown>} configure
+ */
+export function resolveSshTargetFromConfigure(configure) {
+  const ssh = isObject(configure?.ssh) ? configure.ssh : {};
+  const host = typeof ssh.host === "string" ? ssh.host.trim() : "";
+  if (!host) return null;
+  const preferred = typeof ssh.user === "string" && ssh.user.trim() ? ssh.user.trim() : "ubuntu";
+  return resolveGuestSshTargetWithFallback({ host, preferredUser: preferred });
+}
+
+/** @param {unknown} v */
+function isObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }

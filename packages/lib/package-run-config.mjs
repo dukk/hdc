@@ -8,3 +8,9 @@ export {
 export { readResolvedPackageConfigJson } from "../../tools/hdc/lib/json-config-preprocess.mjs";
 
 export { resolveRepoFile, resolveRepoFilePath } from "../../tools/hdc/lib/private-repo.mjs";
+
+export {
+  bootstrapGlobalEnv,
+  buildPackageRunEnv,
+  loadMergedRepoDotenv,
+} from "../../tools/hdc/lib/package-env.mjs";

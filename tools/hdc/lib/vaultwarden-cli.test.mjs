@@ -141,7 +141,7 @@ describe("vaultwarden-cli", () => {
   it("bwGetPassword returns org item password by id", () => {
     const deps = makeDeps({
       responses: {
-        [`list items --search HDC_X --organizationid ${ORG_ID}`]: {
+        [`list items --collectionid ${COLL_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: "item-1", name: "HDC_X", organizationId: ORG_ID }]),
         },
@@ -151,10 +151,63 @@ describe("vaultwarden-cli", () => {
     expect(bwGetPassword(deps, "sess", "HDC_X")).toBe("secret-value");
   });
 
+  it("bwGetPassword returns null when login item has no password", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([
+            { id: "item-empty", name: "HDC_ADMIN_USER_PASSWORD", organizationId: ORG_ID },
+          ]),
+        },
+        "get password item-empty": {
+          status: 1,
+          stderr: "No password available for this login.",
+        },
+        "get item item-empty": {
+          status: 0,
+          stdout: JSON.stringify({
+            id: "item-empty",
+            name: "HDC_ADMIN_USER_PASSWORD",
+            organizationId: ORG_ID,
+            login: { username: "HDC_ADMIN_USER_PASSWORD", password: "", uris: [] },
+          }),
+        },
+      },
+    });
+    expect(bwGetPassword(deps, "sess", "HDC_ADMIN_USER_PASSWORD")).toBeNull();
+  });
+
+  it("bwGetPassword falls back to secure note body when password command fails", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([{ id: "item-note", name: "HDC_NOTE", organizationId: ORG_ID }]),
+        },
+        "get password item-note": {
+          status: 1,
+          stderr: "No password available for this login.",
+        },
+        "get item item-note": {
+          status: 0,
+          stdout: JSON.stringify({
+            id: "item-note",
+            name: "HDC_NOTE",
+            organizationId: ORG_ID,
+            type: 2,
+            notes: "note-secret",
+          }),
+        },
+      },
+    });
+    expect(bwGetPassword(deps, "sess", "HDC_NOTE")).toBe("note-secret");
+  });
+
   it("bwSetPassword creates org login item and assigns collection", () => {
     const deps = makeDeps({
       responses: {
-        [`list items --search HDC_Y --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
+        [`list items --collectionid ${COLL_ID}`]: { status: 0, stdout: "[]" },
         "list items --search HDC_Y": { status: 0, stdout: "[]" },
         [`create item ${ENCODED_PAYLOAD}`]: {
           status: 0,
@@ -173,7 +226,7 @@ describe("vaultwarden-cli", () => {
   it("bwSetPassword updates existing org login item via encoded JSON edit", () => {
     const deps = makeDeps({
       responses: {
-        [`list items --search HDC_Z --organizationid ${ORG_ID}`]: {
+        [`list items --collectionid ${COLL_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: "item-z", name: "HDC_Z", organizationId: ORG_ID }]),
         },
@@ -200,7 +253,7 @@ describe("vaultwarden-cli", () => {
   it("bwListItemNames lists organization items only", () => {
     const deps = makeDeps({
       responses: {
-        [`list items --organizationid ${ORG_ID}`]: {
+        [`list items --collectionid ${COLL_ID}`]: {
           status: 0,
           stdout: JSON.stringify([
             { id: "a", name: "HDC_B", organizationId: ORG_ID },

@@ -53,12 +53,11 @@ describe("vaultwarden-sync", () => {
           stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
         },
         encode: { status: 0, stdout: ENCODED_PAYLOAD },
-        [`list items --search HDC_EXISTING --organizationid ${ORG_ID}`]: {
+        [`list items --collectionid ${COLL_ID}`]: {
           status: 0,
           stdout: JSON.stringify([{ id: "item-1", name: "HDC_EXISTING", organizationId: ORG_ID }]),
         },
-        [`list items --search HDC_NEW --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
-        "list items --search HDC_NEW": { status: 0, stdout: "[]" },
+        "get password item-1": { status: 0, stdout: "old-val" },
         [`create item ${ENCODED_PAYLOAD}`]: {
           status: 0,
           stdout: JSON.stringify({ id: "item-new", name: "HDC_NEW", organizationId: ORG_ID }),
@@ -158,6 +157,83 @@ describe("vaultwarden-sync", () => {
       expect(result.skipped).toBe(1);
       expect(result.skippedKeys).toEqual(["HDC_EXISTING"]);
       expect(result.pushed).toBe(1);
+    });
+
+    it("skipExisting updates empty organization login shells", async () => {
+      root = mkdtempSync(join(tmpdir(), "hdc-sync-"));
+      writeVault(join(root, "vault.enc"), "pw", {
+        HDC_EMPTY: "local-val",
+        HDC_VAULTWARDEN_MASTER_PASSWORD: "master-pass",
+      });
+      const spawnSync = vi.fn((exe, args) => {
+        const key = args.join(" ");
+        const responses = {
+          "--version": { status: 0, stdout: "2024.1.0" },
+          "config server https://vault.example.test": { status: 0 },
+          "login --check": { status: 0 },
+          "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key" },
+          "list organizations": {
+            status: 0,
+            stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
+          },
+          [`list org-collections --organizationid ${ORG_ID}`]: {
+            status: 0,
+            stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
+          },
+          [`list items --collectionid ${COLL_ID}`]: {
+            status: 0,
+            stdout: JSON.stringify([{ id: "item-empty", name: "HDC_EMPTY", organizationId: ORG_ID }]),
+          },
+          "get password item-empty": { status: 1, stderr: "No password available for this login." },
+          "get item item-empty": {
+            status: 0,
+            stdout: JSON.stringify({
+              id: "item-empty",
+              name: "HDC_EMPTY",
+              organizationId: ORG_ID,
+              login: { username: "HDC_EMPTY", password: null, uris: [] },
+            }),
+          },
+          encode: { status: 0, stdout: ENCODED_PAYLOAD },
+          [`edit item item-empty ${ENCODED_PAYLOAD}`]: { status: 0 },
+        };
+        const hit = responses[key];
+        if (hit) {
+          return { status: hit.status, stdout: hit.stdout ?? "", stderr: hit.stderr ?? "" };
+        }
+        return { status: 1, stdout: "", stderr: `unexpected: ${key}` };
+      });
+      const capture = { log: [], warn: [], err: [] };
+      const deps = {
+        env: {
+          HDC_VAULT_PASSPHRASE: "pw",
+          HDC_SECRET_BACKEND: "vaultwarden",
+          HDC_VAULTWARDEN_URL: "https://vault.example.test",
+          HDC_VAULTWARDEN_EMAIL: "ops@example.test",
+          HDC_VAULTWARDEN_ORGANIZATION_ID: ORG_ID,
+          HDC_VAULTWARDEN_COLLECTION_ID: COLL_ID,
+        },
+        log: (...a) => capture.log.push(a.join(" ")),
+        error: (...a) => capture.err.push(a.join(" ")),
+        warn: (...a) => capture.warn.push(a.join(" ")),
+        defaultVaultPath: () => join(root, "vault.enc"),
+        existsSync,
+        readLineQuestion: async () => "",
+        spawnSync,
+      };
+      const access = createVaultAccess(vaultDepsFromCli(deps));
+      const vwCli = {
+        env: deps.env,
+        log: deps.log,
+        error: deps.error,
+        warn: deps.warn,
+        readLineQuestion: deps.readLineQuestion,
+        spawnSync,
+      };
+      const result = await pushLocalSecretsToVaultwarden(access, vwCli, { skipExisting: true });
+      expect(result.skipped).toBe(0);
+      expect(result.updated).toBe(1);
+      expect(result.pushedKeys).toEqual(["HDC_EMPTY"]);
     });
   });
 });

@@ -15,7 +15,7 @@ Automation and documentation for a manually deployed home data center. Agents op
   - Windows: `hdc.cmd <command>`
   - Cross-platform: `node tools/hdc/cli.mjs <command>`
   - macOS/Linux (after `chmod +x hdc`): `./hdc <command>`
-- **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored). API keys and passwords live in the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
+- **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored) for **global** CLI settings (vault passphrase, secret backend, `HDC_PRIVATE_ROOT`, ops Discord, guest baseline). Package-specific env vars live in `packages/<tier>/<id>/.env` (see each package `.env.example`; prefer hdc-private). The root `.env.example` indexes all 96 packages; run `node tools/hdc/scripts/ensure-package-env-examples.mjs --write` after adding a package to scaffold its `.env.example`. Merge order: hdc public then hdc-private for each path. `hdc run` loads only global + the target package (and `env_includes`, auto-proxmox when config uses Proxmox). Migrate a monolithic root `.env` with `node tools/hdc/scripts/migrate-root-env.mjs --dry-run`. API keys and passwords prefer the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
 - **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Package `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed package configs from examples: `node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). On supported infrastructure packages, `query --import --yes` (or package-specific import flags such as Cloudflare `--import-zones`) auto-seeds missing `config.json` from `config.example.json` in hdc-private before importing live API data. Shared loaders: [`tools/hdc/lib/private-repo.mjs`](tools/hdc/lib/private-repo.mjs), [`tools/hdc/lib/package-config.mjs`](tools/hdc/lib/package-config.mjs).
 
 ### Package config JSONC (comments + includes)
@@ -131,8 +131,8 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`packages/<folder>/manifest.json`](packages/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `azure-compute`, `gcp-oauth`, `gcp-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `azure-compute`, `gcp-oauth`, `gcp-compute`, `oci-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`, `paperclip`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `packages/clients/` — per-package `config.json` (e.g. [`packages/clients/windows/config.json`](packages/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -209,24 +209,28 @@ Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpasswor
 
 ## Uptime Kuma in this repo
 
-- **Config:** [`packages/services/uptime-kuma/config.json`](packages/services/uptime-kuma/config.json) (copy from [`config.example.json`](packages/services/uptime-kuma/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/uptime-kuma-a.json`](inventory/manual/systems/uptime-kuma-a.json); service sidecar [`inventory/manual/services/uptime-kuma.json`](inventory/manual/services/uptime-kuma.json).
+- **Config:** [`packages/services/uptime-kuma/config.json`](packages/services/uptime-kuma/config.json) (copy from [`config.example.json`](packages/services/uptime-kuma/config.example.json); keep local config out of git). Optional **split layout:** keep `monitors/` and `status_pages/` folders beside `config.json` with one JSON object per file; root `config.json` lists `{ "$hdc.include": "monitors/<id>.json" }` entries (see [`config.example.json`](packages/services/uptime-kuma/config.example.json)). `query --import --yes` and `--import-from-homepage --yes` preserve split layout when detected; inline arrays remain supported.
+- **Per-deployment (schema v5):** Root/`defaults` supply shared `monitors[]`, `tags[]`, `status_pages[]`, `notifications[]`, and `uptime_kuma_auth`. Each `deployments[]` entry may override `monitors` (replace), `notifications` (replace), and `uptime_kuma_auth` (deep-merge). Use separate monitor trees (e.g. `monitors-public/*.json`) and credentials per instance (`HDC_UPTIME_KUMA_PASSWORD_B`, …). `maintain` syncs notifications then monitors per selected deployment; `--skip-notifications` skips notification reconcile.
+- **Modes:** `proxmox-lxc` (default) or `oci-vm` (Oracle Cloud via [`oci-compute`](packages/infrastructure/oci-compute/); SSH install, no guest Linux baseline). OCI instances use `uptime_kuma_auth.api_via_ssh: true` and `api_url: http://127.0.0.1:3001` — hdc opens an SSH local forward for Socket.IO sync (port 3001 not exposed on WAN).
+- **Discord notifications:** `notifications[]` with `type: discord`, `discord_webhook_vault_key` (e.g. `HDC_OPS_DISCORD_WEBHOOK_URL`), `managed: true`, and `apply_to_monitors: true` (or per-monitor `notifications: ["id"]`).
+- **Inventory:** [`inventory/manual/systems/uptime-kuma-a.json`](inventory/manual/systems/uptime-kuma-a.json), optional `uptime-kuma-b.json` (OCI); service sidecar [`inventory/manual/services/uptime-kuma.json`](inventory/manual/services/uptime-kuma.json).
 - **Schema:** [`tools/hdc/schema/uptime-kuma.config.schema.json`](tools/hdc/schema/uptime-kuma.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC provision + Uptime Kuma install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Upgrade when `uptime_kuma.release` is behind latest (or pinned tag); reconcile `monitors[]` via Socket.IO (`--skip-monitors`, `--prune`, `--dry-run`, `--monitor <id>`); `--skip-upgrade` for restart/health only |
+| `deploy` | Proxmox LXC or `oci-vm`: install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a\|b`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Upgrade when `uptime_kuma.release` is behind latest; reconcile `notifications[]` then `monitors[]` via Socket.IO per deployment (`--skip-monitors`, `--skip-notifications`, `--prune`, `--dry-run`, `--monitor <id>`, `--instance`); `--skip-upgrade` for restart/health only |
 | `query` | Guest `systemctl`/HTTP probe; monitor drift vs live (`--live`); `--import-from-homepage --yes` seeds `monitors[]` from homepage `services.yaml`; `--import --yes` pulls live monitors/tags/status pages into config (name/slug keyed; no UK database IDs) |
-| `teardown` | Destroy LXC (`--dry-run`, `--yes`, `--instance`) |
+| `teardown` | Destroy LXC or `oci-compute` VM (`--dry-run`, `--yes`, `--instance`) |
 
-Complete first-run admin setup in the web UI after deploy. Monitor automation uses `HDC_UPTIME_KUMA_USERNAME` (`.env`) and vault `HDC_UPTIME_KUMA_PASSWORD` (Socket.IO login). Uptime Kuma API keys are read-only (metrics) and cannot create monitors. Config schema v4 keys monitors by hdc `id` + `name`, tags by `name`, groups by `group`, and status pages by `slug`; UK database IDs are resolved at sync/query time only.
+Complete first-run admin setup in the web UI after deploy (OCI: SSH port-forward `ssh -L 3001:127.0.0.1:3001 ubuntu@<ip>`). Monitor automation uses per-deployment `HDC_UPTIME_KUMA_USERNAME` / vault password env keys. Uptime Kuma API keys are read-only (metrics) and cannot create monitors. Config schema v5 keys monitors by hdc `id` + `name`, tags by `name`, groups by `group`, status pages by `slug`, and notifications by hdc `id`; UK database IDs are resolved at sync/query time only.
 
 Example:
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
-node tools/hdc/cli.mjs run service uptime-kuma maintain --
+node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance b
+node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-b --dry-run
 ```
 
 ## SolidTime in this repo
@@ -248,7 +252,7 @@ Example: `node tools/hdc/cli.mjs run service solidtime deploy --`
 
 ## BIND DNS in this repo
 
-- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones[]` objects (`id`, `zone_type`, `records`, optional `subnet` for reverse, optional `cloudflare_fallback` to merge public records from [`packages/infrastructure/cloudflare/config.json`](packages/infrastructure/cloudflare/config.json) with local overrides). Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
+- **Config:** [`packages/services/bind/config.json`](packages/services/bind/config.json) (copy from [`config.example.json`](packages/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones/*.json` sidecars referenced from root `config.json` via `{ "$hdc.include": "zones/<id>.json" }` (inline `zones[]` in one file also works). Each zone object has `id`, `zone_type`, `records`, optional `subnet` for reverse, optional `cloudflare_fallback` to merge public records from [`packages/infrastructure/cloudflare/config.json`](packages/infrastructure/cloudflare/config.json) with local overrides. Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
 - **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](inventory/manual/systems/vm-bind-b.json).
 - **Schema:** [`tools/hdc/schema/bind.config.schema.json`](tools/hdc/schema/bind.config.schema.json).
 
@@ -776,6 +780,23 @@ No vault secrets for v1 — complete first-run admin setup in the web UI after d
 
 Example: `node tools/hdc/cli.mjs run service wallos deploy -- --instance a`
 
+## Memos in this repo
+
+- **Config:** [`packages/services/memos/config.json`](packages/services/memos/config.json) (copy from [`config.example.json`](packages/services/memos/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/memos-a.json`](inventory/manual/systems/memos-a.json); service sidecar [`inventory/manual/services/memos.json`](inventory/manual/services/memos.json).
+- **Schema:** [`tools/hdc/schema/memos.config.schema.json`](tools/hdc/schema/memos.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 1 GiB RAM, 16 GiB rootfs) + Docker Memos (`neosmemo/memos`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 5230) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+No vault secrets for v1 — create the first account in the Memos web UI after deploy. `memos.public_url` is optional (set when adding nginx-waf later). Data persists under `/opt/memos/data` on the CT.
+
+Example: `node tools/hdc/cli.mjs run service memos deploy -- --instance a`
+
 ## Rackula in this repo
 
 - **Config:** [`packages/services/rackula/config.json`](packages/services/rackula/config.json) (copy from [`config.example.json`](packages/services/rackula/config.example.json); keep local config out of git).
@@ -929,6 +950,23 @@ Set `paperless_ngx.public_url` (`https://…`) when using nginx-waf. Vault: `HDC
 
 Example: `node tools/hdc/cli.mjs run service paperless-ngx deploy -- --instance a`
 
+## Paperclip in this repo
+
+- **Config:** [`packages/services/paperclip/config.json`](packages/services/paperclip/config.json) (copy from [`config.example.json`](packages/services/paperclip/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/paperclip-a.json`](inventory/manual/systems/paperclip-a.json); service sidecar [`inventory/manual/services/paperclip.json`](inventory/manual/services/paperclip.json).
+- **Schema:** [`tools/hdc/schema/paperclip.config.schema.json`](tools/hdc/schema/paperclip.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (4 vCPU, 8 GiB RAM, 32 GiB rootfs) + Docker Paperclip + PostgreSQL from `ghcr.io/paperclipai/paperclip` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + `/api/health` on port 3100 |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
+
+Example: `node tools/hdc/cli.mjs run service paperclip deploy -- --instance a`
+
 ## Home Assistant in this repo
 
 - **Config:** [`packages/services/homeassistant/config.json`](packages/services/homeassistant/config.json) (copy from [`config.example.json`](packages/services/homeassistant/config.example.json); keep local config out of git).
@@ -1075,7 +1113,7 @@ Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --
 | `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs |
 | `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail`. Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay.
+Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay; Discord ops alerts use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (#hdc-ops webhook in Vaultwarden collection). Discord messages include the host running hdc (`HDC_OPS_DISCORD_HOST` optional); scheduled job success posts are silent (no channel ping), failures ping.
 
 Example: `node tools/hdc/cli.mjs run service hdc-runner maintain --`
 
@@ -1173,6 +1211,23 @@ Example: `node tools/hdc/cli.mjs run infrastructure azure-compute deploy -- --in
 Env: `HDC_GCP_COMPUTE_PROJECT_ID`. Vault: `HDC_GCP_COMPUTE_SERVICE_ACCOUNT_JSON`. Modes: `gcp-vm`, `gcp-cloud-run`. HostProvisioner: [`gcp-compute-host-provisioner.mjs`](packages/infrastructure/gcp-compute/lib/gcp-compute-host-provisioner.mjs).
 
 Example: `node tools/hdc/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run`
+
+## Oracle Cloud compute in this repo
+
+- **Config:** [`packages/infrastructure/oci-compute/config.json`](packages/infrastructure/oci-compute/config.json) (copy from [`config.example.json`](packages/infrastructure/oci-compute/config.example.json); keep local config in hdc-private).
+- **Schema:** [`tools/hdc/schema/oci-compute.config.schema.json`](tools/hdc/schema/oci-compute.config.schema.json).
+- **Docs:** [`docs/manually-deployed/oci-compute.md`](docs/manually-deployed/oci-compute.md).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | VCN + subnet + NSG + Compute VM / Container Instance; cost estimate + confirmation before billable creates (`--dry-run`, `--yes`, `--resource <id>`) |
+| `maintain` | Reconcile drift; optional `--prune` removes live HDC-tagged resources not in config |
+| `query` | Config summary; `--live` for OCI state + planned actions |
+| `teardown` | Destroy by `--resource <id>`, `--instance <id>`, or `--all` (`--dry-run`, `--yes`) |
+
+Env: `HDC_OCI_TENANCY_OCID`, `HDC_OCI_USER_OCID`, `HDC_OCI_FINGERPRINT`, `HDC_OCI_REGION`. Vault: `HDC_OCI_API_PRIVATE_KEY`. HostProvisioner: [`oci-compute-host-provisioner.mjs`](packages/infrastructure/oci-compute/lib/oci-compute-host-provisioner.mjs) (`oci-vm`, `oci-container` modes).
+
+Example: `node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --dry-run`
 
 ## AWS infrastructure in this repo
 
@@ -1487,7 +1542,7 @@ Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
-**Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
+**Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`; messages include OS hostname or `HDC_OPS_DISCORD_HOST`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
 
 **Scheduled runs:** hdc-runner cron (query jobs) + Cursor Automations drafts in [`.cursor/automations/`](.cursor/automations/README.md).
 

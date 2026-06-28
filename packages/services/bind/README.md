@@ -4,7 +4,7 @@ Authoritative DNS on Proxmox QEMU VMs: primary/secondary pair, zone files from `
 
 ## Prerequisites
 
-- **Config:** [`config.example.json`](config.example.json) → `config.json` (`zones[]` with records; `deployments[].proxmox.qemu.ip` for static cloud-init CIDR; no per-deployment `vmid`)
+- **Config:** [`config.example.json`](config.example.json) → `config.json` (root lists `zones[]` via `{ "$hdc.include": "zones/<id>.json" }`; one zone object per file under `zones/`; `deployments[].proxmox.qemu.ip` for static cloud-init CIDR; no per-deployment `vmid`). Inline `zones[]` in a single file remains supported. Large `records[]` may use nested includes inside a zone file.
 - **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](../../../inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](../../../inventory/manual/systems/vm-bind-b.json)
 - **TSIG:** Deploy auto-generates `bind.tsig_secret` in `config.json` (and syncs `HDC_BIND_TSIG_KEY` in the vault) when missing. Rotate with `--regenerate-tsig`. Manual: `dnssec-keygen -a HMAC-SHA256 -b 256 -n HOST .`
 - **Forwarders (plain):** `bind.forwarders` defaults to `1.1.1.1` and `1.0.0.1` when `forward_upstream` is absent or `mode` is `plain`.

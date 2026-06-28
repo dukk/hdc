@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/affine.config.schema.json",
+  "title": "HDC affine service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^affine-[a-z]+$" },
+          "mode": { "enum": ["proxmox-lxc"] },
+          "proxmox": { "type": "object" },
+          "affine": {
+            "type": "object",
+            "properties": {
+              "revision": { "type": "string" },
+              "host_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "postgres_image": { "type": "string" },
+              "redis_image": { "type": "string" },
+              "public_url": { "type": "string" },
+              "indexer_enabled": { "type": "boolean" },
+              "db_username": { "type": "string" },
+              "db_database": { "type": "string" },
+              "db_password_vault_key": { "type": "string" }
+            }
+          },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "compose_dir": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
