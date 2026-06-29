@@ -2,6 +2,8 @@
 
 Automation and documentation for a manually deployed home data center.
 
+> **Public repo:** automation code and `config.example.json` templates live here. Live `config.json`, inventory, and operator notes belong in a separate private **hdc-private** checkout (`HDC_PRIVATE_ROOT`).
+
 ## Requirements
 
 - **Node.js 18+** (uses built-in modules only; no `npm install` required for the CLI).
