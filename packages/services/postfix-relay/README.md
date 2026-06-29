@@ -30,7 +30,7 @@ node tools/hdc/cli.mjs run service postfix-relay maintain -- --apply-network
 
 1. **SMTP submission:** relay listens per `postfix.inet_interfaces` (example config: all interfaces on the guest IP).
 2. **Port:** typically **25** / **587** depending on your `master.cf` and provider (`relayhost` example: `[mail.smtp2go.com]:587`).
-3. Point LAN apps at `smtp://postfix-relay.hdc.dukk.org:25` (or `10.0.0.60`) **without** SMTP2GO credentials — see `client_defaults` in config.
+3. Point LAN apps at `smtp://postfix-relay.home.example.invalid:25` (or `192.0.2.60`) **without** SMTP2GO credentials — see `client_defaults` in config.
 4. Linux guests, Proxmox hypervisors, and home clients get a **Postfix satellite** automatically via guest baseline / `proxmox maintain` / client maintain (`--skip-mail-relay` to opt out).
 5. No web UI on the relay itself.
 

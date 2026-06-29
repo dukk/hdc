@@ -15,13 +15,13 @@
         "onboot": 1
       },
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       }
     },
     "mosquitto": {
       "tls": {
         "enabled": true,
-        "cert_name": "mqtt.hdc.dukk.org",
+        "cert_name": "mqtt.home.example.invalid",
         "listener_port": 8883,
         "step_ca_config_path": "packages/services/step-ca/config.json",
         "root_ca_path": "/etc/ssl/certs/hdc-step-ca-root.crt",

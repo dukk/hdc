@@ -13,11 +13,11 @@ describe("vikunja render", () => {
 
   it("renders env with trailing slash on public URL", () => {
     const env = renderVikunjaEnv(
-      { public_url: "https://tasks.dukk.org", host_port: 3456, timezone: "UTC" },
+      { public_url: "https://tasks.example.invalid", host_port: 3456, timezone: "UTC" },
       secrets,
-      "10.0.0.50",
+      "192.0.2.50",
     );
-    expect(env).toContain("VIKUNJA_SERVICE_PUBLICURL=https://tasks.dukk.org/");
+    expect(env).toContain("VIKUNJA_SERVICE_PUBLICURL=https://tasks.example.invalid/");
     expect(env).toContain("VIKUNJA_SERVICE_JWTSECRET=jwt-test-secret");
     expect(env).toContain("VIKUNJA_DATABASE_PASSWORD=db-test-secret");
     expect(env).toContain("VIKUNJA_HOST_PORT=3456");
@@ -37,10 +37,10 @@ describe("vikunja render", () => {
   });
 
   it("resolveWebUrl and upstream", () => {
-    expect(resolveWebUrl({ public_url: "https://tasks.dukk.org/" }, null)).toBe(
-      "https://tasks.dukk.org",
+    expect(resolveWebUrl({ public_url: "https://tasks.example.invalid/" }, null)).toBe(
+      "https://tasks.example.invalid",
     );
-    expect(resolveUpstreamUrl("10.0.0.50", { host_port: 3456 })).toBe("http://10.0.0.50:3456");
+    expect(resolveUpstreamUrl("192.0.2.50", { host_port: 3456 })).toBe("http://192.0.2.50:3456");
   });
 
   it("vikunjaMailEnvLines returns empty when mail disabled", () => {

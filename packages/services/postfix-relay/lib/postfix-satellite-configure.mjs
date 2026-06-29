@@ -28,7 +28,7 @@ function runChecked(exec, cmd, log) {
  * @param {object} opts
  * @param {import("./postfix-relay-configure.mjs").ConfigureExec} opts.exec
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} opts.log
- * @param {string} opts.relayhost Bracketed relay host, e.g. [10.0.0.60]
+ * @param {string} opts.relayhost Bracketed relay host, e.g. [192.0.2.60]
  * @param {string} opts.myhostname
  * @param {string} opts.myorigin
  * @param {string} [opts.inetInterfaces]

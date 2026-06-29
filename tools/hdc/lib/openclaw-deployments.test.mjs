@@ -11,7 +11,7 @@ describe("openclaw deployments", () => {
     defaults: {
       mode: "proxmox-qemu",
       proxmox: {
-        qemu: { template_vmid: 9022, vmid: 580, ip: "10.0.0.50/24" },
+        qemu: { template_vmid: 9022, vmid: 580, ip: "192.0.2.50/24" },
       },
       openclaw: { version: "latest" },
     },
@@ -45,7 +45,7 @@ describe("openclaw deployments", () => {
             system_id: "openclaw-a",
             proxmox: {
               host_id: "hypervisor-a",
-              qemu: { vmid: 1, ip: "10.0.0.1/24", template_vmid: 9022 },
+              qemu: { vmid: 1, ip: "192.0.2.1/24", template_vmid: 9022 },
             },
           },
         ],

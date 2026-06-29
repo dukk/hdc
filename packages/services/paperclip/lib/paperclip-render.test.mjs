@@ -44,21 +44,21 @@ describe("paperclip-render", () => {
       {
         ...basePaperclip,
         ollama_backends: [
-          { id: "ollama-a", url: "http://10.0.0.111:11434" },
-          { id: "ollama-b", url: "http://10.0.0.112:11434", primary: true },
+          { id: "ollama-a", url: "http://192.0.2.111:11434" },
+          { id: "ollama-b", url: "http://192.0.2.112:11434", primary: true },
         ],
       },
       baseSecrets,
     );
-    expect(env).toContain("OLLAMA_BASE_URL=http://10.0.0.112:11434");
+    expect(env).toContain("OLLAMA_BASE_URL=http://192.0.2.112:11434");
   });
 
   it("primaryOllamaBaseUrl falls back to first entry when none marked primary", () => {
     const backends = normalizeOllamaBackends([
-      { id: "ollama-a", url: "http://10.0.0.111:11434" },
-      { id: "ollama-b", url: "http://10.0.0.112:11434" },
+      { id: "ollama-a", url: "http://192.0.2.111:11434" },
+      { id: "ollama-b", url: "http://192.0.2.112:11434" },
     ]);
-    expect(primaryOllamaBaseUrl(backends)).toBe("http://10.0.0.111:11434");
+    expect(primaryOllamaBaseUrl(backends)).toBe("http://192.0.2.111:11434");
   });
 
   it("normalizeOllamaBackends returns empty array when unset", () => {

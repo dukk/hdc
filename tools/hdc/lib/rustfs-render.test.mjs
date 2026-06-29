@@ -62,12 +62,12 @@ describe("rustfs-render", () => {
   });
 
   it("resolves upstream URLs for nginx-waf", () => {
-    expect(resolveS3UpstreamUrl("10.0.0.10", rustfs)).toBe("http://10.0.0.10:9000");
+    expect(resolveS3UpstreamUrl("192.0.2.10", rustfs)).toBe("http://192.0.2.10:9000");
     expect(
       resolveS3UpstreamPool(
-        [{ ctIp: "10.0.0.10" }, { ctIp: "10.0.0.11" }, { ctIp: null }],
+        [{ ctIp: "192.0.2.10" }, { ctIp: "192.0.2.11" }, { ctIp: null }],
         rustfs,
       ),
-    ).toEqual(["http://10.0.0.10:9000", "http://10.0.0.11:9000"]);
+    ).toEqual(["http://192.0.2.10:9000", "http://192.0.2.11:9000"]);
   });
 });

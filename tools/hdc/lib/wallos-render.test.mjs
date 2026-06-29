@@ -41,7 +41,7 @@ describe("wallos-render", () => {
       db: "/opt/wallos/db",
       logos: "/opt/wallos/logos",
     });
-    expect(resolveUpstreamUrl("10.0.0.136", wallos)).toBe("http://10.0.0.136:8282");
-    expect(resolveWebUrl(wallos, "10.0.0.136")).toBe("http://10.0.0.136:8282");
+    expect(resolveUpstreamUrl("192.0.2.136", wallos)).toBe("http://192.0.2.136:8282");
+    expect(resolveWebUrl(wallos, "192.0.2.136")).toBe("http://192.0.2.136:8282");
   });
 });

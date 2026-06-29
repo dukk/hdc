@@ -93,7 +93,7 @@ See hdc-private `packages/services/uptime-kuma/plan.md` for Console setup and ro
 
 ## Email notifications (manual)
 
-For `uptime-kuma-a`, configure SMTP in the UK UI (Settings → Notifications → Email). Use internal postfix-relay (`postfix-relay.hdc.dukk.org:25`, no auth). Guest baseline configures OS mail on Proxmox LXCs.
+For `uptime-kuma-a`, configure SMTP in the UK UI (Settings → Notifications → Email). Use internal postfix-relay (`postfix-relay.home.example.invalid:25`, no auth). Guest baseline configures OS mail on Proxmox LXCs.
 
 ## Related
 

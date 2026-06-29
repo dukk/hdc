@@ -305,7 +305,7 @@ export function ensureCertbotPackages(user, pveHost, vmid) {
   const script = [
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
-    "printf 'nameserver 10.0.0.2\\nnameserver 10.0.0.3\\n' > /etc/resolv.conf",
+    "printf 'nameserver 192.0.2.2\\nnameserver 192.0.2.3\\n' > /etc/resolv.conf",
     "apt-get update -qq",
     "apt-get install -y -qq mosquitto mosquitto-clients certbot ca-certificates curl",
   ].join("\n");

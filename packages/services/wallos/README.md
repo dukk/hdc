@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service wallos maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.136:8282`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.136:8282`).
 2. **Inventory:** set `access.nodes[0].ip` on `wallos-a.json`.
 3. **Admin account:** complete first-run setup in the Wallos web UI.
 4. **Data:** SQLite and logos persist under `/opt/wallos/db` and `/opt/wallos/logos` on the CT.

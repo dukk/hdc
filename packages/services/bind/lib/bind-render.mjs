@@ -12,7 +12,7 @@ function zoneFileName(name) {
 /**
  * Zone-file owner column: relative to apex (@ or label), never FQDN under the zone.
  * BIND appends the zone origin to dotted owners without a trailing dot, so
- * `pve-b.hdc.dukk.org` in zone hdc.dukk.org becomes pve-b.hdc.dukk.org.hdc.dukk.org.
+ * `pve-b.home.example.invalid` in zone hdc.example.invalid becomes pve-b.home.example.invalid.home.example.invalid.
  * @param {string} name
  * @param {string} zone Apex zone name.
  */

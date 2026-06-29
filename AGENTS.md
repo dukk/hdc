@@ -36,7 +36,7 @@ Example (split Cloudflare zones):
 ```jsonc
 {
   "zones": [
-    { "$hdc.include": "zones/dukk.org.json" }
+    { "$hdc.include": "zones/example.invalid.json" }
   ]
 }
 ```
@@ -157,7 +157,7 @@ Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`package
 2. **Local sudo admin** — username from `HDC_ADMIN_USER` in repo `.env`; password in vault as `HDC_ADMIN_USER_PASSWORD`. Helpers: [`packages/lib/admin-user-ensure.mjs`](packages/lib/admin-user-ensure.mjs), [`packages/lib/linux-local-admin-user.mjs`](packages/lib/linux-local-admin-user.mjs). Skip with `--skip-admin-user`.
 3. **ClamAV** — install/enable via [`packages/lib/clamav-ensure.mjs`](packages/lib/clamav-ensure.mjs); profile from guest `memory_mb` (`lean` ≤3072: freshclam + oneshot `clamscan` only, no `clamd`; `standard` ≤8191: tuned `clamd`; `full`: Debian defaults). Daily staggered `clamscan` on `/home`, `/opt`, `/var` via [`packages/lib/clamav-scan-schedule.mjs`](packages/lib/clamav-scan-schedule.mjs). Skip with `--skip-clamav` or `--skip-clamav-scan`.
 4. **Unattended-upgrades** — apt security updates via [`packages/lib/unattended-upgrades-ensure.mjs`](packages/lib/unattended-upgrades-ensure.mjs) (no auto-reboot). Skip with `--skip-unattended-upgrades`.
-5. **Mail relay (Postfix satellite)** — forward local mail to the internal relay from [`packages/services/postfix-relay/config.json`](packages/services/postfix-relay/config.json) `client_defaults` (relay host `postfix-relay.hdc.dukk.org` / `10.0.0.60`, no per-guest SMTP2GO creds). Helpers: [`packages/lib/postfix-satellite-ensure.mjs`](packages/lib/postfix-satellite-ensure.mjs), [`packages/lib/mail-relay-config.mjs`](packages/lib/mail-relay-config.mjs). Skip with `--skip-mail-relay`. Auto-skipped on `postfix-relay-a` (the relay host itself).
+5. **Mail relay (Postfix satellite)** — forward local mail to the internal relay from [`packages/services/postfix-relay/config.json`](packages/services/postfix-relay/config.json) `client_defaults` (relay host `postfix-relay.home.example.invalid` / `192.0.2.60`, no per-guest SMTP2GO creds). Helpers: [`packages/lib/postfix-satellite-ensure.mjs`](packages/lib/postfix-satellite-ensure.mjs), [`packages/lib/mail-relay-config.mjs`](packages/lib/mail-relay-config.mjs). Skip with `--skip-mail-relay`. Auto-skipped on `postfix-relay-a` (the relay host itself).
 6. **CrowdSec agent** — enroll to central LAPI from [`packages/infrastructure/proxmox/config.json`](packages/infrastructure/proxmox/config.json) `provision.guest_agents.crowdsec` + vault `HDC_CROWDSEC_ENROLL_KEY`. Skip with `--skip-crowdsec-agent`.
 7. **Wazuh agent** — register to manager from `provision.guest_agents.wazuh` + vault `HDC_WAZUH_AGENT_PASSWORD`. Skip with `--skip-wazuh-agent`.
 8. **Root SSH disabled** — when both `hdc` and admin user are ensured, lock root password and set `PermitRootLogin no` ([`packages/lib/root-login-disable.mjs`](packages/lib/root-login-disable.mjs)). Skip with `--skip-disable-root`.
@@ -361,7 +361,7 @@ Example: `node tools/hdc/cli.mjs run service valkey deploy --`
 
 **Sites:** `host_names[]` (legacy `server_names` accepted with warning); `upstream` as URL string or pool object (`method`, `servers[]`); optional `locations[].upstream`. **TLS:** enabled by default; `tls.http_redirect` (default true) controls HTTP→HTTPS redirect.
 
-Vault: `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt deploy; legacy `HDC_NGINX_WAF_LE_EMAIL` still read with deprecation warning); `HDC_BIND_TSIG_KEY` when ACME uses **dns-01** (explicit challenge or http-01 fallback for names in `acme.dns.zone` only — Cloudflare DNS zones such as `drippylit.com` / `typotests.com` use http-01 via proxy).
+Vault: `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt deploy; legacy `HDC_NGINX_WAF_LE_EMAIL` still read with deprecation warning); `HDC_BIND_TSIG_KEY` when ACME uses **dns-01** (explicit challenge or http-01 fallback for names in `acme.dns.zone` only — Cloudflare DNS zones such as `brand-a.example` / `brand-b.example` use http-01 via proxy).
 
 Example: `node tools/hdc/cli.mjs run service nginx-waf maintain -- --group edge`
 
@@ -505,7 +505,7 @@ Example: `node tools/hdc/cli.mjs run service searxng deploy --`
 | `query` | Config summary; `--live` for compose health + `/api/server/ping`; `--admin` / `--import --yes` for sanitized `system_config` drift vs live (requires API key; single `--system-id`) |
 | `teardown` | Synology: `docker compose down`. Proxmox: optional compose down then destroy QEMU (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Set `immich.public_url` (e.g. `https://immich.dukk.org`) for `IMMICH_SERVER_URL` in `.env` and `server.externalDomain` on admin sync. **`immich.mail.enabled`:** maps internal postfix-relay SMTP into `notifications.smtp` (`postfix-relay.hdc.dukk.org:25`, no auth). **`immich.system_config`:** full sanitized admin config from `query --import`; maintain deep-merges over live before PUT. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
+Set `immich.public_url` (e.g. `https://immich.example.invalid`) for `IMMICH_SERVER_URL` in `.env` and `server.externalDomain` on admin sync. **`immich.mail.enabled`:** maps internal postfix-relay SMTP into `notifications.smtp` (`postfix-relay.home.example.invalid:25`, no auth). **`immich.system_config`:** full sanitized admin config from `query --import`; maintain deep-merges over live before PUT. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
 
 **HTTPS:** nginx-waf `sites[]` upstream `http://<nas-ip>:2283`; Cloudflare A `immich` → WAF WAN IP. Prerequisite: `node tools/hdc/cli.mjs run infrastructure synology-nas maintain -- --instance a`.
 
@@ -527,7 +527,7 @@ Example: `node tools/hdc/cli.mjs run service immich query -- --system-id vm-immi
 | `query` | Config summary; `--live` for synopkg status + HTTP probe |
 | `teardown` | `synopkg stop` only (`--yes`; package stays installed) |
 
-First install remains manual in DSM (Package Center or `.spk` from Plex.tv). LAN UI: `http://10.0.0.9:32400/web`. No vault secrets for v1.
+First install remains manual in DSM (Package Center or `.spk` from Plex.tv). LAN UI: `http://192.0.2.9:32400/web`. No vault secrets for v1.
 
 Example: `node tools/hdc/cli.mjs run service plex query -- --live`
 
@@ -1324,7 +1324,7 @@ Examples:
 node tools/hdc/cli.mjs run infrastructure cloudflare query --
 node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-page-rules --yes
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone dukk.org --prune
+node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone example.invalid --prune
 ```
 
 ## Cloudflare Workers and Pages in this repo

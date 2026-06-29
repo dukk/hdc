@@ -90,7 +90,7 @@ function validateDeployments(deployments) {
     const q = isObject(px.qemu) ? px.qemu : {};
     const ip = typeof q.ip === "string" ? q.ip.trim() : "";
     if (!ip || !/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(ip)) {
-      throw new Error(`${sid}: proxmox.qemu.ip must be CIDR (e.g. 10.0.0.189/24)`);
+      throw new Error(`${sid}: proxmox.qemu.ip must be CIDR (e.g. 192.0.2.189/24)`);
     }
     const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
     if (!Number.isFinite(templateVmid) || templateVmid <= 0) {

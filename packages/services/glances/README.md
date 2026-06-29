@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service glances maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.95:61208`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.95:61208`).
 2. **Inventory:** set `access.nodes[0].ip` on `glances-a.json`.
 3. **HTTPS (optional):** set `glances.public_url`, add BIND A/CNAME records and nginx-waf site with `internal_only` (Web UI has no built-in auth).
 4. **Browser mode:** set `glances.browser_mode: true` and re-run maintain to discover other Glances servers on the LAN.

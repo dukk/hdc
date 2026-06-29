@@ -52,7 +52,7 @@ describe("bind-zones", () => {
     expect(() =>
       validateZoneRecords(
         [
-          { type: "A", name: "ca", data: "10.0.0.8", ttl: 3600 },
+          { type: "A", name: "ca", data: "192.0.2.8", ttl: 3600 },
           { type: "CNAME", name: "ca", data: "step-ca-a.example.", ttl: 3600 },
         ],
         "hdc.example.invalid",

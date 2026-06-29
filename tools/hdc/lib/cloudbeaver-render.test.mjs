@@ -53,23 +53,23 @@ describe("cloudbeaver-render", () => {
   });
 
   it("renders env with admin bootstrap and CB_SERVER_URL from CT IP", () => {
-    const env = renderCloudbeaverEnv(cloudbeaver, "10.0.0.140", "test-pass");
+    const env = renderCloudbeaverEnv(cloudbeaver, "192.0.2.140", "test-pass");
     expect(env).toContain("CLOUDBEAVER_IMAGE=dbeaver/cloudbeaver:latest");
     expect(env).toContain("CLOUDBEAVER_HOST_PORT=8978");
     expect(env).toContain("CB_SERVER_NAME=HDC CloudBeaver");
-    expect(env).toContain("CB_SERVER_URL=http://10.0.0.140:8978/");
+    expect(env).toContain("CB_SERVER_URL=http://192.0.2.140:8978/");
     expect(env).toContain("CB_ADMIN_NAME=cbadmin");
     expect(env).toContain("CB_ADMIN_PASSWORD=test-pass");
   });
 
   it("escapes dollar signs in admin password for compose env", () => {
-    const env = renderCloudbeaverEnv(cloudbeaver, "10.0.0.140", "pa$$word");
+    const env = renderCloudbeaverEnv(cloudbeaver, "192.0.2.140", "pa$$word");
     expect(env).toContain("CB_ADMIN_PASSWORD=pa$$$$word");
   });
 
   it("resolves server url and web/upstream urls", () => {
-    expect(resolveServerUrl(cloudbeaver, "10.0.0.140")).toBe("http://10.0.0.140:8978/");
-    expect(resolveUpstreamUrl("10.0.0.140", cloudbeaver)).toBe("http://10.0.0.140:8978");
-    expect(resolveWebUrl(cloudbeaver, "10.0.0.140")).toBe("http://10.0.0.140:8978");
+    expect(resolveServerUrl(cloudbeaver, "192.0.2.140")).toBe("http://192.0.2.140:8978/");
+    expect(resolveUpstreamUrl("192.0.2.140", cloudbeaver)).toBe("http://192.0.2.140:8978");
+    expect(resolveWebUrl(cloudbeaver, "192.0.2.140")).toBe("http://192.0.2.140:8978");
   });
 });

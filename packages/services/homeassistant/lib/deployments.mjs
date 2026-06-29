@@ -93,7 +93,7 @@ function validateDeployments(deployments) {
       throw new Error(`${sid}: proxmox.qemu.vmid must be a positive number`);
     }
     const ip = typeof q.ip === "string" ? q.ip.trim() : "";
-    if (!ip) throw new Error(`${sid}: proxmox.qemu.ip required (e.g. 10.0.0.30/24)`);
+    if (!ip) throw new Error(`${sid}: proxmox.qemu.ip required (e.g. 192.0.2.30/24)`);
     const ha = isObject(d.homeassistant) ? d.homeassistant : {};
     const release =
       typeof ha.release === "string" && ha.release.trim()

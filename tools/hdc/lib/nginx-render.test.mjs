@@ -35,19 +35,19 @@ describe("nginx render", () => {
   it("renders static HTTP site without TLS redirect", () => {
     const vhost = renderSiteVhost({
       site: {
-        id: "drippylit",
-        server_names: ["drippylit.com"],
+        id: "brand-a-site",
+        server_names: ["brand-a.example"],
         listen: [80],
-        static: { root: "/var/www/drippylit" },
+        static: { root: "/var/www/brand-a" },
         tls: { enabled: false },
       },
       http01Acme: true,
       webroot: "/var/www/letsencrypt",
     });
-    expect(vhost).toContain('root /var/www/drippylit');
+    expect(vhost).toContain('root /var/www/brand-a');
     expect(vhost).toContain("try_files $uri $uri/ =404");
     expect(vhost).not.toContain("return 301 https://");
     expect(vhost).not.toContain("proxy_pass");
-    expect(tlsDomainsFromSites([{ id: "drippylit", server_names: ["drippylit.com"], tls: { enabled: false } }])).toEqual([]);
+    expect(tlsDomainsFromSites([{ id: "brand-a-site", server_names: ["brand-a.example"], tls: { enabled: false } }])).toEqual([]);
   });
 });

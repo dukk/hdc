@@ -28,9 +28,9 @@ describe("zabbix deployments", () => {
         system_id: "vm-zabbix-a",
         proxmox: {
           host_id: "pve-b",
-          qemu: { vmid: 581, ip: "10.0.0.203/24", template_vmid: 9022 },
+          qemu: { vmid: 581, ip: "192.0.2.203/24", template_vmid: 9022 },
         },
-        configure: { ssh: { host: "10.0.0.203" } },
+        configure: { ssh: { host: "192.0.2.203" } },
       },
     ],
   };

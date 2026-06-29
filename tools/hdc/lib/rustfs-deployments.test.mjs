@@ -15,7 +15,7 @@ describe("rustfs deployments", () => {
       lxc: {
         vmid,
         hostname: `rustfs-${letter}`,
-        ip_config: `ip=${ip}/24,gw=10.0.0.1`,
+        ip_config: `ip=${ip}/24,gw=192.0.2.1`,
       },
     },
   });
@@ -25,10 +25,10 @@ describe("rustfs deployments", () => {
     rustfs: { image: "rustfs/rustfs:latest", cluster_dns_suffix: ".hdc.example.org" },
     defaults: { mode: "proxmox-lxc" },
     deployments: [
-      baseDeployment("a", 501, "10.0.0.41"),
-      baseDeployment("b", 502, "10.0.0.42"),
-      baseDeployment("c", 503, "10.0.0.43"),
-      baseDeployment("d", 504, "10.0.0.44"),
+      baseDeployment("a", 501, "192.0.2.41"),
+      baseDeployment("b", 502, "192.0.2.42"),
+      baseDeployment("c", 503, "192.0.2.43"),
+      baseDeployment("d", 504, "192.0.2.44"),
     ],
   };
 
@@ -37,7 +37,7 @@ describe("rustfs deployments", () => {
     expect(() =>
       normalizeRustfsConfig({
         schema_version: 2,
-        deployments: [baseDeployment("a", 501, "10.0.0.41")],
+        deployments: [baseDeployment("a", 501, "192.0.2.41")],
       }),
     ).toThrow(/exactly 4 deployments/);
   });
@@ -78,10 +78,10 @@ describe("rustfs deployments", () => {
       normalizeRustfsConfig({
         schema_version: 2,
         deployments: [
-          baseDeployment("a", 501, "10.0.0.41"),
-          baseDeployment("b", 501, "10.0.0.42"),
-          baseDeployment("c", 503, "10.0.0.43"),
-          baseDeployment("d", 504, "10.0.0.44"),
+          baseDeployment("a", 501, "192.0.2.41"),
+          baseDeployment("b", 501, "192.0.2.42"),
+          baseDeployment("c", 503, "192.0.2.43"),
+          baseDeployment("d", 504, "192.0.2.44"),
         ],
       }),
     ).toThrow(/duplicate proxmox.lxc.vmid/);

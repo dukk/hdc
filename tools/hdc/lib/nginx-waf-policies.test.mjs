@@ -12,7 +12,7 @@ const catalog = mergePolicyDefinitions(
   {
     nginx_waf: {
       modsecurity: { enabled: true, rule_engine: "On" },
-      trusted_cidrs: ["10.0.0.0/8"],
+      trusted_cidrs: ["192.0.2.0/8"],
       policy_definitions: {
         "api-rate": {
           type: "rate_limit",
@@ -36,7 +36,7 @@ describe("nginx-waf-policies", () => {
         waf: { enabled: true },
         locations: [{ path: "/", access: { policy: "internal_only", deny_status: 404 } }],
       },
-      ["10.0.0.0/8"],
+      ["192.0.2.0/8"],
     );
     expect(site.policies).toContain("modsecurity-default");
     expect(site.locations[0].policies[0].type).toBe("trusted_cidrs");
@@ -56,7 +56,7 @@ describe("nginx-waf-policies", () => {
               type: "trusted_cidrs",
               deny_status: 401,
               groups: [
-                { id: "lan", cidrs: ["10.0.0.0/8"] },
+                { id: "lan", cidrs: ["192.0.2.0/8"] },
                 { id: "vpn", cidrs: ["10.8.0.0/24"] },
               ],
             },
@@ -65,7 +65,7 @@ describe("nginx-waf-policies", () => {
       ],
     };
     const locPlan = resolveLocationPolicyPlan(site, site.locations[0], 0, catalog, {});
-    expect(locPlan.trusted_cidrs.unionCidrs).toEqual(["10.0.0.0/8", "10.8.0.0/24"]);
+    expect(locPlan.trusted_cidrs.unionCidrs).toEqual(["192.0.2.0/8", "10.8.0.0/24"]);
     expect(locPlan.trusted_cidrs.denyStatus).toBe(401);
   });
 

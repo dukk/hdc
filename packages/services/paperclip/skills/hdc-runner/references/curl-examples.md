@@ -3,7 +3,7 @@
 Replace `$RUNNER` and `$TOKEN` from company secrets.
 
 ```bash
-export RUNNER=http://10.0.0.125:9120
+export RUNNER=http://192.0.2.125:9120
 export TOKEN=<HDC_RUNNER_API_TOKEN>
 
 # Health

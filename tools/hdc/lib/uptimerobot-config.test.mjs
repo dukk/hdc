@@ -23,7 +23,7 @@ import { liveStateToConfigEntries } from "../../../packages/infrastructure/uptim
 
 describe("uptimerobot-config", () => {
   it("slugifyId normalizes friendly names", () => {
-    expect(slugifyId("Immich (dukk.org)")).toBe("immich-dukk-org");
+    expect(slugifyId("Immich (example.invalid)")).toBe("immich-example-invalid");
   });
 
   it("deriveResourceId avoids collisions", () => {
@@ -71,7 +71,7 @@ describe("uptimerobot-config", () => {
       uptimerobot_id: 123,
       friendly_name: "Immich",
       type: "http",
-      url: "https://immich.dukk.org",
+      url: "https://immich.example.invalid",
       interval_seconds: 300,
       status: "up",
       managed: true,
@@ -83,7 +83,7 @@ describe("uptimerobot-config", () => {
       {
         id: 123,
         friendly_name: "Immich",
-        url: "https://immich.dukk.org",
+        url: "https://immich.example.invalid",
         type: 1,
         interval: 300,
         status: 2,

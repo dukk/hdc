@@ -12,7 +12,7 @@ describe("safeline-admin-setup", () => {
       "\u001b[92m[INFO] Initial username：admin\u001b[0m\n" +
       "\u001b[92m[INFO] Initial password：ecDSpeUH\u001b[0m\n" +
       "\u001b[92m[INFO] Done\u001b[0m\n" +
-      "Warning: Permanently added '10.0.0.12' (ED25519) to the list of known hosts.";
+      "Warning: Permanently added '192.0.2.12' (ED25519) to the list of known hosts.";
     expect(parseResetAdminOutput(sample)).toEqual({
       username: "admin",
       password: "ecDSpeUH",

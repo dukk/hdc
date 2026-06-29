@@ -66,7 +66,7 @@ describe("qemu-guest-ssh-wait", () => {
   describe("waitForQemuGuestSshAfterBoot", () => {
     const apiOpts = {
       user: "hdc",
-      host: "10.0.0.1",
+      host: "192.0.2.1",
       apiBase: "https://pve.test:8006",
       node: "hypervisor-a",
       vmid: 200,

@@ -30,7 +30,7 @@ node tools/hdc/cli.mjs run service shlink maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.x:8080`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.x:8080`).
 2. **Inventory:** set `access.nodes[0].ip` on `shlink-a.json`.
 3. **BIND / Cloudflare:** A records for `shlink.default_domain` and `shlink.web_client.public_url` when used.
 4. **nginx-waf:** short/API site → `http://<ct-ip>:8080`; web client site → `http://<ct-ip>:8081`.

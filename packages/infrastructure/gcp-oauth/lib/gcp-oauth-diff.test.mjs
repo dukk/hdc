@@ -14,9 +14,9 @@ describe("gcp-oauth-config", () => {
 
 describe("buildDerivedUris", () => {
   it("builds https redirect and origin from hostname and path", () => {
-    const d = buildDerivedUris("vault.hdc.dukk.org", "/oidc/callback");
-    expect(d.redirect_uris).toEqual(["https://vault.hdc.dukk.org/oidc/callback"]);
-    expect(d.javascript_origins).toEqual(["https://vault.hdc.dukk.org"]);
+    const d = buildDerivedUris("vault.home.example.invalid", "/oidc/callback");
+    expect(d.redirect_uris).toEqual(["https://vault.home.example.invalid/oidc/callback"]);
+    expect(d.javascript_origins).toEqual(["https://vault.home.example.invalid"]);
   });
 });
 

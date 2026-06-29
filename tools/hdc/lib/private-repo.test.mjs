@@ -124,20 +124,20 @@ describe("private-repo", () => {
       schema_version: 1,
       zones: [
         {
-          name: "dukk.org",
+          name: "example.invalid",
           records: [
             { type: "A", name: "@", data: "1.2.3.4", ttl: 1, proxied: true },
-            { type: "CNAME", name: "www", data: "dukk.org", proxied: false },
+            { type: "CNAME", name: "www", data: "example.invalid", proxied: false },
           ],
         },
       ],
     };
     const text = formatRepoJson(data);
-    expect(text).toContain('"name": "dukk.org"');
+    expect(text).toContain('"name": "example.invalid"');
     expect(text).toMatch(
       /\{ "type": "A", "name": "@", "data": "1\.2\.3\.4", "ttl": 1, "proxied": true \}/,
     );
-    expect(text).toMatch(/\{ "type": "CNAME", "name": "www", "data": "dukk\.org", "proxied": false \}/);
+    expect(text).toMatch(/\{ "type": "CNAME", "name": "www", "data": "example.invalid", "proxied": false \}/);
     expect(text.split("\n").length).toBeLessThan(15);
     expect(JSON.parse(text.trimEnd())).toEqual(data);
   });
@@ -182,18 +182,18 @@ describe("private-repo", () => {
 
   it("formatRepoJson keeps other string arrays expanded", () => {
     const data = {
-      cloudflare: { zone_filter: { mode: "include", names: ["dukk.org", "example.com"] } },
+      cloudflare: { zone_filter: { mode: "include", names: ["example.invalid", "example.com"] } },
     };
     const text = formatRepoJson(data);
-    expect(text).toContain('"dukk.org"');
+    expect(text).toContain('"example.invalid"');
     expect(text).toContain('"example.com"');
-    expect(text).not.toMatch(/\{ "dukk\.org"/);
+    expect(text).not.toMatch(/\{ "example\.invalid"/);
     expect(JSON.parse(text.trimEnd())).toEqual(data);
   });
 
   it("formatRepoJson compactArrayKeys [] uses fully expanded objects", () => {
     const data = {
-      zones: [{ name: "dukk.org", records: [{ type: "A", name: "@", data: "1.2.3.4", ttl: 1 }] }],
+      zones: [{ name: "example.invalid", records: [{ type: "A", name: "@", data: "1.2.3.4", ttl: 1 }] }],
     };
     const text = formatRepoJson(data, { compactArrayKeys: [] });
     expect(text).toContain('"type": "A"');

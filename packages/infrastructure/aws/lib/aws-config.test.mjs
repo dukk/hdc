@@ -7,7 +7,7 @@ describe("normalizeAwsConfig", () => {
     const cfg = normalizeAwsConfig({
       schema_version: 1,
       aws: { region: "us-east-1" },
-      vpcs: [{ id: "vpc-main", cidr: "10.0.0.0/16" }],
+      vpcs: [{ id: "vpc-main", cidr: "192.0.2.0/16" }],
       subnets: [
         { id: "subnet-a", vpc_id: "vpc-main", cidr: "10.0.1.0/24", az: "us-east-1a" },
       ],

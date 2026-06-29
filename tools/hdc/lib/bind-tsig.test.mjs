@@ -36,7 +36,7 @@ describe("bind-tsig", () => {
       JSON.stringify({
         id: "example.test",
         zone_type: "forward",
-        records: [{ type: "A", name: "host", data: "10.0.0.1", ttl: 3600 }],
+        records: [{ type: "A", name: "host", data: "192.0.2.1", ttl: 3600 }],
       }),
     );
     const path = join(dir, "config.json");

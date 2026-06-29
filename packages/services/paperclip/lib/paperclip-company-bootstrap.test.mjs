@@ -10,7 +10,7 @@ describe("paperclip-company-bootstrap", () => {
           company: {
             name: "Home Data Center",
             api_url: "https://paperclip.example.test",
-            hdc_runner_url: "http://10.0.0.125:9120",
+            hdc_runner_url: "http://192.0.2.125:9120",
             skills_github_base: "https://github.com/dukk/hdc/tree/main/packages/services/paperclip/skills",
             agents: [{ id: "hdc-monitor", name: "HDC Monitor", adapter_type: "cursor" }],
           },

@@ -4,7 +4,7 @@ import { loadPackageConfigFromPackageRoot } from "./package-run-config.mjs";
 import { repoRoot } from "../../tools/hdc/paths.mjs";
 
 /** @typedef {object} MailRelayClientDefaults
- * @property {string} relayhost Bracketed host for Postfix relayhost, e.g. [10.0.0.60]
+ * @property {string} relayhost Bracketed host for Postfix relayhost, e.g. [192.0.2.60]
  * @property {string} relay_hostname DNS name for app SMTP clients
  * @property {number} relay_port SMTP port on internal relay (default 25)
  * @property {string} myorigin Default envelope origin domain
@@ -14,11 +14,11 @@ import { repoRoot } from "../../tools/hdc/paths.mjs";
  */
 
 const FALLBACK_DEFAULTS = {
-  relayhost: "[10.0.0.60]",
-  relay_hostname: "postfix-relay.hdc.dukk.org",
+  relayhost: "[192.0.2.60]",
+  relay_hostname: "postfix-relay.home.example.invalid",
   relay_port: 25,
-  myorigin: "hdc.dukk.org",
-  default_from: "noreply@hdc.dukk.org",
+  myorigin: "hdc.example.invalid",
+  default_from: "noreply@hdc.example.invalid",
   inet_interfaces: "loopback-only",
   relay_system_id: "postfix-relay-a",
 };

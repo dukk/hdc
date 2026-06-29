@@ -30,9 +30,9 @@ node tools/hdc/cli.mjs run service docuseal maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.x:3000`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.x:3000`).
 2. **Inventory:** set `access.nodes[0].ip` on `docuseal-a.json`.
-3. **BIND / Cloudflare:** A record for the hostname in `docuseal.public_url` (e.g. `sign.dukk.org`).
+3. **BIND / Cloudflare:** A record for the hostname in `docuseal.public_url` (e.g. `sign.example.invalid`).
 4. **nginx-waf:** add a site with `proxy_pass` to the CT upstream; enable WebSockets; consider `proxy_read_timeout 300s` for slow PDF renders.
 5. **First run:** complete admin setup in the DocuSeal web UI.
 6. **SMTP:** `docuseal.mail.enabled` maps postfix-relay to `SMTP_*` env vars; admin UI settings may override env on some releases.

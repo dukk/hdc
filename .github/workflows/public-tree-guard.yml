@@ -1,0 +1,46 @@
+name: public-tree-guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block live package configs
+        run: |
+          set -euo pipefail
+          bad=$(git ls-files 'packages/**/config.json' | grep -v 'manifest.json' || true)
+          if [ -n "$bad" ]; then
+            echo "Tracked config.json files are not allowed in the public tree:"
+            echo "$bad"
+            exit 1
+          fi
+      - name: Block .env except examples
+        run: |
+          set -euo pipefail
+          bad=$(git ls-files '.env' 'packages/**/.env' | grep -v '.env.example' || true)
+          if [ -n "$bad" ]; then
+            echo "Tracked .env files are not allowed:"
+            echo "$bad"
+            exit 1
+          fi
+      - name: Block inventory except _example.json
+        run: |
+          set -euo pipefail
+          bad=$(git ls-files 'inventory/**' | grep -v 'inventory/manual/systems/_example.json' || true)
+          if [ -n "$bad" ]; then
+            echo "Inventory files are not allowed in the public tree:"
+            echo "$bad"
+            exit 1
+          fi
+      - name: Block RFC1918 10.0.0.x in tracked files
+        run: |
+          set -euo pipefail
+          if git grep -nE '10\.0\.0\.[0-9]+' -- ':!package-lock.json' ':!.github/workflows/public-tree-guard.yml'; then
+            echo "Found 10.0.0.x addresses; use 192.0.2.x (RFC 5737) in public examples."
+            exit 1
+          fi

@@ -4,9 +4,9 @@ Provision the **Home Data Center** Paperclip company with HDC skills and agents 
 
 ## Prerequisites
 
-- Paperclip deployed (`paperclip-a`, `https://paperclip.hdc.dukk.org`)
+- Paperclip deployed (`paperclip-a`, `https://paperclip.home.example.invalid`)
 - Instance claimed (CEO / first admin)
-- hdc-runner deployed with web API and optional HTTP bridge (`10.0.0.125:9120`, bridge `:9121`)
+- hdc-runner deployed with web API and optional HTTP bridge (`192.0.2.125:9120`, bridge `:9121`)
 - Vault keys: `HDC_PAPERCLIP_API_KEY`, `HDC_HDC_RUNNER_API_TOKEN`, `HDC_PAPERCLIP_AGENT_BRIDGE_SECRET`
 - HDC skills committed to public hdc repo (for GitHub import URL in config)
 
@@ -21,9 +21,9 @@ This auto-generates `HDC_HDC_RUNNER_API_TOKEN` and `HDC_PAPERCLIP_AGENT_BRIDGE_S
 Verify:
 
 ```bash
-curl -s http://10.0.0.125:9120/api/health
-curl -s -H "Authorization: Bearer <token>" http://10.0.0.125:9120/api/schedules
-curl -s http://10.0.0.125:9121/api/health
+curl -s http://192.0.2.125:9120/api/health
+curl -s -H "Authorization: Bearer <token>" http://192.0.2.125:9120/api/schedules
+curl -s http://192.0.2.125:9121/api/health
 ```
 
 ## 2. Create Paperclip board API key
@@ -67,7 +67,7 @@ Imports skills from GitHub and creates/syncs agents:
 Set env:
 
 ```bash
-export PAPERCLIP_API_URL=https://paperclip.hdc.dukk.org
+export PAPERCLIP_API_URL=https://paperclip.home.example.invalid
 export PAPERCLIP_API_KEY=<board-token>
 export COMPANY_ID=<uuid-after-list>
 ```
@@ -99,7 +99,7 @@ curl -X POST "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/agents" \
 
 | Secret | Value |
 |--------|-------|
-| `HDC_RUNNER_API_URL` | `http://10.0.0.125:9120` |
+| `HDC_RUNNER_API_URL` | `http://192.0.2.125:9120` |
 | `HDC_RUNNER_API_TOKEN` | From vault `HDC_HDC_RUNNER_API_TOKEN` |
 | `HDC_PAPERCLIP_BRIDGE_SECRET` | From vault (HTTP adapter agents) |
 
@@ -119,8 +119,8 @@ Configure backends in `packages/services/paperclip/config.json`:
 
 ```json
 "ollama_backends": [
-  { "id": "ollama-a", "url": "http://10.0.0.111:11434", "primary": true },
-  { "id": "ollama-b", "url": "http://10.0.0.112:11434" }
+  { "id": "ollama-a", "url": "http://192.0.2.111:11434", "primary": true },
+  { "id": "ollama-b", "url": "http://192.0.2.112:11434" }
 ]
 ```
 
@@ -130,8 +130,8 @@ Then run `node tools/hdc/cli.mjs run service paperclip maintain --`.
 
 1. Open Paperclip → pick any agent (or create a test agent).
 2. Adapter → choose **Ollama**, **OpenCode local**, or **OpenAI-compatible**.
-3. Primary Ollama (`vm-ollama-a`): leave `baseUrl` empty or set `http://10.0.0.111:11434`.
-4. Secondary Ollama (`vm-ollama-b`): set `baseUrl` to `http://10.0.0.112:11434`.
+3. Primary Ollama (`vm-ollama-a`): leave `baseUrl` empty or set `http://192.0.2.111:11434`.
+4. Secondary Ollama (`vm-ollama-b`): set `baseUrl` to `http://192.0.2.112:11434`.
 5. Select a model pulled on that host (see `packages/services/ollama/config.json`).
 6. Run **Test environment** so Paperclip discovers models from `GET /api/tags`.
 

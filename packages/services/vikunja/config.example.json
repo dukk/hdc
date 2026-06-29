@@ -20,13 +20,13 @@
       "image_tag": "latest",
       "postgres_image_tag": "16-alpine",
       "host_port": 3456,
-      "public_url": "https://tasks.dukk.org/",
+      "public_url": "https://tasks.example.invalid/",
       "timezone": "America/New_York",
       "jwt_secret_vault_key": "HDC_VIKUNJA_JWT_SECRET",
       "db_password_vault_key": "HDC_VIKUNJA_DB_PASSWORD",
       "mail": {
         "enabled": false,
-        "from": "noreply@hdc.dukk.org"
+        "from": "noreply@hdc.example.invalid"
       }
     },
     "install": {

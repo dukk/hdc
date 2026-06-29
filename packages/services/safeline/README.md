@@ -54,10 +54,10 @@ Example site:
 ```json
 {
   "id": "immich",
-  "server_names": ["immich.dukk.org"],
+  "server_names": ["immich.example.invalid"],
   "ports": ["443"],
   "ssl": true,
-  "upstreams": ["http://10.0.0.9:2283"],
+  "upstreams": ["http://192.0.2.9:2283"],
   "comment": "Immich via SafeLine edge",
   "load_balance": { "balance_type": 1 }
 }

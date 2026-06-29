@@ -45,10 +45,10 @@ describe("glances-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.95", glances)).toBe("http://10.0.0.95:61208");
-    expect(resolveWebUrl(glances, "10.0.0.95")).toBe("http://10.0.0.95:61208");
-    expect(resolveWebUrl({ public_url: "https://glances.hdc.dukk.org" }, "10.0.0.95")).toBe(
-      "https://glances.hdc.dukk.org",
+    expect(resolveUpstreamUrl("192.0.2.95", glances)).toBe("http://192.0.2.95:61208");
+    expect(resolveWebUrl(glances, "192.0.2.95")).toBe("http://192.0.2.95:61208");
+    expect(resolveWebUrl({ public_url: "https://glances.home.example.invalid" }, "192.0.2.95")).toBe(
+      "https://glances.home.example.invalid",
     );
   });
 });

@@ -30,14 +30,14 @@ describe("safeline-render", () => {
   it("maps site config to API payload with hdc comment marker", () => {
     const payload = siteToApiPayload({
       id: "immich",
-      server_names: ["immich.dukk.org"],
+      server_names: ["immich.example.invalid"],
       ports: ["443"],
       ssl: true,
-      upstreams: ["http://10.0.0.9:2283"],
+      upstreams: ["http://192.0.2.9:2283"],
       comment: "Immich edge",
     });
     expect(payload.comment).toBe("hdc:site:immich Immich edge");
-    expect(payload.server_names).toEqual(["immich.dukk.org"]);
+    expect(payload.server_names).toEqual(["immich.example.invalid"]);
     expect(payload.ssl).toBe(true);
   });
 

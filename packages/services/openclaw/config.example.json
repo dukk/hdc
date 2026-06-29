@@ -13,7 +13,7 @@
         "rootfs_gb": 48
       },
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       }
     },
     "install": {
@@ -53,7 +53,7 @@
         "host_id": "hypervisor-a",
         "qemu": {
           "vmid": 580,
-          "ip": "10.0.0.0/24",
+          "ip": "192.0.2.0/24",
           "hostname": "vm-openclaw-a"
         }
       },

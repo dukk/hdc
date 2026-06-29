@@ -12,3 +12,10 @@ packages/**/*.json
 inventory/manual/**/*.json
 !inventory/manual/systems/_example.json
 inventory/automated/
+
+*.pem
+*.key
+vault.enc
+**/client_secret*.json
+tools/hdc/scripts/test-*.mjs
+tmp-*.txt

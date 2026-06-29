@@ -112,7 +112,7 @@
                   "enabled": { "type": ["boolean", "integer"] },
                   "url": {
                     "type": "string",
-                    "description": "Plex Media Server base URL (default http://10.0.0.9:32400)."
+                    "description": "Plex Media Server base URL (default http://192.0.2.9:32400)."
                   },
                   "token_vault_key": {
                     "type": "string",

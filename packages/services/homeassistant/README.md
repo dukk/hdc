@@ -31,7 +31,7 @@ node tools/hdc/cli.mjs run service homeassistant query -- --live
 
 ## Static IP
 
-HAOS does not use Ubuntu cloud-init. After first boot, set the configured static IP in **Settings → System → Network** if the deploy HTTP wait fails (match `proxmox.qemu.ip` in `config.json`, e.g. `10.0.0.39/24`, gw `10.0.0.1`, DNS BIND).
+HAOS does not use Ubuntu cloud-init. After first boot, set the configured static IP in **Settings → System → Network** if the deploy HTTP wait fails (match `proxmox.qemu.ip` in `config.json`, e.g. `192.0.2.39/24`, gw `192.0.2.1`, DNS BIND).
 
 ## nginx-waf / Cloudflare (public URL)
 
@@ -41,12 +41,12 @@ When `homeassistant.public_url` is `https://…` and **nginx-waf** proxies to po
 http:
   use_x_forwarded_for: true
   trusted_proxies:
-    - 10.0.0.40   # vm-nginx-waf-a
-    - 10.0.0.41   # vm-nginx-waf-b
+    - 192.0.2.40   # vm-nginx-waf-a
+    - 192.0.2.41   # vm-nginx-waf-b
 
 homeassistant:
-  external_url: https://ha.dukk.org
-  internal_url: http://10.0.0.39:8123
+  external_url: https://ha.example.invalid
+  internal_url: http://192.0.2.39:8123
 ```
 
 **Automation:** `deploy` and `maintain` (default) write the block above to HAOS `configuration.yaml` via the Proxmox host when `public_url` starts with `https://`. WAF IPs resolve from inventory `vm-nginx-waf-a` / `vm-nginx-waf-b`, or set `homeassistant.trusted_proxies[]` in package config. Skip with `--skip-reverse-proxy`. Manual fallback: **Terminal & SSH** add-on, or edit `supervisor/homeassistant/configuration.yaml` on HAOS data partition 8 while the VM is stopped.

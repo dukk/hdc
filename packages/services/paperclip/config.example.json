@@ -32,21 +32,21 @@
       "ollama_backends": [
         {
           "id": "ollama-a",
-          "url": "http://10.0.0.111:11434",
+          "url": "http://192.0.2.111:11434",
           "primary": true,
           "notes": "vm-ollama-a — matches packages/services/ollama config"
         },
         {
           "id": "ollama-b",
-          "url": "http://10.0.0.112:11434",
+          "url": "http://192.0.2.112:11434",
           "notes": "vm-ollama-b"
         }
       ],
       "company": {
         "name": "Home Data Center",
-        "api_url": "https://paperclip.hdc.dukk.org",
+        "api_url": "https://paperclip.home.example.invalid",
         "api_key_vault_key": "HDC_PAPERCLIP_API_KEY",
-        "hdc_runner_url": "http://10.0.0.125:9120",
+        "hdc_runner_url": "http://192.0.2.125:9120",
         "skills_github_base": "https://github.com/dukk/hdc/tree/main/packages/services/paperclip/skills",
         "agents": [
           {
@@ -83,7 +83,7 @@
             "role": "operator",
             "adapter_type": "http",
             "adapter_config": {
-              "url": "http://10.0.0.125:9121/paperclip/heartbeat",
+              "url": "http://192.0.2.125:9121/paperclip/heartbeat",
               "method": "POST",
               "headers": { "X-HDC-Bridge-Secret": "${HDC_PAPERCLIP_BRIDGE_SECRET}" }
             },

@@ -26,7 +26,7 @@ describe("homepage-render", () => {
 
   it("renderHomepageEnv injects NODE_TLS_REJECT_UNAUTHORIZED when proxmox widget enabled", () => {
     const env = renderHomepageEnv({
-      allowed_hosts: ["hdc.dukk.org"],
+      allowed_hosts: ["hdc.example.invalid"],
       image_tag: "latest",
       proxmox_widget: { enabled: true },
     });
@@ -35,7 +35,7 @@ describe("homepage-render", () => {
 
   it("renderHomepageEnv omits TLS bypass when proxmox_widget.tls_insecure is false", () => {
     const env = renderHomepageEnv({
-      allowed_hosts: ["hdc.dukk.org"],
+      allowed_hosts: ["hdc.example.invalid"],
       proxmox_widget: { enabled: true, tls_insecure: false },
     });
     expect(env).not.toContain("NODE_TLS_REJECT_UNAUTHORIZED");

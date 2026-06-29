@@ -38,7 +38,7 @@ Default container user is UID **10001** — install scripts `chown` data and log
 
 ## After deploy
 
-1. **CT IPs:** from deploy/query `upstream_s3` per node (e.g. `http://10.0.0.x:9000`).
+1. **CT IPs:** from deploy/query `upstream_s3` per node (e.g. `http://192.0.2.x:9000`).
 2. **Inventory:** set `access.nodes[0].ip` on each `rustfs-{a,b,c,d}.json`.
 3. **Internal DNS:** ensure peer hostnames in `RUSTFS_VOLUMES` resolve between all four nodes.
 4. **BIND:** A records for hostnames in `rustfs.s3_public_url` and `rustfs.console_public_url` → nginx-waf WAN IP.

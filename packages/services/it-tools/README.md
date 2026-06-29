@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service it-tools maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.141:8080`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.141:8080`).
 2. **Inventory:** set `access.nodes[0].ip` on `it-tools-a.json`.
 3. **Usage:** open the web UI from the LAN — no accounts or setup wizard.
 4. **HTTPS (optional):** set `it_tools.public_url`, add BIND + nginx-waf upstream manually.

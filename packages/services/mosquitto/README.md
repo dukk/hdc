@@ -30,7 +30,7 @@ node tools/hdc/cli.mjs run service mosquitto maintain -- --renew-certs
 ## Home Assistant
 
 1. Trust the step-ca root (same cert as nginx-waf / other internal TLS clients).
-2. Settings → Devices & services → MQTT → broker `mqtt.hdc.dukk.org`, port **8883**, TLS enabled.
+2. Settings → Devices & services → MQTT → broker `mqtt.home.example.invalid`, port **8883**, TLS enabled.
 3. Username/password from vault keys in config.
 
 Plaintext port **1883** is disabled by default (`plain_listener.enabled: false`).
@@ -43,7 +43,7 @@ step-ca certificates are short-lived. Deploy installs a systemd timer (`hdc-mosq
 
 `--instance a`, `--system-id mosquitto-a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-cert-renew` (maintain), `--renew-certs` (maintain), guest baseline skips.
 
-Static IP: set `deployments[].proxmox.lxc.ip` with `defaults.proxmox.network.gateway`, or `proxmox.lxc.ip_config` as `10.0.0.x/24,gw=10.0.0.1`.
+Static IP: set `deployments[].proxmox.lxc.ip` with `defaults.proxmox.network.gateway`, or `proxmox.lxc.ip_config` as `192.0.2.x/24,gw=192.0.2.1`.
 
 ## Related
 

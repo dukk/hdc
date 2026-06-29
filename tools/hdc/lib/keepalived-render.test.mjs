@@ -22,7 +22,7 @@ const exampleCfg = {
       id: "wan-vip",
       virtual_router_id: 51,
       interface: "eth0",
-      virtual_ipaddress: ["10.0.0.50/24"],
+      virtual_ipaddress: ["192.0.2.50/24"],
       track_scripts: [
         {
           id: "chk_nginx",
@@ -37,14 +37,14 @@ const exampleCfg = {
     {
       id: "https",
       vrrp_instance_id: "wan-vip",
-      vip: "10.0.0.50",
+      vip: "192.0.2.50",
       port: 443,
       protocol: "TCP",
       lb_kind: "NAT",
       lb_algo: "rr",
       real_servers: [
-        { address: "10.0.0.40", port: 443, weight: 1, system_id: "vm-nginx-waf-a" },
-        { address: "10.0.0.41", port: 443, weight: 1, system_id: "vm-nginx-waf-b" },
+        { address: "192.0.2.40", port: 443, weight: 1, system_id: "vm-nginx-waf-a" },
+        { address: "192.0.2.41", port: 443, weight: 1, system_id: "vm-nginx-waf-b" },
       ],
     },
   ],
@@ -57,7 +57,7 @@ const exampleCfg = {
       priority: 150,
       mode: "configure-only",
       vrrp_instance_ids: ["wan-vip"],
-      configure: { ssh: { host: "10.0.0.45" } },
+      configure: { ssh: { host: "192.0.2.45" } },
     },
     {
       deployment_kind: "director",
@@ -67,7 +67,7 @@ const exampleCfg = {
       priority: 100,
       mode: "configure-only",
       vrrp_instance_ids: ["wan-vip"],
-      configure: { ssh: { host: "10.0.0.46" } },
+      configure: { ssh: { host: "192.0.2.46" } },
     },
     {
       deployment_kind: "real_server",
@@ -75,7 +75,7 @@ const exampleCfg = {
       mode: "configure-only",
       lb_kind: "NAT",
       virtual_server_ids: ["https"],
-      configure: { ssh: { host: "10.0.0.40" } },
+      configure: { ssh: { host: "192.0.2.40" } },
     },
     {
       deployment_kind: "real_server",
@@ -83,7 +83,7 @@ const exampleCfg = {
       mode: "configure-only",
       lb_kind: "NAT",
       virtual_server_ids: ["https"],
-      configure: { ssh: { host: "10.0.0.41" } },
+      configure: { ssh: { host: "192.0.2.41" } },
     },
   ],
 };
@@ -113,9 +113,9 @@ describe("keepalived-render", () => {
     expect(conf).toContain("state MASTER");
     expect(conf).toContain("priority 150");
     expect(conf).toContain("auth_pass s3cret12");
-    expect(conf).toContain("virtual_server 10.0.0.50 443");
+    expect(conf).toContain("virtual_server 192.0.2.50 443");
     expect(conf).toContain("lb_kind NAT");
-    expect(conf).toContain("real_server 10.0.0.40 443");
+    expect(conf).toContain("real_server 192.0.2.40 443");
     expect(conf).toContain("TCP_CHECK");
   });
 
@@ -133,9 +133,9 @@ describe("keepalived-render", () => {
   });
 
   it("buildDrRealServerCommands configures lo VIP and sysctl", () => {
-    const cmd = buildDrRealServerCommands("10.0.0.50/32");
+    const cmd = buildDrRealServerCommands("192.0.2.50/32");
     expect(cmd).toContain("arp_ignore");
-    expect(cmd).toContain("ip addr add '10.0.0.50/32' dev lo");
+    expect(cmd).toContain("ip addr add '192.0.2.50/32' dev lo");
   });
 
   it("buildDirectorSysctlCommands enables ip_forward for NAT", () => {
@@ -144,9 +144,9 @@ describe("keepalived-render", () => {
   });
 
   it("buildNatRealServerVerifyCommand checks default route", () => {
-    const cmd = buildNatRealServerVerifyCommand("10.0.0.50");
+    const cmd = buildNatRealServerVerifyCommand("192.0.2.50");
     expect(cmd).toContain("ip route show default");
-    expect(cmd).toContain("10.0.0.50");
+    expect(cmd).toContain("192.0.2.50");
   });
 });
 

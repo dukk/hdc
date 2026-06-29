@@ -54,7 +54,7 @@ describe("bind-deployments", () => {
             system_id: "vm-bind-a",
             role: "primary",
             hostname: "bind-a",
-            proxmox: { host_id: "pve-b", qemu: { ip: "10.0.0.2/24" } },
+            proxmox: { host_id: "pve-b", qemu: { ip: "192.0.2.2/24" } },
           },
         ],
       },

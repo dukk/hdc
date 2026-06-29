@@ -43,7 +43,7 @@ node tools/hdc/cli.mjs run service paperclip maintain -- --reset-db --yes
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.123:3100`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.123:3100`).
 2. **First admin:** open the LAN URL, sign in or register, then **Claim this instance** on the setup screen.
 3. **Inventory:** set `access.nodes[0].ip` on `paperclip-a.json`.
 4. **Optional HTTPS:** set `paperclip.public_url`, add BIND A record and nginx-waf upstream to the CT IP.

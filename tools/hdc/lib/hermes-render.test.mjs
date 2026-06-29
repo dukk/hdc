@@ -27,10 +27,10 @@ describe("hermes-render", () => {
     dashboard_port: 9119,
     dashboard_enabled: true,
     dashboard_username: "admin",
-    searxng_url: "http://10.0.0.135:8080",
+    searxng_url: "http://192.0.2.135:8080",
     ollama_backends: [
-      { id: "ollama-a", url: "http://10.0.0.111:11434", primary: true },
-      { id: "ollama-b", url: "http://10.0.0.112:11434" },
+      { id: "ollama-a", url: "http://192.0.2.111:11434", primary: true },
+      { id: "ollama-b", url: "http://192.0.2.112:11434" },
     ],
     model: { default: "qwen3.5:cloud", context_length: 64000 },
     fallback_providers: [{ provider: "openrouter", model: "anthropic/claude-sonnet-4" }],
@@ -64,7 +64,7 @@ describe("hermes-render", () => {
     expect(env).toContain("HERMES_DASHBOARD=1");
     expect(env).toContain("HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin");
     expect(env).toContain("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=dash-pass");
-    expect(env).toContain("SEARXNG_URL=http://10.0.0.135:8080");
+    expect(env).toContain("SEARXNG_URL=http://192.0.2.135:8080");
   });
 
   it("renders env with discord token from extraEnv", () => {
@@ -82,16 +82,16 @@ describe("hermes-render", () => {
   });
 
   it("resolves dashboard url from guest ip", () => {
-    expect(resolveDashboardUrl(hermes, "10.0.0.113")).toBe("http://10.0.0.113:9119");
-    expect(resolveDashboardUrl({ ...hermes, dashboard_enabled: false }, "10.0.0.113")).toBeNull();
+    expect(resolveDashboardUrl(hermes, "192.0.2.113")).toBe("http://192.0.2.113:9119");
+    expect(resolveDashboardUrl({ ...hermes, dashboard_enabled: false }, "192.0.2.113")).toBeNull();
   });
 });
 
 describe("hermes-config-render", () => {
   const hermes = {
     ollama_backends: [
-      { id: "ollama-a", url: "http://10.0.0.111:11434", primary: true },
-      { id: "ollama-b", url: "http://10.0.0.112:11434" },
+      { id: "ollama-a", url: "http://192.0.2.111:11434", primary: true },
+      { id: "ollama-b", url: "http://192.0.2.112:11434" },
     ],
     model: { default: "qwen3.5:cloud", context_length: 64000 },
     fallback_providers: [{ provider: "openrouter", model: "anthropic/claude-sonnet-4" }],
@@ -102,7 +102,7 @@ describe("hermes-config-render", () => {
   it("resolves primary ollama backend with /v1 base url", () => {
     const primary = resolvePrimaryOllamaBackend(hermes);
     expect(primary?.id).toBe("ollama-a");
-    expect(primary?.base_url).toBe("http://10.0.0.111:11434/v1");
+    expect(primary?.base_url).toBe("http://192.0.2.111:11434/v1");
   });
 
   it("renders config.yaml with model, fallback, agent, and discord", () => {
@@ -110,7 +110,7 @@ describe("hermes-config-render", () => {
     expect(yaml).toContain("model:");
     expect(yaml).toContain("default: qwen3.5:cloud");
     expect(yaml).toContain("provider: custom");
-    expect(yaml).toContain("base_url: http://10.0.0.111:11434/v1");
+    expect(yaml).toContain("base_url: http://192.0.2.111:11434/v1");
     expect(yaml).toContain("context_length: 64000");
     expect(yaml).toContain("fallback_providers:");
     expect(yaml).toContain("provider: openrouter");
@@ -123,7 +123,7 @@ describe("hermes-config-render", () => {
   it("requires model.default when ollama backends are set", () => {
     expect(() =>
       renderHermesConfigYaml({
-        ollama_backends: [{ id: "ollama-a", url: "http://10.0.0.111:11434" }],
+        ollama_backends: [{ id: "ollama-a", url: "http://192.0.2.111:11434" }],
       }),
     ).toThrow(/hermes.model.default is required/);
   });

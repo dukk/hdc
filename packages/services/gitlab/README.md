@@ -32,7 +32,7 @@ node tools/hdc/cli.mjs run service gitlab maintain --
 
 1. **First boot** can take several minutes — deploy waits for `/-/health`.
 2. **Root password:** inside the container at `/etc/gitlab/initial_root_password` (valid ~24h after first boot). Deploy logs how to retrieve it; never printed on stderr.
-3. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.123:80`).
+3. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.123:80`).
 4. **Inventory:** set `access.nodes[0].ip` on `gitlab-a.json`.
 5. **BIND:** forward A record for the hostname in `gitlab.external_url`.
 6. **nginx-waf:** add a site with upstream to the CT IP on port 80.

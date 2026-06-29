@@ -12,7 +12,7 @@ describe("windows-unattend", () => {
       adminUsername: "Administrator",
       adminPassword: "Secret123!",
       locale: "en-US",
-      network: { ipCidr: "10.0.0.50/24", gateway: "10.0.0.1", dnsServers: ["10.0.0.2"] },
+      network: { ipCidr: "192.0.2.50/24", gateway: "192.0.2.1", dnsServers: ["192.0.2.2"] },
     });
     expect(xml).toContain("<ComputerName>win11-a</ComputerName>");
     expect(xml).toContain("Administrator");
@@ -32,7 +32,7 @@ describe("windows-unattend", () => {
       adminUsername: "Administrator",
       adminPassword: "Secret123!",
       locale: "en-US",
-      network: { ipCidr: "10.0.0.180/24", gateway: "10.0.0.1", dnsServers: ["10.0.0.2"] },
+      network: { ipCidr: "192.0.2.180/24", gateway: "192.0.2.1", dnsServers: ["192.0.2.2"] },
     });
     expect(xml).toContain("<ComputerName>win11-a</ComputerName>");
     expect(xml).not.toContain("DiskConfiguration");

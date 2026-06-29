@@ -33,7 +33,7 @@ node tools/hdc/cli.mjs run service stirling-pdf maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.139:8080`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.139:8080`).
 2. **Inventory:** set `access.nodes[0].ip` on `stirling-pdf-a.json`.
 3. **Login:** username from `stirling_pdf.security.initial_username` (default `admin`); password from vault.
 4. **HTTPS (optional):** set `stirling_pdf.public_url`, add BIND + nginx-waf upstream manually (consider larger `client_max_body_size` for uploads).

@@ -31,7 +31,7 @@ node tools/hdc/cli.mjs run vaultwarden maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.123:80`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.123:80`).
 2. **Inventory:** set `access.nodes[0].ip` on `vaultwarden-a.json`.
 3. **BIND:** forward A record for the hostname in `vaultwarden.domain`.
 4. **nginx-waf:** add a site with upstream to the CT IP; set `"websocket": true` on locations that need WebSockets (e.g. `/` and `/notifications/hub` for Vaultwarden). On the `/admin` location, set `"waf": { "enabled": false }` so OWASP CRS does not block admin Save POSTs (see [nginx-waf README](../nginx-waf/README.md)).

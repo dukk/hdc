@@ -45,7 +45,7 @@ Use your **WAN/public IP** (`203.0.113.254` is documentation-only).
 ```json
 "nat": {
   "enabled": true,
-  "local_net": "10.0.0.0/24",
+  "local_net": "192.0.2.0/24",
   "external_signaling_address": "203.0.113.254",
   "external_media_address": "203.0.113.254"
 }
@@ -57,7 +57,7 @@ Use your **WAN/public IP** (`203.0.113.254` is documentation-only).
 
 ## 5. Edge firewall / router
 
-- [ ] Forward **UDP/TCP 5060** → Asterisk guest LAN IP (e.g. `10.0.0.150`)
+- [ ] Forward **UDP/TCP 5060** → Asterisk guest LAN IP (e.g. `192.0.2.150`)
 - [ ] Forward **UDP 10000–20000** → same guest IP (match `rtp_port_min` / `rtp_port_max` in config)
 
 ## 6. Apply HDC config

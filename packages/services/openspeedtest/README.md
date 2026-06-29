@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service openspeedtest maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.138:3000`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.138:3000`).
 2. **Inventory:** set `access.nodes[0].ip` on `openspeedtest-a.json`.
 3. **Usage:** open the web UI and click Start to measure download/upload on your LAN.
 4. **HTTPS (optional):** set `openspeedtest.public_url`, add BIND + nginx-waf upstream manually.

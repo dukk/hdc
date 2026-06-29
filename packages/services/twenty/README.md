@@ -32,7 +32,7 @@ node tools/hdc/cli.mjs run service twenty maintain --
 
 1. Wait 1–2 minutes for DB migrations; confirm `GET /healthz` returns OK.
 2. **First-run signup:** open `SERVER_URL` in a browser and create the first account (becomes admin when `multi_workspace_enabled` is false).
-3. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.x:3000`).
+3. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.x:3000`).
 4. **Inventory:** set `access.nodes[0].ip` on `twenty-a.json`.
 5. **HTTPS:** set `twenty.public_url` before first login when using nginx-waf; add BIND A record and nginx-waf upstream.
 6. **LAN-only:** omit `public_url`; browse `http://<ct-ip>:3000`.

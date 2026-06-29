@@ -6,16 +6,16 @@ import {
 
 const drawSite = {
   id: "draw",
-  host_names: ["draw.dukk.org"],
-  upstream: "http://10.0.0.155:8080",
-  tls: { enabled: true, cert_name: "draw.dukk.org" },
+  host_names: ["draw.example.invalid"],
+  upstream: "http://192.0.2.155:8080",
+  tls: { enabled: true, cert_name: "draw.example.invalid" },
 };
 
 const vaultSite = {
   id: "vaultwarden",
-  host_names: ["vault.dukk.org", "vault.hdc.dukk.org"],
-  upstream: "http://10.0.0.123:80",
-  tls: { enabled: true, cert_name: "vault.dukk.org" },
+  host_names: ["vault.example.invalid", "vault.home.example.invalid"],
+  upstream: "http://192.0.2.123:80",
+  tls: { enabled: true, cert_name: "vault.example.invalid" },
 };
 
 describe("nginx-waf vhost drift", () => {
@@ -23,23 +23,23 @@ describe("nginx-waf vhost drift", () => {
     const content = `# hdc site draw
 server {
     listen 80;
-    server_name draw.dukk.org;
+    server_name draw.example.invalid;
     location / {
-        proxy_pass http://10.0.0.155:8080;
+        proxy_pass http://192.0.2.155:8080;
     }
 }
 server {
     listen 443 ssl http2;
-    server_name draw.dukk.org;
-    ssl_certificate /etc/letsencrypt/live/draw.dukk.org/fullchain.pem;
+    server_name draw.example.invalid;
+    ssl_certificate /etc/letsencrypt/live/draw.example.invalid/fullchain.pem;
     location / {
-        proxy_pass http://10.0.0.155:8080;
+        proxy_pass http://192.0.2.155:8080;
     }
 }
 `;
     const parsed = parseLiveSiteVhost(content, "draw");
-    expect(parsed.host_names).toEqual(["draw.dukk.org", "draw.dukk.org"]);
-    expect(parsed.upstream).toBe("http://10.0.0.155:8080");
+    expect(parsed.host_names).toEqual(["draw.example.invalid", "draw.example.invalid"]);
+    expect(parsed.upstream).toBe("http://192.0.2.155:8080");
     expect(parsed.has_listen_443).toBe(true);
   });
 
@@ -50,23 +50,23 @@ server {
         parseLiveSiteVhost(
           `server {
     listen 443 ssl;
-    server_name vault.dukk.org vault.hdc.dukk.org draw.dukk.org;
-    location / { proxy_pass http://10.0.0.123:80; }
+    server_name vault.example.invalid vault.home.example.invalid draw.example.invalid;
+    location / { proxy_pass http://192.0.2.123:80; }
 }`,
           "vaultwarden",
         ),
         parseLiveSiteVhost(
           `server {
     listen 80;
-    server_name draw.dukk.org;
-    location / { proxy_pass http://10.0.0.155:8080; }
+    server_name draw.example.invalid;
+    location / { proxy_pass http://192.0.2.155:8080; }
 }`,
           "draw",
         ),
       ],
-      certPresent: (name) => name === "draw.dukk.org",
+      certPresent: (name) => name === "draw.example.invalid",
     });
-    expect(drift.some((d) => d.kind === "orphan_hostname" && d.hostname === "draw.dukk.org")).toBe(
+    expect(drift.some((d) => d.kind === "orphan_hostname" && d.hostname === "draw.example.invalid")).toBe(
       true,
     );
     expect(drift.some((d) => d.kind === "https_missing" && d.site_id === "draw")).toBe(true);
@@ -79,16 +79,16 @@ server {
         parseLiveSiteVhost(
           `server {
     listen 443 ssl;
-    server_name draw.dukk.org;
-    location / { proxy_pass http://10.0.0.155:8080; }
+    server_name draw.example.invalid;
+    location / { proxy_pass http://192.0.2.155:8080; }
 }`,
           "draw",
         ),
         parseLiveSiteVhost(
           `server {
     listen 443 ssl;
-    server_name vault.dukk.org vault.hdc.dukk.org;
-    location / { proxy_pass http://10.0.0.123:80; }
+    server_name vault.example.invalid vault.home.example.invalid;
+    location / { proxy_pass http://192.0.2.123:80; }
 }`,
           "vaultwarden",
         ),

@@ -14,9 +14,9 @@ describe("proxmox guest firewall maintain", () => {
   });
 
   it("buildGuestFirewallHdcSection allows LAN and drops other inbound", () => {
-    const section = buildGuestFirewallHdcSection({ cidrs: ["10.0.0.0/24"] });
+    const section = buildGuestFirewallHdcSection({ cidrs: ["192.0.2.0/24"] });
     expect(section).toContain(HDC_GUEST_FW_MARKER_BEGIN);
-    expect(section).toContain("IN ACCEPT -source 10.0.0.0/24");
+    expect(section).toContain("IN ACCEPT -source 192.0.2.0/24");
     expect(section).toContain("IN DROP");
     expect(section).toContain("policy_in: DROP");
   });

@@ -45,7 +45,7 @@ After deploy, copy files into the consume directory on the guest (default `/opt/
 
 ## After deploy
 
-1. **Guest IP / URL:** from deploy/query `upstream_url` (e.g. `http://10.0.0.152:8000`).
+1. **Guest IP / URL:** from deploy/query `upstream_url` (e.g. `http://192.0.2.152:8000`).
 2. **Inventory:** set `access.nodes[0].ip` on `paperless-ngx-a.json`.
 3. **Admin account:** enable `paperless_ngx.admin.enabled` before first deploy to auto-create a superuser, or run `docker compose exec webserver createsuperuser` in the compose dir.
 4. **HTTPS (optional):** set `paperless_ngx.public_url` to `https://…`, add BIND A record and nginx-waf site upstream to `http://<guest-ip>:8000`. Increase `client_max_body_size` on the nginx-waf site for large document uploads.

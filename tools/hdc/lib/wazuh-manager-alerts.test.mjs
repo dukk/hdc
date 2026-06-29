@@ -24,16 +24,16 @@ const SAMPLE_CONF = `<ossec_config>
 describe("wazuh-manager-alerts", () => {
   it("patches global and alerts email settings", () => {
     const patched = patchWazuhManagerConfEmail(SAMPLE_CONF, {
-      smtp_server: "10.0.0.60",
-      email_from: "noreply@hdc.dukk.org",
-      email_to: "dukk@dukk.org",
+      smtp_server: "192.0.2.60",
+      email_from: "noreply@hdc.example.invalid",
+      email_to: "ops@example.invalid",
       alert_level: 10,
       max_per_hour: 12,
     });
     expect(patched).toContain("<email_notification>yes</email_notification>");
-    expect(patched).toContain("<smtp_server>10.0.0.60</smtp_server>");
-    expect(patched).toContain("<email_from>noreply@hdc.dukk.org</email_from>");
-    expect(patched).toContain("<email_to>dukk@dukk.org</email_to>");
+    expect(patched).toContain("<smtp_server>192.0.2.60</smtp_server>");
+    expect(patched).toContain("<email_from>noreply@hdc.example.invalid</email_from>");
+    expect(patched).toContain("<email_to>ops@example.invalid</email_to>");
     expect(patched).toContain("<email_alert_level>10</email_alert_level>");
   });
 
@@ -43,15 +43,15 @@ describe("wazuh-manager-alerts", () => {
 
   it("builds remote patch bash referencing manager conf and docker restart", () => {
     const bash = buildWazuhManagerAlertsPatchBash({
-      smtp_server: "10.0.0.60",
-      email_from: "noreply@hdc.dukk.org",
-      email_to: ["dukk@dukk.org"],
+      smtp_server: "192.0.2.60",
+      email_from: "noreply@hdc.example.invalid",
+      email_to: ["ops@example.invalid"],
       alert_level: 10,
       max_per_hour: 12,
     });
     expect(bash).toContain("wazuh_manager.conf");
     expect(bash).toContain("docker compose restart wazuh.manager");
-    expect(bash).toContain("10.0.0.60");
+    expect(bash).toContain("192.0.2.60");
   });
 
   it("formats multiple manager email recipients", () => {

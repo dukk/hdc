@@ -120,7 +120,7 @@ async function deployOne(deployment, defaults, kaliPassword, flags, log) {
       ? net.gateway.trim()
       : typeof q.gateway === "string"
         ? q.gateway.trim()
-        : "10.0.0.1";
+        : "192.0.2.1";
   const bridge = typeof net.bridge === "string" && net.bridge.trim() ? net.bridge.trim() : "vmbr0";
   const dnsServers = Array.isArray(net.dns)
     ? net.dns.map((d) => String(d).trim()).filter(Boolean)

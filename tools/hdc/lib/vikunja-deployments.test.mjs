@@ -16,7 +16,7 @@ describe("vikunja deployments", () => {
       proxmox: { lxc: { rootfs_gb: 20, memory_mb: 2048, cores: 2 } },
       vikunja: {
         host_port: 3456,
-        public_url: "https://tasks.dukk.org/",
+        public_url: "https://tasks.example.invalid/",
         image_tag: "latest",
       },
     },
@@ -63,7 +63,7 @@ describe("vikunja deployments", () => {
       host_id: "hypervisor-a",
       vmid: 510,
       host_port: 3456,
-      public_url: "https://tasks.dukk.org",
+      public_url: "https://tasks.example.invalid",
     });
   });
 

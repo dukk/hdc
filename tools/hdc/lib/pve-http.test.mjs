@@ -7,7 +7,7 @@ import {
 describe("pveFormBody", () => {
   it("encodeURIComponent preserves + in SSH keys (not URLSearchParams + as space)", () => {
     const key =
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII9fNnKJTlQpQa+s10hzwZxHsM79rc1dTLUb0SRETKIx dukk@dukk.org";
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1vY2t+U3Rlc3RLZXlGb3JFbmNvZGluZyB0ZXN0 test@example.invalid";
     const body = pveFormBody({ sshkeys: key });
     expect(body).toContain("%2B");
     expect(body).not.toMatch(/sshkeys=ssh-ed25519\+/);

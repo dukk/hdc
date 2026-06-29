@@ -9,7 +9,7 @@
       "id": "wan-vip",
       "virtual_router_id": 51,
       "interface": "eth0",
-      "virtual_ipaddress": ["10.0.0.50/24"],
+      "virtual_ipaddress": ["192.0.2.50/24"],
       "track_scripts": [
         {
           "id": "chk_nginx",
@@ -24,20 +24,20 @@
     {
       "id": "https",
       "vrrp_instance_id": "wan-vip",
-      "vip": "10.0.0.50",
+      "vip": "192.0.2.50",
       "port": 443,
       "protocol": "TCP",
       "lb_kind": "NAT",
       "lb_algo": "rr",
       "real_servers": [
         {
-          "address": "10.0.0.40",
+          "address": "192.0.2.40",
           "port": 443,
           "weight": 1,
           "system_id": "vm-nginx-waf-a"
         },
         {
-          "address": "10.0.0.41",
+          "address": "192.0.2.41",
           "port": 443,
           "weight": 1,
           "system_id": "vm-nginx-waf-b"
@@ -80,12 +80,12 @@
         "host_id": "hypervisor-a",
         "qemu": {
           "vmid": 310,
-          "ip": "10.0.0.45/24"
+          "ip": "192.0.2.45/24"
         }
       },
       "configure": {
         "ssh": {
-          "host": "10.0.0.45"
+          "host": "192.0.2.45"
         }
       }
     },
@@ -99,7 +99,7 @@
       "vrrp_instance_ids": ["wan-vip"],
       "configure": {
         "ssh": {
-          "host": "10.0.0.46"
+          "host": "192.0.2.46"
         }
       }
     },
@@ -111,7 +111,7 @@
       "virtual_server_ids": ["https"],
       "configure": {
         "ssh": {
-          "host": "10.0.0.40"
+          "host": "192.0.2.40"
         }
       }
     },
@@ -123,7 +123,7 @@
       "virtual_server_ids": ["https"],
       "configure": {
         "ssh": {
-          "host": "10.0.0.41"
+          "host": "192.0.2.41"
         }
       }
     }

@@ -51,7 +51,7 @@ Published SPF/DMARC/DKIM records live in **cloudflare** or **bind** config — n
 
 ## Restrict Senders vs sender domains
 
-SMTP2GO **Restrict Senders** (`allowed_senders.mode` of `whitelist` or `blacklist`) **disables Sender Domains and Single Sender Emails** in the console. If you rely on verified sender domains (`dukk.org`, etc.), keep `allowed_senders.mode` at **`disabled`** unless you intentionally switch to address/domain allowlisting instead.
+SMTP2GO **Restrict Senders** (`allowed_senders.mode` of `whitelist` or `blacklist`) **disables Sender Domains and Single Sender Emails** in the console. If you rely on verified sender domains (`example.invalid`, etc.), keep `allowed_senders.mode` at **`disabled`** unless you intentionally switch to address/domain allowlisting instead.
 
 IP allowlist is independent: when `ip_allow_list.enabled` is true, only listed **public egress IPs** may submit mail or call the API. List the WAN egress IP of your postfix-relay (as seen by SMTP2GO), not RFC1918 LAN addresses.
 
@@ -62,7 +62,7 @@ IP allowlist is independent: when `ip_allow_list.enabled` is true, only listed *
 node tools/hdc/cli.mjs run infrastructure smtp2go query --
 
 # Limit to one sender domain
-node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.dukk.org
+node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.example.invalid
 
 # Refresh hdc-private config from live API
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
@@ -77,7 +77,7 @@ Query JSON includes `dns_checklist[]` per sender domain (SPF template, DKIM, ret
 ```bash
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-dukk-org
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
 ```
@@ -92,4 +92,4 @@ Re-run `query` after updating DNS until sender-domain verification succeeds.
 
 ## Postfix relay
 
-Internal guests send mail to `postfix-relay.hdc.dukk.org` (port 25) without SMTP2GO credentials. The relay host authenticates upstream to `[mail.smtp2go.com]:587`. See [`packages/services/postfix-relay/README.md`](../../packages/services/postfix-relay/README.md).
+Internal guests send mail to `postfix-relay.home.example.invalid` (port 25) without SMTP2GO credentials. The relay host authenticates upstream to `[mail.smtp2go.com]:587`. See [`packages/services/postfix-relay/README.md`](../../packages/services/postfix-relay/README.md).

@@ -4,7 +4,7 @@
     "mode": "proxmox-lxc",
     "proxmox": {
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       },
       "lxc": {
         "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
@@ -23,13 +23,13 @@
       "image_tag": "2.4.0",
       "postgres_image_tag": "16",
       "host_port": 3000,
-      "public_url": "https://sign.dukk.org",
+      "public_url": "https://sign.example.invalid",
       "timezone": "America/New_York",
       "secret_key_base_vault_key": "HDC_DOCUSEAL_SECRET_KEY_BASE",
       "db_password_vault_key": "HDC_DOCUSEAL_DB_PASSWORD",
       "mail": {
         "enabled": true,
-        "from": "noreply@hdc.dukk.org"
+        "from": "noreply@hdc.example.invalid"
       }
     },
     "install": {

@@ -18,7 +18,7 @@ const baseAsterisk = {
   sip_port: 5060,
   nat: {
     enabled: true,
-    local_net: "10.0.0.0/24",
+    local_net: "192.0.2.0/24",
     external_signaling_address: "203.0.113.1",
     external_media_address: "203.0.113.1",
   },
@@ -58,7 +58,7 @@ describe("asterisk render", () => {
     const conf = renderTransportConf(baseAsterisk, 5060);
     expect(conf).toContain("[transport-udp]");
     expect(conf).toContain("external_signaling_address=203.0.113.1");
-    expect(conf).toContain("local_net=10.0.0.0/24");
+    expect(conf).toContain("local_net=192.0.2.0/24");
   });
 
   it("renderTwilioTrunkConf includes domain and identify CIDRs", () => {

@@ -32,7 +32,7 @@ describe("it-tools-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.141", itTools)).toBe("http://10.0.0.141:8080");
-    expect(resolveWebUrl(itTools, "10.0.0.141")).toBe("http://10.0.0.141:8080");
+    expect(resolveUpstreamUrl("192.0.2.141", itTools)).toBe("http://192.0.2.141:8080");
+    expect(resolveWebUrl(itTools, "192.0.2.141")).toBe("http://192.0.2.141:8080");
   });
 });

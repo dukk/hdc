@@ -212,7 +212,7 @@ async function deployQemu(deployment, flags) {
   const templateVmid = typeof q.template_vmid === "number" ? q.template_vmid : Number(q.template_vmid);
   const ip = typeof q.ip === "string" ? q.ip.trim() : "";
   const gateway =
-    typeof net.gateway === "string" && net.gateway.trim() ? net.gateway.trim() : "10.0.0.1";
+    typeof net.gateway === "string" && net.gateway.trim() ? net.gateway.trim() : "192.0.2.1";
   if (!hostId || !Number.isFinite(vmid) || vmid <= 0 || !Number.isFinite(templateVmid) || !ip) {
     return { ok: false, system_id: systemId, message: "invalid qemu vmid, template_vmid, or ip" };
   }

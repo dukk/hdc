@@ -218,19 +218,19 @@ describe("nginx-waf deployments", () => {
             sites: [
               {
                 id: "draw",
-                host_names: ["draw.dukk.org"],
-                upstream: "http://10.0.0.155:8080",
+                host_names: ["draw.example.invalid"],
+                upstream: "http://192.0.2.155:8080",
               },
               {
                 id: "vaultwarden",
-                host_names: ["vault.dukk.org", "draw.dukk.org"],
-                upstream: "http://10.0.0.123:80",
+                host_names: ["vault.example.invalid", "draw.example.invalid"],
+                upstream: "http://192.0.2.123:80",
               },
             ],
           },
         ],
       }),
-    ).toThrow(/draw\.dukk\.org/);
+    ).toThrow(/draw\.example\.invalid/);
   });
 
   it("maintainSiteLists keeps allSites for vhost push when --site is set", () => {

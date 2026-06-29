@@ -64,11 +64,11 @@ describe("workers-config", () => {
   });
 
   it("zone filter include/exclude", () => {
-    const include = { mode: "include", names: new Set(["dukk.org"]) };
-    expect(zonePassesFilter("dukk.org", include)).toBe(true);
+    const include = { mode: "include", names: new Set(["example.invalid"]) };
+    expect(zonePassesFilter("example.invalid", include)).toBe(true);
     expect(zonePassesFilter("other.com", include)).toBe(false);
-    const exclude = { mode: "exclude", names: new Set(["dukk.org"]) };
-    expect(zonePassesFilter("dukk.org", exclude)).toBe(false);
+    const exclude = { mode: "exclude", names: new Set(["example.invalid"]) };
+    expect(zonePassesFilter("example.invalid", exclude)).toBe(false);
   });
 
   it("routeMatchKey is stable", () => {

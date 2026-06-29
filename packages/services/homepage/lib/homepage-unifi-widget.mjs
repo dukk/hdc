@@ -2,7 +2,7 @@ import { stderr as errout } from "node:process";
 
 import { controllerFromPackageConfig } from "../../../infrastructure/unifi-network/lib/unifi-config.mjs";
 import { UNIFI_API_KEY_VAULT_KEY } from "../../../infrastructure/unifi-network/lib/vault-deps.mjs";
-import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { tryLoadPackageConfigOrExample } from "../../../lib/package-run-config.mjs";
 import {
   readRequiredVaultSecret,
   vaultKeyFromWidget,
@@ -29,9 +29,12 @@ export async function resolveHomepageUnifiWidgetEnv(opts) {
 
   errout.write("[hdc] homepage: resolving UniFi widget env …\n");
 
-  const loaded = loadPackageConfigFromPackageRoot(unifiNetworkPackageRoot, {
+  const loaded = tryLoadPackageConfigOrExample(unifiNetworkPackageRoot, {
     exampleRel: "packages/infrastructure/unifi-network/config.example.json",
   });
+  if (!loaded?.ok || !loaded.data) {
+    throw new Error("homepage unifi_widget: unifi-network config not found");
+  }
   const controller = controllerFromPackageConfig(loaded.data);
   if (!controller?.url) {
     throw new Error("homepage unifi_widget: unifi-network controller_base_url required");

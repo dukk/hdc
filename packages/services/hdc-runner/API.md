@@ -134,7 +134,7 @@ Maps task titles to hdc-runner schedule runs. See `packages/services/paperclip/l
 ## Examples
 
 ```bash
-export RUNNER=http://10.0.0.125:9120
+export RUNNER=http://192.0.2.125:9120
 export TOKEN=$(node tools/hdc/cli.mjs secrets get HDC_HDC_RUNNER_API_TOKEN)
 
 curl -s -H "Authorization: Bearer $TOKEN" "$RUNNER/api/schedules" | jq .

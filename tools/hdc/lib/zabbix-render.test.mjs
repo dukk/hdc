@@ -53,9 +53,9 @@ describe("zabbix render", () => {
   });
 
   it("resolveWebUrl builds http URL from guest IP", () => {
-    expect(resolveWebUrl(zabbixPgsql, "10.0.0.50")).toBe("http://10.0.0.50/");
-    expect(resolveWebUrl(zabbixMysql, "10.0.0.50")).toBe("http://10.0.0.50:8080/");
-    expect(resolveWebUrl({ public_url: "https://zabbix.example.com/" }, "10.0.0.50")).toBe(
+    expect(resolveWebUrl(zabbixPgsql, "192.0.2.50")).toBe("http://192.0.2.50/");
+    expect(resolveWebUrl(zabbixMysql, "192.0.2.50")).toBe("http://192.0.2.50:8080/");
+    expect(resolveWebUrl({ public_url: "https://zabbix.example.com/" }, "192.0.2.50")).toBe(
       "https://zabbix.example.com/",
     );
   });

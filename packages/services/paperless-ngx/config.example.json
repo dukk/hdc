@@ -4,7 +4,7 @@
     "mode": "proxmox-qemu",
     "proxmox": {
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       },
       "qemu": {
         "template_vmid": 9024,
@@ -47,7 +47,7 @@
       "admin": {
         "enabled": false,
         "user": "admin",
-        "mail": "admin@hdc.dukk.org",
+        "mail": "admin@hdc.example.invalid",
         "password_vault_key": "HDC_PAPERLESS_ADMIN_PASSWORD"
       }
     },
@@ -64,7 +64,7 @@
         "qemu": {
           "vmid": 0,
           "template_vmid": 9024,
-          "ip": "10.0.0.0/24",
+          "ip": "192.0.2.0/24",
           "hostname": "paperless-ngx-a"
         },
         "lxc": {
@@ -74,7 +74,7 @@
       },
       "configure": {
         "ssh": {
-          "host": "10.0.0.0"
+          "host": "192.0.2.0"
         }
       }
     }

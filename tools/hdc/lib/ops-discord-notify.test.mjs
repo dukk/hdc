@@ -70,9 +70,9 @@ describe("ops-discord-notify", () => {
 
   describe("redactIpsFromText", () => {
     it("removes IPv4 and CIDR while preserving hostnames", () => {
-      const input = "pi-hole-a at 10.0.0.5 and hypervisor-a 192.0.2.120/24 ok";
+      const input = "pi-hole-a at 192.0.2.5 and hypervisor-a 192.0.2.120/24 ok";
       const out = redactIpsFromText(input);
-      expect(out).not.toContain("10.0.0.5");
+      expect(out).not.toContain("192.0.2.5");
       expect(out).not.toContain("192.0.2.120");
       expect(out).toContain("pi-hole-a");
       expect(out).toContain("hypervisor-a");
@@ -103,7 +103,7 @@ describe("ops-discord-notify", () => {
         exitCode: 0,
         stdoutPayload: {
           instances: [
-            { system_id: "pi-hole-a", ok: true, message: "synced at 10.0.0.2" },
+            { system_id: "pi-hole-a", ok: true, message: "synced at 192.0.2.2" },
             { system_id: "pi-hole-b", ok: true },
           ],
         },

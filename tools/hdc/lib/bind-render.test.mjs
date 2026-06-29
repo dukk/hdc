@@ -71,23 +71,23 @@ describe("bind-render", () => {
     expect(text).not.toMatch(/hypervisor-a\.hdc\.example\.invalid\t3600\tIN\tA/);
   });
 
-  it("does not double the zone apex in hdc.dukk.org owners", () => {
+  it("does not double the zone apex in hdc.example.invalid owners", () => {
     const text = renderMasterZoneFile({
-      zone: "hdc.dukk.org",
+      zone: "hdc.example.invalid",
       serial: "2026052501",
-      primaryNs: "bind-a.hdc.dukk.org.",
-      secondaryNs: "bind-b.hdc.dukk.org.",
-      primaryIp: "10.0.0.2",
-      secondaryIp: "10.0.0.3",
-      hostmaster: "hostmaster.hdc.dukk.org",
+      primaryNs: "bind-a.home.example.invalid.",
+      secondaryNs: "bind-b.home.example.invalid.",
+      primaryIp: "192.0.2.2",
+      secondaryIp: "192.0.2.3",
+      hostmaster: "hostmaster.home.example.invalid",
       records: [
-        { type: "A", name: "pve-b", data: "10.0.0.12", ttl: 3600 },
-        { type: "CNAME", name: "ca", data: "step-ca-a.hdc.dukk.org.", ttl: 3600 },
+        { type: "A", name: "pve-b", data: "192.0.2.12", ttl: 3600 },
+        { type: "CNAME", name: "ca", data: "step-ca-a.home.example.invalid.", ttl: 3600 },
       ],
     });
-    expect(text).toMatch(/pve-b\t3600\tIN\tA\t10\.0\.0\.12/);
-    expect(text).not.toContain("hdc.dukk.org.hdc.dukk.org");
-    expect(text).not.toMatch(/pve-b\.hdc\.dukk\.org\t3600\tIN\tA/);
+    expect(text).toMatch(/pve-b\t3600\tIN\tA\t192\.0\.2\.12/);
+    expect(text).not.toContain("hdc.example.invalid.home.example.invalid");
+    expect(text).not.toMatch(/pve-b\.hdc\.example\.invalid\t3600\tIN\tA/);
   });
 
   it("renders TSIG key block", () => {
@@ -98,13 +98,13 @@ describe("bind-render", () => {
 
   it("renders TXT and CNAME without mangling TXT rdata", () => {
     const text = renderMasterZoneFile({
-      zone: "hdc.dukk.org",
+      zone: "hdc.example.invalid",
       serial: "2026060801",
-      primaryNs: "bind-a.hdc.dukk.org.",
-      secondaryNs: "bind-b.hdc.dukk.org.",
-      primaryIp: "10.0.0.2",
-      secondaryIp: "10.0.0.3",
-      hostmaster: "hostmaster.hdc.dukk.org",
+      primaryNs: "bind-a.home.example.invalid.",
+      secondaryNs: "bind-b.home.example.invalid.",
+      primaryIp: "192.0.2.2",
+      secondaryIp: "192.0.2.3",
+      hostmaster: "hostmaster.home.example.invalid",
       records: [
         {
           type: "TXT",

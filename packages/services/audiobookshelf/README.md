@@ -16,7 +16,7 @@ Copy [`config.example.json`](config.example.json) to hdc-private `packages/servi
 
 Key blocks:
 
-- `audiobookshelf.public_url` — public HTTPS URL when behind nginx-waf (e.g. `https://bookshelf.dukk.org`)
+- `audiobookshelf.public_url` — public HTTPS URL when behind nginx-waf (e.g. `https://bookshelf.example.invalid`)
 - `audiobookshelf.host_port` — host port mapped to container port 80 (default **13378**)
 - `install.compose_dir` — Docker Compose directory (default `/opt/audiobookshelf`)
 - `install.data_mount` — mount point for libraries + `/config` + `/metadata` (default `/data/audiobookshelf`)

@@ -10,8 +10,8 @@ import {
 
 describe("homepage pihole widget", () => {
   it("ipFromIpConfig extracts address from static ip_config", () => {
-    expect(ipFromIpConfig("10.0.0.4/24,gw=10.0.0.1")).toBe("10.0.0.4");
-    expect(ipFromIpConfig("10.0.0.5/24")).toBe("10.0.0.5");
+    expect(ipFromIpConfig("192.0.2.4/24,gw=192.0.2.1")).toBe("192.0.2.4");
+    expect(ipFromIpConfig("192.0.2.5/24")).toBe("192.0.2.5");
   });
 
   it("ipFromIpConfig rejects dhcp", () => {
@@ -47,11 +47,11 @@ describe("homepage pihole widget", () => {
       deployments: [
         {
           system_id: "pi-hole-a",
-          proxmox: { host_id: "pve-b", lxc: { vmid: 110, ip_config: "10.0.0.4/24,gw=10.0.0.1" } },
+          proxmox: { host_id: "pve-b", lxc: { vmid: 110, ip_config: "192.0.2.4/24,gw=192.0.2.1" } },
         },
         {
           system_id: "pi-hole-b",
-          proxmox: { host_id: "pve-c", lxc: { vmid: 112, ip_config: "10.0.0.5/24,gw=10.0.0.1" } },
+          proxmox: { host_id: "pve-c", lxc: { vmid: 112, ip_config: "192.0.2.5/24,gw=192.0.2.1" } },
         },
       ],
     };
@@ -60,7 +60,7 @@ describe("homepage pihole widget", () => {
     expect(all[0]).toEqual({
       letter: "a",
       systemId: "pi-hole-a",
-      url: "http://10.0.0.4",
+      url: "http://192.0.2.4",
       key: "secret-admin",
     });
 
@@ -77,7 +77,7 @@ describe("homepage pihole widget", () => {
         deployments: [
           {
             system_id: "pi-hole-a",
-            proxmox: { host_id: "pve-b", lxc: { vmid: 110, ip_config: "10.0.0.4/24" } },
+            proxmox: { host_id: "pve-b", lxc: { vmid: 110, ip_config: "192.0.2.4/24" } },
           },
         ],
       }),

@@ -26,7 +26,7 @@ const sampleConfigMonitor = {
   id: "pi-hole-a",
   name: "Pi-hole A",
   type: "http",
-  url: "http://10.0.0.4/admin",
+  url: "http://192.0.2.4/admin",
   hostname: null,
   group: "Infrastructure",
   tags: ["critical"],
@@ -50,8 +50,8 @@ describe("uptime-kuma config", () => {
   });
 
   it("shouldIgnoreTlsForUrl detects Proxmox HTTPS", () => {
-    expect(shouldIgnoreTlsForUrl("https://10.0.0.11:8006")).toBe(true);
-    expect(shouldIgnoreTlsForUrl("http://10.0.0.4/admin")).toBe(false);
+    expect(shouldIgnoreTlsForUrl("https://192.0.2.11:8006")).toBe(true);
+    expect(shouldIgnoreTlsForUrl("http://192.0.2.4/admin")).toBe(false);
   });
 
   it("findLiveMonitor matches by hdc id then name", () => {
@@ -73,7 +73,7 @@ describe("uptime-kuma config", () => {
           parent_uptime_kuma_id: 43,
           name: "Pi-hole A",
           type: "http",
-          url: "http://10.0.0.4/admin",
+          url: "http://192.0.2.4/admin",
           managed: true,
         },
       ],
@@ -86,7 +86,7 @@ describe("uptime-kuma config", () => {
 
   it("monitorHasDrift compares managed fields", () => {
     expect(monitorHasDrift(sampleConfigMonitor, sampleLiveMonitor)).toBe(false);
-    expect(monitorHasDrift(sampleConfigMonitor, { ...sampleLiveMonitor, url: "http://10.0.0.5/admin" })).toBe(
+    expect(monitorHasDrift(sampleConfigMonitor, { ...sampleLiveMonitor, url: "http://192.0.2.5/admin" })).toBe(
       true,
     );
     expect(monitorHasDrift(sampleConfigMonitor, { ...sampleLiveMonitor, group: "Media" })).toBe(true);
@@ -116,7 +116,7 @@ describe("uptime-kuma config", () => {
         id: 5,
         type: "http",
         name: "Pi-hole A",
-        url: "http://10.0.0.4/admin",
+        url: "http://192.0.2.4/admin",
         description: "Group: Infrastructure",
         tags: [{ name: "critical", color: "#dc2626", tag_id: 3 }],
       },
@@ -171,7 +171,7 @@ describe("uptime-kuma config", () => {
             id: 10,
             type: "ping",
             name: "BIND A",
-            hostname: "10.0.0.2",
+            hostname: "192.0.2.2",
             description: "Group: Infrastructure",
           },
         ],
@@ -190,7 +190,7 @@ describe("uptime-kuma config", () => {
   it("monitorToSocketPayload builds http monitor", () => {
     const payload = monitorToSocketPayload(sampleConfigMonitor);
     expect(payload.type).toBe("http");
-    expect(payload.url).toBe("http://10.0.0.4/admin");
+    expect(payload.url).toBe("http://192.0.2.4/admin");
     expect(payload.description).toBe("");
     expect(payload.accepted_statuscodes).toEqual(["200-299"]);
     expect(payload.conditions).toEqual([]);
@@ -209,7 +209,7 @@ describe("uptime-kuma config", () => {
       name: "BIND A",
       type: "ping",
       url: null,
-      hostname: "10.0.0.2",
+      hostname: "192.0.2.2",
       group: "Infrastructure",
       tags: [],
       interval: 60,
@@ -218,7 +218,7 @@ describe("uptime-kuma config", () => {
       notes: null,
     });
     expect(payload.type).toBe("ping");
-    expect(payload.hostname).toBe("10.0.0.2");
+    expect(payload.hostname).toBe("192.0.2.2");
     expect(payload.accepted_statuscodes).toEqual(["200-299"]);
     expect(payload.conditions).toEqual([]);
   });
@@ -228,30 +228,30 @@ describe("uptime-kuma homepage import", () => {
   it("maps siteMonitor and ping from services yaml", () => {
     const yaml = `- Infrastructure:
     - Pi-hole A:
-        siteMonitor: http://10.0.0.4/admin
+        siteMonitor: http://192.0.2.4/admin
     - BIND A:
-        ping: 10.0.0.2
+        ping: 192.0.2.2
 - Monitoring:
     - Uptime Kuma:
-        siteMonitor: http://10.0.0.105:3001
+        siteMonitor: http://192.0.2.105:3001
 `;
     const monitors = monitorsFromHomepageServicesYaml(yaml);
     expect(monitors).toHaveLength(2);
     expect(monitors.find((m) => m.id === "pi-hole-a")).toMatchObject({
       type: "http",
-      url: "http://10.0.0.4/admin",
+      url: "http://192.0.2.4/admin",
       managed: true,
     });
     expect(monitors.find((m) => m.id === "bind-a")).toMatchObject({
       type: "ping",
-      hostname: "10.0.0.2",
+      hostname: "192.0.2.2",
     });
     expect(monitors.every((m) => !("uptime_kuma_id" in m))).toBe(true);
   });
 
   it("homepageServiceToMonitor skips uptime-kuma self tile", () => {
     expect(
-      homepageServiceToMonitor({ name: "Uptime Kuma", siteMonitor: "http://10.0.0.105:3001" }, "Monitoring"),
+      homepageServiceToMonitor({ name: "Uptime Kuma", siteMonitor: "http://192.0.2.105:3001" }, "Monitoring"),
     ).toBeNull();
   });
 });

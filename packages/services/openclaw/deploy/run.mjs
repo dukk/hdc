@@ -131,7 +131,7 @@ async function deployOne(deployment, flags, log, vault) {
       ? net.gateway.trim()
       : typeof q.gateway === "string"
         ? q.gateway.trim()
-        : "10.0.0.1";
+        : "192.0.2.1";
   const guestName =
     hostname ||
     (typeof q.hostname === "string" && q.hostname.trim()

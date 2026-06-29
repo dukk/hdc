@@ -22,7 +22,7 @@ Copy [`config.example.json`](config.example.json) to hdc-private `packages/servi
 
 Key blocks:
 
-- `mailcow.hostname` — `MAILCOW_HOSTNAME` FQDN (e.g. `mailcow-a.hdc.dukk.org`), **not** a mail domain
+- `mailcow.hostname` — `MAILCOW_HOSTNAME` FQDN (e.g. `mailcow-a.home.example.invalid`), **not** a mail domain
 - `mailcow.admin_url` — browser UI URL (often nginx-waf front door)
 - `mailcow.api_url` — optional Mailcow API base (defaults to `https://{hostname}`); set to `https://<guest-ip>` when running `maintain` from a LAN workstation (uses insecure TLS for self-signed certs on the guest IP)
 - `mailcow.domains[]` — domains to add in Mailcow; each has `outbound.mode`, `dns` templates, optional `mailboxes[]` and `aliases[]`
@@ -80,7 +80,7 @@ MX, SPF, and DMARC remain manual via BIND or [`cloudflare`](../infrastructure/cl
 - **DKIM** — live from Mailcow API; auto-published to Cloudflare when enabled
 - **Autodiscover** CNAME (optional)
 
-For `postfix-relay` outbound domains, SPF in the example uses SMTP2GO-style includes; add provider DKIM CNAMEs per your relay upstream (see existing `dukk.org` Cloudflare records when using SMTP2GO).
+For `postfix-relay` outbound domains, SPF in the example uses SMTP2GO-style includes; add provider DKIM CNAMEs per your relay upstream (see existing `example.invalid` Cloudflare records when using SMTP2GO).
 
 ## Guest baseline
 

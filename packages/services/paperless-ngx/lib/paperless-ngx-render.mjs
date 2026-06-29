@@ -264,7 +264,7 @@ export function renderPaperlessEnv(cfg, secrets, ctIp = null) {
     const mail =
       typeof admin.mail === "string" && admin.mail.trim()
         ? admin.mail.trim()
-        : "admin@hdc.dukk.org";
+        : "admin@hdc.example.invalid";
     const adminPassword = String(secrets.adminPassword || "").trim();
     if (!adminPassword) {
       throw new Error("PAPERLESS_ADMIN_PASSWORD is required when paperless_ngx.admin.enabled is true");

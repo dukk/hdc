@@ -23,7 +23,7 @@ In repo `.env` (see [`.env.example`](../../.env.example)):
 
 ```env
 HDC_SECRET_BACKEND=auto
-HDC_VAULTWARDEN_URL=https://vault.dukk.org
+HDC_VAULTWARDEN_URL=https://vault.example.invalid
 HDC_VAULTWARDEN_EMAIL=you@example.com
 HDC_VAULTWARDEN_ORGANIZATION_ID=<uuid>   # optional when org name resolves (default: HDC)
 HDC_VAULTWARDEN_COLLECTION_ID=<uuid>     # required
@@ -38,7 +38,7 @@ bw list org-collections --organizationid <orgId>
 
 Set `HDC_VAULTWARDEN_ORGANIZATION_NAME=HDC` (default) to auto-resolve the organization when `HDC_VAULTWARDEN_ORGANIZATION_ID` is unset.
 
-Both `https://vault.dukk.org` and `https://vault.hdc.dukk.org` reach the same Vaultwarden instance; prefer `vault.dukk.org` for new setups.
+Both `https://vault.example.invalid` and `https://vault.home.example.invalid` reach the same Vaultwarden instance; prefer `vault.example.invalid` for new setups.
 
 | Mode | Behavior |
 | --- | --- |
@@ -50,11 +50,11 @@ Both `https://vault.dukk.org` and `https://vault.hdc.dukk.org` reach the same Va
 
 After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
 
-1. Open `https://vault.dukk.org/admin` and create your account (or use an invitation).
+1. Open `https://vault.example.invalid/admin` and create your account (or use an invitation).
 2. Point `bw` at your server:
 
    ```powershell
-   bw config server https://vault.dukk.org
+   bw config server https://vault.example.invalid
    ```
 
 3. Run any hdc command that needs secrets, or:

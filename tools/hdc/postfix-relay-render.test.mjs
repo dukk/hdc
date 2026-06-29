@@ -41,16 +41,16 @@ describe("configurePostfixSatellite", () => {
     configurePostfixSatellite({
       exec,
       log,
-      relayhost: "[10.0.0.60]",
-      myhostname: "nginx-waf-a.hdc.dukk.org",
-      myorigin: "hdc.dukk.org",
+      relayhost: "[192.0.2.60]",
+      myhostname: "nginx-waf-a.home.example.invalid",
+      myorigin: "hdc.example.invalid",
       inetInterfaces: "loopback-only",
     });
 
     const joined = commands.join("\n");
     expect(joined).toContain("sed -i '/^include \\/etc\\/postfix\\/main.cf.d/d'");
     expect(joined).not.toContain("echo 'include /etc/postfix/main.cf.d'");
-    expect(joined).toContain("relayhost=[10.0.0.60]");
+    expect(joined).toContain("relayhost=[192.0.2.60]");
     expect(joined).toContain("local_transport=error:local delivery disabled on satellite");
   });
 });
@@ -76,12 +76,12 @@ describe("postfix-relay-render (SMTP2GO)", () => {
 
   it("renderSatelliteCfSnippet has relayhost without SASL", () => {
     const s = renderSatelliteCfSnippet({
-      relayhost: "[10.0.0.60]",
-      myhostname: "pi-hole-a.hdc.dukk.org",
-      myorigin: "hdc.dukk.org",
+      relayhost: "[192.0.2.60]",
+      myhostname: "pi-hole-a.home.example.invalid",
+      myorigin: "hdc.example.invalid",
       inetInterfaces: "loopback-only",
     });
-    expect(s).toContain("relayhost = [10.0.0.60]");
+    expect(s).toContain("relayhost = [192.0.2.60]");
     expect(s).toContain("inet_interfaces = loopback-only");
     expect(s).not.toContain("smtp_sasl");
   });
@@ -98,11 +98,11 @@ describe("mail-relay-config", () => {
   });
 
   it("resolveSatelliteMyhostname appends myorigin to short hostname", () => {
-    expect(resolveSatelliteMyhostname({ hostname: "n8n" }, "hdc.dukk.org")).toBe(
-      "n8n.hdc.dukk.org",
+    expect(resolveSatelliteMyhostname({ hostname: "n8n" }, "hdc.example.invalid")).toBe(
+      "n8n.hdc.example.invalid",
     );
-    expect(resolveSatelliteMyhostname({ system_id: "vm-bind-a" }, "hdc.dukk.org")).toBe(
-      "vm-bind-a.hdc.dukk.org",
+    expect(resolveSatelliteMyhostname({ system_id: "vm-bind-a" }, "hdc.example.invalid")).toBe(
+      "vm-bind-a.hdc.example.invalid",
     );
   });
 });

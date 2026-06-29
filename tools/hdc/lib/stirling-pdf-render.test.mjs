@@ -71,7 +71,7 @@ describe("stirling-pdf-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.139", stirlingPdf)).toBe("http://10.0.0.139:8080");
-    expect(resolveWebUrl(stirlingPdf, "10.0.0.139")).toBe("http://10.0.0.139:8080");
+    expect(resolveUpstreamUrl("192.0.2.139", stirlingPdf)).toBe("http://192.0.2.139:8080");
+    expect(resolveWebUrl(stirlingPdf, "192.0.2.139")).toBe("http://192.0.2.139:8080");
   });
 });

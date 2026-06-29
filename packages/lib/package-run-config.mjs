@@ -1,6 +1,7 @@
 export {
   loadPackageConfigFromPackageRoot,
   tryLoadPackageConfigFromPackageRoot,
+  tryLoadPackageConfigOrExample,
   packageRootFromMeta,
   packageRootFromScriptDir,
 } from "../../tools/hdc/lib/package-config.mjs";

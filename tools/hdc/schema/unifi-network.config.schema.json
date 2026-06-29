@@ -10,7 +10,7 @@
     "controller_base_url": {
       "type": "string",
       "minLength": 1,
-      "description": "HTTPS base URL for the UniFi gateway/controller (e.g. https://10.0.0.1)."
+      "description": "HTTPS base URL for the UniFi gateway/controller (e.g. https://192.0.2.1)."
     },
     "default_site_id": {
       "type": "string",

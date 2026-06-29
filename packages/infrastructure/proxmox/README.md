@@ -88,7 +88,7 @@ Optional overrides:
 ```json
 "notifications": {
   "enabled": true,
-  "mailto": "dukk@dukk.org",
+  "mailto": "ops@example.invalid",
   "sendmail_target": "hdc-mail",
   "backup_failure_matcher": "hdc-backup-failures",
   "disable_matchers": ["default"],

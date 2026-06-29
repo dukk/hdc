@@ -26,7 +26,7 @@ const proxmoxCfg = {
     },
     notifications: {
       enabled: true,
-      mailto: "ops@dukk.org",
+      mailto: "ops@example.invalid",
     },
   },
 };
@@ -92,7 +92,7 @@ describe("proxmox backup maintain", () => {
       comment: "hdc-managed: vaultwarden-a",
       "notification-mode": "notification-system",
     };
-    const live = { ...desired, mailto: "ops@dukk.org", "notification-mode": "auto" };
+    const live = { ...desired, mailto: "ops@example.invalid", "notification-mode": "auto" };
     expect(backupJobsMatch(desired, live)).toBe(false);
     expect(backupJobLegacyMailFields(live)).toEqual(["mailto"]);
     expect(buildBackupJobPutForm(desired, live)).toContain("delete=mailto");
@@ -135,7 +135,7 @@ describe("proxmox backup maintain", () => {
       {
         system_id: "vm-bind-a",
         hostname: "bind-a",
-        proxmox: { host_id: "pve-b", qemu: { ip: "10.0.0.2/24" } },
+        proxmox: { host_id: "pve-b", qemu: { ip: "192.0.2.2/24" } },
       },
       { profile: "daily" },
     );

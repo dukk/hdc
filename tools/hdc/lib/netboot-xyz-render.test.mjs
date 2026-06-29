@@ -66,14 +66,14 @@ describe("netboot-xyz render", () => {
   });
 
   it("dhcpHints returns boot filenames and next-server", () => {
-    const hints = dhcpHints("10.0.0.50", baseCfg);
-    expect(hints.next_server).toBe("10.0.0.50");
+    const hints = dhcpHints("192.0.2.50", baseCfg);
+    expect(hints.next_server).toBe("192.0.2.50");
     expect(hints.bios_boot_file).toBe("netboot.xyz.kpxe");
     expect(hints.uefi_boot_file).toBe("netboot.xyz.efi");
-    expect(hints.web_ui_url).toBe("http://10.0.0.50:3000");
-    expect(hints.assets_url).toBe("http://10.0.0.50:8080/");
+    expect(hints.web_ui_url).toBe("http://192.0.2.50:3000");
+    expect(hints.assets_url).toBe("http://192.0.2.50:8080/");
     expect(hints.examples.generic_dhcp).toEqual({
-      "next-server": "10.0.0.50",
+      "next-server": "192.0.2.50",
       filename_bios: "netboot.xyz.kpxe",
       filename_uefi: "netboot.xyz.efi",
     });

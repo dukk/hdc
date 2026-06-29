@@ -3,7 +3,7 @@
   "defaults": {
     "mode": "proxmox-qemu",
     "proxmox": {
-      "network": { "gateway": "10.0.0.1" },
+      "network": { "gateway": "192.0.2.1" },
       "qemu": {
         "template_vmid": 9022,
         "storage": "local-lvm",
@@ -63,12 +63,12 @@
         "qemu": {
           "vmid": 0,
           "template_vmid": 9022,
-          "ip": "10.0.0.162/24",
+          "ip": "192.0.2.162/24",
           "hostname": "vm-twenty-a"
         }
       },
       "configure": {
-        "ssh": { "host": "10.0.0.162" }
+        "ssh": { "host": "192.0.2.162" }
       }
     }
   ]

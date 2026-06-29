@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service memos maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.151:5230`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.151:5230`).
 2. **Inventory:** set `access.nodes[0].ip` on `memos-a.json`.
 3. **First account:** sign up in the Memos web UI (first user becomes admin).
 4. **Data:** SQLite and assets persist under `/opt/memos/data` on the CT.

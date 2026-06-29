@@ -122,7 +122,7 @@ export function renderKeepalivedConf(opts) {
 
 /**
  * Shell commands to prepare a DR mode real server (loopback VIP + ARP sysctl).
- * @param {string} vip CIDR or address e.g. 10.0.0.50/32
+ * @param {string} vip CIDR or address e.g. 192.0.2.50/32
  */
 export function buildDrRealServerCommands(vip) {
   const addr = vip.includes("/") ? vip.split("/")[0] : vip;

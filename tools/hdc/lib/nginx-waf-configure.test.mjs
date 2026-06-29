@@ -6,7 +6,7 @@ const wafSampleSite = {
   id: "vaultwarden",
   host_names: ["vault.example.test"],
   listen: [80],
-  upstream: "http://10.0.0.123:80",
+  upstream: "http://192.0.2.123:80",
   tls: { enabled: false },
 };
 
@@ -14,7 +14,7 @@ const nginxSampleSite = {
   id: "vaultwarden",
   server_names: ["vault.example.test"],
   listen: [80],
-  upstream: "http://10.0.0.123:80",
+  upstream: "http://192.0.2.123:80",
   tls: { enabled: false },
 };
 

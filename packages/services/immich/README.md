@@ -35,7 +35,7 @@ node tools/hdc/cli.mjs run service immich query -- --system-id vm-immich-a --adm
 - `immich.port` — default `2283` (compose publish port)
 - `immich.public_url` — e.g. `https://immich.example.org` for `IMMICH_SERVER_URL` and admin `server.externalDomain`
 - `immich.api_key_vault_key` — vault env name for admin API (default `HDC_IMMICH_API_KEY`)
-- `immich.mail.enabled` — when true, maintain sets `notifications.smtp` to internal postfix-relay (`postfix-relay.hdc.dukk.org:25`, no auth)
+- `immich.mail.enabled` — when true, maintain sets `notifications.smtp` to internal postfix-relay (`postfix-relay.home.example.invalid:25`, no auth)
 - `immich.system_config` — sanitized admin config from `query --import`; maintain deep-merges over live via `PUT /api/system-config`
 - `immich.upload_location` / `immich.db_data_location` — library and Postgres data paths
 - **Synology:** `mode: synology-docker`, `install.compose_dir` under `/volume1/docker/immich`

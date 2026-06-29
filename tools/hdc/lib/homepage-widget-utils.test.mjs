@@ -16,10 +16,10 @@ describe("homepage widget utils", () => {
   });
 
   it("serviceUrlFromPublicUrlOrHostPort prefers public_url", () => {
-    expect(serviceUrlFromPublicUrlOrHostPort("https://uptime-kuma.hdc.dukk.org", "10.0.0.105", 3001)).toBe(
-      "https://uptime-kuma.hdc.dukk.org",
+    expect(serviceUrlFromPublicUrlOrHostPort("https://uptime-kuma.home.example.invalid", "192.0.2.105", 3001)).toBe(
+      "https://uptime-kuma.home.example.invalid",
     );
-    expect(serviceUrlFromPublicUrlOrHostPort("", "10.0.0.105", 3001)).toBe("http://10.0.0.105:3001");
-    expect(serviceUrlFromHostPort("10.0.0.95", 61208)).toBe("http://10.0.0.95:61208");
+    expect(serviceUrlFromPublicUrlOrHostPort("", "192.0.2.105", 3001)).toBe("http://192.0.2.105:3001");
+    expect(serviceUrlFromHostPort("192.0.2.95", 61208)).toBe("http://192.0.2.95:61208");
   });
 });

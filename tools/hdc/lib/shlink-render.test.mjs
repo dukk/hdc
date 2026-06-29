@@ -81,9 +81,9 @@ describe("shlink-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.50", shlink)).toBe("http://10.0.0.50:8080");
-    expect(resolveWebUrl(shlink, "10.0.0.50")).toBe("https://s.example.invalid");
-    expect(resolveWebClientUrl(shlink, "10.0.0.50")).toBe("https://shlink.example.invalid");
-    expect(resolveWebClientUpstreamUrl("10.0.0.50", shlink)).toBe("http://10.0.0.50:8081");
+    expect(resolveUpstreamUrl("192.0.2.50", shlink)).toBe("http://192.0.2.50:8080");
+    expect(resolveWebUrl(shlink, "192.0.2.50")).toBe("https://s.example.invalid");
+    expect(resolveWebClientUrl(shlink, "192.0.2.50")).toBe("https://shlink.example.invalid");
+    expect(resolveWebClientUpstreamUrl("192.0.2.50", shlink)).toBe("http://192.0.2.50:8081");
   });
 });

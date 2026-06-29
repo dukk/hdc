@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { tryLoadPackageConfigFromPackageRoot } from "../../../../tools/hdc/lib/package-config.mjs";
+import { tryLoadPackageConfigOrExample } from "../../../../tools/hdc/lib/package-config.mjs";
 import { repoRoot as defaultRepoRoot } from "../../../../tools/hdc/paths.mjs";
 import {
   clusterConfigByKey,
@@ -150,7 +150,7 @@ export function collectStartupTargetsFromPackages(root, proxmoxCfg) {
       continue;
     }
     const exampleRel = `packages/services/${pkgId}/config.example.json`;
-    const loaded = tryLoadPackageConfigFromPackageRoot(pkgRoot, { exampleRel });
+    const loaded = tryLoadPackageConfigOrExample(pkgRoot, { exampleRel });
     if (!loaded || !isObject(loaded.data)) continue;
 
     const defaults = loaded.data.defaults ?? null;

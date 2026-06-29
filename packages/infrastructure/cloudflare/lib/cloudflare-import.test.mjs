@@ -96,16 +96,16 @@ describe("cloudflare-import", () => {
   it("importZonesFromLive produces config-shaped zones[]", () => {
     const zones = importZonesFromLive([
       {
-        name: "dukk.org",
+        name: "example.invalid",
         records: [
           { type: "A", name: "@", data: "203.0.113.10", ttl: 300, proxied: false },
-          { type: "CNAME", name: "www", data: "dukk.org", ttl: 300, proxied: false },
+          { type: "CNAME", name: "www", data: "example.invalid", ttl: 300, proxied: false },
         ],
       },
     ]);
 
     expect(zones).toHaveLength(1);
-    expect(zones[0].name).toBe("dukk.org");
+    expect(zones[0].name).toBe("example.invalid");
     expect(zones[0].records).toHaveLength(2);
     expect(zones[0].records[0].type).toBe("A");
     expect(zones[0].records[1].type).toBe("CNAME");
@@ -117,12 +117,12 @@ describe("cloudflare-import", () => {
         id: "cf-pr-1",
         priority: 1,
         status: "active",
-        targets: [{ target: "url", constraint: { operator: "matches", value: "*dukk.org/*" } }],
+        targets: [{ target: "url", constraint: { operator: "matches", value: "*example.invalid/*" } }],
         actions: [{ id: "always_use_https", value: "on" }],
       },
     ]);
     expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("matches-dukk-org");
+    expect(rules[0].id).toBe("matches-example-invalid");
     expect(rules[0].cf_id).toBe("cf-pr-1");
   });
 
@@ -131,12 +131,12 @@ describe("cloudflare-import", () => {
       {
         id: "cf-er-1",
         enabled: true,
-        matchers: [{ type: "literal", field: "to", value: "info@dukk.org" }],
+        matchers: [{ type: "literal", field: "to", value: "info@example.invalid" }],
         actions: [{ type: "forward", value: ["user@gmail.com"] }],
       },
     ]);
     expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("to-info-dukk-org");
+    expect(rules[0].id).toBe("to-info-example-invalid");
     expect(rules[0].cf_id).toBe("cf-er-1");
   });
 });

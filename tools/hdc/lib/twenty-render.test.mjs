@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import {
   generateTwentyDbPassword,
   hostPort,
@@ -7,6 +7,10 @@ import {
   resolveServerUrl,
   resolveWebUrl,
 } from "../../../packages/services/twenty/lib/twenty-render.mjs";
+import {
+  installMailRelayExampleMock,
+  restoreMailRelayExampleMock,
+} from "../test/mock-mail-relay-example.mjs";
 
 const baseCfg = {
   image_tag: "v2.11.0",
@@ -23,6 +27,14 @@ const secrets = {
 };
 
 describe("twenty render", () => {
+  beforeEach(() => {
+    installMailRelayExampleMock();
+  });
+
+  afterEach(() => {
+    restoreMailRelayExampleMock();
+  });
+
   it("hostPort defaults to 3000", () => {
     expect(hostPort({})).toBe(3000);
     expect(hostPort({ host_port: 8080 })).toBe(8080);
@@ -48,20 +60,20 @@ describe("twenty render", () => {
     const env = renderTwentyEnv(
       {
         ...baseCfg,
-        public_url: "https://twenty.hdc.dukk.org",
+        public_url: "https://twenty.home.example.invalid",
         mail: {
           enabled: true,
-          to: "ops@hdc.dukk.org",
-          from: "noreply@hdc.dukk.org",
+          to: "ops@hdc.example.invalid",
+          from: "noreply@hdc.example.invalid",
         },
       },
       secrets,
-      "10.0.0.162",
+      "192.0.2.162",
     );
     expect(env).toContain("EMAIL_DRIVER=smtp");
-    expect(env).toContain("EMAIL_SMTP_HOST=postfix-relay.hdc.dukk.org");
+    expect(env).toContain("EMAIL_SMTP_HOST=postfix-relay.home.example.invalid");
     expect(env).toContain("EMAIL_SMTP_PORT=25");
-    expect(env).toContain("EMAIL_FROM_ADDRESS=noreply@hdc.dukk.org");
+    expect(env).toContain("EMAIL_FROM_ADDRESS=noreply@hdc.example.invalid");
     expect(env).toContain("EMAIL_FROM_NAME=Twenty CRM");
   });
 
@@ -73,26 +85,26 @@ describe("twenty render", () => {
 
   it("renderTwentyEnv uses public_url for SERVER_URL", () => {
     const env = renderTwentyEnv(
-      { ...baseCfg, public_url: "https://crm.dukk.org" },
+      { ...baseCfg, public_url: "https://crm.example.invalid" },
       secrets,
-      "10.0.0.50",
+      "192.0.2.50",
     );
-    expect(env).toContain("SERVER_URL=https://crm.dukk.org");
+    expect(env).toContain("SERVER_URL=https://crm.example.invalid");
     expect(env).toContain("ENCRYPTION_KEY=");
     expect(env).toContain(`PG_DATABASE_PASSWORD=${secrets.dbPassword}`);
     expect(env).toContain("IS_MULTIWORKSPACE_ENABLED=false");
   });
 
   it("renderTwentyEnv falls back to CT IP when public_url omitted", () => {
-    const env = renderTwentyEnv({ ...baseCfg, public_url: "" }, secrets, "10.0.0.50");
-    expect(env).toContain("SERVER_URL=http://10.0.0.50:3000");
+    const env = renderTwentyEnv({ ...baseCfg, public_url: "" }, secrets, "192.0.2.50");
+    expect(env).toContain("SERVER_URL=http://192.0.2.50:3000");
   });
 
   it("resolveServerUrl and resolveWebUrl prefer public_url", () => {
-    expect(resolveServerUrl({ public_url: "https://crm.dukk.org" }, "10.0.0.1")).toBe(
-      "https://crm.dukk.org",
+    expect(resolveServerUrl({ public_url: "https://crm.example.invalid" }, "192.0.2.1")).toBe(
+      "https://crm.example.invalid",
     );
-    expect(resolveWebUrl({}, "10.0.0.50")).toBe("http://10.0.0.50:3000");
+    expect(resolveWebUrl({}, "192.0.2.50")).toBe("http://192.0.2.50:3000");
   });
 
   it("renderTwentyEnv requires secrets", () => {

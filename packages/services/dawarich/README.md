@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service dawarich maintain --
 
 ## After deploy
 
-1. **CT IP / URL:** from deploy/query `url` or `upstream_url` (e.g. `http://10.0.0.153:3000` or `https://dawarich.dukk.org`).
+1. **CT IP / URL:** from deploy/query `url` or `upstream_url` (e.g. `http://192.0.2.153:3000` or `https://dawarich.example.invalid`).
 2. **Inventory:** set `access.nodes[0].ip` on `dawarich-a.json`.
 3. **First login:** change the default admin password in the web UI.
 4. **Mobile:** point Dawarich or OwnTracks apps at your public URL.

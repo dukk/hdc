@@ -50,9 +50,9 @@ describe("openclaw render", () => {
   });
 
   it("resolveDashboardUrl documents SSH tunnel for loopback", () => {
-    const u = resolveDashboardUrl({ gateway: { bind: "loopback", port: 18789 } }, "10.0.0.99");
+    const u = resolveDashboardUrl({ gateway: { bind: "loopback", port: 18789 } }, "192.0.2.99");
     expect(u.gateway_url).toBe("http://127.0.0.1:18789");
     expect(u.access_note).toContain("ssh -L 18789:127.0.0.1:18789");
-    expect(u.access_note).toContain("10.0.0.99");
+    expect(u.access_note).toContain("192.0.2.99");
   });
 });

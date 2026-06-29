@@ -41,7 +41,7 @@ node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-email-rou
 
 Preview without writing: omit import flags and inspect `discovered_zones[]` in query JSON.
 
-Limit to one apex: `--zone dukk.org` (with or without import flags).
+Limit to one apex: `--zone example.invalid` (with or without import flags).
 
 ## Config
 

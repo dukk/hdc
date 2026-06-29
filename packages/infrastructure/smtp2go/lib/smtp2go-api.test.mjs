@@ -25,7 +25,7 @@ describe("smtp2go-api", () => {
             domains: [
               {
                 domain: {
-                  fulldomain: "dukk.org",
+                  fulldomain: "example.invalid",
                   dkim_selector: "s1160987",
                   dkim_value: "dkim.smtp2go.net",
                   dkim_verified: true,
@@ -52,7 +52,7 @@ describe("smtp2go-api", () => {
     const domains = await api.listSenderDomains();
 
     expect(domains).toHaveLength(1);
-    expect(domains[0].domain.fulldomain).toBe("dukk.org");
+    expect(domains[0].domain.fulldomain).toBe("example.invalid");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/domain/view");
@@ -65,21 +65,21 @@ describe("smtp2go-api", () => {
       ok: true,
       text: async () =>
         JSON.stringify({
-          data: { domains: [{ domain: { fulldomain: "hdc.dukk.org" } }] },
+          data: { domains: [{ domain: { fulldomain: "hdc.example.invalid" } }] },
         }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const api = createSmtp2goClient({ apiKey: "api-test-key" });
     await api.addSenderDomain({
-      domain: "hdc.dukk.org",
+      domain: "hdc.example.invalid",
       trackingSubdomain: "link",
       returnpathSubdomain: "em1160987",
       autoVerify: true,
     });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
-    expect(body.domain).toBe("hdc.dukk.org");
+    expect(body.domain).toBe("hdc.example.invalid");
     expect(body.tracking_subdomain).toBe("link");
     expect(body.returnpath_subdomain).toBe("em1160987");
     expect(body.auto_verify).toBe(true);

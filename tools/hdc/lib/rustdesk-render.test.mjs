@@ -45,14 +45,14 @@ describe("rustdesk-render", () => {
   });
 
   it("resolveIdServerHost prefers id_server_host over CT IP", () => {
-    expect(resolveIdServerHost("10.0.0.50", rustdesk)).toBe("10.0.0.50");
-    expect(resolveIdServerHost("10.0.0.50", { id_server_host: "rustdesk.lan" })).toBe("rustdesk.lan");
+    expect(resolveIdServerHost("192.0.2.50", rustdesk)).toBe("192.0.2.50");
+    expect(resolveIdServerHost("192.0.2.50", { id_server_host: "rustdesk.lan" })).toBe("rustdesk.lan");
     expect(resolveIdServerHost(null, rustdesk)).toBeNull();
   });
 
   it("clientConfigSummary includes ports and client hint", () => {
-    const summary = clientConfigSummary("10.0.0.50", "abc123key", rustdesk);
-    expect(summary.id_server).toBe("10.0.0.50");
+    const summary = clientConfigSummary("192.0.2.50", "abc123key", rustdesk);
+    expect(summary.id_server).toBe("192.0.2.50");
     expect(summary.public_key).toBe("abc123key");
     expect(summary.relay_server).toBeNull();
     expect(summary.relay_port).toBe(REQUIRED_PORTS.relay_port);

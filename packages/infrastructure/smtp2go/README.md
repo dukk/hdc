@@ -32,7 +32,7 @@ Set `managed: true` on sender domains, `ip_allow_list`, or `allowed_senders` sec
 
 ```bash
 node tools/hdc/cli.mjs run infrastructure smtp2go query --
-node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.dukk.org
+node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.example.invalid
 node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```
 
@@ -41,7 +41,7 @@ node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```bash
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-dukk-org
+node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list
 node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-allowed-senders

@@ -26,7 +26,7 @@ const testPolicyCatalog = mergePolicyDefinitions(
   {
     nginx_waf: {
       modsecurity: { enabled: true, rule_engine: "On" },
-      trusted_cidrs: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
+      trusted_cidrs: ["192.0.2.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
     },
   },
   null,
@@ -48,13 +48,13 @@ const restrictedSite = {
     {
       path: "/api/",
       proxy_headers: true,
-      policies: [{ type: "trusted_cidrs", deny_status: 404, groups: [{ id: "default", cidrs: ["10.0.0.0/8"] }] }],
+      policies: [{ type: "trusted_cidrs", deny_status: 404, groups: [{ id: "default", cidrs: ["192.0.2.0/8"] }] }],
     },
     {
       path: "~ ^/admin",
       proxy_headers: true,
       policies: [
-        { type: "trusted_cidrs", deny_status: 401, groups: [{ id: "default", cidrs: ["10.0.0.0/8"] }] },
+        { type: "trusted_cidrs", deny_status: 401, groups: [{ id: "default", cidrs: ["192.0.2.0/8"] }] },
         { type: "modsecurity", enabled: false },
       ],
     },
@@ -96,7 +96,7 @@ describe("nginx-waf render", () => {
   it("renders geo and deny_status for trusted_cidrs policies", () => {
     const vhost = renderWithCatalog(restrictedSite);
     expect(vhost).toContain("geo $remote_addr $hdc_trusted_example_app {");
-    expect(vhost).toContain("10.0.0.0/8 1;");
+    expect(vhost).toContain("192.0.2.0/8 1;");
     expect(vhost).toContain("location /api/ {");
     expect(vhost).toContain("if ($hdc_trusted_example_app = 0) { return 404; }");
     expect(vhost).toContain("location ~ ^/admin {");
@@ -141,7 +141,7 @@ describe("nginx-waf render", () => {
       {
         nginx_waf: {
           modsecurity: { enabled: true, rule_engine: "On" },
-          trusted_cidrs: ["10.0.0.0/8"],
+          trusted_cidrs: ["192.0.2.0/8"],
           policy_definitions: {
             "cloudflare-only": {
               type: "cloudflare_origin",
@@ -317,8 +317,8 @@ describe("nginx-waf render", () => {
       upstream: {
         method: "least_conn",
         servers: [
-          { url: "https://10.0.0.1:8006", weight: 2 },
-          { url: "https://10.0.0.2:8006", backup: true },
+          { url: "https://192.0.2.1:8006", weight: 2 },
+          { url: "https://192.0.2.2:8006", backup: true },
         ],
       },
       tls: { enabled: true, cert_name: "pve.hdc.example.invalid" },
@@ -326,8 +326,8 @@ describe("nginx-waf render", () => {
     });
     expect(vhost).toContain("upstream hdc_pve {");
     expect(vhost).toContain("least_conn;");
-    expect(vhost).toContain("server 10.0.0.1:8006 weight=2;");
-    expect(vhost).toContain("server 10.0.0.2:8006 backup;");
+    expect(vhost).toContain("server 192.0.2.1:8006 weight=2;");
+    expect(vhost).toContain("server 192.0.2.2:8006 backup;");
     expect(vhost).toContain("proxy_pass https://hdc_pve;");
     expect(vhost).toContain("proxy_ssl on;");
   });

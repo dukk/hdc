@@ -45,7 +45,7 @@ describe("memos-render", () => {
 
   it("resolves data dir and urls", () => {
     expect(dataDir(install)).toBe("/opt/memos/data");
-    expect(resolveUpstreamUrl("10.0.0.151", memos)).toBe("http://10.0.0.151:5230");
-    expect(resolveWebUrl(memos, "10.0.0.151")).toBe("http://10.0.0.151:5230");
+    expect(resolveUpstreamUrl("192.0.2.151", memos)).toBe("http://192.0.2.151:5230");
+    expect(resolveWebUrl(memos, "192.0.2.151")).toBe("http://192.0.2.151:5230");
   });
 });

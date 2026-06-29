@@ -1,4 +1,4 @@
-const DEFAULT_GATEWAY = "10.0.0.1";
+const DEFAULT_GATEWAY = "192.0.2.1";
 const DEFAULT_BRIDGE = "vmbr0";
 const DEFAULT_IFACE = "eth0";
 
@@ -43,7 +43,7 @@ export function resolveLxcIpConfig(lxc, opts = {}) {
 
 /**
  * @param {string} bridge
- * @param {string} ipConfig Proxmox ip= value (e.g. 10.0.0.4/24,gw=10.0.0.1)
+ * @param {string} ipConfig Proxmox ip= value (e.g. 192.0.2.4/24,gw=192.0.2.1)
  * @param {string} [iface]
  */
 export function buildNet0(bridge, ipConfig, iface = DEFAULT_IFACE) {
@@ -66,7 +66,7 @@ export function parseIpv4FromIpConfig(value) {
 }
 
 /**
- * Parse IPv4 from a Proxmox net0 line (name=eth0,bridge=vmbr0,ip=10.0.0.4/24,gw=…).
+ * Parse IPv4 from a Proxmox net0 line (name=eth0,bridge=vmbr0,ip=192.0.2.4/24,gw=…).
  * @param {string} net0
  */
 export function parseIpv4FromNet0(net0) {

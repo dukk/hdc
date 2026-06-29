@@ -43,12 +43,12 @@ describe("affine render", () => {
 
   it("public_url sets https server host", () => {
     const env = renderFullEnv(
-      { ...affine, public_url: "https://affine.dukk.org" },
+      { ...affine, public_url: "https://affine.example.invalid" },
       secrets,
       "/opt/affine",
     );
     expect(env).toContain("AFFINE_SERVER_HTTPS=true");
-    expect(env).toContain("AFFINE_SERVER_HOST=affine.dukk.org");
+    expect(env).toContain("AFFINE_SERVER_HOST=affine.example.invalid");
   });
 
   it("hostPort defaults to 3010", () => {
@@ -62,8 +62,8 @@ describe("affine render", () => {
   });
 
   it("resolve web and upstream urls", () => {
-    expect(resolveWebUrl(affine, "10.0.0.151")).toBe("http://10.0.0.151:3010");
-    expect(resolveUpstreamUrl("10.0.0.151", affine)).toBe("http://10.0.0.151:3010");
+    expect(resolveWebUrl(affine, "192.0.2.151")).toBe("http://192.0.2.151:3010");
+    expect(resolveUpstreamUrl("192.0.2.151", affine)).toBe("http://192.0.2.151:3010");
     expect(resolveWebUrl({ ...affine, public_url: "https://affine.example.invalid" })).toBe(
       "https://affine.example.invalid",
     );

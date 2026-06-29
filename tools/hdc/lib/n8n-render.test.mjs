@@ -26,7 +26,7 @@ describe("n8n render", () => {
   });
 
   it("renderN8nEnv sets encryption key and webhook URL from public_url", () => {
-    const env = renderN8nEnv(baseN8n, "test-encryption-key", "10.0.0.50");
+    const env = renderN8nEnv(baseN8n, "test-encryption-key", "192.0.2.50");
     expect(env).toContain("N8N_ENCRYPTION_KEY=test-encryption-key");
     expect(env).toContain("N8N_HOST=n8n.example.invalid");
     expect(env).toContain("N8N_PROTOCOL=https");
@@ -38,10 +38,10 @@ describe("n8n render", () => {
   });
 
   it("renderN8nEnv uses CT IP when public_url omitted", () => {
-    const env = renderN8nEnv({ host_port: 5678 }, "key", "10.0.0.99");
-    expect(env).toContain("N8N_HOST=10.0.0.99");
+    const env = renderN8nEnv({ host_port: 5678 }, "key", "192.0.2.99");
+    expect(env).toContain("N8N_HOST=192.0.2.99");
     expect(env).toContain("N8N_PROTOCOL=http");
-    expect(env).toContain("WEBHOOK_URL=http://10.0.0.99:5678/");
+    expect(env).toContain("WEBHOOK_URL=http://192.0.2.99:5678/");
   });
 
   it("hostPort defaults to 5678", () => {
@@ -71,10 +71,10 @@ describe("n8n render", () => {
   });
 
   it("resolveWebUrl and resolveUpstreamUrl", () => {
-    expect(resolveWebUrl(baseN8n, "10.0.0.1")).toBe("https://n8n.example.invalid");
-    expect(resolveUpstreamUrl("10.0.0.1", baseN8n)).toBe("http://10.0.0.1:5678");
-    expect(resolveN8nUrlSettings({ host_port: 5678 }, "10.0.0.2").webhookUrl).toBe(
-      "http://10.0.0.2:5678/",
+    expect(resolveWebUrl(baseN8n, "192.0.2.1")).toBe("https://n8n.example.invalid");
+    expect(resolveUpstreamUrl("192.0.2.1", baseN8n)).toBe("http://192.0.2.1:5678");
+    expect(resolveN8nUrlSettings({ host_port: 5678 }, "192.0.2.2").webhookUrl).toBe(
+      "http://192.0.2.2:5678/",
     );
   });
 });

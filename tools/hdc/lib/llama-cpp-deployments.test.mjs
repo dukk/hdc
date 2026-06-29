@@ -43,15 +43,15 @@ describe("llama-cpp deployments", () => {
         install: { backend: "cuda" },
         proxmox: {
           host_id: "pve-d",
-          network: { gateway: "10.0.0.1" },
+          network: { gateway: "192.0.2.1" },
           qemu: {
             vmid: 480,
             template_vmid: 9024,
-            ip: "10.0.0.28/24",
+            ip: "192.0.2.28/24",
             hostpci: [{ id: "0000:01:00.0", pcie: true, rombar: false }],
           },
         },
-        configure: { ssh: { user: "root", host: "10.0.0.28" } },
+        configure: { ssh: { user: "root", host: "192.0.2.28" } },
       },
       {
         system_id: "llama-cpp-b",
@@ -109,7 +109,7 @@ describe("llama-cpp deployments", () => {
     expect(d.systemId).toBe("vm-llama-cpp-a");
     expect(d.mode).toBe("proxmox-qemu");
     expect(d.hostname).toBe("llama-cpp-a");
-    expect(d.configure).toMatchObject({ ssh: { host: "10.0.0.28" } });
+    expect(d.configure).toMatchObject({ ssh: { host: "192.0.2.28" } });
   });
 
   it("lists deployment summaries", () => {

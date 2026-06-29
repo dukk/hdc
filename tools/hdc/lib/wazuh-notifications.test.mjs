@@ -10,10 +10,10 @@ import {
 /** @type {import("../../../packages/services/wazuh/lib/wazuh-mail-config.mjs").WazuhMailSettings} */
 const mail = {
   enabled: true,
-  smtp_server: "10.0.0.60",
+  smtp_server: "192.0.2.60",
   smtp_port: 25,
-  email_from: "noreply@hdc.dukk.org",
-  email_to: ["dukk@dukk.org"],
+  email_from: "noreply@hdc.example.invalid",
+  email_to: ["ops@example.invalid"],
   alert_level: 10,
   max_per_hour: 12,
   notifications: {
@@ -29,10 +29,10 @@ describe("wazuh-notifications", () => {
     const cfg = buildSmtpAccountConfig(mail);
     expect(cfg.config_id).toBe("hdc-postfix-relay");
     expect(cfg.config.smtp_account).toEqual({
-      host: "10.0.0.60",
+      host: "192.0.2.60",
       port: 25,
       method: "none",
-      from_address: "noreply@hdc.dukk.org",
+      from_address: "noreply@hdc.example.invalid",
     });
   });
 
@@ -40,7 +40,7 @@ describe("wazuh-notifications", () => {
     const cfg = buildEmailChannelConfig(mail);
     expect(cfg.config_id).toBe("hdc-wazuh-alerts");
     expect(cfg.config.email.email_account_id).toBe("hdc-postfix-relay");
-    expect(cfg.config.email.recipient_list.recipient).toEqual(["dukk@dukk.org"]);
+    expect(cfg.config.email.recipient_list.recipient).toEqual(["ops@example.invalid"]);
   });
 
   it("detects SMTP and email channel drift", () => {
@@ -48,7 +48,7 @@ describe("wazuh-notifications", () => {
     const email = buildEmailChannelConfig(mail);
     expect(smtpAccountDrifts(null, smtp)).toBe(true);
     expect(smtpAccountDrifts({ smtp_account: smtp.config.smtp_account }, smtp)).toBe(false);
-    expect(smtpAccountDrifts({ smtp_account: { ...smtp.config.smtp_account, host: "10.0.0.1" } }, smtp)).toBe(
+    expect(smtpAccountDrifts({ smtp_account: { ...smtp.config.smtp_account, host: "192.0.2.1" } }, smtp)).toBe(
       true,
     );
     expect(emailChannelDrifts(null, email)).toBe(true);

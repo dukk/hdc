@@ -21,7 +21,7 @@ export const DEFAULT_LETS_ENCRYPT_EMAIL_VAULT_KEY = "HDC_NGINX_WAF_LETS_ENCRYPT_
 
 /** Default trusted networks for internal_only location access. */
 export const DEFAULT_TRUSTED_CIDRS = [
-  "10.0.0.0/8",
+  "192.0.2.0/8",
   "172.16.0.0/12",
   "192.168.0.0/16",
   "127.0.0.0/8",

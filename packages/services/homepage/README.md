@@ -7,7 +7,7 @@ Self-hosted [gethomepage.dev](https://gethomepage.dev/) dashboard on Proxmox LXC
 - **Config:** [`config.example.json`](config.example.json) → `config.json` — set `homepage.allowed_hosts[]`, `homepage.public_url`, `homepage.config_files`, `proxmox.host_id`, `proxmox.lxc.vmid`, static `ip_config`
 - **Dashboard YAML:** copy `homepage/*.example.yaml` → `homepage/*.yaml` in hdc-private (paths relative to package root)
 - **Inventory:** `inventory/manual/systems/homepage-a.json`; `inventory/manual/services/homepage.json`
-- **nginx-waf (optional):** internal HTTPS at `https://hdc.dukk.org` with `internal_only` access policy
+- **nginx-waf (optional):** internal HTTPS at `https://hdc.example.invalid` with `internal_only` access policy
 - **DNS:** BIND A `homepage-a`; apex `@` → nginx-waf-a for HTTPS entry
 
 ## Commands
@@ -33,7 +33,7 @@ node tools/hdc/cli.mjs run service homepage maintain --
 
 - `homepage.config_files` — paths relative to `packages/services/homepage/` (`services`, `settings`, `bookmarks`, optional `widgets` YAML). hdc checks the public repo first, then hdc-private.
 - `homepage.allowed_hosts[]` — required for `HOMEPAGE_ALLOWED_HOSTS` (comma-separated in container env)
-- `homepage.public_url` — optional HTTPS URL shown in reports (e.g. `https://hdc.dukk.org`)
+- `homepage.public_url` — optional HTTPS URL shown in reports (e.g. `https://hdc.example.invalid`)
 
 Edit `homepage/services.yaml` (and optional `settings.yaml` / `bookmarks.yaml` / `widgets.yaml`) in hdc-private and run `maintain` to refresh the dashboard. Use native gethomepage keys (`siteMonitor`, `disableIndexing`, etc.) — see [Homepage docs](https://gethomepage.dev/configs/services/). Header info bars (CPU, memory, disk, search, datetime) live in `widgets.yaml` — see [info widgets](https://gethomepage.dev/widgets/info/datetime/).
 
@@ -121,11 +121,11 @@ Rules: every tile needs `icon`; vendored `/icons/*.png` must exist under `homepa
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.49:3000`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.49:3000`).
 2. **Inventory:** set `access.nodes[0].ip` on `homepage-a.json`.
 3. **BIND:** A `homepage-a`; A `@` → nginx-waf-a for apex HTTPS.
 4. **nginx-waf:** site `hdc-homepage` upstream to CT IP; `internal_only` on `/`; `websocket: true`.
-5. **Browse:** `http://10.0.0.49:3000` or `https://hdc.dukk.org` from LAN.
+5. **Browse:** `http://192.0.2.49:3000` or `https://hdc.example.invalid` from LAN.
 
 ## Related
 

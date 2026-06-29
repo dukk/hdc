@@ -14,7 +14,7 @@ const validCfg = {
     proxmox: {
       lxc: {
         vmid: 0,
-        ip_config: "10.0.0.100/24,gw=10.0.0.1",
+        ip_config: "192.0.2.100/24,gw=192.0.2.1",
       },
     },
   },
@@ -23,14 +23,14 @@ const validCfg = {
       system_id: "nagios-a",
       proxmox: {
         host_id: "pve-b",
-        lxc: { vmid: 150, ip_config: "10.0.0.100/24,gw=10.0.0.1" },
+        lxc: { vmid: 150, ip_config: "192.0.2.100/24,gw=192.0.2.1" },
       },
     },
     {
       system_id: "nagios-b",
       proxmox: {
         host_id: "pve-c",
-        lxc: { vmid: 151, ip_config: "10.0.0.101/24,gw=10.0.0.1" },
+        lxc: { vmid: 151, ip_config: "192.0.2.101/24,gw=192.0.2.1" },
       },
     },
   ],

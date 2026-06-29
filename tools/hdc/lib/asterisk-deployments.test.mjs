@@ -24,9 +24,9 @@ const baseCfg = {
       mode: "proxmox-qemu",
       proxmox: {
         host_id: "hypervisor-a",
-        qemu: { vmid: 501, template_vmid: 9024, ip: "10.0.0.151/24" },
+        qemu: { vmid: 501, template_vmid: 9024, ip: "192.0.2.151/24" },
       },
-      configure: { ssh: { host: "10.0.0.151" } },
+      configure: { ssh: { host: "192.0.2.151" } },
     },
   ],
 };

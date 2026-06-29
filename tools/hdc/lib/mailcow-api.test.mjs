@@ -8,7 +8,7 @@ import {
 
 vi.mock("../../../packages/lib/mail-relay-config.mjs", () => ({
   loadMailRelayClientDefaults: () => ({
-    relay_hostname: "postfix-relay.hdc.dukk.org",
+    relay_hostname: "postfix-relay.home.example.invalid",
     relay_port: 25,
   }),
 }));
@@ -81,7 +81,7 @@ describe("reconcileMailcowDomains", () => {
         return new Response(JSON.stringify([{ type: "success" }]));
       }
       if (url.endsWith("/api/v1/get/relayhost/all") && method === "GET") {
-        return new Response(JSON.stringify([{ id: "7", hostname: "postfix-relay.hdc.dukk.org:25" }]));
+        return new Response(JSON.stringify([{ id: "7", hostname: "postfix-relay.home.example.invalid:25" }]));
       }
       if (url.endsWith("/api/v1/edit/domain") && method === "POST") {
         return new Response(JSON.stringify([{ type: "success" }]));
@@ -120,7 +120,7 @@ describe("reconcileMailcowDomains", () => {
         if (calls <= 1) {
           return new Response(JSON.stringify([]));
         }
-        return new Response(JSON.stringify([{ id: "7", hostname: "postfix-relay.hdc.dukk.org:25" }]));
+        return new Response(JSON.stringify([{ id: "7", hostname: "postfix-relay.home.example.invalid:25" }]));
       }
       if (url.endsWith("/api/v1/add/relayhost")) {
         return new Response(JSON.stringify([{ type: "success" }]));
@@ -154,7 +154,7 @@ describe("reconcileMailcowDomains", () => {
         );
       }
       if (url.endsWith("/api/v1/get/relayhost/all")) {
-        return new Response(JSON.stringify([{ id: "3", hostname: "postfix-relay.hdc.dukk.org:25" }]));
+        return new Response(JSON.stringify([{ id: "3", hostname: "postfix-relay.home.example.invalid:25" }]));
       }
       if (url.endsWith("/api/v1/edit/domain")) {
         return new Response(JSON.stringify([{ type: "success" }]));

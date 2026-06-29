@@ -90,7 +90,7 @@ export function relayhostForSaslMap(relayhost) {
 /**
  * Postfix satellite client: forward all mail to internal hdc relay (no SASL).
  * @param {object} opts
- * @param {string} opts.relayhost e.g. [10.0.0.60]
+ * @param {string} opts.relayhost e.g. [192.0.2.60]
  * @param {string} opts.myhostname
  * @param {string} opts.myorigin
  * @param {string} [opts.inetInterfaces]

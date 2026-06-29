@@ -6,7 +6,7 @@ Nginx with ModSecurity (OWASP CRS), reverse proxy `sites[]`, catalog-driven secu
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json` (`schema_version`: **4**)
 - **Inventory:** [`inventory/manual/systems/vm-nginx-waf-a.json`](../../../inventory/manual/systems/vm-nginx-waf-a.json), [`vm-nginx-waf-b.json`](../../../inventory/manual/systems/vm-nginx-waf-b.json); [`inventory/manual/services/nginx-waf.json`](../../../inventory/manual/services/nginx-waf.json)
-- **Vault:** `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt); legacy `HDC_NGINX_WAF_LE_EMAIL` is still read with a deprecation warning. Default ACME challenge is **http-01** (webroot). Optional group `acme.dns` enables **dns-01** fallback via BIND RFC2136 when HTTP obtain fails — only for hostnames in that authoritative zone (e.g. `*.hdc.dukk.org`). Public names on **Cloudflare DNS** (`*.dukk.org` via orange-cloud, `drippylit.com`, `typotests.com`, etc.) must use http-01 through Cloudflare proxy to the WAF; BIND fallback is skipped when SANs are outside `acme.dns.zone` (`HDC_BIND_TSIG_KEY` required for DNS fallback).
+- **Vault:** `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt); legacy `HDC_NGINX_WAF_LE_EMAIL` is still read with a deprecation warning. Default ACME challenge is **http-01** (webroot). Optional group `acme.dns` enables **dns-01** fallback via BIND RFC2136 when HTTP obtain fails — only for hostnames in that authoritative zone (e.g. `*.home.example.invalid`). Public names on **Cloudflare DNS** (`*.example.invalid` via orange-cloud, `brand-a.example`, `brand-b.example`, etc.) must use http-01 through Cloudflare proxy to the WAF; BIND fallback is skipped when SANs are outside `acme.dns.zone` (`HDC_BIND_TSIG_KEY` required for DNS fallback).
 
 ## Commands
 
@@ -70,13 +70,13 @@ Each site requires `id`, **`host_names`**, and `upstream` (string URL or upstrea
 ```json
 "certificate": {
   "provider": "custom",
-  "server": "https://ca.hdc.dukk.org/acme/acme/directory"
+  "server": "https://ca.home.example.invalid/acme/acme/directory"
 }
 ```
 
 Install the step-ca root at `acme.root_ca_path` on WAF nodes (default `/etc/ssl/certs/hdc-step-ca-root.crt`) before using custom ACME.
 
-**Cloudflare DNS zones:** Group `acme.dns` targets authoritative BIND (RFC2136 to `acme.dns.zone`, typically `hdc.dukk.org`). Public hostnames on Cloudflare — including `*.dukk.org` CNAMEs to `waf.dukk.org`, `drippylit.com`, and `typotests.com` — obtain certs via **http-01** only (orange-cloud proxy to WAF port 80). dns-01 fallback is skipped when any cert SAN is outside `acme.dns.zone`.
+**Cloudflare DNS zones:** Group `acme.dns` targets authoritative BIND (RFC2136 to `acme.dns.zone`, typically `hdc.example.invalid`). Public hostnames on Cloudflare — including `*.example.invalid` CNAMEs to `waf.example.invalid`, `brand-a.example`, and `brand-b.example` — obtain certs via **http-01** only (orange-cloud proxy to WAF port 80). dns-01 fallback is skipped when any cert SAN is outside `acme.dns.zone`.
 
 **Upstream pools:**
 
@@ -84,8 +84,8 @@ Install the step-ca root at `acme.root_ca_path` on WAF nodes (default `/etc/ssl/
 "upstream": {
   "method": "least_conn",
   "servers": [
-    { "url": "https://pve-a.hdc.dukk.org:8006", "weight": 1 },
-    { "url": "https://pve-b.hdc.dukk.org:8006", "weight": 1 }
+    { "url": "https://pve-a.home.example.invalid:8006", "weight": 1 },
+    { "url": "https://pve-b.home.example.invalid:8006", "weight": 1 }
   ]
 }
 ```

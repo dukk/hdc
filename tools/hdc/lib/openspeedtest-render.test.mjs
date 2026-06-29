@@ -36,7 +36,7 @@ describe("openspeedtest-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.138", openspeedtest)).toBe("http://10.0.0.138:3000");
-    expect(resolveWebUrl(openspeedtest, "10.0.0.138")).toBe("http://10.0.0.138:3000");
+    expect(resolveUpstreamUrl("192.0.2.138", openspeedtest)).toBe("http://192.0.2.138:3000");
+    expect(resolveWebUrl(openspeedtest, "192.0.2.138")).toBe("http://192.0.2.138:3000");
   });
 });

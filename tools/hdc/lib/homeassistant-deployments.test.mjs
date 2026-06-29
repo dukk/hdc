@@ -17,7 +17,7 @@ describe("homeassistant deployments", () => {
     defaults: {
       mode: "proxmox-qemu-haos",
       proxmox: {
-        network: { gateway: "10.0.0.1", dns: ["10.0.0.2"] },
+        network: { gateway: "192.0.2.1", dns: ["192.0.2.2"] },
         qemu: { storage: "local-lvm", cores: 2, memory_mb: 4096, rootfs_gb: 32 },
       },
     },
@@ -25,10 +25,10 @@ describe("homeassistant deployments", () => {
       {
         system_id: "vm-homeassistant-a",
         hostname: "ha",
-        homeassistant: { release: "16.0", public_url: "https://ha.dukk.org" },
+        homeassistant: { release: "16.0", public_url: "https://ha.example.invalid" },
         proxmox: {
           host_id: "pve-h",
-          qemu: { vmid: 120, ip: "10.0.0.30/24", usb: [{ id: "1a86:55d4" }] },
+          qemu: { vmid: 120, ip: "192.0.2.30/24", usb: [{ id: "1a86:55d4" }] },
         },
       },
     ],

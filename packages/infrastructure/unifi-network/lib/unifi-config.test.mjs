@@ -46,7 +46,7 @@ describe("normalizePortForwardConfigEntry", () => {
         id: "pf-test",
         name: "Service (.234)",
         dst_port: "443",
-        fwd: "10.0.0.40",
+        fwd: "192.0.2.40",
       },
       { ".234": "203.0.113.234" },
     );
@@ -61,7 +61,7 @@ describe("portForwardMatchKey", () => {
       proto: "tcp",
       dst_port: "443",
       destination_ip: "203.0.113.234",
-      fwd: "10.0.0.40",
+      fwd: "192.0.2.40",
       fwd_port: "443",
     });
     const b = portForwardMatchKey({
@@ -69,7 +69,7 @@ describe("portForwardMatchKey", () => {
       proto: "tcp",
       dst_port: "443",
       destination_ip: "203.0.113.235",
-      fwd: "10.0.0.41",
+      fwd: "192.0.2.41",
       fwd_port: "443",
     });
     expect(a).not.toBe(b);

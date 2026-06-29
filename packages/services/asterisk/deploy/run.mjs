@@ -283,7 +283,7 @@ async function deployQemu(deployment, flags, log, secrets) {
   const gateway =
     typeof net.gateway === "string" && net.gateway.trim()
       ? net.gateway.trim()
-      : "10.0.0.1";
+      : "192.0.2.1";
   const guestName =
     hostname ||
     (typeof q.name === "string" && q.name.trim() ? q.name.trim() : systemId.replace(/^vm-/, ""));

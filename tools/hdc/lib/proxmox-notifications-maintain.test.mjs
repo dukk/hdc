@@ -11,7 +11,7 @@ const cfg = {
   provision: {
     notifications: {
       enabled: true,
-      mailto: "dukk@dukk.org",
+      mailto: "ops@example.invalid",
       sendmail_target: "hdc-mail",
       backup_failure_matcher: "hdc-backup-failures",
       disable_matchers: ["default"],
@@ -30,7 +30,7 @@ describe("proxmox notifications maintain", () => {
 
   it("notificationsSpecFromConfig reads overrides", () => {
     const spec = notificationsSpecFromConfig(cfg);
-    expect(spec.mailto).toBe("dukk@dukk.org");
+    expect(spec.mailto).toBe("ops@example.invalid");
     expect(spec.sendmailTarget).toBe("hdc-mail");
     expect(spec.backupFailureMatcher).toBe("hdc-backup-failures");
     expect(spec.disableMatchers).toEqual(["default"]);
@@ -56,11 +56,11 @@ describe("proxmox notifications maintain", () => {
     const spec = notificationsSpecFromConfig(cfg);
     expect(
       sendmailTargetMatches(
-        { mailto: "dukk@dukk.org", comment: "hdc-managed proxmox notifications" },
+        { mailto: "ops@example.invalid", comment: "hdc-managed proxmox notifications" },
         spec,
       ),
     ).toBe(true);
-    expect(sendmailTargetMatches({ mailto: "other@dukk.org" }, spec)).toBe(false);
+    expect(sendmailTargetMatches({ mailto: "other@example.invalid" }, spec)).toBe(false);
   });
 
   it("backupFailureMatcherMatches requires vzdump error target", () => {

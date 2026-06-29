@@ -30,7 +30,7 @@ node tools/hdc/cli.mjs run service vikunja maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.123:3456`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.123:3456`).
 2. **Inventory:** set `access.nodes[0].ip` on `vikunja-a.json`.
 3. **BIND / Cloudflare:** A record for the hostname in `vikunja.public_url`.
 4. **nginx-waf:** add a site with `proxy_pass` to the CT upstream; enable WebSockets.

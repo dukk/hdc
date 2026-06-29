@@ -20,7 +20,7 @@ describe("dawarich-render", () => {
     redis_image_tag: "7.4-alpine",
     host_port: 3000,
     rails_env: "production",
-    public_url: "https://dawarich.dukk.org",
+    public_url: "https://dawarich.example.invalid",
     time_zone: "America/Chicago",
   };
   const install = { compose_dir: "/opt/dawarich" };
@@ -36,22 +36,22 @@ describe("dawarich-render", () => {
   });
 
   it("builds APPLICATION_HOSTS with CT IP and public hostname", () => {
-    const hosts = applicationHosts(dawarich, "10.0.0.153");
-    expect(hosts).toContain("10.0.0.153");
-    expect(hosts).toContain("dawarich.dukk.org");
+    const hosts = applicationHosts(dawarich, "192.0.2.153");
+    expect(hosts).toContain("192.0.2.153");
+    expect(hosts).toContain("dawarich.example.invalid");
     expect(hosts).toContain("localhost");
     expect(applicationProtocol(dawarich)).toBe("https");
   });
 
   it("renders env with production database and protocol", () => {
-    const env = renderDawarichEnv(dawarich, secrets, "10.0.0.153");
+    const env = renderDawarichEnv(dawarich, secrets, "192.0.2.153");
     expect(env).toContain("RAILS_ENV=production");
     expect(env).toContain("POSTGRES_DB=dawarich_production");
     expect(env).toContain("DATABASE_NAME=dawarich_production");
     expect(env).toContain("APPLICATION_PROTOCOL=https");
     expect(env).toContain("APPLICATION_HOSTS=");
-    expect(env).toContain("dawarich.dukk.org");
-    expect(env).toContain("10.0.0.153");
+    expect(env).toContain("dawarich.example.invalid");
+    expect(env).toContain("192.0.2.153");
     expect(env).toContain("TIME_ZONE=America/Chicago");
     expect(env).toContain("SECRET_KEY_BASE=");
     expect(env).toContain("DATABASE_PASSWORD=");
@@ -68,7 +68,7 @@ describe("dawarich-render", () => {
   });
 
   it("resolves urls", () => {
-    expect(resolveUpstreamUrl("10.0.0.153", dawarich)).toBe("http://10.0.0.153:3000");
-    expect(resolveWebUrl(dawarich, "10.0.0.153")).toBe("https://dawarich.dukk.org");
+    expect(resolveUpstreamUrl("192.0.2.153", dawarich)).toBe("http://192.0.2.153:3000");
+    expect(resolveWebUrl(dawarich, "192.0.2.153")).toBe("https://dawarich.example.invalid");
   });
 });

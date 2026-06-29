@@ -26,14 +26,14 @@ describe("hdc-runner-ui-inventory", () => {
         kind: "system",
         id: "test-host-a",
         hostname: "test-host-a",
-        access: { nodes: [{ ip: "10.0.0.99" }] },
+        access: { nodes: [{ ip: "192.0.2.99" }] },
       }),
     );
 
     const list = listInventoryCategory(root, root, "systems");
     expect(list.items).toHaveLength(1);
     expect(list.items[0].id).toBe("test-host-a");
-    expect(list.items[0].primary_ip).toBe("10.0.0.99");
+    expect(list.items[0].primary_ip).toBe("192.0.2.99");
 
     const detail = getInventoryRecord(root, root, "systems", "test-host-a");
     expect(detail.record?.id).toBe("test-host-a");

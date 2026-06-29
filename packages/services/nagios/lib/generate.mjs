@@ -14,7 +14,7 @@ export function nagiosHostName(sidecarId, nodeName) {
 }
 
 /**
- * Nagios-safe host_name from a BIND FQDN (e.g. pi-hole-a.hdc.dukk.org. → pi-hole-a_hdc_dukk_org).
+ * Nagios-safe host_name from a BIND FQDN (e.g. pi-hole-a.home.example.invalid. → pi-hole-a_hdc_dukk_org).
  * @param {string} fqdn
  */
 export function nagiosHostNameFromFqdn(fqdn) {

@@ -196,6 +196,56 @@ export function tryLoadPackageConfigFromPackageRoot(packageRoot, opts = {}) {
 }
 
 /**
+ * Load config.json when present; otherwise fall back to config.example.json (public repo / CI).
+ * @param {string} packageRoot
+ * @param {{ filename?: string; publicRoot?: string; exampleRel?: string; bootstrapFromExample?: boolean; log?: (line: string) => void; env?: NodeJS.ProcessEnv; preprocess?: boolean }} [opts]
+ */
+export function tryLoadPackageConfigOrExample(packageRoot, opts = {}) {
+  const loaded = tryLoadPackageConfigFromPackageRoot(packageRoot, opts);
+  if (loaded?.ok && loaded.data) return loaded;
+
+  const publicRoot = opts.publicRoot ?? repoRoot();
+  const exampleRel =
+    opts.exampleRel ??
+    packageConfigRel(packageRoot, opts.filename ?? "config.json", publicRoot).replace(
+      /\/config\.json$/,
+      "/config.example.json",
+    );
+  const exampleResolved = resolveRepoFile(publicRoot, exampleRel, opts.env);
+  if (!exampleResolved.found) {
+    return loaded;
+  }
+  try {
+    const data = assertJsonObject(
+      readResolvedPackageConfigJson(exampleResolved, {
+        publicRoot,
+        env: opts.env,
+        preprocess: opts.preprocess,
+      }),
+    );
+    return {
+      ok: true,
+      missing: false,
+      path: exampleResolved.path,
+      rel: exampleRel,
+      source: exampleResolved.source,
+      data,
+      resolved: exampleResolved,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      missing: false,
+      path: exampleResolved.path,
+      rel: exampleRel,
+      source: exampleResolved.source,
+      error: /** @type {Error} */ (e).message,
+      resolved: exampleResolved,
+    };
+  }
+}
+
+/**
  * Package root from a verb script directory (deploy/maintain/query/run.mjs).
  * @param {string} scriptDir dirname of run.mjs
  */

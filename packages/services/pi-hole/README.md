@@ -46,9 +46,9 @@ This is **not** the same as `local_dns[]` (custom A records). Allowlist entries 
 
 `--instance a|b`, `--system-id pi-hole-b`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-core-update` (maintain), `--apply-network` (maintain: stop CT, set Proxmox `net0` from `proxmox.lxc.ip_config` or `ip` + `proxmox.network.gateway`), `--webpassword` (override config), `--dry-run`, `--no-report`.
 
-Static IP in config: use `deployments[].proxmox.lxc.ip_config` as `10.0.0.4/24,gw=10.0.0.1` (or `ip: 10.0.0.4/24` with `defaults.proxmox.network.gateway`). Not the QEMU-style `ip` field alone on deploy without gateway.
+Static IP in config: use `deployments[].proxmox.lxc.ip_config` as `192.0.2.4/24,gw=192.0.2.1` (or `ip: 192.0.2.4/24` with `defaults.proxmox.network.gateway`). Not the QEMU-style `ip` field alone on deploy without gateway.
 
-**Multi-VLAN DNS:** Set `defaults.pihole.listening_mode` to `ALL` (default in `config.example.json`) so clients outside the Pi-hole subnet (e.g. `10.1.0.0/24`) can query Pi-hole. `LOCAL` only answers for the same subnet as the CT.
+**Multi-VLAN DNS:** Set `defaults.pihole.listening_mode` to `ALL` (default in `config.example.json`) so clients outside the Pi-hole subnet (e.g. `192.0.2.0/24`) can query Pi-hole. `LOCAL` only answers for the same subnet as the CT.
 
 ## After deploy
 

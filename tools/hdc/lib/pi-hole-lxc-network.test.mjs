@@ -9,14 +9,14 @@ import {
 
 describe("pi-hole lxc network", () => {
   it("uses ip_config when set", () => {
-    expect(resolveLxcIpConfig({ ip_config: "10.0.0.4/24,gw=10.0.0.1" })).toBe(
-      "10.0.0.4/24,gw=10.0.0.1",
+    expect(resolveLxcIpConfig({ ip_config: "192.0.2.4/24,gw=192.0.2.1" })).toBe(
+      "192.0.2.4/24,gw=192.0.2.1",
     );
   });
 
   it("builds ip_config from ip CIDR and gateway", () => {
-    expect(resolveLxcIpConfig({ ip: "10.0.0.5/24" }, { gateway: "10.0.0.1" })).toBe(
-      "10.0.0.5/24,gw=10.0.0.1",
+    expect(resolveLxcIpConfig({ ip: "192.0.2.5/24" }, { gateway: "192.0.2.1" })).toBe(
+      "192.0.2.5/24,gw=192.0.2.1",
     );
   });
 
@@ -26,20 +26,20 @@ describe("pi-hole lxc network", () => {
   });
 
   it("builds net0 line", () => {
-    expect(buildNet0("vmbr0", "10.0.0.4/24,gw=10.0.0.1")).toBe(
-      "name=eth0,bridge=vmbr0,ip=10.0.0.4/24,gw=10.0.0.1",
+    expect(buildNet0("vmbr0", "192.0.2.4/24,gw=192.0.2.1")).toBe(
+      "name=eth0,bridge=vmbr0,ip=192.0.2.4/24,gw=192.0.2.1",
     );
   });
 
   it("parses IPv4 from ip_config and net0", () => {
-    expect(parseIpv4FromIpConfig("10.0.0.4/24,gw=10.0.0.1")).toBe("10.0.0.4");
-    expect(parseIpv4FromNet0("name=eth0,bridge=vmbr0,ip=10.0.0.5/24,gw=10.0.0.1")).toBe(
-      "10.0.0.5",
+    expect(parseIpv4FromIpConfig("192.0.2.4/24,gw=192.0.2.1")).toBe("192.0.2.4");
+    expect(parseIpv4FromNet0("name=eth0,bridge=vmbr0,ip=192.0.2.5/24,gw=192.0.2.1")).toBe(
+      "192.0.2.5",
     );
   });
 
   it("reads gateway from proxmox.network", () => {
     expect(gatewayFromProxmox({ network: { gateway: "192.168.1.1" } })).toBe("192.168.1.1");
-    expect(gatewayFromProxmox({})).toBe("10.0.0.1");
+    expect(gatewayFromProxmox({})).toBe("192.0.2.1");
   });
 });

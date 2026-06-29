@@ -22,10 +22,10 @@ describe("lms deployments", () => {
           qemu: {
             vmid: 475,
             template_vmid: 9022,
-            ip: "10.0.0.28/24",
+            ip: "192.0.2.28/24",
           },
         },
-        configure: { ssh: { host: "10.0.0.28" } },
+        configure: { ssh: { host: "192.0.2.28" } },
       },
     ],
   };
@@ -44,7 +44,7 @@ describe("lms deployments", () => {
             system_id: "lms-a",
             proxmox: {
               host_id: "hypervisor-d",
-              qemu: { vmid: 475, template_vmid: 9022, ip: "10.0.0.28/24" },
+              qemu: { vmid: 475, template_vmid: 9022, ip: "192.0.2.28/24" },
             },
           },
         ],
@@ -61,7 +61,7 @@ describe("lms deployments", () => {
             mode: "proxmox-lxc",
             proxmox: {
               host_id: "hypervisor-d",
-              qemu: { vmid: 475, template_vmid: 9022, ip: "10.0.0.28/24" },
+              qemu: { vmid: 475, template_vmid: 9022, ip: "192.0.2.28/24" },
             },
           },
         ],

@@ -46,18 +46,18 @@ Vault names (no values in plans): `HDC_BIND_TSIG_KEY` (DNS-01 for nginx/nginx-wa
 | pi-hole | LAN DNS | — | — | — | — | after BIND |
 | bind | infrastructure | — | — | — | — | — |
 | nginx-waf | infrastructure | — | uses bind for DNS-01 | — | optional | after BIND |
-| homeassistant | LAN / ha.dukk.org | — | often manual IP in HA UI; **trusted_proxies** on WAF IPs after nginx-waf | may exist | optional | after BIND |
+| homeassistant | LAN / ha.example.invalid | — | often manual IP in HA UI; **trusted_proxies** on WAF IPs after nginx-waf | may exist | optional | after BIND |
 | postgresql, redis, kafka, etc. | internal | — | optional | — | — | optional |
 
 ## Patterns by exposure
 
 ### LAN HTTPS via nginx-waf (`internal-lan`)
 
-For LAN browser UIs and HTTP APIs on `*.hdc.dukk.org` that must **not** be reachable from the public internet:
+For LAN browser UIs and HTTP APIs on `*.home.example.invalid` that must **not** be reachable from the public internet:
 
-1. Set `public_url` in service config (`https://<name>.hdc.dukk.org`).
+1. Set `public_url` in service config (`https://<name>.home.example.invalid`).
 2. Deploy service; note CT/VM IP and **listen port** from output.
-3. **bind:** keep `*-a` A record on the guest IP for SSH/Nagios; add or flip short-name **CNAME** to `nginx-waf-a.hdc.dukk.org.` (when the friendly hostname is not the `*-a` record, e.g. `uptime-kuma` → WAF). When the web hostname **is** `*-a` (e.g. `nagios-a`, `ollama-a`), replace that A record with a CNAME to `nginx-waf-a` instead.
+3. **bind:** keep `*-a` A record on the guest IP for SSH/Nagios; add or flip short-name **CNAME** to `nginx-waf-a.home.example.invalid.` (when the friendly hostname is not the `*-a` record, e.g. `uptime-kuma` → WAF). When the web hostname **is** `*-a` (e.g. `nagios-a`, `ollama-a`), replace that A record with a CNAME to `nginx-waf-a` instead.
 4. **nginx-waf:** add `sites[]` with `listen: [80, 443]`, `upstream: http://<guest-ip>:<port>` (or `https://` for TLS-native backends), `host_names`, `tls`, `locations[].websocket: true` when needed, and `"policies": ["internal-lan", { "type": "modsecurity", "enabled": false }]`. Do **not** set `client_ip: cloudflare`.
 5. **homepage / inventory:** update dashboard `href` and `web_ui` to the HTTPS hostname (no port); keep `siteMonitor` on direct guest IP for health checks.
 6. Service **maintain** to re-push compose/env when `public_url` affects runtime config.
@@ -78,7 +78,7 @@ Reference sites: `glances`, `paperless-ngx`, `twenty`, `uptime-kuma`, `n8n`, `op
 4. **nginx-waf:** add `sites[]` entry with `proxy_pass` to `http://<guest-ip>:<port>`; `client_ip: cloudflare` when behind Cloudflare.
 5. **cloudflare:** A record to WAF WAN IP (proxied) if used.
 6. **nagios:** `run service nagios maintain --` after BIND has the A record.
-7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../packages/services/homeassistant/README.md). Without this, `https://ha.dukk.org` returns **400**.
+7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../packages/services/homeassistant/README.md). Without this, `https://ha.example.invalid` returns **400**.
 
 See [vaultwarden README](../../../packages/services/vaultwarden/README.md) and [n8n README](../../../packages/services/n8n/README.md) for step lists.
 

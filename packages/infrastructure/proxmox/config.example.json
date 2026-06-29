@@ -179,7 +179,7 @@
     },
     "guest_firewall": {
       "enabled": true,
-      "allowed_source_cidrs": ["10.0.0.0/24", "192.168.0.0/16", "172.16.0.0/12"],
+      "allowed_source_cidrs": ["192.0.2.0/24", "192.168.0.0/16", "172.16.0.0/12"],
       "manage_from_deployments": true
     },
     "guest_rootdisk": {
@@ -204,12 +204,12 @@
     "guest_agents": {
       "crowdsec": {
         "enabled": true,
-        "lapi_url": "http://10.0.0.50:8080",
+        "lapi_url": "http://192.0.2.50:8080",
         "enroll_key_vault_key": "HDC_CROWDSEC_ENROLL_KEY"
       },
       "wazuh": {
         "enabled": true,
-        "manager_host": "10.0.0.51",
+        "manager_host": "192.0.2.51",
         "registration_password_vault_key": "HDC_WAZUH_AGENT_PASSWORD"
       }
     },

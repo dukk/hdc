@@ -1,6 +1,6 @@
 # Wazuh (HDC)
 
-Single-node Wazuh manager on `vm-wazuh-a` (`10.0.0.202`). Linux Proxmox guests enroll via guest baseline; edge nginx-waf nodes ship ModSecurity and access logs.
+Single-node Wazuh manager on `vm-wazuh-a` (`192.0.2.202`). Linux Proxmox guests enroll via guest baseline; edge nginx-waf nodes ship ModSecurity and access logs.
 
 ## Vault secrets
 
@@ -53,7 +53,7 @@ Override per package with `defaults.wazuh.log_collection[]` in that service `con
 
 Two paths:
 
-1. **Manager email** — SMTP via internal postfix-relay (`10.0.0.60`); `email_to` supports comma-separated recipients.
+1. **Manager email** — SMTP via internal postfix-relay (`192.0.2.60`); `email_to` supports comma-separated recipients.
 2. **Dashboard notifications** — channel `hdc-wazuh-alerts` to addresses in `defaults.mail.to[]`.
 
 Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`packages/services/wazuh/config.json`](../../packages/services/wazuh/config.example.json).
@@ -66,7 +66,7 @@ Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`packages/ser
 | `notifications sync skipped: indexer returned 401` | Re-run `wazuh maintain`; verify `HDC_WAZUH_API_PASSWORD` matches live stack |
 | No ModSecurity events | Run full `nginx-waf maintain`; confirm agent active and `wazuh_log_collection: applied` |
 
-Dashboard (LAN): `https://10.0.0.202` or `https://wazuh-a.hdc.dukk.org`.
+Dashboard (LAN): `https://192.0.2.202` or `https://wazuh-a.home.example.invalid`.
 
 ## Uptime monitoring
 

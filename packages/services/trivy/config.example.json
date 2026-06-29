@@ -20,7 +20,7 @@
       "scan_targets": [
         {
           "id": "vm-nginx-a",
-          "host": "10.0.0.40",
+          "host": "192.0.2.40",
           "paths": ["/etc/nginx", "/opt/app"],
           "docker_compose_dirs": ["/opt/compose"]
         }

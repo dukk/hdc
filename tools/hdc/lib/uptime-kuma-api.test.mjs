@@ -41,7 +41,7 @@ describe("uptime-kuma-api monitorList", () => {
 
 describe("uptime-kuma-api getMonitorList flow", () => {
   it("combines monitorList event with getMonitorList callback", async () => {
-    const rows = { 10: { id: 10, name: "BIND", type: "ping", hostname: "10.0.0.2" } };
+    const rows = { 10: { id: 10, name: "BIND", type: "ping", hostname: "192.0.2.2" } };
 
     /** @type {import("socket.io-client").Socket} */
     const socket = {

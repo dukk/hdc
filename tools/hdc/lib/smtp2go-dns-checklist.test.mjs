@@ -8,7 +8,7 @@ import {
 describe("smtp2go-dns-checklist", () => {
   const liveRow = {
     domain: {
-      fulldomain: "dukk.org",
+      fulldomain: "example.invalid",
       dkim_selector: "s1160987",
       dkim_value: "dkim.smtp2go.net",
       dkim_verified: true,

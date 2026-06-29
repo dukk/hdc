@@ -21,21 +21,21 @@ describe("homeassistant reverse proxy config", () => {
 
   it("buildReverseProxyConfigurationBlock includes trusted_proxies and URLs", () => {
     const block = buildReverseProxyConfigurationBlock({
-      trustedProxies: ["10.0.0.40", "10.0.0.41"],
-      externalUrl: "https://ha.dukk.org",
-      internalUrl: "http://10.0.0.39:8123",
+      trustedProxies: ["192.0.2.40", "192.0.2.41"],
+      externalUrl: "https://ha.example.invalid",
+      internalUrl: "http://192.0.2.39:8123",
     });
     expect(block).toContain(HDC_REVERSE_PROXY_BEGIN);
-    expect(block).toContain("- 10.0.0.40");
-    expect(block).toContain("external_url: https://ha.dukk.org");
-    expect(block).toContain("internal_url: http://10.0.0.39:8123");
+    expect(block).toContain("- 192.0.2.40");
+    expect(block).toContain("external_url: https://ha.example.invalid");
+    expect(block).toContain("internal_url: http://192.0.2.39:8123");
   });
 
   it("mergeHomeAssistantConfigurationYaml replaces managed block idempotently", () => {
     const block = buildReverseProxyConfigurationBlock({
-      trustedProxies: ["10.0.0.40"],
+      trustedProxies: ["192.0.2.40"],
       externalUrl: "https://ha.example.invalid",
-      internalUrl: "http://10.0.0.39:8123",
+      internalUrl: "http://192.0.2.39:8123",
     });
     const once = mergeHomeAssistantConfigurationYaml(baseYaml, block);
     const twice = mergeHomeAssistantConfigurationYaml(once, block);
@@ -47,16 +47,16 @@ describe("homeassistant reverse proxy config", () => {
     const merged = mergeHomeAssistantConfigurationYaml(
       baseYaml,
       buildReverseProxyConfigurationBlock({
-        trustedProxies: ["10.0.0.40", "10.0.0.41"],
-        externalUrl: "https://ha.dukk.org",
-        internalUrl: "http://10.0.0.39:8123",
+        trustedProxies: ["192.0.2.40", "192.0.2.41"],
+        externalUrl: "https://ha.example.invalid",
+        internalUrl: "http://192.0.2.39:8123",
       }),
     );
     expect(
       reverseProxyConfigurationInSync(merged, {
-        trustedProxies: ["10.0.0.40", "10.0.0.41"],
-        externalUrl: "https://ha.dukk.org",
-        internalUrl: "http://10.0.0.39:8123",
+        trustedProxies: ["192.0.2.40", "192.0.2.41"],
+        externalUrl: "https://ha.example.invalid",
+        internalUrl: "http://192.0.2.39:8123",
       }),
     ).toBe(true);
   });
@@ -67,15 +67,15 @@ describe("homeassistant reverse proxy config", () => {
   });
 
   it("publicUrlNeedsReverseProxy requires https", () => {
-    expect(publicUrlNeedsReverseProxy("https://ha.dukk.org")).toBe(true);
-    expect(publicUrlNeedsReverseProxy("http://10.0.0.39:8123")).toBe(false);
+    expect(publicUrlNeedsReverseProxy("https://ha.example.invalid")).toBe(true);
+    expect(publicUrlNeedsReverseProxy("http://192.0.2.39:8123")).toBe(false);
     expect(publicUrlNeedsReverseProxy("")).toBe(false);
   });
 
   it("resolveNginxWafTrustedProxies honors overrideIps", () => {
     const ips = resolveNginxWafTrustedProxies("/nonexistent", {
-      overrideIps: ["10.0.0.40", "10.0.0.41"],
+      overrideIps: ["192.0.2.40", "192.0.2.41"],
     });
-    expect(ips).toEqual(["10.0.0.40", "10.0.0.41"]);
+    expect(ips).toEqual(["192.0.2.40", "192.0.2.41"]);
   });
 });

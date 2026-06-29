@@ -40,9 +40,9 @@ QEMU example deployment block (merge into `config.json`):
   "mode": "proxmox-qemu",
   "proxmox": {
     "host_id": "pve-b",
-    "qemu": { "vmid": 562, "ip": "10.0.0.202/24", "template_vmid": 9022 }
+    "qemu": { "vmid": 562, "ip": "192.0.2.202/24", "template_vmid": 9022 }
   },
-  "configure": { "ssh": { "host": "10.0.0.202" } }
+  "configure": { "ssh": { "host": "192.0.2.202" } }
 }
 ```
 

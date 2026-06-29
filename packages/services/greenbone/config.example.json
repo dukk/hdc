@@ -4,7 +4,7 @@
     "mode": "proxmox-lxc",
     "proxmox": {
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       },
       "lxc": {
         "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",

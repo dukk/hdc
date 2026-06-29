@@ -6,7 +6,7 @@ slug: hdc-runner
 
 # hdc-runner API skill
 
-Paperclip agents reach homelab automation through **hdc-runner-a** (default `http://10.0.0.125:9120`).
+Paperclip agents reach homelab automation through **hdc-runner-a** (default `http://192.0.2.125:9120`).
 
 ## Company secrets
 
@@ -14,7 +14,7 @@ Bind in Paperclip UI (Settings → Secrets):
 
 | Secret name | Value |
 |-------------|-------|
-| `HDC_RUNNER_API_URL` | Base URL, e.g. `http://10.0.0.125:9120` |
+| `HDC_RUNNER_API_URL` | Base URL, e.g. `http://192.0.2.125:9120` |
 | `HDC_RUNNER_API_TOKEN` | Same as vault `HDC_HDC_RUNNER_API_TOKEN` |
 
 Every API call:

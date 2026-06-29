@@ -63,7 +63,7 @@ describe("gitlab render", () => {
 
   it("resolveWebUrl upstream and ssh hints", () => {
     expect(resolveWebUrl(baseGl)).toBe("https://gitlab.example.invalid");
-    expect(resolveUpstreamUrl("10.0.0.5", baseGl)).toBe("http://10.0.0.5:80");
-    expect(resolveSshCloneHint("10.0.0.5", baseGl)).toContain("2222");
+    expect(resolveUpstreamUrl("192.0.2.5", baseGl)).toBe("http://192.0.2.5:80");
+    expect(resolveSshCloneHint("192.0.2.5", baseGl)).toContain("2222");
   });
 });

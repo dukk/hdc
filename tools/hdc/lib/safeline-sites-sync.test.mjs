@@ -6,10 +6,10 @@ describe("safeline-sites-sync", () => {
   const configSites = [
     {
       id: "immich",
-      server_names: ["immich.dukk.org"],
+      server_names: ["immich.example.invalid"],
       ports: ["443"],
       ssl: true,
-      upstreams: ["http://10.0.0.9:2283"],
+      upstreams: ["http://192.0.2.9:2283"],
       comment: "Immich",
     },
   ];
@@ -25,9 +25,9 @@ describe("safeline-sites-sync", () => {
       {
         id: 7,
         comment: "hdc:site:immich",
-        server_names: ["immich.dukk.org"],
+        server_names: ["immich.example.invalid"],
         ports: ["80"],
-        upstreams: ["http://10.0.0.9:2283"],
+        upstreams: ["http://192.0.2.9:2283"],
         ssl: false,
       },
     ];
@@ -41,9 +41,9 @@ describe("safeline-sites-sync", () => {
       {
         id: 1,
         comment: "hdc:site:old-app",
-        server_names: ["old.dukk.org"],
+        server_names: ["old.example.invalid"],
         ports: ["443"],
-        upstreams: ["http://10.0.0.1:80"],
+        upstreams: ["http://192.0.2.1:80"],
       },
     ];
     const plan = planSiteSync([], live, { prune: true });
@@ -55,10 +55,10 @@ describe("safeline-sites-sync", () => {
       ...configSites,
       {
         id: "n8n",
-        server_names: ["n8n.dukk.org"],
+        server_names: ["n8n.example.invalid"],
         ports: ["443"],
         ssl: true,
-        upstreams: ["http://10.0.0.1:5678"],
+        upstreams: ["http://192.0.2.1:5678"],
       },
     ];
     const plan = planSiteSync(multi, [], { siteFilter: "n8n" });

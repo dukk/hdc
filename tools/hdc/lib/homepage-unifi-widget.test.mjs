@@ -52,7 +52,7 @@ describe("homepage-services-lint unifi", () => {
     - UniFi:
         icon: unifi.png
         href: https://unifi.example.invalid
-        ping: 10.0.0.1
+        ping: 192.0.2.1
         widget:
           type: unifi
           url: "{{HOMEPAGE_VAR_UNIFI_URL}}"

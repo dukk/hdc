@@ -77,21 +77,21 @@ describe("nagios generate from BIND", () => {
   });
 
   it("builds host_name from BIND FQDN", () => {
-    expect(nagiosHostNameFromFqdn("pi-hole-a.hdc.dukk.org.")).toBe("pi-hole-a_hdc_dukk_org");
+    expect(nagiosHostNameFromFqdn("pi-hole-a.home.example.invalid.")).toBe("pi-hole-a_home_example_invalid");
   });
 
   it("renders PING host and service from BIND records", () => {
     const bundle = buildNagiosBundleFromBind(
-      [{ zone: "hdc.dukk.org", name: "pve-b", fqdn: "pve-b.hdc.dukk.org.", ip: "10.0.0.12", ttl: 3600 }],
+      [{ zone: "hdc.example.invalid", name: "pve-b", fqdn: "pve-b.home.example.invalid.", ip: "192.0.2.12", ttl: 3600 }],
       { adminEmail: "ops@example.invalid" },
     );
     expect(bundle.stats.hostCount).toBe(1);
     expect(bundle.stats.serviceCount).toBe(1);
-    expect(bundle.nagiosCfg).toContain("host_name pve-b_hdc_dukk_org");
+    expect(bundle.nagiosCfg).toContain("host_name pve-b_home_example_invalid");
     expect(bundle.nagiosCfg).toContain("contact_groups hdc-admins");
     expect(bundle.nagiosCfg).toContain("email ops@example.invalid");
     expect(bundle.nagiosCfg).toContain("check_ping!100.0,20%!500.0,60%");
-    expect(bundle.nagiosCfg).toContain("address 10.0.0.12");
+    expect(bundle.nagiosCfg).toContain("address 192.0.2.12");
   });
 
   it("loadNagiosBindBundle reads bind config from disk", () => {
@@ -103,18 +103,18 @@ describe("nagios generate from BIND", () => {
         schema_version: 2,
         zones: [
           {
-            id: "hdc.dukk.org",
+            id: "hdc.example.invalid",
             zone_type: "forward",
-            records: [{ type: "A", name: "nas-1", data: "10.0.0.9", ttl: 3600 }],
+            records: [{ type: "A", name: "nas-1", data: "192.0.2.9", ttl: 3600 }],
           },
         ],
-        bind: { primary_ip: "10.0.0.2" },
+        bind: { primary_ip: "192.0.2.2" },
         deployments: [
           {
             system_id: "vm-bind-a",
             role: "primary",
-            proxmox: { host_id: "pve-b", qemu: { vmid: 101, ip: "10.0.0.2/24" } },
-            configure: { ssh: { user: "root", host: "10.0.0.2" } },
+            proxmox: { host_id: "pve-b", qemu: { vmid: 101, ip: "192.0.2.2/24" } },
+            configure: { ssh: { user: "root", host: "192.0.2.2" } },
           },
         ],
       }),

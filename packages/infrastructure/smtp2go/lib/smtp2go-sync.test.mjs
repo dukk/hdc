@@ -10,8 +10,8 @@ describe("smtp2go-sync", () => {
   };
 
   const managedEntry = {
-    id: "hdc-dukk-org",
-    domain: "hdc.dukk.org",
+    id: "hdc-example-invalid",
+    domain: "hdc.example.invalid",
     managed: true,
     tracking_subdomain: "link",
     returnpath_subdomain: null,
@@ -45,7 +45,7 @@ describe("smtp2go-sync", () => {
       entry: managedEntry,
       live: {
         domain: {
-          fulldomain: "hdc.dukk.org",
+          fulldomain: "hdc.example.invalid",
           dkim_verified: false,
           rpath_verified: true,
         },

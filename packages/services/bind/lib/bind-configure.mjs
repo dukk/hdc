@@ -66,7 +66,7 @@ export function syncPrimaryZoneFiles(opts) {
   const apex =
     typeof hostmaster === "string" && hostmaster.includes(".")
       ? hostmaster.replace(/^[^.]+\./, "").replace(/\.$/, "")
-      : "hdc.dukk.org";
+      : "hdc.example.invalid";
   const primaryNs = `bind-a.${apex}.`;
   const secondaryNs = `bind-b.${apex}.`;
   const ns = { primaryNs, secondaryNs, primaryIp, secondaryIp, hostmaster };

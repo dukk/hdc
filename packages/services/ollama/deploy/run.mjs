@@ -330,7 +330,7 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         ? net.gateway.trim()
         : typeof q.gateway === "string"
           ? q.gateway.trim()
-          : "10.0.0.1";
+          : "192.0.2.1";
     const guestName =
       hostname ||
       (typeof q.name === "string" && q.name.trim() ? q.name.trim() : systemId.replace(/^vm-/, ""));

@@ -25,8 +25,8 @@ describe("cloudflare-page-rules-config", () => {
   });
 
   it("slugifies page rule targets for import ids", () => {
-    expect(slugFromPageRuleTarget({ operator: "matches", value: "*dukk.org/*" })).toBe(
-      "matches-dukk-org"
+    expect(slugFromPageRuleTarget({ operator: "matches", value: "*example.invalid/*" })).toBe(
+      "matches-example-invalid"
     );
   });
 });

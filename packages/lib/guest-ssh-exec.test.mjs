@@ -31,9 +31,9 @@ describe("guest-ssh-exec", () => {
   });
 
   it("createGuestSshExec defaults to hdc without fallback probe", () => {
-    const exec = createGuestSshExec({ host: "10.0.0.2", useFallback: false });
+    const exec = createGuestSshExec({ host: "192.0.2.2", useFallback: false });
     expect(exec.effectiveUser).toBe(DEFAULT_GUEST_SSH_USER);
-    expect(exec.label).toBe(`ssh hdc@10.0.0.2`);
+    expect(exec.label).toBe(`ssh hdc@192.0.2.2`);
   });
 
   it("createGuestSshExec falls back to root when hdc probe fails", () => {
@@ -43,7 +43,7 @@ describe("guest-ssh-exec", () => {
 
     const logs = [];
     const exec = createGuestSshExec({
-      host: "10.0.0.2",
+      host: "192.0.2.2",
       log: (line) => logs.push(line),
     });
     expect(exec.effectiveUser).toBe("root");
@@ -53,7 +53,7 @@ describe("guest-ssh-exec", () => {
 
   it("createGuestSshExec respects configured user", () => {
     const exec = createGuestSshExec({
-      host: "10.0.0.2",
+      host: "192.0.2.2",
       configuredUser: "deploy",
       useFallback: false,
     });

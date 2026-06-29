@@ -32,7 +32,7 @@ describe("twilio-config", () => {
           id: "main",
           sid: "TKabc",
           termination_domain: "main.pstn.twilio.com",
-          origination_urls: [{ sid: "OU1", sip_url: "sip:10.0.0.1" }],
+          origination_urls: [{ sid: "OU1", sip_url: "sip:192.0.2.1" }],
         },
       ],
       phone_numbers: [{ sid: "PN1", phone_number: "+15551234567" }],

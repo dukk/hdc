@@ -400,24 +400,26 @@ describe("runCli", () => {
     expect(readVault(vaultPath, "new-pass")).toEqual({});
   });
 
-  it("secrets list errors without passphrase or vault", async () => {
+  it("secrets list succeeds with empty output when no vault exists", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     const capture = { logLines: [], errorLines: [], warnLines: [] };
     const deps = createMemoryCliDeps({
       root,
       capture,
       defaultVaultPath: () => join(root, "vault.enc"),
-      envVars: {},
+      envVars: { HDC_SECRET_BACKEND: "local" },
     });
-    expect(await runCli(["secrets", "list"], deps)).toBe(1);
+    expect(await runCli(["secrets", "list"], deps)).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/\(empty\)/);
 
     const deps2 = createMemoryCliDeps({
       root,
       capture,
       defaultVaultPath: () => join(root, "vault.enc"),
-      envVars: { HDC_VAULT_PASSPHRASE: "pw" },
+      envVars: { HDC_SECRET_BACKEND: "local", HDC_VAULT_PASSPHRASE: "pw" },
     });
-    expect(await runCli(["secrets", "list"], deps2)).toBe(1);
+    expect(await runCli(["secrets", "list"], deps2)).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/\(empty\)/);
   });
 
   it("secrets list fails when vault cannot be decrypted", async () => {
@@ -522,6 +524,7 @@ describe("runCli", () => {
           status: 0,
           stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]),
         },
+        [`list items --collectionid ${COLL_ID}`]: { status: 0, stdout: "[]" },
         [`list items --search HDC_PUSH_ME --organizationid ${ORG_ID}`]: { status: 0, stdout: "[]" },
       };
       const hit = responses[key];

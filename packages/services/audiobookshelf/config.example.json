@@ -4,7 +4,7 @@
     "mode": "proxmox-qemu",
     "proxmox": {
       "network": {
-        "gateway": "10.0.0.1"
+        "gateway": "192.0.2.1"
       },
       "qemu": {
         "template_vmid": 9022,
@@ -39,12 +39,12 @@
         "qemu": {
           "vmid": 0,
           "template_vmid": 9022,
-          "ip": "10.0.0.160/24"
+          "ip": "192.0.2.160/24"
         }
       },
       "configure": {
         "ssh": {
-          "host": "10.0.0.160"
+          "host": "192.0.2.160"
         }
       }
     }

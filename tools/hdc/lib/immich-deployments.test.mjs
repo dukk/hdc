@@ -10,7 +10,7 @@ describe("normalizeImmichConfig synology-docker", () => {
       defaults: {
         mode: "synology-docker",
         synology: { instance: "a", stack_id: "immich" },
-        immich: { public_url: "https://immich.dukk.org" },
+        immich: { public_url: "https://immich.example.invalid" },
         install: { compose_dir: "/volume1/docker/immich" },
       },
       deployments: [{ system_id: "immich-a" }],
@@ -72,11 +72,11 @@ describe("instanceFlagToSystemId", () => {
 describe("renderImmichEnv", () => {
   it("includes IMMICH_SERVER_URL when public_url is set", () => {
     const env = renderImmichEnv(
-      { public_url: "https://immich.dukk.org", timezone: "UTC" },
+      { public_url: "https://immich.example.invalid", timezone: "UTC" },
       { compose_dir: "/volume1/docker/immich" },
       "secret",
     );
-    expect(env).toContain("IMMICH_SERVER_URL=https://immich.dukk.org");
+    expect(env).toContain("IMMICH_SERVER_URL=https://immich.example.invalid");
     expect(env).toContain("DB_PASSWORD=secret");
   });
 

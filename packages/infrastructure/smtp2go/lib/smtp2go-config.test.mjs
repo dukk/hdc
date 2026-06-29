@@ -14,7 +14,7 @@ import { liveStateToRestrictions } from "./smtp2go-import-restrictions.mjs";
 
 describe("smtp2go-config", () => {
   it("domainIdFromFqdn slugifies fqdn", () => {
-    expect(domainIdFromFqdn("hdc.dukk.org")).toBe("hdc-dukk-org");
+    expect(domainIdFromFqdn("hdc.example.invalid")).toBe("hdc-example-invalid");
   });
 
   it("normalizeSmtp2goConfig reads sender_domains, restrictions, and defaults", () => {
@@ -24,8 +24,8 @@ describe("smtp2go-config", () => {
       defaults: { tracking_subdomain: "link", auto_verify: true },
       sender_domains: [
         {
-          id: "hdc-dukk-org",
-          domain: "hdc.dukk.org",
+          id: "hdc-example-invalid",
+          domain: "hdc.example.invalid",
           managed: true,
           tracking_subdomain: "link",
         },
@@ -51,15 +51,15 @@ describe("smtp2go-config", () => {
   it("liveDomainToConfig preserves managed flag and notes from existing entry", () => {
     const row = {
       domain: {
-        fulldomain: "dukk.org",
+        fulldomain: "example.invalid",
         rpath_selector: "em1160987",
         dkim_selector: "s1160987",
       },
       trackers: [{ subdomain: "link", enabled: true }],
     };
     const existing = {
-      id: "dukk-org",
-      domain: "dukk.org",
+      id: "example-invalid",
+      domain: "example.invalid",
       managed: true,
       tracking_subdomain: "link",
       returnpath_subdomain: null,
@@ -158,13 +158,13 @@ describe("smtp2go-collect", () => {
     smtp2go: {},
     sender_domains: [
       {
-        id: "hdc-dukk-org",
-        domain: "hdc.dukk.org",
+        id: "hdc-example-invalid",
+        domain: "hdc.example.invalid",
         managed: true,
       },
       {
-        id: "dukk-org",
-        domain: "dukk.org",
+        id: "example-invalid",
+        domain: "example.invalid",
         managed: false,
       },
     ],
@@ -174,7 +174,7 @@ describe("smtp2go-collect", () => {
     senderDomains: [
       {
         domain: {
-          fulldomain: "dukk.org",
+          fulldomain: "example.invalid",
           dkim_selector: "s1160987",
           dkim_value: "dkim.smtp2go.net",
           dkim_verified: true,
@@ -199,7 +199,7 @@ describe("smtp2go-collect", () => {
   it("collectSmtp2goState reports missing configured domain in live", () => {
     const state = collectSmtp2goState({ config: baseConfig, live: liveFixture });
     expect(state.has_drift).toBe(true);
-    const hdc = state.sender_domains.find((d) => d.domain === "hdc.dukk.org");
+    const hdc = state.sender_domains.find((d) => d.domain === "hdc.example.invalid");
     expect(hdc?.missing_in_live).toBe(true);
     expect(state.extra_in_live).toHaveLength(0);
   });
@@ -212,6 +212,6 @@ describe("smtp2go-collect", () => {
     });
     const state = collectSmtp2goState({ config: cfg, live: liveFixture });
     expect(state.extra_in_live).toHaveLength(1);
-    expect(state.extra_in_live[0].domain).toBe("dukk.org");
+    expect(state.extra_in_live[0].domain).toBe("example.invalid");
   });
 });

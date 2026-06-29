@@ -29,7 +29,7 @@ node tools/hdc/cli.mjs run service rackula maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.156:8080`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.156:8080`).
 2. **Inventory:** set `access.nodes[0].ip` on `rackula-a.json`.
 3. **Data:** layouts persist as YAML under `/opt/rackula/data` (owned by UID 1001).
 4. **HTTPS (optional):** set `rackula.public_url`, add BIND + nginx-waf upstream manually.

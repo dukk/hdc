@@ -12,7 +12,7 @@ const baseEntry = {
   id: "audiobookshelf",
   name: "Audiobookshelf",
   type: "http",
-  url: "https://bookshelf.dukk.org",
+  url: "https://bookshelf.example.invalid",
   hostname: null,
   group: "Applications",
   tags: ["Public"],

@@ -25,7 +25,7 @@ const sampleCfg = {
     {
       system_id: "vm-win11-a",
       hostname: "win11-a",
-      proxmox: { qemu: { vmid: 200, ip: "10.0.0.50/24" } },
+      proxmox: { qemu: { vmid: 200, ip: "192.0.2.50/24" } },
     },
   ],
 };

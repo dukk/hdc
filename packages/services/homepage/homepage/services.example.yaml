@@ -1,9 +1,9 @@
 - Public apps:
     - Immich:
         icon: immich.png
-        href: https://immich.dukk.org
+        href: https://immich.example.invalid
         description: Photos & videos
-        siteMonitor: https://immich.dukk.org
+        siteMonitor: https://immich.example.invalid
         showStats: true
         widget:
           type: immich
@@ -13,32 +13,32 @@
           fields: ["photos", "videos", "storage"]
     - Vaultwarden:
         icon: vaultwarden.png
-        href: https://vault.dukk.org
+        href: https://vault.example.invalid
         description: Passwords
-        siteMonitor: https://vault.dukk.org
+        siteMonitor: https://vault.example.invalid
     - Home Assistant:
         icon: home-assistant.png
-        href: https://ha.dukk.org
+        href: https://ha.example.invalid
         description: Smart home
-        siteMonitor: https://ha.dukk.org
+        siteMonitor: https://ha.example.invalid
 - Productivity:
     - n8n:
         icon: n8n.png
-        href: http://n8n.hdc.dukk.org:5678
+        href: http://n8n.home.example.invalid:5678
         description: Workflow automation
-        siteMonitor: http://10.0.0.120:5678
+        siteMonitor: http://192.0.2.120:5678
 - Monitoring:
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: http://uptime-kuma.hdc.dukk.org:3001
+        href: http://uptime-kuma.home.example.invalid:3001
         description: Status pages
-        siteMonitor: http://10.0.0.105:3001
+        siteMonitor: http://192.0.2.105:3001
 - Virtualization:
     - Proxmox Cluster:
         icon: proxmox.png
-        href: https://pve-a.hdc.dukk.org:8006
+        href: https://pve-a.home.example.invalid:8006
         description: Primary cluster · 5 nodes · PVE 9
-        siteMonitor: https://10.0.0.11:8006
+        siteMonitor: https://192.0.2.11:8006
         showStats: true
         widget:
           type: proxmox
@@ -48,9 +48,9 @@
           fields: ["vms", "lxc", "resources.cpu", "resources.mem"]
     - Proxmox A:
         icon: proxmox.png
-        href: https://pve-a.hdc.dukk.org:8006
-        description: 10.0.0.11 · Hypervisor node
-        siteMonitor: https://10.0.0.11:8006
+        href: https://pve-a.home.example.invalid:8006
+        description: 192.0.2.11 · Hypervisor node
+        siteMonitor: https://192.0.2.11:8006
         showStats: true
         widget:
           type: proxmox
@@ -62,9 +62,9 @@
 - Infrastructure:
     - Pi-hole A:
         icon: pi-hole.png
-        href: http://pi-hole-a.hdc.dukk.org/admin
+        href: http://pi-hole-a.home.example.invalid/admin
         description: DNS ad-block
-        siteMonitor: http://10.0.0.4/admin
+        siteMonitor: http://192.0.2.4/admin
         showStats: true
         widget:
           type: pihole
@@ -74,9 +74,9 @@
           fields: ["queries", "blocked", "blocked_percent", "gravity"]
     - UniFi:
         icon: unifi.png
-        href: https://unifi.hdc.dukk.org
+        href: https://unifi.home.example.invalid
         description: Gateway · UDM
-        ping: 10.0.0.1
+        ping: 192.0.2.1
         showStats: true
         widget:
           type: unifi

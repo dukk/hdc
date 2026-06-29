@@ -28,7 +28,7 @@ export function resolveImmichApiBaseUrl(immich, sshHost = null) {
 
 /**
  * @param {object} opts
- * @param {string} opts.apiBase e.g. https://immich.dukk.org/api
+ * @param {string} opts.apiBase e.g. https://immich.example.invalid/api
  * @param {string} opts.apiKey
  */
 export function createImmichApiClient(opts) {

@@ -9,6 +9,10 @@ import {
   systemConfigChanged,
 } from "../../../packages/services/immich/lib/immich-admin-config.mjs";
 import { resetMailRelayClientDefaultsCache } from "../../../packages/lib/mail-relay-config.mjs";
+import {
+  installMailRelayExampleMock,
+  restoreMailRelayExampleMock,
+} from "../test/mock-mail-relay-example.mjs";
 
 describe("sanitizeSystemConfigForStorage", () => {
   it("strips SMTP password and OAuth client secrets", () => {
@@ -32,22 +36,22 @@ describe("sanitizeSystemConfigForStorage", () => {
 
 describe("applyMailRelayToSystemConfig", () => {
   beforeEach(() => {
-    resetMailRelayClientDefaultsCache();
+    installMailRelayExampleMock();
   });
 
   afterEach(() => {
-    resetMailRelayClientDefaultsCache();
+    restoreMailRelayExampleMock();
   });
 
   it("sets postfix-relay host/port when mail.enabled", () => {
     const cfg = { notifications: { smtp: { enabled: false, transport: { host: "old" } } } };
     const immich = {
-      mail: { enabled: true, from: "photos@hdc.dukk.org" },
+      mail: { enabled: true, from: "photos@hdc.example.invalid" },
     };
     applyMailRelayToSystemConfig(cfg, immich);
     expect(cfg.notifications.smtp.enabled).toBe(true);
-    expect(cfg.notifications.smtp.from).toBe("photos@hdc.dukk.org");
-    expect(cfg.notifications.smtp.transport.host).toBe("postfix-relay.hdc.dukk.org");
+    expect(cfg.notifications.smtp.from).toBe("photos@hdc.example.invalid");
+    expect(cfg.notifications.smtp.transport.host).toBe("postfix-relay.home.example.invalid");
     expect(cfg.notifications.smtp.transport.port).toBe(25);
     expect(cfg.notifications.smtp.transport.secure).toBe(false);
     expect(cfg.notifications.smtp.transport.username).toBe("");
@@ -64,7 +68,7 @@ describe("applyMailRelayToSystemConfig", () => {
 describe("diffSystemConfigSections", () => {
   it("detects smtp host drift", () => {
     const configured = {
-      notifications: { smtp: { transport: { host: "postfix-relay.hdc.dukk.org" } } },
+      notifications: { smtp: { transport: { host: "postfix-relay.home.example.invalid" } } },
     };
     const live = {
       notifications: { smtp: { transport: { host: "smtp.gmail.com" } } },
@@ -76,11 +80,11 @@ describe("diffSystemConfigSections", () => {
 
 describe("mergeSystemConfigForMaintain", () => {
   beforeEach(() => {
-    resetMailRelayClientDefaultsCache();
+    installMailRelayExampleMock();
   });
 
   afterEach(() => {
-    resetMailRelayClientDefaultsCache();
+    restoreMailRelayExampleMock();
   });
 
   it("merges configured sections and applies mail overlay", () => {
@@ -90,16 +94,16 @@ describe("mergeSystemConfigForMaintain", () => {
       trash: { enabled: true, days: 30 },
     };
     const immich = {
-      public_url: "https://immich.dukk.org",
-      mail: { enabled: true, from: "noreply@hdc.dukk.org" },
+      public_url: "https://immich.example.invalid",
+      mail: { enabled: true, from: "noreply@hdc.example.invalid" },
       system_config: {
         trash: { enabled: true, days: 7 },
       },
     };
     const merged = mergeSystemConfigForMaintain(live, immich);
-    expect(merged.server.externalDomain).toBe("https://immich.dukk.org");
+    expect(merged.server.externalDomain).toBe("https://immich.example.invalid");
     expect(merged.trash.days).toBe(7);
-    expect(merged.notifications.smtp.transport.host).toBe("postfix-relay.hdc.dukk.org");
+    expect(merged.notifications.smtp.transport.host).toBe("postfix-relay.home.example.invalid");
   });
 });
 
@@ -109,13 +113,13 @@ describe("smtpSummaryFromSystemConfig", () => {
       notifications: {
         smtp: {
           enabled: true,
-          from: "noreply@hdc.dukk.org",
-          transport: { host: "postfix-relay.hdc.dukk.org", port: 25 },
+          from: "noreply@hdc.example.invalid",
+          transport: { host: "postfix-relay.home.example.invalid", port: 25 },
         },
       },
     });
     expect(s.enabled).toBe(true);
-    expect(s.host).toBe("postfix-relay.hdc.dukk.org");
+    expect(s.host).toBe("postfix-relay.home.example.invalid");
     expect(s.port).toBe(25);
   });
 });

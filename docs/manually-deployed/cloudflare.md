@@ -63,7 +63,7 @@ Inspect `discovered_zones[]` and per-zone diffs in the JSON on stdout.
 ```bash
 node tools/hdc/cli.mjs run infrastructure cloudflare query --
 node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone dukk.org
+node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone example.invalid
 ```
 
 Use `--prune` only when you intend to **delete** live records or rules that are not listed in config for a managed zone key.
@@ -77,4 +77,4 @@ Use `--skip-page-rules` or `--skip-email-routing` on maintain for DNS-only runs.
 
 ## Registrar migration
 
-When ready to use Cloudflare as authoritative DNS for a public zone, update NS at your registrar to Cloudflare’s assigned nameservers. BIND apex zones (e.g. `dukk.org` with internal NS glue) can be narrowed or removed separately.
+When ready to use Cloudflare as authoritative DNS for a public zone, update NS at your registrar to Cloudflare’s assigned nameservers. BIND apex zones (e.g. `example.invalid` with internal NS glue) can be narrowed or removed separately.

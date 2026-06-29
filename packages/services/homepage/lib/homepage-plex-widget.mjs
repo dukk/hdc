@@ -8,7 +8,7 @@ import {
 } from "./homepage-widget-utils.mjs";
 
 export const DEFAULT_PLEX_TOKEN_VAULT_KEY = "HDC_HOMEPAGE_PLEX_TOKEN";
-const DEFAULT_PLEX_URL = "http://10.0.0.9:32400";
+const DEFAULT_PLEX_URL = "http://192.0.2.9:32400";
 
 /**
  * @param {Record<string, unknown>} homepage

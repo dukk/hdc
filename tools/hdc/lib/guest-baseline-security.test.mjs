@@ -71,12 +71,12 @@ describe("guest-agents-config", () => {
     const cfg = guestAgentsConfigFromProxmox({
       provision: {
         guest_agents: {
-          crowdsec: { enabled: true, lapi_url: "http://10.0.0.50:8080" },
+          crowdsec: { enabled: true, lapi_url: "http://192.0.2.50:8080" },
           wazuh: { enabled: false },
         },
       },
     });
-    expect(cfg.crowdsec?.lapi_url).toBe("http://10.0.0.50:8080");
+    expect(cfg.crowdsec?.lapi_url).toBe("http://192.0.2.50:8080");
     expect(cfg.wazuh?.enabled).toBe(false);
   });
 

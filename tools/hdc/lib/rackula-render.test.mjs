@@ -44,9 +44,9 @@ describe("rackula-render", () => {
   });
 
   it("renders env with LAN CORS and trust proxy off", () => {
-    const env = renderEnvFile(rackula, "10.0.0.156");
+    const env = renderEnvFile(rackula, "192.0.2.156");
     expect(env).toContain("RACKULA_PORT=8080");
-    expect(env).toContain("CORS_ORIGIN=http://10.0.0.156:8080");
+    expect(env).toContain("CORS_ORIGIN=http://192.0.2.156:8080");
     expect(env).toContain("RACKULA_TRUST_PROXY=0");
     expect(env).not.toContain("RACKULA_API_WRITE_TOKEN=");
     expect(trustProxyFlag(rackula)).toBe("0");
@@ -55,7 +55,7 @@ describe("rackula-render", () => {
   it("includes write token when enabled", () => {
     const env = renderEnvFile(
       { ...rackula, api_write_token_enabled: true },
-      "10.0.0.156",
+      "192.0.2.156",
       "secret-token",
     );
     expect(env).toContain("RACKULA_API_WRITE_TOKEN=secret-token");
@@ -63,10 +63,10 @@ describe("rackula-render", () => {
 
   it("resolves urls and cors from public_url", () => {
     const withPublic = { ...rackula, public_url: "https://rack.example.invalid" };
-    expect(resolveCorsOrigin(withPublic, "10.0.0.156")).toBe("https://rack.example.invalid");
+    expect(resolveCorsOrigin(withPublic, "192.0.2.156")).toBe("https://rack.example.invalid");
     expect(trustProxyFlag(withPublic)).toBe("1");
-    expect(resolveUpstreamUrl("10.0.0.156", rackula)).toBe("http://10.0.0.156:8080");
-    expect(resolveWebUrl(rackula, "10.0.0.156")).toBe("http://10.0.0.156:8080");
-    expect(resolveWebUrl(withPublic, "10.0.0.156")).toBe("https://rack.example.invalid");
+    expect(resolveUpstreamUrl("192.0.2.156", rackula)).toBe("http://192.0.2.156:8080");
+    expect(resolveWebUrl(rackula, "192.0.2.156")).toBe("http://192.0.2.156:8080");
+    expect(resolveWebUrl(withPublic, "192.0.2.156")).toBe("https://rack.example.invalid");
   });
 });

@@ -53,37 +53,37 @@ describe("paperless-ngx render", () => {
   });
 
   it("renderPaperlessEnv sets secret key and falls back to CT IP", () => {
-    const env = renderPaperlessEnv(baseCfg, secrets, "10.0.0.137");
+    const env = renderPaperlessEnv(baseCfg, secrets, "192.0.2.137");
     expect(env).toContain("PAPERLESS_SECRET_KEY=test-secret-key-very-long");
     expect(env).toContain("PAPERLESS_DBPASS=test-db-password");
-    expect(env).toContain("PAPERLESS_URL=http://10.0.0.137:8000");
+    expect(env).toContain("PAPERLESS_URL=http://192.0.2.137:8000");
     expect(env).toContain("PAPERLESS_OCR_LANGUAGE=eng");
   });
 
   it("renderPaperlessEnv uses public_url when set", () => {
     const env = renderPaperlessEnv(
-      { ...baseCfg, public_url: "https://paperless.dukk.org" },
+      { ...baseCfg, public_url: "https://paperless.example.invalid" },
       secrets,
-      "10.0.0.137",
+      "192.0.2.137",
     );
-    expect(env).toContain("PAPERLESS_URL=https://paperless.dukk.org");
+    expect(env).toContain("PAPERLESS_URL=https://paperless.example.invalid");
   });
 
   it("formatPaperlessUrl prefers public_url", () => {
-    expect(formatPaperlessUrl({ public_url: "https://paperless.dukk.org" }, "10.0.0.1")).toBe(
-      "https://paperless.dukk.org",
+    expect(formatPaperlessUrl({ public_url: "https://paperless.example.invalid" }, "192.0.2.1")).toBe(
+      "https://paperless.example.invalid",
     );
-    expect(formatPaperlessUrl({}, "10.0.0.137")).toBe("http://10.0.0.137:8000");
+    expect(formatPaperlessUrl({}, "192.0.2.137")).toBe("http://192.0.2.137:8000");
   });
 
   it("admin bootstrap requires password", () => {
     expect(() =>
-      renderPaperlessEnv({ ...baseCfg, admin: { enabled: true } }, secrets, "10.0.0.1"),
+      renderPaperlessEnv({ ...baseCfg, admin: { enabled: true } }, secrets, "192.0.2.1"),
     ).toThrow(/ADMIN_PASSWORD/);
     const env = renderPaperlessEnv(
       { ...baseCfg, admin: { enabled: true, user: "ops", mail: "ops@example.com" } },
       { ...secrets, adminPassword: "admin-pass" },
-      "10.0.0.1",
+      "192.0.2.1",
     );
     expect(env).toContain("PAPERLESS_ADMIN_USER=ops");
     expect(env).toContain("PAPERLESS_ADMIN_PASSWORD=admin-pass");

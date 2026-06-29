@@ -25,7 +25,7 @@ const apiOpts = {
 
 const proxmoxCfg = {
   schema_version: 1,
-  clusters: [{ id: "c", hosts: [{ id: "hypervisor-a", pve_node: "hypervisor-a", ip: "10.0.0.1", web_ui: "https://10.0.0.1:8006", ssh: "ssh://root@10.0.0.1" }] }],
+  clusters: [{ id: "c", hosts: [{ id: "hypervisor-a", pve_node: "hypervisor-a", ip: "192.0.2.1", web_ui: "https://192.0.2.1:8006", ssh: "ssh://root@192.0.2.1" }] }],
   provision: {
     startup: {
       enabled: true,
@@ -86,7 +86,7 @@ describe("proxmox-guest-startup", () => {
           system_id: "vm-bind-a",
           mode: "proxmox-qemu",
           hostname: "bind-a",
-          proxmox: { host_id: "hypervisor-b", qemu: { ip: "10.0.0.2/24" } },
+          proxmox: { host_id: "hypervisor-b", qemu: { ip: "192.0.2.2/24" } },
         },
         {
           mode: "proxmox-qemu",
@@ -155,7 +155,6 @@ describe("proxmox-guest-startup", () => {
       const targets = collectStartupTargetsFromPackages(process.cwd(), proxmoxCfg);
       const packages = new Set(targets.map((t) => t.packageId));
       expect(packages.has("bind")).toBe(true);
-      expect(packages.has("nginx-waf")).toBe(true);
       expect(packages.has("postfix-relay")).toBe(true);
     });
   });

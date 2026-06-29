@@ -33,7 +33,7 @@ node tools/hdc/cli.mjs run service cloudbeaver maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.140:8978`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.140:8978`).
 2. **Inventory:** set `access.nodes[0].ip` on `cloudbeaver-a.json`.
 3. **Login:** username from `cloudbeaver.admin.username` (default `cbadmin`); password from vault.
 4. **Database connections:** add in the UI. Use `host.docker.internal` (enabled via `extra_hosts`) or a LAN IP for PostgreSQL/MySQL on other guests.

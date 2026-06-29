@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    setupFiles: ["tools/hdc/test/vitest-setup.mjs"],
     include: [
       "tools/hdc/**/*.test.mjs",
       "packages/lib/**/*.test.mjs",
@@ -17,6 +18,7 @@ export default defineConfig({
       exclude: [
         "tools/hdc/**/*.test.mjs",
         "tools/hdc/test/**",
+        "tools/hdc/scripts/**",
         "tools/hdc/cli.mjs",
         "node_modules/**",
       ],
