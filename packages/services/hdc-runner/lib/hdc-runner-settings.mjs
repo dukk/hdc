@@ -7,6 +7,124 @@ const DEFAULT_INSTALL_ROOT = "/opt/hdc";
 const DEFAULT_PRIVATE_ROOT = "/opt/hdc-private";
 const DEFAULT_META_ROOT = "/opt/hdc-runner";
 
+const DEFAULT_WEB = {
+  enabled: true,
+  host: "0.0.0.0",
+  port: 9120,
+  username: "hdc",
+  password_vault_key: "HDC_HDC_RUNNER_UI_PASSWORD",
+  session_secret_vault_key: "HDC_HDC_RUNNER_UI_SESSION_SECRET",
+  api_token_vault_key: "HDC_HDC_RUNNER_API_TOKEN",
+  allowed_verbs: ["query", "maintain"],
+  max_concurrent_jobs: 1,
+  allowed_schedule_ids: [],
+  allowed_packages: [],
+};
+
+const DEFAULT_PAPERCLIP_BRIDGE = {
+  enabled: false,
+  host: "0.0.0.0",
+  port: 9121,
+  secret_vault_key: "HDC_PAPERCLIP_AGENT_BRIDGE_SECRET",
+  hdc_runner_url: "http://127.0.0.1:9120",
+};
+
+/**
+ * @param {unknown} bridgeBlock
+ */
+export function normalizePaperclipBridgeBlock(bridgeBlock) {
+  const b = isObject(bridgeBlock) ? bridgeBlock : {};
+  const port = Number(b.port);
+  return {
+    enabled: b.enabled === true,
+    host: typeof b.host === "string" && b.host.trim() ? b.host.trim() : DEFAULT_PAPERCLIP_BRIDGE.host,
+    port: Number.isFinite(port) && port > 0 ? Math.floor(port) : DEFAULT_PAPERCLIP_BRIDGE.port,
+    secret_vault_key:
+      typeof b.secret_vault_key === "string" && b.secret_vault_key.trim()
+        ? b.secret_vault_key.trim()
+        : DEFAULT_PAPERCLIP_BRIDGE.secret_vault_key,
+    hdc_runner_url:
+      typeof b.hdc_runner_url === "string" && b.hdc_runner_url.trim()
+        ? b.hdc_runner_url.trim()
+        : DEFAULT_PAPERCLIP_BRIDGE.hdc_runner_url,
+  };
+}
+
+/**
+ * @param {unknown} webBlock
+ */
+export function normalizeHdcRunnerWebBlock(webBlock) {
+  const w = isObject(webBlock) ? webBlock : {};
+  const allowedRaw = Array.isArray(w.allowed_verbs) ? w.allowed_verbs : DEFAULT_WEB.allowed_verbs;
+  const allowed_verbs = allowedRaw.map((v) => String(v).trim().toLowerCase()).filter(Boolean);
+  const maxJobs = Number(w.max_concurrent_jobs);
+  return {
+    enabled: w.enabled !== false,
+    host: typeof w.host === "string" && w.host.trim() ? w.host.trim() : DEFAULT_WEB.host,
+    port: Number.isFinite(Number(w.port)) && Number(w.port) > 0 ? Number(w.port) : DEFAULT_WEB.port,
+    username:
+      typeof w.username === "string" && w.username.trim() ? w.username.trim() : DEFAULT_WEB.username,
+    password_vault_key:
+      typeof w.password_vault_key === "string" && w.password_vault_key.trim()
+        ? w.password_vault_key.trim()
+        : DEFAULT_WEB.password_vault_key,
+    session_secret_vault_key:
+      typeof w.session_secret_vault_key === "string" && w.session_secret_vault_key.trim()
+        ? w.session_secret_vault_key.trim()
+        : DEFAULT_WEB.session_secret_vault_key,
+    allowed_verbs: allowed_verbs.length > 0 ? allowed_verbs : [...DEFAULT_WEB.allowed_verbs],
+    max_concurrent_jobs:
+      Number.isFinite(maxJobs) && maxJobs > 0 ? Math.floor(maxJobs) : DEFAULT_WEB.max_concurrent_jobs,
+    api_token_vault_key:
+      typeof w.api_token_vault_key === "string" && w.api_token_vault_key.trim()
+        ? w.api_token_vault_key.trim()
+        : DEFAULT_WEB.api_token_vault_key,
+    allowed_schedule_ids: Array.isArray(w.allowed_schedule_ids)
+      ? w.allowed_schedule_ids.map((id) => String(id).trim()).filter(Boolean)
+      : [...DEFAULT_WEB.allowed_schedule_ids],
+    allowed_packages: Array.isArray(w.allowed_packages)
+      ? w.allowed_packages
+      : [...DEFAULT_WEB.allowed_packages],
+  };
+}
+
+/** @param {ReturnType<typeof normalizeHdcRunnerWebBlock>} web */
+export function uiPasswordVaultKey(web) {
+  return web.password_vault_key;
+}
+
+/** @param {ReturnType<typeof normalizeHdcRunnerWebBlock>} web */
+export function uiSessionSecretVaultKey(web) {
+  return web.session_secret_vault_key;
+}
+
+/** @param {ReturnType<typeof normalizeHdcRunnerWebBlock>} web */
+export function uiApiTokenVaultKey(web) {
+  return web.api_token_vault_key;
+}
+
+/**
+ * Non-secret web config pushed to guest as web-config.json.
+ *
+ * @param {ReturnType<typeof normalizeHdcRunnerWebBlock>} web
+ */
+export function buildWebConfigJson(web) {
+  return JSON.stringify(
+    {
+      enabled: web.enabled,
+      host: web.host,
+      port: web.port,
+      username: web.username,
+      allowed_verbs: web.allowed_verbs,
+      max_concurrent_jobs: web.max_concurrent_jobs,
+      allowed_schedule_ids: web.allowed_schedule_ids,
+      allowed_packages: web.allowed_packages,
+    },
+    null,
+    2,
+  );
+}
+
 /**
  * @param {unknown} runnerBlock
  */
@@ -27,6 +145,8 @@ export function normalizeHdcRunnerBlock(runnerBlock) {
       typeof r.node_version === "string" && r.node_version.trim() ? r.node_version.trim() : "22",
     bw_version:
       typeof r.bw_version === "string" && r.bw_version.trim() ? r.bw_version.trim() : "2026.5.0",
+    cron_tz:
+      typeof r.cron_tz === "string" && r.cron_tz.trim() ? r.cron_tz.trim() : "UTC",
     env: isObject(r.env) ? { ...r.env } : {},
     mail: isObject(r.mail) ? { ...r.mail } : {},
     discord: isObject(r.discord) ? { ...r.discord } : {},
@@ -36,6 +156,8 @@ export function normalizeHdcRunnerBlock(runnerBlock) {
       : {
           exclude: [".git", "node_modules", "**/reports", ".cursor", ".vscode"],
         },
+    web: normalizeHdcRunnerWebBlock(r.web),
+    paperclip_bridge: normalizePaperclipBridgeBlock(r.paperclip_bridge),
   };
 }
 
@@ -56,6 +178,23 @@ export function hdcRunnerSettingsForDeployment(defaults, deployment) {
     discord: { ...base.discord, ...over.discord },
     sync: { ...base.sync, ...over.sync },
     schedules: over.schedules.length > 0 ? over.schedules : base.schedules,
+    web: {
+      ...base.web,
+      ...over.web,
+      allowed_verbs:
+        over.web.allowed_verbs.length > 0 ? over.web.allowed_verbs : base.web.allowed_verbs,
+      allowed_schedule_ids:
+        over.web.allowed_schedule_ids.length > 0
+          ? over.web.allowed_schedule_ids
+          : base.web.allowed_schedule_ids,
+      allowed_packages:
+        over.web.allowed_packages.length > 0 ? over.web.allowed_packages : base.web.allowed_packages,
+    },
+    paperclip_bridge: {
+      ...base.paperclip_bridge,
+      ...over.paperclip_bridge,
+      enabled: over.paperclip_bridge.enabled || base.paperclip_bridge.enabled,
+    },
   };
 }
 

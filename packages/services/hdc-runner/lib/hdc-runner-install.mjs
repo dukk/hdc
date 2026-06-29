@@ -28,8 +28,9 @@ export function buildHdcRunnerInstallScript(runner) {
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update -qq",
-    "apt-get install -y -qq curl ca-certificates gnupg rsync git mailutils unzip openssh-server",
+    "apt-get install -y -qq curl ca-certificates gnupg rsync git mailutils unzip openssh-server cron",
     "systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true",
+    "systemctl enable --now cron 2>/dev/null || true",
     "",
     "# Node.js",
     "command -v node >/dev/null 2>&1 || {",
@@ -158,6 +159,29 @@ export function ensureHdcNpmDepsOnGuest(exec, installRoot, log) {
     return { ok: false, message: detail };
   }
   return { ok: true, message: "npm deps installed" };
+}
+
+/**
+ * Ensure cron is installed and running (idempotent on existing guests).
+ *
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
+ * @param {{ info: (msg: string) => void }} log
+ */
+export function ensureCronServiceOnGuest(exec, log) {
+  log.info(`${exec.label}: ensuring cron package and service`);
+  const script = [
+    "set -e",
+    "export DEBIAN_FRONTEND=noninteractive",
+    "command -v cron >/dev/null 2>&1 || apt-get install -y -qq cron",
+    "systemctl enable --now cron",
+    "systemctl is-active cron",
+  ].join("\n");
+  const r = exec.run(script, { capture: true });
+  if (r.status !== 0) {
+    const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    return { ok: false, message: detail };
+  }
+  return { ok: true, message: `${r.stdout}`.trim() || "active" };
 }
 
 export { resolvePveSshForHost, readCtPrimaryIp };

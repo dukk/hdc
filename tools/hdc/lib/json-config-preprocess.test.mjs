@@ -13,6 +13,7 @@ import {
   readResolvedPackageConfigJson,
   resolveIncludeRelPath,
   stripJsonc,
+  stripUtf8Bom,
 } from "./json-config-preprocess.mjs";
 import { resolveRepoFile } from "./private-repo.mjs";
 
@@ -44,10 +45,25 @@ describe("json-config-preprocess", () => {
     });
   });
 
+  describe("stripUtf8Bom", () => {
+    it("removes a leading BOM", () => {
+      expect(stripUtf8Bom("\uFEFF{ \"a\": 1 }")).toBe('{ "a": 1 }');
+    });
+
+    it("leaves text without BOM unchanged", () => {
+      expect(stripUtf8Bom('{ "a": 1 }')).toBe('{ "a": 1 }');
+    });
+  });
+
   describe("parseJsonc", () => {
     it("parses commented config", () => {
       const out = parseJsonc(`{ "x": 1 /* y */ }`, "test.json");
       expect(out).toEqual({ x: 1 });
+    });
+
+    it("parses BOM-prefixed JSON", () => {
+      const out = parseJsonc('\uFEFF{ "a": 1 }', "test.json");
+      expect(out).toEqual({ a: 1 });
     });
   });
 
@@ -204,6 +220,28 @@ describe("json-config-preprocess", () => {
       const out = preprocessPackageConfigText(readFileSync(join(publicRoot, rel), "utf8"), ctx(rel));
       expect(out).toEqual({ ok: true });
     });
+
+    it("loads BOM-prefixed include sidecars", () => {
+      const rel = "packages/services/uptime-kuma/config.json";
+      mkdirSync(join(publicRoot, "packages/services/uptime-kuma/monitors-public"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(publicRoot, "packages/services/uptime-kuma/monitors-public/immich.json"),
+        '\uFEFF{ "id": "immich", "name": "Immich" }',
+        "utf8",
+      );
+      writeFileSync(
+        join(publicRoot, rel),
+        '{ "monitors": [{ "$hdc.include": "monitors-public/immich.json" }] }',
+        "utf8",
+      );
+
+      const out = preprocessPackageConfigText(readFileSync(join(publicRoot, rel), "utf8"), ctx(rel));
+      expect(out).toEqual({
+        monitors: [{ id: "immich", name: "Immich" }],
+      });
+    });
   });
 
   describe("readResolvedPackageConfigJson integration", () => {
@@ -247,6 +285,12 @@ describe("json-config-preprocess", () => {
 
     it("readResolvedPackageConfigJson honors preprocess:false", () => {
       writeFileSync(join(packageRoot, "config.json"), '{"a":1}', "utf8");
+      const resolved = resolveRepoFile(publicRoot, "packages/infrastructure/cloudflare/config.json");
+      expect(readResolvedPackageConfigJson(resolved, { preprocess: false })).toEqual({ a: 1 });
+    });
+
+    it("readResolvedPackageConfigJson strips BOM when preprocess:false", () => {
+      writeFileSync(join(packageRoot, "config.json"), '\uFEFF{"a":1}', "utf8");
       const resolved = resolveRepoFile(publicRoot, "packages/infrastructure/cloudflare/config.json");
       expect(readResolvedPackageConfigJson(resolved, { preprocess: false })).toEqual({ a: 1 });
     });

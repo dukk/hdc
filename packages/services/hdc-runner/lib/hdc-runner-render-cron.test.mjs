@@ -42,4 +42,12 @@ describe("hdc-runner-render-cron", () => {
     expect(files).toHaveLength(2);
     expect(cronFileBasename("a")).toBe("hdc-runner-a");
   });
+
+  it("renderAllCronFiles passes cron timezone", () => {
+    const files = renderAllCronFiles([{ id: "a", cron: "0 1 * * *" }], {
+      jobScriptPath: "/opt/hdc-runner/bin/run-scheduled-job.mjs",
+      tz: "America/New_York",
+    });
+    expect(files[0].content).toContain("CRON_TZ=America/New_York");
+  });
 });

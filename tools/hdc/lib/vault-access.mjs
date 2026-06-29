@@ -6,8 +6,10 @@ import {
   bwGetPassword,
   bwItemExistsInOrg,
   bwListItemNames,
+  bwReadOrgSecrets,
   bwSetPassword,
   ensureBwUnlocked,
+  getProcessBwSession,
   vaultwardenCliDepsFromCli,
 } from "./vaultwarden-cli.mjs";
 
@@ -51,6 +53,9 @@ export function clearVaultPassphraseProcessCache() {
 export function createVaultAccess(deps) {
   /** @type {string | null} */
   let cachedPassphrase = null;
+
+  /** @type {Map<string, string>} Per-process vaultwarden secret cache (key → value). */
+  const vaultwardenSecretCache = new Map();
 
   const vwCli = vaultwardenCliDepsFromCli(deps, deps.spawnSync);
 
@@ -177,6 +182,17 @@ export function createVaultAccess(deps) {
   }
 
   /**
+   * @param {Record<string, string>} secrets
+   */
+  function seedVaultwardenCache(secrets) {
+    for (const [key, value] of Object.entries(secrets)) {
+      if (typeof value === "string" && value.length > 0) {
+        vaultwardenSecretCache.set(key, value);
+      }
+    }
+  }
+
+  /**
    * @param {UnlockOptions} [unlockOpts]
    * @returns {Promise<Record<string, string> | null>}
    */
@@ -196,13 +212,8 @@ export function createVaultAccess(deps) {
             await setLocalSecret(key, value);
           },
         );
-        const names = bwListItemNames(vwCli, session);
-        /** @type {Record<string, string>} */
-        const out = {};
-        for (const name of names) {
-          const val = bwGetPassword(vwCli, session, name);
-          if (typeof val === "string" && val.length > 0) out[name] = val;
-        }
+        const out = bwReadOrgSecrets(vwCli, session);
+        seedVaultwardenCache(out);
         const local = await readLocalSecrets(unlockOpts);
         if (local) {
           for (const [k, v] of Object.entries(local)) {
@@ -329,6 +340,9 @@ export function createVaultAccess(deps) {
       return getSecretLocal(key, options);
     }
 
+    const cached = vaultwardenSecretCache.get(key);
+    if (typeof cached === "string" && cached.length > 0) return cached;
+
     try {
       const session = await ensureBwUnlocked(
         vwCli,
@@ -343,7 +357,10 @@ export function createVaultAccess(deps) {
         },
       );
       const cur = bwGetPassword(vwCli, session, key);
-      if (typeof cur === "string" && cur.length > 0) return cur;
+      if (typeof cur === "string" && cur.length > 0) {
+        vaultwardenSecretCache.set(key, cur);
+        return cur;
+      }
 
       if (isAutoSecretBackend(deps.env)) {
         const localVal = await getSecretLocal(key, { ...options, optional: true });
@@ -373,7 +390,10 @@ export function createVaultAccess(deps) {
             continue;
           }
         }
-        if (value) bwSetPassword(vwCli, session, key, value);
+        if (value) {
+          bwSetPassword(vwCli, session, key, value);
+          vaultwardenSecretCache.set(key, value);
+        }
         return value;
       }
     } catch (e) {
@@ -408,6 +428,7 @@ export function createVaultAccess(deps) {
         },
       );
       bwSetPassword(vwCli, session, key, value);
+      vaultwardenSecretCache.set(key, value);
     } catch (e) {
       if (isAutoSecretBackend(deps.env)) {
         deps.warn(`Vaultwarden backend unavailable (${/** @type {Error} */ (e).message}); saving ${key} to local vault.`);
@@ -444,7 +465,9 @@ export function createVaultAccess(deps) {
           await setLocalSecret(k, val);
         },
       );
-      return bwDeleteItem(vwCli, session, key);
+      const deleted = bwDeleteItem(vwCli, session, key);
+      if (deleted) vaultwardenSecretCache.delete(key);
+      return deleted;
     } catch (e) {
       if (isAutoSecretBackend(deps.env)) {
         let data = await readLocalSecrets({ createIfMissing: false });
@@ -466,6 +489,7 @@ export function createVaultAccess(deps) {
       deps.warn("HDC_SECRET_BACKEND is local; Vaultwarden unlock skipped.");
       return;
     }
+    const hadSession = getProcessBwSession() !== null;
     await ensureBwUnlocked(
       vwCli,
       async (k) => {
@@ -478,7 +502,9 @@ export function createVaultAccess(deps) {
         await setLocalSecret(k, value);
       },
     );
-    deps.log("[hdc] vaultwarden: vault unlocked.");
+    if (!hadSession) {
+      deps.log("[hdc] vaultwarden: vault unlocked.");
+    }
   }
 
   /**

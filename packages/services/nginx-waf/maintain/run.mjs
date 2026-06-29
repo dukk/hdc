@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { resolveBindTsigForAcme } from "../../../lib/bind-tsig-for-acme.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { createNginxWafVaultAccess } from "../lib/vault-deps.mjs";
 import {
@@ -95,11 +96,7 @@ async function loadGroupSecrets(global, vault) {
     global.challenge === "dns-01" ||
     (global.dnsZone && global.dnsNameservers?.length);
   if (needsTsig) {
-    tsigSecret = String(
-      await vault.getSecret(global.dnsTsigVaultKey, {
-        promptLabel: `vault secret ${global.dnsTsigVaultKey}`,
-      }),
-    ).trim();
+    tsigSecret = await resolveBindTsigForAcme(vault, global.dnsTsigVaultKey, root);
   }
   return { email, tsigSecret };
 }

@@ -8,7 +8,7 @@ function isObject(v) {
  */
 export function normalizeImageTag(paperclip) {
   const t = typeof paperclip.image_tag === "string" ? paperclip.image_tag.trim() : "";
-  if (!t) return "v2026.618.0";
+  if (!t) return "latest";
   return t;
 }
 
@@ -81,6 +81,98 @@ export function dbPasswordVaultKey(paperclip) {
 
 /**
  * @param {Record<string, unknown>} paperclip
+ */
+export function cursorApiKeyVaultKey(paperclip) {
+  const key =
+    typeof paperclip.cursor_api_key_vault_key === "string" &&
+    paperclip.cursor_api_key_vault_key.trim()
+      ? paperclip.cursor_api_key_vault_key.trim()
+      : "HDC_PAPERCLIP_CURSOR_API_KEY";
+  return key;
+}
+
+/**
+ * @param {Record<string, unknown>} paperclip
+ */
+export function anthropicApiKeyVaultKey(paperclip) {
+  const key =
+    typeof paperclip.anthropic_api_key_vault_key === "string" &&
+    paperclip.anthropic_api_key_vault_key.trim()
+      ? paperclip.anthropic_api_key_vault_key.trim()
+      : "HDC_PAPERCLIP_ANTHROPIC_API_KEY";
+  return key;
+}
+
+/**
+ * @param {Record<string, unknown>} paperclip
+ */
+export function openaiApiKeyVaultKey(paperclip) {
+  const key =
+    typeof paperclip.openai_api_key_vault_key === "string" &&
+    paperclip.openai_api_key_vault_key.trim()
+      ? paperclip.openai_api_key_vault_key.trim()
+      : "HDC_PAPERCLIP_OPENAI_API_KEY";
+  return key;
+}
+
+/**
+ * @param {Record<string, unknown>} paperclip
+ */
+export function googleGeminiApiKeyVaultKey(paperclip) {
+  const key =
+    typeof paperclip.google_gemini_api_key_vault_key === "string" &&
+    paperclip.google_gemini_api_key_vault_key.trim()
+      ? paperclip.google_gemini_api_key_vault_key.trim()
+      : "HDC_PAPERCLIP_GOOGLE_GEMINI_API_KEY";
+  return key;
+}
+
+/**
+ * @param {unknown} backends
+ * @returns {{ id: string; url: string; primary: boolean }[]}
+ */
+export function normalizeOllamaBackends(backends) {
+  if (!Array.isArray(backends) || backends.length === 0) {
+    return [];
+  }
+  /** @type {{ id: string; url: string; primary: boolean }[]} */
+  const out = [];
+  const seen = new Set();
+  for (const raw of backends) {
+    if (!isObject(raw)) continue;
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    if (!id || !url) {
+      throw new Error("each paperclip.ollama_backends entry needs id and url");
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error(`paperclip.ollama_backends ${JSON.stringify(id)}: url must be http(s)://…`);
+    }
+    if (seen.has(id)) {
+      throw new Error(`duplicate paperclip.ollama_backends id ${JSON.stringify(id)}`);
+    }
+    seen.add(id);
+    out.push({ id, url, primary: raw.primary === true });
+  }
+  if (!out.length) {
+    throw new Error("paperclip.ollama_backends must contain at least one valid entry when set");
+  }
+  return out;
+}
+
+/**
+ * @param {{ id: string; url: string; primary: boolean }[]} backends
+ * @returns {string | null}
+ */
+export function primaryOllamaBaseUrl(backends) {
+  if (!backends.length) return null;
+  const marked = backends.find((b) => b.primary);
+  if (marked) return marked.url;
+  return backends[0].url;
+}
+
+/**
+ * @param {Record<string, unknown>} paperclip
  * @returns {URL | null}
  */
 export function parsePublicUrl(paperclip) {
@@ -112,7 +204,7 @@ const DB_NAME = "paperclip";
 
 /**
  * @param {Record<string, unknown>} paperclip
- * @param {{ betterAuthSecret: string; dbPassword: string }} secrets
+ * @param {{ betterAuthSecret: string; dbPassword: string; cursorApiKey?: string; anthropicApiKey?: string; openaiApiKey?: string; googleGeminiApiKey?: string }} secrets
  * @param {string | null} [ctIp]
  */
 export function renderPaperclipEnv(paperclip, secrets, ctIp = null) {
@@ -162,6 +254,31 @@ export function renderPaperclipEnv(paperclip, secrets, ctIp = null) {
 
   if (telemetryDisabled(paperclip)) {
     lines.push("PAPERCLIP_TELEMETRY_DISABLED=1", "DO_NOT_TRACK=1");
+  }
+
+  const cursorApiKey = String(secrets.cursorApiKey || "").trim();
+  if (cursorApiKey) {
+    lines.push(`CURSOR_API_KEY=${cursorApiKey}`);
+  }
+
+  const anthropicApiKey = String(secrets.anthropicApiKey || "").trim();
+  if (anthropicApiKey) {
+    lines.push(`ANTHROPIC_API_KEY=${anthropicApiKey}`);
+  }
+
+  const openaiApiKey = String(secrets.openaiApiKey || "").trim();
+  if (openaiApiKey) {
+    lines.push(`OPENAI_API_KEY=${openaiApiKey}`);
+  }
+
+  const googleGeminiApiKey = String(secrets.googleGeminiApiKey || "").trim();
+  if (googleGeminiApiKey) {
+    lines.push(`GOOGLE_API_KEY=${googleGeminiApiKey}`);
+  }
+
+  const ollamaPrimary = primaryOllamaBaseUrl(normalizeOllamaBackends(paperclip.ollama_backends));
+  if (ollamaPrimary) {
+    lines.push(`OLLAMA_BASE_URL=${ollamaPrimary}`);
   }
 
   return `${lines.join("\n")}\n`;

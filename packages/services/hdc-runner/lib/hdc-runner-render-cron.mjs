@@ -70,9 +70,11 @@ export function cronFilePath(scheduleId) {
  * @param {object} paths
  * @param {string} paths.jobScriptPath
  * @param {string} [paths.logDir]
+ * @param {string} [paths.tz]
  */
 export function renderAllCronFiles(schedules, paths) {
   const logDir = paths.logDir ?? "/var/log/hdc-runner";
+  const tz = paths.tz ?? "UTC";
   /** @type {{ id: string; path: string; content: string }[]} */
   const files = [];
   const seen = new Set();
@@ -91,6 +93,7 @@ export function renderAllCronFiles(schedules, paths) {
         cron,
         jobScriptPath: paths.jobScriptPath,
         logPath: `${logDir}/${sid}.log`,
+        tz,
       }),
     });
   }

@@ -58,9 +58,10 @@ describe("proxmox deploy auth", () => {
     });
     const perKey = vaultTokenKeyForHost("hypervisor-b");
     const vault = {
-      readSecrets: vi.fn(async () => ({
-        [perKey]: "root@pam!hdc-old=wrong",
-      })),
+      getSecret: vi.fn(async (key, opts) => {
+        if (key === perKey && opts?.optional) return "root@pam!hdc-old=wrong";
+        return opts?.optional ? "" : "";
+      }),
       setSecret: vi.fn(),
     };
     const warns = [];
@@ -90,9 +91,10 @@ describe("proxmox deploy auth", () => {
     const perKey = vaultTokenKeyForHost("hypervisor-b");
     const verifyFn = vi.fn(async () => ({ major: 8, release: "8.4.0" }));
     const vault = {
-      readSecrets: vi.fn(async () => ({
-        [perKey]: "root@pam!hdc=good",
-      })),
+      getSecret: vi.fn(async (key, opts) => {
+        if (key === perKey && opts?.optional) return "root@pam!hdc=good";
+        return opts?.optional ? "" : "";
+      }),
       setSecret: vi.fn(),
     };
     const result = await resolveProxmoxApiAuthorization({

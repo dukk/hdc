@@ -53,7 +53,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent) {
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} envContent
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; resetVolumes?: boolean }} [opts]
  */
 export function buildMaintainScript(composeDirPath, composeYaml, envContent, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
@@ -68,6 +68,9 @@ export function buildMaintainScript(composeDirPath, composeYaml, envContent, opt
     "HDCENV",
     `cd '${dir}'`,
   ];
+  if (opts.resetVolumes) {
+    lines.push("docker compose down -v || true");
+  }
   if (!opts.skipUpgrade) {
     lines.push("docker compose pull");
   }
@@ -86,6 +89,19 @@ export function buildComposeDownScript(composeDirPath) {
     `  cd '${dir}' && docker compose down -v 2>/dev/null || true`,
     "fi",
   ].join("\n");
+}
+
+/**
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {Record<string, unknown>} install
+ */
+function readRemotePostgresPassword(user, pveHost, vmid, install) {
+  const dir = composeDir(install).replace(/'/g, `'\\''`);
+  const inner = `test -f '${dir}/.env' && grep '^POSTGRES_PASSWORD=' '${dir}/.env' | cut -d= -f2- || true`;
+  const r = pctExec(user, pveHost, vmid, inner, { capture: true });
+  return r.stdout.trim();
 }
 
 /**
@@ -149,7 +165,7 @@ export async function installPaperclipInCt(user, pveHost, vmid, paperclip, insta
  * @param {Record<string, unknown>} paperclip
  * @param {Record<string, unknown>} install
  * @param {{ betterAuthSecret: string; dbPassword: string }} secrets
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; resetDb?: boolean }} [opts]
  */
 export async function maintainPaperclipInCt(user, pveHost, vmid, paperclip, install, secrets, opts = {}) {
   errout.write(`[hdc] paperclip maintain: refreshing stack in CT ${vmid} …\n`);
@@ -159,11 +175,22 @@ export async function maintainPaperclipInCt(user, pveHost, vmid, paperclip, inst
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
+  const oldDbPassword = readRemotePostgresPassword(user, pveHost, vmid, install);
+  const resetVolumes = opts.resetDb || (oldDbPassword !== "" && oldDbPassword !== secrets.dbPassword);
+  if (resetVolumes) {
+    errout.write(
+      `[hdc] paperclip maintain: resetting Postgres volume${opts.resetDb ? " (--reset-db)" : " (db password changed)"} …\n`,
+    );
+  }
+
   const ip = readCtPrimaryIp(user, pveHost, vmid);
   const envContent = renderPaperclipEnv(paperclip, secrets, ip);
   const composeYaml = renderComposeYaml();
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, composeYaml, envContent, opts);
+  const inner = buildMaintainScript(dir, composeYaml, envContent, {
+    skipUpgrade: opts.skipUpgrade,
+    resetVolumes,
+  });
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, message: `maintain failed (exit ${r.status})` };
@@ -171,6 +198,7 @@ export async function maintainPaperclipInCt(user, pveHost, vmid, paperclip, inst
   return {
     ok: true,
     message: opts.skipUpgrade ? "restarted" : "images refreshed",
+    db_volume_reset: resetVolumes,
     url: resolveWebUrl(paperclip, ip),
     upstream_url: resolveUpstreamUrl(ip, paperclip),
     ct_ip: ip,

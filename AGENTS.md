@@ -960,10 +960,10 @@ Example: `node tools/hdc/cli.mjs run service paperless-ngx deploy -- --instance 
 | --- | --- |
 | `deploy` | Proxmox LXC (4 vCPU, 8 GiB RAM, 32 GiB rootfs) + Docker Paperclip + PostgreSQL from `ghcr.io/paperclipai/paperclip` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
 | `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
-| `query` | Config summary; `--live` for Docker + `/api/health` on port 3100 |
+| `query` | Config summary; `--live` for Docker + `/api/health` on port 3100; `--bootstrap-company --yes` imports HDC skills and agents (see [`docs/manually-deployed/paperclip-hdc-company.md`](docs/manually-deployed/paperclip-hdc-company.md)) |
 | `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
+Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing); `HDC_PAPERCLIP_API_KEY` for company bootstrap. **HDC skills** under [`packages/services/paperclip/skills/`](packages/services/paperclip/skills/) integrate with **hdc-runner** (`HDC_HDC_RUNNER_API_TOKEN`). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
 
 Example: `node tools/hdc/cli.mjs run service paperclip deploy -- --instance a`
 
@@ -1108,12 +1108,14 @@ Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI, rsync hdc + hdc-private from operator, cron schedules, guest baseline (mail relay; skips ClamAV) |
-| `maintain` | Rsync operator trees to guest; refresh `.env` (Vaultwarden master password from operator vault), cron, job wrapper; `--skip-sync`, `--prune`, `--dry-run` |
-| `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs |
+| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI, rsync hdc + hdc-private from operator, cron schedules, guest baseline (mail relay; skips ClamAV), web UI systemd unit |
+| `maintain` | Rsync operator trees to guest; refresh `.env` (Vaultwarden master password + web UI secrets from operator vault), cron, job wrapper, web UI; `--skip-sync`, `--skip-ui`, `--prune`, `--dry-run` |
+| `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs, web UI health |
 | `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay; Discord ops alerts use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (#hdc-ops webhook in Vaultwarden collection). Discord messages include the host running hdc (`HDC_OPS_DISCORD_HOST` optional); scheduled job success posts are silent (no channel ping), failures ping.
+Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. **`hdc_runner.web`:** LAN web UI on port 9120 (default); session auth via vault `HDC_HDC_RUNNER_UI_PASSWORD` and auto-generated `HDC_HDC_RUNNER_UI_SESSION_SECRET`; **Bearer token** via vault `HDC_HDC_RUNNER_API_TOKEN` for Paperclip agents; optional `allowed_schedule_ids` / `allowed_packages` policy. Ad-hoc runs limited to `query` and `maintain`. API reference: [`packages/services/hdc-runner/API.md`](packages/services/hdc-runner/API.md). **`hdc_runner.paperclip_bridge`:** HTTP adapter bridge on port 9121 for Paperclip heartbeat → schedule runs. Browse `http://<guest-ip>:9120` after maintain.
+
+Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay; Discord ops alerts use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (#hdc-ops webhook in Vaultwarden collection). Discord messages include the host running hdc (`HDC_OPS_DISCORD_HOST` optional); scheduled job success posts are silent (no channel ping), failures ping.
 
 Example: `node tools/hdc/cli.mjs run service hdc-runner maintain --`
 

@@ -4,7 +4,7 @@ import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mj
  * Maintain paperclip: re-push compose + .env from config, refresh Docker images, guest baseline.
  *
  * Usage: hdc run service paperclip maintain -- [--instance a | --system-id paperclip-a]
- *        hdc run service paperclip maintain -- [--skip-upgrade] [--skip-clamav]
+ *        hdc run service paperclip maintain -- [--skip-upgrade] [--skip-clamav] [--reset-db]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -59,6 +59,7 @@ function readCfg() {
 async function maintainOne(deployment, flags, secrets, vaultAccess) {
   const { systemId, proxmox: px, paperclip, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
+  const resetDb = flagGet(flags, "reset-db", "reset_db") !== undefined;
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -85,7 +86,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     paperclipCfg,
     installCfg,
     secrets,
-    { skipUpgrade },
+    { skipUpgrade, resetDb },
   );
 
   const log = provisionLogFromConsole(console);
@@ -103,6 +104,8 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
+    reset_db: resetDb,
+    db_volume_reset: result.db_volume_reset ?? false,
     url: result.url ?? null,
     upstream_url: result.upstream_url ?? null,
     message: result.message,

@@ -17,10 +17,13 @@ export function parseDotenvText(text) {
     const m = rawLine.match(LINE_RE);
     if (!m?.groups) continue;
     let val = m.groups.val;
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
+    if (val.startsWith('"') && val.endsWith('"')) {
+      try {
+        val = JSON.parse(val);
+      } catch {
+        val = val.slice(1, -1);
+      }
+    } else if (val.startsWith("'") && val.endsWith("'")) {
       val = val.slice(1, -1);
     }
     val = val.replace(/\\n/g, "\n");

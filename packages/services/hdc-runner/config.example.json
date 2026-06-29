@@ -58,6 +58,26 @@
       ],
       "sync": {
         "exclude": [".git", "node_modules", "**/reports"]
+      },
+      "web": {
+        "enabled": true,
+        "host": "0.0.0.0",
+        "port": 9120,
+        "username": "hdc",
+        "password_vault_key": "HDC_HDC_RUNNER_UI_PASSWORD",
+        "session_secret_vault_key": "HDC_HDC_RUNNER_UI_SESSION_SECRET",
+        "api_token_vault_key": "HDC_HDC_RUNNER_API_TOKEN",
+        "allowed_verbs": ["query", "maintain"],
+        "max_concurrent_jobs": 1,
+        "allowed_schedule_ids": [],
+        "allowed_packages": []
+      },
+      "paperclip_bridge": {
+        "enabled": false,
+        "host": "0.0.0.0",
+        "port": 9121,
+        "secret_vault_key": "HDC_PAPERCLIP_AGENT_BRIDGE_SECRET",
+        "hdc_runner_url": "http://127.0.0.1:9120"
       }
     },
     "install": {

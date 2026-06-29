@@ -3,9 +3,9 @@
  * Scheduled job runner — installed on hdc-runner guest at
  * /opt/hdc-runner/bin/run-scheduled-job.mjs
  *
- * Usage: node run-scheduled-job.mjs <schedule-id>
+ * Usage: node run-scheduled-job.mjs <schedule-id> [ui-job-id]
  */
-import { readFileSync, appendFileSync, existsSync } from "node:fs";
+import { readFileSync, appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 const META_ROOT = process.env.HDC_RUNNER_META_ROOT || "/opt/hdc-runner";
 const INSTALL_ROOT = process.env.HDC_RUNNER_INSTALL_ROOT || "/opt/hdc";
 const PRIVATE_ROOT = process.env.HDC_RUNNER_PRIVATE_ROOT || "/opt/hdc-private";
+const CLI_MAX_BUFFER = 64 * 1024 * 1024;
 
 /**
  * @param {string} path
@@ -27,10 +28,13 @@ function loadDotEnv(path) {
     if (eq <= 0) continue;
     const key = t.slice(0, eq).trim();
     let val = t.slice(eq + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
+    if (val.startsWith('"') && val.endsWith('"')) {
+      try {
+        val = JSON.parse(val);
+      } catch {
+        val = val.slice(1, -1);
+      }
+    } else if (val.startsWith("'") && val.endsWith("'")) {
       val = val.slice(1, -1);
     }
     process.env[key] = val;
@@ -47,6 +51,47 @@ function loadSchedule(scheduleId) {
   const sched = list.find((s) => s && s.id === scheduleId);
   if (!sched) throw new Error(`schedule not found: ${scheduleId}`);
   return sched;
+}
+
+/**
+ * @param {string} scheduleId
+ * @param {string} line
+ */
+function appendJobLog(scheduleId, line) {
+  const logPath = join("/var/log/hdc-runner", `${scheduleId}.log`);
+  try {
+    appendFileSync(logPath, line, "utf8");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @param {string} jobId
+ * @param {string} line
+ */
+function appendUiJobLog(jobId, line) {
+  const logPath = join(META_ROOT, "jobs", `${jobId}.log`);
+  try {
+    appendFileSync(logPath, line, "utf8");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @param {string} jobId
+ * @param {Record<string, unknown>} patch
+ */
+function updateUiJobMeta(jobId, patch) {
+  const path = join(META_ROOT, "jobs", `${jobId}.json`);
+  if (!existsSync(path)) return;
+  const current = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, JSON.stringify({ ...current, ...patch }, null, 2), "utf8");
+}
+
+function clearActiveJob() {
+  writeFileSync(join(META_ROOT, "jobs", "active.json"), "{}", "utf8");
 }
 
 /**
@@ -77,10 +122,56 @@ function buildDiscordMessage(opts) {
   return ok ? "completed" : "failed (no output captured)";
 }
 
+/**
+ * @param {object} opts
+ * @param {string} opts.title
+ * @param {string} opts.message
+ * @param {boolean} [opts.silent]
+ * @param {string} [opts.webhookVaultKey]
+ * @returns {Promise<{ ok: boolean; skipped?: boolean; error?: string }>}
+ */
+async function sendDiscordNotification(opts) {
+  const title = String(opts.title ?? "").trim();
+  const message = String(opts.message ?? "").trim();
+  if (!title && !message) return { ok: false, skipped: true };
+
+  const opsDiscordUrl = pathToFileURL(
+    join(INSTALL_ROOT, "tools/hdc/lib/ops-discord-notify.mjs"),
+  ).href;
+  const vaultAccessUrl = pathToFileURL(
+    join(INSTALL_ROOT, "tools/hdc/lib/vault-access.mjs"),
+  ).href;
+  const nodeCliDepsUrl = pathToFileURL(
+    join(INSTALL_ROOT, "tools/hdc/lib/node-cli-deps.mjs"),
+  ).href;
+
+  const { formatDiscordContent, postDiscordWebhook, redactIpsFromText } =
+    await import(opsDiscordUrl);
+  const { createVaultAccess, vaultDepsFromCli } = await import(vaultAccessUrl);
+  const { createNodeCliDeps } = await import(nodeCliDepsUrl);
+
+  const deps = createNodeCliDeps();
+  const vault = createVaultAccess(vaultDepsFromCli(deps));
+  const webhookKey = opts.webhookVaultKey || "HDC_OPS_DISCORD_WEBHOOK_URL";
+  let url = String(deps.env[webhookKey] ?? "").trim();
+  if (!url) {
+    url = String(await vault.getSecret(webhookKey, { optional: true }) ?? "").trim();
+  }
+
+  if (!url) {
+    return { ok: false, error: `webhook ${webhookKey} not found` };
+  }
+
+  const content = formatDiscordContent(title, redactIpsFromText(message), { env: deps.env });
+  await postDiscordWebhook(url, content, { suppressNotifications: opts.silent === true });
+  return { ok: true };
+}
+
 async function main() {
   const scheduleId = process.argv[2]?.trim();
+  const uiJobId = process.argv[3]?.trim() || null;
   if (!scheduleId) {
-    process.stderr.write("usage: run-scheduled-job.mjs <schedule-id>\n");
+    process.stderr.write("usage: run-scheduled-job.mjs <schedule-id> [ui-job-id]\n");
     process.exit(2);
   }
 
@@ -95,6 +186,35 @@ async function main() {
     process.exit(1);
   }
 
+  const startedAt = new Date().toISOString();
+  const startLine = `\n=== ${startedAt} job ${scheduleId} started ===\n`;
+  appendJobLog(scheduleId, startLine);
+  if (uiJobId) appendUiJobLog(uiJobId, startLine);
+  process.stderr.write(`[hdc-runner] job ${scheduleId}: started at ${startedAt}\n`);
+
+  const discord = schedule.resolved_discord ?? {};
+  const discordPrefix = discord.title_prefix || "[HDC]";
+  const discordWebhookKey =
+    typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
+      ? discord.webhook_vault_key.trim()
+      : "HDC_OPS_DISCORD_WEBHOOK_URL";
+
+  if (discord.enabled === true) {
+    const startResult = await sendDiscordNotification({
+      title: `${discordPrefix} ${scheduleId} — started`,
+      message: `Scheduled job started at ${startedAt}`,
+      silent: true,
+      webhookVaultKey: discordWebhookKey,
+    });
+    if (startResult.skipped) {
+      process.stderr.write(`[hdc-runner] job ${scheduleId}: discord start skipped\n`);
+    } else {
+      process.stderr.write(
+        `[hdc-runner] job ${scheduleId}: discord start ${startResult.ok ? "sent" : "failed"}${startResult.error ? `: ${startResult.error}` : ""}\n`,
+      );
+    }
+  }
+
   const cliPath = join(INSTALL_ROOT, "tools/hdc/cli.mjs");
   const args =
     cliArgs.length > 0 ? [cliPath, ...cli, "--", ...cliArgs] : [cliPath, ...cli];
@@ -104,22 +224,35 @@ async function main() {
     cwd: INSTALL_ROOT,
     encoding: "utf8",
     env: process.env,
+    maxBuffer: CLI_MAX_BUFFER,
   });
 
   const stderr = r.stderr ?? "";
   const stdout = r.stdout ?? "";
-  const exitCode = r.status ?? 1;
+  const exitCode = r.status ?? (r.error ? 1 : 1);
   const ok = exitCode === 0;
 
-  const logPath = join("/var/log/hdc-runner", `${scheduleId}.log`);
-  try {
-    appendFileSync(
-      logPath,
-      `\n--- ${new Date().toISOString()} exit=${exitCode} ---\n${stderr}\n${stdout}\n`,
-      "utf8",
+  if (r.error) {
+    process.stderr.write(
+      `[hdc-runner] job ${scheduleId}: cli spawn error: ${r.error.message}\n`,
     );
-  } catch {
-    /* ignore */
+  }
+
+  appendJobLog(
+    scheduleId,
+    `\n--- ${new Date().toISOString()} exit=${exitCode} ---\n${stderr}\n${stdout}\n`,
+  );
+  if (uiJobId) {
+    appendUiJobLog(
+      uiJobId,
+      `\n--- ${new Date().toISOString()} exit=${exitCode} ---\n${stderr}\n${stdout}\n`,
+    );
+    updateUiJobMeta(uiJobId, {
+      status: ok ? "completed" : "failed",
+      exit_code: exitCode,
+      finished_at: new Date().toISOString(),
+    });
+    clearActiveJob();
   }
 
   const mail = schedule.resolved_mail ?? {};
@@ -150,21 +283,15 @@ async function main() {
     }
   }
 
-  const discord = schedule.resolved_discord ?? {};
   const shouldDiscord = discord.enabled === true && (!discord.on_failure_only || !ok);
   if (shouldDiscord) {
-    const opsDiscordUrl = pathToFileURL(
-      join(INSTALL_ROOT, "tools/hdc/lib/ops-discord-notify.mjs"),
-    ).href;
-    const { redactIpsFromText, sendOpsDiscordNotifyBestEffort } = await import(opsDiscordUrl);
-    const prefix = discord.title_prefix || "[HDC]";
-    const title = `${prefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
+    const title = `${discordPrefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
     const message = buildDiscordMessage({ ok, stderr, stdout, reportPath });
-    const discordResult = sendOpsDiscordNotifyBestEffort({
+    const discordResult = await sendDiscordNotification({
       title,
-      message: redactIpsFromText(message),
-      env: process.env,
+      message,
       silent: ok,
+      webhookVaultKey: discordWebhookKey,
     });
     if (discordResult.skipped) {
       process.stderr.write(`[hdc-runner] job ${scheduleId}: discord skipped\n`);

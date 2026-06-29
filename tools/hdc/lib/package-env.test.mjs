@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyDotenvFile,
@@ -16,6 +16,7 @@ import {
   loadMergedRepoDotenv,
   resolveEnvIncludes,
 } from "./package-env.mjs";
+import { clearBwSessionProcessCache, ensureBwUnlocked, getProcessBwSession } from "./vaultwarden-cli.mjs";
 
 describe("parseDotenvText / applyDotenvFile", () => {
   it("parses quoted values and applies to target env", () => {
@@ -136,6 +137,78 @@ describe("buildPackageRunEnv", () => {
     buildPackageRunEnv(deps, publicRoot, manifest);
     buildPackageRunEnv(deps, publicRoot, manifest);
     expect(warnings.filter((w) => w.includes("HDC_PROXMOX_API_TOKEN")).length).toBe(1);
+  });
+
+  it("passes BW_SESSION into package run env when vaultwarden session is active", async () => {
+    clearBwSessionProcessCache();
+    const publicRoot = mkdtempSync(join(tmpdir(), "hdc-bw-session-"));
+    mkdirSync(join(publicRoot, "packages/services/demo"), { recursive: true });
+    writeFileSync(
+      join(publicRoot, "packages/services/demo/manifest.json"),
+      JSON.stringify({ id: "demo", verbs: { query: { script: "run.mjs" } } }),
+      "utf8",
+    );
+    const ORG_ID = "org-1111-aaaa-bbbb-cccc";
+    const COLL_ID = "coll-2222-dddd-eeee-ffff";
+    const spawnSync = vi.fn((exe, args) => {
+      const key = args.join(" ");
+      if (key === "--version") return { status: 0, stdout: "2024.1.0", stderr: "" };
+      if (key === "config server https://vault.example.test") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      if (key === `list items --collectionid ${COLL_ID}`) {
+        return { status: 0, stdout: "[]", stderr: "" };
+      }
+      return { status: 1, stdout: "", stderr: `unexpected: ${key}` };
+    });
+    /** @type {NodeJS.ProcessEnv} */
+    const parent = {
+      HDC_SECRET_BACKEND: "vaultwarden",
+      HDC_VAULTWARDEN_URL: "https://vault.example.test",
+      HDC_VAULTWARDEN_EMAIL: "ops@example.test",
+      HDC_VAULTWARDEN_ORGANIZATION_ID: ORG_ID,
+      HDC_VAULTWARDEN_COLLECTION_ID: COLL_ID,
+      BW_SESSION: "inherited-session-key",
+    };
+    await ensureBwUnlocked(
+      {
+        env: parent,
+        log: () => {},
+        error: () => {},
+        warn: () => {},
+        readLineQuestion: async () => "",
+        spawnSync,
+      },
+      async () => null,
+      async () => {},
+    );
+    expect(getProcessBwSession()).toBe("inherited-session-key");
+
+    const manifest = {
+      path: join(publicRoot, "packages/services/demo/manifest.json"),
+      dir: join(publicRoot, "packages/services/demo"),
+      raw: { id: "demo", verbs: { query: { script: "run.mjs" } } },
+    };
+    const runEnv = buildPackageRunEnv(
+      {
+        env: parent,
+        packagesDir: (root) => join(root, "packages"),
+        join,
+        warn: () => {},
+        existsSync: (p) => {
+          try {
+            readFileSync(p);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      },
+      publicRoot,
+      manifest,
+    );
+    expect(runEnv.BW_SESSION).toBe("inherited-session-key");
+    clearBwSessionProcessCache();
   });
 });
 

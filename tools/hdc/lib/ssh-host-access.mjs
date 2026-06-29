@@ -369,8 +369,7 @@ export async function resolveProxmoxSshPassword(opts) {
   /** @type {string | null} */
   let password = null;
   if (!dryRun) {
-    const data = (await vault.readSecrets({})) ?? {};
-    const stored = typeof data[vaultKey] === "string" ? data[vaultKey].trim() : "";
+    const stored = String(await vault.getSecret(vaultKey, { optional: true })).trim();
     if (stored && sshReachableWithPassword(target, spawnSync, env, stored)) {
       password = stored;
     } else if (stored) {

@@ -63,10 +63,11 @@ export async function resolveHdcPasswordForSystem(systemId, vaultAccess, opts = 
   if (!pending) {
     pending = (async () => {
       await vaultAccess.unlock({});
-      const data = await vaultAccess.readSecrets({ createIfMissing: false });
-      const existing = data?.[vaultKey];
-      if (typeof existing === "string" && existing.trim()) {
-        return existing.trim();
+      const existing = String(
+        await vaultAccess.getSecret(vaultKey, { optional: true }),
+      ).trim();
+      if (existing) {
+        return existing;
       }
       if (opts.autoGenerate === false) {
         throw new Error(`${vaultKey} is not set`);

@@ -135,12 +135,21 @@ function stripTrailingCommas(text) {
 }
 
 /**
+ * Remove a leading UTF-8 BOM (U+FEFF) when present.
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripUtf8Bom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
  * @param {string} text
  * @param {string} [label]
  * @returns {unknown}
  */
 export function parseJsonc(text, label = "config") {
-  const stripped = stripJsonc(text);
+  const stripped = stripJsonc(stripUtf8Bom(text));
   try {
     return JSON.parse(stripped);
   } catch (e) {
@@ -324,7 +333,7 @@ export function readResolvedPackageConfigJson(resolved, opts = {}) {
     throw missingRepoFileError(resolved);
   }
 
-  const raw = readFileSync(resolved.path, "utf8");
+  const raw = stripUtf8Bom(readFileSync(resolved.path, "utf8"));
   if (opts.preprocess === false) {
     return JSON.parse(raw);
   }

@@ -71,6 +71,129 @@ describe("createVaultAccess secret backend", () => {
     expect(v).toBe("local-val");
     expect(deps._capture.warn.some((m) => m.includes("Vaultwarden backend unavailable"))).toBe(true);
   });
+
+  it("readSecrets bulk-reads vaultwarden collection in one list items call", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-va-"));
+    writeVault(join(root, "vault.enc"), "p", { HDC_VAULTWARDEN_MASTER_PASSWORD: "master-pass" });
+    const ORG_ID = "org-1111-aaaa-bbbb-cccc";
+    const COLL_ID = "coll-2222-dddd-eeee-ffff";
+    const spawnSync = vi.fn((exe, args) => {
+      const key = args.join(" ");
+      if (key === "--version" || key === "bw --version") {
+        return { status: 0, stdout: "2024.1.0", stderr: "" };
+      }
+      if (key === "config server https://vault.example.test") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      if (key === "login --check") return { status: 0, stdout: "", stderr: "" };
+      if (key === "unlock --passwordenv BW_PASSWORD --raw") {
+        return { status: 0, stdout: "session-key", stderr: "" };
+      }
+      if (key === "list organizations") {
+        return { status: 0, stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]), stderr: "" };
+      }
+      if (key === `list org-collections --organizationid ${ORG_ID}`) {
+        return { status: 0, stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]), stderr: "" };
+      }
+      if (key === `list items --collectionid ${COLL_ID}`) {
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "i1",
+              name: "HDC_ONE",
+              organizationId: ORG_ID,
+              login: { username: "HDC_ONE", password: "one", uris: [] },
+            },
+            {
+              id: "i2",
+              name: "HDC_TWO",
+              organizationId: ORG_ID,
+              login: { username: "HDC_TWO", password: "two", uris: [] },
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: `unexpected: ${key}` };
+    });
+    const deps = makeDeps({
+      envVars: {
+        HDC_VAULT_PASSPHRASE: "p",
+        HDC_SECRET_BACKEND: "vaultwarden",
+        HDC_VAULTWARDEN_URL: "https://vault.example.test",
+        HDC_VAULTWARDEN_EMAIL: "ops@example.test",
+        HDC_VAULTWARDEN_ORGANIZATION_ID: ORG_ID,
+        HDC_VAULTWARDEN_COLLECTION_ID: COLL_ID,
+      },
+      spawnSync,
+    });
+    const a = createVaultAccess(vaultDepsFromCli(deps));
+    const secrets = await a.readSecrets({ createIfMissing: false });
+    expect(secrets).toMatchObject({ HDC_ONE: "one", HDC_TWO: "two" });
+    const getPasswordCalls = spawnSync.mock.calls.filter(
+      (c) => Array.isArray(c[1]) && c[1][0] === "get" && c[1][1] === "password",
+    );
+    expect(getPasswordCalls.length).toBe(0);
+  });
+
+  it("getSecret caches vaultwarden values within the same vault access instance", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-va-"));
+    writeVault(join(root, "vault.enc"), "p", { HDC_VAULTWARDEN_MASTER_PASSWORD: "master-pass" });
+    const ORG_ID = "org-1111-aaaa-bbbb-cccc";
+    const COLL_ID = "coll-2222-dddd-eeee-ffff";
+    let listItemsCalls = 0;
+    const spawnSync = vi.fn((exe, args) => {
+      const key = args.join(" ");
+      if (key === "--version" || key === "bw --version") {
+        return { status: 0, stdout: "2024.1.0", stderr: "" };
+      }
+      if (key === "config server https://vault.example.test") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      if (key === "login --check") return { status: 0, stdout: "", stderr: "" };
+      if (key === "unlock --passwordenv BW_PASSWORD --raw") {
+        return { status: 0, stdout: "session-key", stderr: "" };
+      }
+      if (key === "list organizations") {
+        return { status: 0, stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]), stderr: "" };
+      }
+      if (key === `list org-collections --organizationid ${ORG_ID}`) {
+        return { status: 0, stdout: JSON.stringify([{ id: COLL_ID, name: "HDC" }]), stderr: "" };
+      }
+      if (key === `list items --collectionid ${COLL_ID}`) {
+        listItemsCalls += 1;
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "i1",
+              name: "HDC_CACHED",
+              organizationId: ORG_ID,
+              login: { username: "HDC_CACHED", password: "cached-val", uris: [] },
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: `unexpected: ${key}` };
+    });
+    const deps = makeDeps({
+      envVars: {
+        HDC_VAULT_PASSPHRASE: "p",
+        HDC_SECRET_BACKEND: "vaultwarden",
+        HDC_VAULTWARDEN_URL: "https://vault.example.test",
+        HDC_VAULTWARDEN_EMAIL: "ops@example.test",
+        HDC_VAULTWARDEN_ORGANIZATION_ID: ORG_ID,
+        HDC_VAULTWARDEN_COLLECTION_ID: COLL_ID,
+      },
+      spawnSync,
+    });
+    const a = createVaultAccess(vaultDepsFromCli(deps));
+    expect(await a.getSecret("HDC_CACHED", { optional: true })).toBe("cached-val");
+    expect(await a.getSecret("HDC_CACHED", { optional: true })).toBe("cached-val");
+    expect(listItemsCalls).toBe(2);
+  });
 });
 
 describe("createVaultAccess local vault", () => {

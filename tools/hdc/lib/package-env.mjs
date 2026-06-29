@@ -7,6 +7,8 @@ import { ENV_KEY_TO_PACKAGE_ID } from "./env-key-packages.mjs";
 import { tryLoadPackageConfigFromPackageRoot } from "./package-config.mjs";
 import { hdcPrivateRoot } from "./private-repo.mjs";
 import { manifestId } from "../manifests.mjs";
+import { resolveSecretBackendMode } from "./secret-backend.mjs";
+import { getProcessBwSession } from "./vaultwarden-cli.mjs";
 
 export { GLOBAL_ENV_KEYS } from "./env-example-split.mjs";
 
@@ -273,6 +275,13 @@ export function buildPackageRunEnv(deps, publicRoot, manifest, baseEnv) {
   loadMergedRepoDotenv(publicRoot, pkgRel, runEnv, deps);
 
   applyRootEnvFallback(runEnv, deps, publicRoot, targetId);
+
+  if (resolveSecretBackendMode(runEnv) === "vaultwarden") {
+    const bwSession = getProcessBwSession();
+    if (bwSession) {
+      runEnv.BW_SESSION = bwSession;
+    }
+  }
 
   return runEnv;
 }

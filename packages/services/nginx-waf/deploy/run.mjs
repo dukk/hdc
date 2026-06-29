@@ -13,6 +13,7 @@ import { stderr as errout } from "node:process";
 import { deployTargetInventory, logDeployInventoryStatus } from "../../../lib/deploy-inventory.mjs";
 import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
+import { resolveBindTsigForAcme } from "../../../lib/bind-tsig-for-acme.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { authorizeProxmoxForHost } from "../../../infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 import { isProxmoxHostDown } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
@@ -547,12 +548,11 @@ async function deployOne(deployment, flags, global, sites, log) {
 async function loadSecrets(global, vault) {
   const email = await loadLetsEncryptEmail(global, vault);
   let tsigSecret = "";
-  if (global.challenge === "dns-01") {
-    tsigSecret = String(
-      await vault.getSecret(global.dnsTsigVaultKey, {
-        promptLabel: `vault secret ${global.dnsTsigVaultKey}`,
-      }),
-    ).trim();
+  const needsTsig =
+    global.challenge === "dns-01" ||
+    (global.dnsZone && global.dnsNameservers?.length);
+  if (needsTsig) {
+    tsigSecret = await resolveBindTsigForAcme(vault, global.dnsTsigVaultKey, root);
   }
   return { email, tsigSecret };
 }

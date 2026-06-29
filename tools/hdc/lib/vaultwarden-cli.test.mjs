@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bwGetPassword,
   bwListItemNames,
+  bwReadOrgSecrets,
   bwSetPassword,
   clearBwSessionProcessCache,
   ensureBwUnlocked,
   resolveBwCollectionId,
+  resolveBwCommand,
   resolveBwExecutable,
   resolveBwOrganizationId,
 } from "./vaultwarden-cli.mjs";
@@ -76,26 +78,10 @@ describe("vaultwarden-cli", () => {
     expect(resolveBwExecutable(deps)).toBe("bw");
   });
 
-  it("resolveBwOrganizationId uses env when it matches bw list organizations", () => {
-    const deps = makeDeps();
+  it("resolveBwOrganizationId trusts env id without list organizations", () => {
+    const deps = makeDeps({ responses: {} });
     expect(resolveBwOrganizationId(deps, "sess")).toBe(ORG_ID);
-  });
-
-  it("resolveBwOrganizationId falls back to name when env id is stale", () => {
-    const deps = makeDeps({
-      envVars: {
-        HDC_VAULTWARDEN_ORGANIZATION_ID: "stale-org-id",
-        HDC_VAULTWARDEN_ORGANIZATION_NAME: "HDC",
-      },
-      responses: {
-        "list organizations": {
-          status: 0,
-          stdout: JSON.stringify([{ id: ORG_ID, name: "HDC" }]),
-        },
-      },
-    });
-    expect(resolveBwOrganizationId(deps, "sess")).toBe(ORG_ID);
-    expect(deps._capture.warn.some((m) => m.includes("stale-org-id"))).toBe(true);
+    expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[1] === "organizations")).toBe(false);
   });
 
   it("resolveBwOrganizationId resolves by name when env unset", () => {
@@ -114,9 +100,10 @@ describe("vaultwarden-cli", () => {
     expect(resolveBwOrganizationId(deps, "sess")).toBe(ORG_ID);
   });
 
-  it("resolveBwCollectionId validates collection in org", () => {
-    const deps = makeDeps();
+  it("resolveBwCollectionId trusts env id without list org-collections", () => {
+    const deps = makeDeps({ responses: {} });
     expect(resolveBwCollectionId(deps, "sess", ORG_ID)).toBe(COLL_ID);
+    expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[1] === "org-collections")).toBe(false);
   });
 
   it("ensureBwUnlocked uses stored master password and caches session", async () => {
@@ -127,6 +114,7 @@ describe("vaultwarden-cli", () => {
         "config server https://vault.example.test": { status: 0 },
         "login --check": { status: 0 },
         "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-key-1" },
+        [`list items --collectionid ${COLL_ID}`]: { status: 0, stdout: "[]" },
       },
     });
     const readLocal = vi.fn(async () => "master-pass");
@@ -136,6 +124,128 @@ describe("vaultwarden-cli", () => {
     expect(s1).toBe("session-key-1");
     expect(s2).toBe("session-key-1");
     expect(readLocal).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolveBwCommand caches result across spawns", () => {
+    const deps = makeDeps({
+      responses: {
+        "--version": { status: 0, stdout: "2024.1.0" },
+        "bw:--version": { status: 0, stdout: "2024.1.0" },
+      },
+    });
+    resolveBwCommand(deps);
+    resolveBwCommand(deps);
+    const versionCalls = deps.spawnSync.mock.calls.filter(
+      (c) => Array.isArray(c[1]) && c[1].includes("--version"),
+    );
+    expect(versionCalls.length).toBe(1);
+  });
+
+  it("ensureBwUnlocked reuses valid BW_SESSION from environment", async () => {
+    const deps = makeDeps({
+      envVars: { BW_SESSION: "inherited-session" },
+      responses: {
+        "config server https://vault.example.test": { status: 0 },
+        [`list items --collectionid ${COLL_ID}`]: { status: 0, stdout: "[]" },
+      },
+    });
+    const readLocal = vi.fn(async () => null);
+    const writeLocal = vi.fn(async () => {});
+    const session = await ensureBwUnlocked(deps, readLocal, writeLocal);
+    expect(session).toBe("inherited-session");
+    expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[0] === "unlock")).toBe(false);
+    expect(readLocal).not.toHaveBeenCalled();
+  });
+
+  it("ensureBwUnlocked omits stale BW_SESSION from env during password unlock", async () => {
+    /** @type {NodeJS.ProcessEnv[]} */
+    const unlockEnvs = [];
+    let listItemsCalls = 0;
+    const deps = makeDeps({
+      envVars: { BW_SESSION: "expired-session" },
+      responses: {
+        "config server https://vault.example.test": { status: 0 },
+        "login --check": { status: 0 },
+        "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "fresh-session" },
+      },
+    });
+    const origSpawn = deps.spawnSync;
+    deps.spawnSync = vi.fn((exe, args, opts) => {
+      const key = args.join(" ");
+      if (key === `list items --collectionid ${COLL_ID}`) {
+        listItemsCalls += 1;
+        if (listItemsCalls === 1) {
+          return { status: 1, stdout: "", stderr: "invalid session" };
+        }
+        return { status: 0, stdout: "[]" };
+      }
+      if (Array.isArray(args) && args[0] === "unlock") {
+        unlockEnvs.push({ ...(opts?.env ?? {}) });
+      }
+      return origSpawn(exe, args, opts);
+    });
+    const readLocal = vi.fn(async () => "master-pass");
+    const writeLocal = vi.fn(async () => {});
+    const session = await ensureBwUnlocked(deps, readLocal, writeLocal);
+    expect(session).toBe("fresh-session");
+    expect(unlockEnvs.length).toBeGreaterThan(0);
+    expect(unlockEnvs[0].BW_SESSION).toBeUndefined();
+    expect(unlockEnvs[0].BW_PASSWORD).toBe("master-pass");
+  });
+
+  it("bwGetPassword reads password from list items without get password spawn", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "item-1",
+              name: "HDC_X",
+              organizationId: ORG_ID,
+              login: { username: "HDC_X", password: "embedded-secret", uris: [] },
+            },
+          ]),
+        },
+      },
+    });
+    expect(bwGetPassword(deps, "sess", "HDC_X")).toBe("embedded-secret");
+    expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[0] === "get" && c[1]?.[1] === "password")).toBe(
+      false,
+    );
+  });
+
+  it("bwReadOrgSecrets bulk-reads from list items without per-item get password", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "item-a",
+              name: "HDC_A",
+              organizationId: ORG_ID,
+              login: { username: "HDC_A", password: "secret-a", uris: [] },
+            },
+            {
+              id: "item-b",
+              name: "HDC_B",
+              organizationId: ORG_ID,
+              login: { username: "HDC_B", password: "secret-b", uris: [] },
+            },
+          ]),
+        },
+      },
+    });
+    expect(bwReadOrgSecrets(deps, "sess")).toEqual({ HDC_A: "secret-a", HDC_B: "secret-b" });
+    const getPasswordCalls = deps.spawnSync.mock.calls.filter(
+      (c) => Array.isArray(c[1]) && c[1][0] === "get" && c[1][1] === "password",
+    );
+    expect(getPasswordCalls.length).toBe(0);
+    const listCalls = deps.spawnSync.mock.calls.filter(
+      (c) => Array.isArray(c[1]) && c[1][0] === "list" && c[1][1] === "items",
+    );
+    expect(listCalls.length).toBe(1);
   });
 
   it("bwGetPassword returns org item password by id", () => {

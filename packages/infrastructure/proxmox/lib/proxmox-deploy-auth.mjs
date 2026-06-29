@@ -92,11 +92,10 @@ export function pveTokenAclId(parsed) {
 export async function readProxmoxApiTokenRaw({ vault, hostId, env: processEnv = env }) {
   const envTok = String(processEnv.HDC_PROXMOX_API_TOKEN ?? "").trim();
   if (envTok) return envTok;
-  const data = (await vault.readSecrets({})) ?? {};
   const perKey = vaultTokenKeyForHost(hostId);
-  const perVal = typeof data[perKey] === "string" ? data[perKey].trim() : "";
+  const perVal = String(await vault.getSecret(perKey, { optional: true })).trim();
   if (perVal) return perVal;
-  const globVal = typeof data[VAULT_KEY_GLOBAL] === "string" ? data[VAULT_KEY_GLOBAL].trim() : "";
+  const globVal = String(await vault.getSecret(VAULT_KEY_GLOBAL, { optional: true })).trim();
   return globVal || null;
 }
 
@@ -205,10 +204,9 @@ export async function authorizeProxmoxForHost(opts) {
   }
 
   if (!authorization) {
-    const data = (await vault.readSecrets({})) ?? {};
     const perKey = vaultTokenKeyForHost(host.id);
-    const perVal = typeof data[perKey] === "string" ? data[perKey].trim() : "";
-    const globVal = typeof data[VAULT_KEY_GLOBAL] === "string" ? data[VAULT_KEY_GLOBAL].trim() : "";
+    const perVal = String(await vault.getSecret(perKey, { optional: true })).trim();
+    const globVal = String(await vault.getSecret(VAULT_KEY_GLOBAL, { optional: true })).trim();
     if (perVal) {
       const auth = normalizePveAuthorization(perVal);
       try {
@@ -230,9 +228,9 @@ export async function authorizeProxmoxForHost(opts) {
   }
 
   if (!authorization) {
-    const data = (await vault.readSecrets({})) ?? {};
     const perKey = vaultTokenKeyForHost(host.id);
-    const hasPerHost = typeof data[perKey] === "string" && data[perKey].trim();
+    const perVal = String(await vault.getSecret(perKey, { optional: true })).trim();
+    const hasPerHost = perVal.length > 0;
     const token = await vault.getSecret(hasPerHost ? perKey : VAULT_KEY_GLOBAL, {
       promptLabel: hasPerHost
         ? `Proxmox API token for ${host.id} (user@realm!tokenid=secret, or PVEAPIToken=…)`

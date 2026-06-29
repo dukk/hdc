@@ -4,6 +4,8 @@
  *
  * Usage: hdc run service paperclip query -- [--instance a]
  *        hdc run service paperclip query -- --live
+ *        hdc run service paperclip query -- --bootstrap-company --dry-run
+ *        hdc run service paperclip query -- --bootstrap-company --yes
  */
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +20,8 @@ import {
 } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/paperclip-install.mjs";
 import { queryPaperclipInCt } from "../lib/query-status.mjs";
+import { bootstrapPaperclipCompany, resolvePaperclipCompanyConfig } from "../lib/paperclip-company-bootstrap.mjs";
+import { createPaperclipVaultAccess } from "../lib/paperclip-vault-deps.mjs";
 import { loadPackageConfigFromPackageRoot, tryLoadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -60,8 +64,55 @@ async function main() {
       : PACKAGE_CONFIG_EXAMPLE;
   const flags = parseArgvFlags(process.argv.slice(2));
   const live = flagGet(flags, "live") !== undefined;
+  const bootstrapCompany = flagGet(flags, "bootstrap-company", "bootstrap_company") !== undefined;
+  const bootstrapYes = flagGet(flags, "yes") !== undefined;
+  const bootstrapDryRun = flagGet(flags, "dry-run", "dry_run") !== undefined || !bootstrapYes;
 
   errout.write(`[hdc] ${target} ${verb}: config ${rel} ${loaded.ok ? "loaded" : "not loaded"}.\n`);
+
+  if (bootstrapCompany) {
+    if (!cfg) {
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, error: "config required for --bootstrap-company" }, null, 2)}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const vault = createPaperclipVaultAccess();
+    await vault.unlock({});
+    const companyCfg = resolvePaperclipCompanyConfig(cfg);
+    const apiKey = String(
+      await vault.getSecret(companyCfg.api_key_vault_key, {
+        optional: bootstrapDryRun,
+        promptLabel: "Paperclip API key",
+      }),
+    ).trim();
+    if (!bootstrapDryRun && !apiKey) {
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, error: `missing vault ${companyCfg.api_key_vault_key}` }, null, 2)}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    errout.write(
+      `[hdc] ${target} ${verb}: bootstrap company ${bootstrapDryRun ? "(dry-run)" : ""} …\n`,
+    );
+    try {
+      const result = await bootstrapPaperclipCompany({
+        cfg,
+        apiKey: apiKey || "dry-run-placeholder",
+        dryRun: bootstrapDryRun,
+      });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      process.exitCode = result.ok ? 0 : 1;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errout.write(`[hdc] ${target} ${verb}: bootstrap failed: ${msg}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: false, error: msg }, null, 2)}\n`);
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   /** @type {unknown[]} */
   let deployments = [];

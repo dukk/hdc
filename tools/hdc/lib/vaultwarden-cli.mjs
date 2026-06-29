@@ -20,12 +20,33 @@ let processBwCollectionId = null;
 /** @type {Array<{ id: string; name: string; organizationId?: string }> | null} */
 let processBwOrgItems = null;
 
+/** Full cipher objects from the last `list items` call (passwords when vault is unlocked). */
+/** @type {Array<Record<string, unknown>> | null} */
+let processBwOrgFullItems = null;
+
+/** @type {{ command: string; prefixArgs: string[] } | null} */
+let cachedBwCommand = null;
+
+/** @type {Promise<string> | null} */
+let processBwUnlockPromise = null;
+
 /** @internal Test helper */
 export function clearBwSessionProcessCache() {
   processBwSession = null;
   processBwOrganizationId = null;
   processBwCollectionId = null;
   processBwOrgItems = null;
+  processBwOrgFullItems = null;
+  cachedBwCommand = null;
+  processBwUnlockPromise = null;
+}
+
+/**
+ * Bitwarden session for the current hdc process (after unlock). Used to pass BW_SESSION to child package scripts.
+ * @returns {string | null}
+ */
+export function getProcessBwSession() {
+  return processBwSession;
 }
 
 /**
@@ -59,7 +80,7 @@ function resolveBwFromExecutableOverride(override, env) {
  * @param {VaultwardenCliDeps} deps
  * @returns {{ command: string; prefixArgs: string[] }}
  */
-export function resolveBwCommand(deps) {
+function resolveBwCommandUncached(deps) {
   const override = String(deps.env.HDC_BW_EXECUTABLE ?? "").trim();
   if (override) {
     const shim = resolveBwFromExecutableOverride(override, deps.env);
@@ -109,6 +130,16 @@ export function resolveBwCommand(deps) {
 
 /**
  * @param {VaultwardenCliDeps} deps
+ * @returns {{ command: string; prefixArgs: string[] }}
+ */
+export function resolveBwCommand(deps) {
+  if (cachedBwCommand) return cachedBwCommand;
+  cachedBwCommand = resolveBwCommandUncached(deps);
+  return cachedBwCommand;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
  * @returns {string}
  */
 export function resolveBwExecutable(deps) {
@@ -126,8 +157,11 @@ function spawnBw(deps, bwArgs, opts = {}) {
   const spawn = deps.spawnSync ?? spawnSync;
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...deps.env };
+  if (opts.password) {
+    delete env.BW_SESSION;
+    env.BW_PASSWORD = opts.password;
+  }
   if (opts.session) env.BW_SESSION = opts.session;
-  if (opts.password) env.BW_PASSWORD = opts.password;
   const r = spawn(command, [...prefixArgs, ...bwArgs], {
     encoding: "utf8",
     env,
@@ -298,6 +332,40 @@ function bwUnlockRaw(deps, masterPassword) {
 }
 
 /**
+ * @param {string} msg
+ * @returns {string}
+ */
+function formatBwErrorMessage(msg) {
+  const raw = String(msg || "unknown error");
+  const firstLine = raw.split("\n")[0].trim();
+  if (/master password/i.test(firstLine)) {
+    return "session invalid (master password required)";
+  }
+  if (firstLine.includes("ERR_USE_AFTER_CLOSE")) {
+    return "session invalid (bw interactive prompt failed)";
+  }
+  return firstLine.length > 240 ? `${firstLine.slice(0, 237)}...` : firstLine;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ */
+function bwSessionIsValid(deps, session) {
+  const collectionId = vaultwardenCollectionIdFromEnv(deps.env);
+  if (collectionId) {
+    const r = spawnBw(deps, ["list", "items", "--collectionid", collectionId], {
+      capture: true,
+      session,
+      allowMissing: true,
+    });
+    return r.ok;
+  }
+  const r = spawnBw(deps, ["list", "organizations"], { capture: true, session, allowMissing: true });
+  return r.ok;
+}
+
+/**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
  * @returns {Array<{ id: string; name: string }>}
@@ -306,7 +374,7 @@ function bwListOrganizations(deps, session) {
   const r = spawnBw(deps, ["list", "organizations"], { capture: true, session });
   if (!r.ok || !r.stdout) {
     throw new Error(
-      `bw list organizations failed: ${r.stderr || r.stdout || "unknown error"}; set HDC_VAULTWARDEN_ORGANIZATION_ID in .env`,
+      `bw list organizations failed: ${formatBwErrorMessage(r.stderr || r.stdout)}; set HDC_VAULTWARDEN_ORGANIZATION_ID in .env`,
     );
   }
   let orgs;
@@ -343,19 +411,13 @@ function formatOrganizationChoices(orgs) {
 export function resolveBwOrganizationId(deps, session) {
   if (processBwOrganizationId) return processBwOrganizationId;
 
-  const orgs = bwListOrganizations(deps, session);
   const fromEnv = vaultwardenOrganizationIdFromEnv(deps.env);
   if (fromEnv) {
-    const envMatch = orgs.find((o) => o.id === fromEnv);
-    if (envMatch) {
-      processBwOrganizationId = fromEnv;
-      return fromEnv;
-    }
-    deps.warn(
-      `[hdc] vaultwarden: HDC_VAULTWARDEN_ORGANIZATION_ID ${fromEnv} is not in your organizations; trying name lookup`,
-    );
+    processBwOrganizationId = fromEnv;
+    return fromEnv;
   }
 
+  const orgs = bwListOrganizations(deps, session);
   const name = vaultwardenOrganizationNameFromEnv(deps.env);
   const byName = orgs.find((o) => o.name === name);
   if (byName) {
@@ -402,36 +464,6 @@ export function resolveBwCollectionId(deps, session, orgId) {
     );
   }
 
-  const r = spawnBw(deps, ["list", "org-collections", "--organizationid", orgId], { capture: true, session });
-  if (!r.ok || !r.stdout) {
-    const msg = r.stderr || r.stdout || "unknown error";
-    if (String(msg).toLowerCase().includes("organization not found")) {
-      throw new Error(
-        `bw list org-collections failed: organization ${JSON.stringify(orgId)} not found. ` +
-          "Run bw list organizations and set HDC_VAULTWARDEN_ORGANIZATION_ID to an id your account can access.",
-      );
-    }
-    throw new Error(`bw list org-collections failed: ${msg}`);
-  }
-  let collections;
-  try {
-    collections = JSON.parse(r.stdout);
-  } catch {
-    throw new Error("bw list org-collections returned invalid JSON");
-  }
-  if (!Array.isArray(collections)) {
-    throw new Error("bw list org-collections returned unexpected data");
-  }
-  const match = collections.find((c) => c && typeof c === "object" && c.id === fromEnv);
-  if (!match) {
-    const names = collections
-      .map((c) => (c && typeof c === "object" && typeof c.name === "string" ? `${c.name} (${c.id})` : null))
-      .filter(Boolean)
-      .join(", ");
-    throw new Error(
-      `HDC_VAULTWARDEN_COLLECTION_ID ${JSON.stringify(fromEnv)} not found in organization (available: ${names || "none"})`,
-    );
-  }
   processBwCollectionId = fromEnv;
   return fromEnv;
 }
@@ -455,6 +487,22 @@ export function resolveBwOrgContext(deps, session) {
  */
 export async function ensureBwUnlocked(deps, readLocalSecret, writeLocalSecret) {
   if (processBwSession) return processBwSession;
+  if (!processBwUnlockPromise) {
+    processBwUnlockPromise = ensureBwUnlockedInner(deps, readLocalSecret, writeLocalSecret).finally(() => {
+      processBwUnlockPromise = null;
+    });
+  }
+  return processBwUnlockPromise;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {() => Promise<string | null>} readLocalSecret
+ * @param {(key: string, value: string) => Promise<void>} writeLocalSecret
+ * @returns {Promise<string>}
+ */
+async function ensureBwUnlockedInner(deps, readLocalSecret, writeLocalSecret) {
+  if (processBwSession) return processBwSession;
 
   const url = String(deps.env.HDC_VAULTWARDEN_URL ?? "").trim();
   const email = String(deps.env.HDC_VAULTWARDEN_EMAIL ?? "").trim();
@@ -463,6 +511,13 @@ export async function ensureBwUnlocked(deps, readLocalSecret, writeLocalSecret) 
   }
 
   ensureBwConfigured(deps, url);
+
+  const inheritedSession = String(deps.env.BW_SESSION ?? "").trim();
+  if (inheritedSession && bwSessionIsValid(deps, inheritedSession)) {
+    processBwSession = inheritedSession;
+    deps.log("[hdc] vaultwarden: reusing BW_SESSION from environment.");
+    return processBwSession;
+  }
 
   /** @type {string | null} */
   let masterPassword = null;
@@ -508,6 +563,10 @@ export async function ensureBwUnlocked(deps, readLocalSecret, writeLocalSecret) 
     }
   }
 
+  if (!bwSessionIsValid(deps, session)) {
+    throw new Error("bw unlock returned a session that failed validation");
+  }
+
   processBwSession = session;
   deps.log("[hdc] vaultwarden: vault unlocked (session cached for this command).");
 
@@ -550,25 +609,53 @@ function parseBwItemList(stdout) {
  * @param {string} collectionId
  * @returns {Array<{ id: string; name: string; organizationId?: string }>}
  */
-function bwListOrgItems(deps, session, organizationId, collectionId) {
-  if (processBwOrgItems) return processBwOrgItems;
+function bwFetchOrgFullItems(deps, session, organizationId, collectionId) {
+  if (processBwOrgFullItems) return processBwOrgFullItems;
   const r = spawnBw(deps, ["list", "items", "--collectionid", collectionId], { capture: true, session });
-  if (!r.ok || !r.stdout) return [];
+  if (!r.ok || !r.stdout) {
+    processBwOrgFullItems = [];
+    processBwOrgItems = [];
+    return processBwOrgFullItems;
+  }
   const items = parseBwItemList(r.stdout);
-  processBwOrgItems = items
-    .map((it) => {
-      if (!it || typeof it !== "object" || typeof it.name !== "string" || typeof it.id !== "string") {
-        return null;
-      }
-      if (it.organizationId !== organizationId) return null;
-      return {
-        id: it.id,
-        name: it.name,
-        organizationId: typeof it.organizationId === "string" ? it.organizationId : undefined,
-      };
-    })
-    .filter((it) => it !== null);
-  return processBwOrgItems;
+  processBwOrgFullItems = items.filter((it) => {
+    if (!it || typeof it !== "object" || typeof it.name !== "string" || typeof it.id !== "string") {
+      return false;
+    }
+    return it.organizationId === organizationId;
+  });
+  processBwOrgItems = processBwOrgFullItems.map((it) => ({
+    id: /** @type {string} */ (it.id),
+    name: /** @type {string} */ (it.name),
+    organizationId: typeof it.organizationId === "string" ? it.organizationId : undefined,
+  }));
+  return processBwOrgFullItems;
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} organizationId
+ * @param {string} collectionId
+ * @returns {Array<{ id: string; name: string; organizationId?: string }>}
+ */
+function bwListOrgItems(deps, session, organizationId, collectionId) {
+  bwFetchOrgFullItems(deps, session, organizationId, collectionId);
+  return processBwOrgItems ?? [];
+}
+
+/**
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemName
+ * @param {string} organizationId
+ * @returns {Record<string, unknown> | null}
+ */
+function bwFindOrgFullItem(deps, session, itemName, organizationId) {
+  const { collectionId } = resolveBwOrgContext(deps, session);
+  const items = bwFetchOrgFullItems(deps, session, organizationId, collectionId);
+  const exact = items.find((it) => it.name === itemName);
+  return exact ?? null;
 }
 
 /**
@@ -654,7 +741,12 @@ function extractSecretFromBwItem(item) {
  */
 export function bwGetPassword(deps, session, itemName) {
   const { organizationId } = resolveBwOrgContext(deps, session);
-  const itemId = bwFindItemId(deps, session, itemName, organizationId);
+  const cachedItem = bwFindOrgFullItem(deps, session, itemName, organizationId);
+  if (cachedItem) {
+    const fromList = extractSecretFromBwItem(cachedItem);
+    if (typeof fromList === "string" && fromList.length > 0) return fromList;
+  }
+  const itemId = cachedItem && typeof cachedItem.id === "string" ? cachedItem.id : bwFindItemId(deps, session, itemName, organizationId);
   if (!itemId) return null;
   const r = spawnBw(deps, ["get", "password", itemId], { capture: true, session });
   if (r.ok && r.stdout.length > 0) return r.stdout;
@@ -707,6 +799,9 @@ export function bwItemHasSecret(deps, session, itemName) {
  */
 export function bwSetPassword(deps, session, itemName, value) {
   const { organizationId, collectionId } = resolveBwOrgContext(deps, session);
+
+  processBwOrgFullItems = null;
+  processBwOrgItems = null;
 
   const orgItemId = bwFindItemId(deps, session, itemName, organizationId);
   if (orgItemId) {
@@ -771,7 +866,33 @@ export function bwDeleteItem(deps, session, itemName) {
   if (!r.ok) {
     throw new Error(`bw delete item failed for ${itemName}: ${r.stderr || r.stdout || "unknown error"}`);
   }
+  processBwOrgFullItems = null;
+  processBwOrgItems = null;
   return true;
+}
+
+/**
+ * Read all hdc secrets from the HDC organization collection in one `list items` call when possible.
+ * Falls back to per-item `get password` / `get item` when list payload lacks decrypted fields.
+ *
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @returns {Record<string, string>}
+ */
+export function bwReadOrgSecrets(deps, session) {
+  const { organizationId, collectionId } = resolveBwOrgContext(deps, session);
+  const items = bwFetchOrgFullItems(deps, session, organizationId, collectionId);
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const item of items) {
+    if (typeof item.name !== "string" || !item.name) continue;
+    let val = extractSecretFromBwItem(item);
+    if (val === null && typeof item.id === "string") {
+      val = bwGetPassword(deps, session, item.name);
+    }
+    if (typeof val === "string" && val.length > 0) out[item.name] = val;
+  }
+  return out;
 }
 
 /**

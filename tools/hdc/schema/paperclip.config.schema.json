@@ -29,7 +29,36 @@
               "deployment_exposure": { "enum": ["private", "public"] },
               "telemetry_disabled": { "type": "boolean" },
               "better_auth_secret_vault_key": { "type": "string" },
-              "db_password_vault_key": { "type": "string" }
+              "db_password_vault_key": { "type": "string" },
+              "cursor_api_key_vault_key": { "type": "string" },
+              "anthropic_api_key_vault_key": { "type": "string" },
+              "openai_api_key_vault_key": { "type": "string" },
+              "google_gemini_api_key_vault_key": { "type": "string" },
+              "ollama_backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "url"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "url": { "type": "string" },
+                    "primary": { "type": "boolean" },
+                    "notes": { "type": "string" }
+                  }
+                }
+              },
+              "company": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "api_url": { "type": "string" },
+                  "api_key_vault_key": { "type": "string" },
+                  "company_id": { "type": "string" },
+                  "hdc_runner_url": { "type": "string" },
+                  "skills_github_base": { "type": "string" },
+                  "agents": { "type": "array" }
+                }
+              }
             }
           },
           "install": {

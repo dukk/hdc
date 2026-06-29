@@ -42,6 +42,7 @@ import {
   writeSecretExport,
 } from "./secrets-export.mjs";
 import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultwarden-sync.mjs";
+import { resolveSecretBackendMode } from "./secret-backend.mjs";
 import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
 import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
@@ -1098,7 +1099,7 @@ function cmdList(deps, root) {
  * @param {string} root
  * @param {string[]} argv
  */
-function cmdRun(deps, root, argv) {
+async function cmdRun(deps, root, argv) {
   const { forward, extra } = splitRunArgs(argv);
   if (forward.length < 3) {
     die(deps, `run: need <tier> <package> <verb> (tiers: ${runTiersUsage()})`);
@@ -1109,6 +1110,16 @@ function cmdRun(deps, root, argv) {
   const inv = resolveRunInvocation(forward.slice(1), m);
   if ("error" in inv) die(deps, `run: ${inv.error}`);
   const { packageId, platform, verb } = inv;
+
+  if (resolveSecretBackendMode(deps.env) === "vaultwarden") {
+    const vault = createVaultAccess(vaultDepsFromCli(deps));
+    try {
+      await vault.unlock({});
+    } catch (e) {
+      die(deps, `run: vault unlock failed: ${/** @type {Error} */ (e).message || e}`);
+    }
+  }
+
   if (verb !== "query") {
     const runEnv = buildPackageRunEnv(deps, root, m);
     for (const key of envRequired(m)) {
@@ -1172,7 +1183,7 @@ export async function runCli(argv, deps) {
       return 0;
     }
     if (cmd === "run") {
-      cmdRun(deps, root, rest);
+      await cmdRun(deps, root, rest);
     } else if (cmd === "secrets") {
       if (rest.length === 0) {
         die(

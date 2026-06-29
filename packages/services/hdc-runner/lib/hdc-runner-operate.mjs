@@ -10,9 +10,14 @@ import {
 import {
   ensureHdcNpmDepsOnGuest,
   ensureOperatorSshKeysOnGuest,
+  ensureCronServiceOnGuest,
   installHdcRunnerOnGuest,
 } from "./hdc-runner-install.mjs";
 import { ensureRunnerDirectories, syncHdcTreesToGuest } from "./hdc-runner-sync.mjs";
+import {
+  runGuestDiscordTest,
+  runGuestScheduleTest,
+} from "./hdc-runner-guest-test.mjs";
 import {
   resolveRunnerConfigureExec,
   resolveRunnerGuestSsh,
@@ -21,6 +26,7 @@ import {
   createHdcRunnerVaultAccess,
   resolveVaultwardenMasterPassword,
 } from "./vault-deps.mjs";
+import { resolveHdcRunnerUiSecrets, resolvePaperclipBridgeSecret } from "./vault-secrets.mjs";
 
 /**
  * @param {ReturnType<typeof import("./deployments.mjs").resolveHdcRunnerDeployments>[number]} deployment
@@ -40,6 +46,9 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
 
   /** @type {Record<string, unknown>} */
   const result = { system_id: systemId, mode };
+
+  const testDiscord = flagGet(flags, "test-discord", "test_discord") !== undefined;
+  const testSchedule = flagGet(flags, "test-schedule", "test_schedule");
 
   if (runInstall) {
     const installResult = installHdcRunnerOnGuest(exec, runner, log);
@@ -105,6 +114,12 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
     return { ...result, ok: true, message: "dry-run (configure skipped)" };
   }
 
+  const cronResult = ensureCronServiceOnGuest(exec, log);
+  result.cron_service = cronResult;
+  if (!cronResult.ok) {
+    return { ...result, ok: false, message: cronResult.message };
+  }
+
   /** @type {Record<string, string>} */
   const envMap = {};
   for (const [key, val] of Object.entries(runner.env)) {
@@ -121,7 +136,48 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
     return { ...result, ok: false, message: `vault: ${msg}` };
   }
 
-  const configureResult = configureHdcRunnerOnGuest(exec, runner, envMap, log);
+  try {
+    const webhookUrl = await vaultAccess.getSecret("HDC_OPS_DISCORD_WEBHOOK_URL", { optional: true });
+    if (webhookUrl) {
+      envMap.HDC_OPS_DISCORD_WEBHOOK_URL = String(webhookUrl).trim();
+    }
+  } catch {
+    /* optional — Discord falls back to guest bw when absent */
+  }
+
+  if (runner.web.enabled !== false) {
+    try {
+      const uiSecrets = await resolveHdcRunnerUiSecrets(vaultAccess, runner.web);
+      if (uiSecrets.uiPassword) envMap.HDC_HDC_RUNNER_UI_PASSWORD = uiSecrets.uiPassword;
+      if (uiSecrets.sessionSecret) envMap.HDC_HDC_RUNNER_UI_SESSION_SECRET = uiSecrets.sessionSecret;
+      if (uiSecrets.apiToken) envMap.HDC_HDC_RUNNER_API_TOKEN = uiSecrets.apiToken;
+      result.ui_secrets = { vault_keys: uiSecrets.vaultKeys };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ...result, ok: false, message: `web UI secrets: ${msg}` };
+    }
+  }
+
+  if (runner.paperclip_bridge?.enabled) {
+    try {
+      const bridgeSecrets = await resolvePaperclipBridgeSecret(vaultAccess, runner.paperclip_bridge);
+      if (bridgeSecrets.bridgeSecret) {
+        envMap.HDC_PAPERCLIP_BRIDGE_SECRET = bridgeSecrets.bridgeSecret;
+      }
+      result.bridge_secrets = { vault_key: bridgeSecrets.vaultKey };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ...result, ok: false, message: `paperclip bridge secret: ${msg}` };
+    }
+  }
+
+  const skipUi = flagGet(flags, "skip-ui", "skip_ui") !== undefined;
+  const skipBridge = flagGet(flags, "skip-bridge", "skip_bridge") !== undefined;
+  const configureResult = configureHdcRunnerOnGuest(exec, runner, envMap, log, {
+    systemId,
+    skipUi,
+    skipBridge,
+  });
   result.configure = configureResult;
   if (!configureResult.ok) {
     return { ...result, ok: false, message: configureResult.message };
@@ -131,9 +187,20 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
     result.prune = pruneStaleCronFiles(exec, runner);
   }
 
+  if (testDiscord) {
+    result.test_discord = runGuestDiscordTest(exec, runner, log);
+  }
+  if (testSchedule) {
+    result.test_schedule = runGuestScheduleTest(exec, runner, testSchedule, log);
+  }
+
+  const testFailed =
+    (testDiscord && result.test_discord?.ok === false) ||
+    (testSchedule && result.test_schedule?.ok === false);
+
   return {
     ...result,
-    ok: configureResult.ok,
-    message: configureResult.message,
+    ok: configureResult.ok && !testFailed,
+    message: testFailed ? "test failed" : configureResult.message,
   };
 }

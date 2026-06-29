@@ -113,6 +113,21 @@ These never sync to Vaultwarden:
 
 The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still protects `~/.hdc/vault.enc` when reading bootstrap keys.
 
+## Performance
+
+hdc minimizes Bitwarden CLI overhead:
+
+- **Bulk reads** — `readSecrets` / `secrets dump` load the HDC collection with one `bw list items` call and parse decrypted passwords from the response (no per-item `get password` when the list payload includes them).
+- **Session reuse** — After unlock, the `BW_SESSION` is cached for the hdc process and passed to spawned package scripts (`hdc run`, `maintain daily`) so child processes skip login/unlock when the session is still valid.
+- **In-process cache** — Repeated `getSecret` calls for the same key in one command reuse the cached value.
+
+Operator tips for faster runs:
+
+- Store **`HDC_VAULTWARDEN_MASTER_PASSWORD`** in the local hdc vault (via `secrets unlock`) so unlock is non-interactive.
+- Prefer the **native `bw.exe`** over npm `@bitwarden/cli` when possible (`HDC_BW_EXECUTABLE` if needed).
+- Put frequently used secrets in **package `.env`** (hdc-private) when acceptable — hdc reads env vars before calling `bw`.
+- Use **`HDC_SECRET_BACKEND=local`** on dev machines that do not need Vaultwarden.
+
 ## hdc-runner scheduled host
 
 The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault), plus org/collection IDs from `hdc_runner.env`. Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`packages/services/hdc-runner/README.md`](../packages/services/hdc-runner/README.md).

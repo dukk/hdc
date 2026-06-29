@@ -3,7 +3,7 @@
  * Maintain hdc-runner: rsync hdc trees, refresh cron/env, guest baseline.
  *
  * Usage: hdc run service hdc-runner maintain -- [--instance a] [--dry-run] [--skip-sync]
- *        [--skip-clamav] [--prune]
+ *        [--skip-clamav] [--prune] [--test-discord] [--test-schedule <id>] [--skip-ui]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";

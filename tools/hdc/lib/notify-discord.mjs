@@ -65,6 +65,7 @@ async function main() {
   }
 
   loadDotenv(join(repoRoot, ".env"));
+  loadDotenv(join(process.env.HDC_RUNNER_META_ROOT || "/opt/hdc-runner", ".env"));
 
   const deps = createNodeCliDeps();
   const vault = createVaultAccess(vaultDepsFromCli(deps));
