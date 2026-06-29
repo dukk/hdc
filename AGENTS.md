@@ -959,7 +959,7 @@ Example: `node tools/hdc/cli.mjs run service paperless-ngx deploy -- --instance 
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Proxmox LXC (4 vCPU, 8 GiB RAM, 32 GiB rootfs) + Docker Paperclip + PostgreSQL from `ghcr.io/paperclipai/paperclip` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`) |
+| `maintain` | Re-push compose + `.env` from config, `docker compose pull` + `up -d`, guest Linux baseline (omit `--skip-clamav`); adopts live guest secrets into vault when they differ (no automatic volume wipe); `--reset-db --yes` destroys volumes for a full reset |
 | `query` | Config summary; `--live` for Docker + `/api/health` on port 3100; `--bootstrap-company --yes` imports HDC skills and agents (see [`docs/manually-deployed/paperclip-hdc-company.md`](docs/manually-deployed/paperclip-hdc-company.md)) |
 | `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
 

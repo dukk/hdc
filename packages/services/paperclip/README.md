@@ -14,7 +14,7 @@ Self-hosted [Paperclip](https://github.com/paperclipai/paperclip) AI agent orche
 | Verb | Purpose |
 |------|---------|
 | `deploy` | LXC + Docker Paperclip + PostgreSQL |
-| `maintain` | Re-push compose + `.env`; `docker compose pull` + `up -d`; guest baseline |
+| `maintain` | Re-push compose + `.env`; `docker compose pull` + `up -d`; guest baseline; syncs vault from live guest `.env` when secrets differ (never auto-wipes volumes) |
 | `query` | Config summary; `--live` for `/api/health` |
 | `query --bootstrap-company` | Import HDC skills + create/sync Paperclip agents (see [paperclip-hdc-company.md](../../../docs/manually-deployed/paperclip-hdc-company.md)) |
 | `teardown` | Optional compose down, destroy LXC |
@@ -27,7 +27,19 @@ node tools/hdc/cli.mjs run service paperclip maintain --
 
 ## Common flags
 
-`--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-upgrade` (maintain), `--skip-clamav` (maintain), `--live` (query), `--skip-compose-down`, `--dry-run`, `--yes` (teardown).
+`--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-upgrade` (maintain), `--skip-clamav` (maintain), `--reset-db --yes` (maintain — **destroys** `paperclip-pgdata` and `paperclip-data`; claim instance again afterward), `--live` (query), `--skip-compose-down`, `--dry-run`, `--yes` (teardown).
+
+## Maintain and secrets
+
+Routine `maintain` **never** destroys Docker volumes when vault and guest passwords differ. Instead it **adopts** live `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` from `/opt/paperclip/.env` into vault (`HDC_PAPERCLIP_DB_PASSWORD`, `HDC_PAPERCLIP_BETTER_AUTH_SECRET`). This prevents the wipe loop that occurred when vault and guest drifted apart.
+
+To factory-reset Paperclip (empty database, claim required):
+
+```bash
+node tools/hdc/cli.mjs run service paperclip maintain -- --reset-db --yes
+```
+
+`--reset-db` without `--yes` is refused.
 
 ## After deploy
 

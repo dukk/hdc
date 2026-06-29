@@ -96,12 +96,28 @@ export function buildComposeDownScript(composeDirPath) {
  * @param {string} pveHost
  * @param {number} vmid
  * @param {Record<string, unknown>} install
+ * @param {string} envKey
  */
-function readRemotePostgresPassword(user, pveHost, vmid, install) {
+function readRemoteEnvValue(user, pveHost, vmid, install, envKey) {
   const dir = composeDir(install).replace(/'/g, `'\\''`);
-  const inner = `test -f '${dir}/.env' && grep '^POSTGRES_PASSWORD=' '${dir}/.env' | cut -d= -f2- || true`;
+  const key = envKey.replace(/'/g, `'\\''`);
+  const inner = `test -f '${dir}/.env' && grep '^${key}=' '${dir}/.env' | cut -d= -f2- || true`;
   const r = pctExec(user, pveHost, vmid, inner, { capture: true });
   return r.stdout.trim();
+}
+
+/**
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {Record<string, unknown>} install
+ * @returns {{ dbPassword: string; betterAuthSecret: string }}
+ */
+export function readRemotePaperclipSecrets(user, pveHost, vmid, install) {
+  return {
+    dbPassword: readRemoteEnvValue(user, pveHost, vmid, install, "POSTGRES_PASSWORD"),
+    betterAuthSecret: readRemoteEnvValue(user, pveHost, vmid, install, "BETTER_AUTH_SECRET"),
+  };
 }
 
 /**
@@ -175,11 +191,10 @@ export async function maintainPaperclipInCt(user, pveHost, vmid, paperclip, inst
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const oldDbPassword = readRemotePostgresPassword(user, pveHost, vmid, install);
-  const resetVolumes = opts.resetDb || (oldDbPassword !== "" && oldDbPassword !== secrets.dbPassword);
+  const resetVolumes = opts.resetDb === true;
   if (resetVolumes) {
     errout.write(
-      `[hdc] paperclip maintain: resetting Postgres volume${opts.resetDb ? " (--reset-db)" : " (db password changed)"} …\n`,
+      "[hdc] paperclip maintain: WARNING — destroying Docker volumes (paperclip-pgdata, paperclip-data); claim instance required afterward …\n",
     );
   }
 

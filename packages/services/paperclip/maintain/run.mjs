@@ -4,7 +4,7 @@ import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mj
  * Maintain paperclip: re-push compose + .env from config, refresh Docker images, guest baseline.
  *
  * Usage: hdc run service paperclip maintain -- [--instance a | --system-id paperclip-a]
- *        hdc run service paperclip maintain -- [--skip-upgrade] [--skip-clamav] [--reset-db]
+ *        hdc run service paperclip maintain -- [--skip-upgrade] [--skip-clamav] [--reset-db --yes]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -18,9 +18,9 @@ import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../tools/hdc/paths.mjs";
 import { resolvePaperclipDeployments } from "../lib/deployments.mjs";
-import { maintainPaperclipInCt, resolvePveSshForHost } from "../lib/paperclip-install.mjs";
+import { maintainPaperclipInCt, readRemotePaperclipSecrets, resolvePveSshForHost } from "../lib/paperclip-install.mjs";
 import { createPaperclipVaultAccess } from "../lib/paperclip-vault-deps.mjs";
-import { resolvePaperclipSecrets } from "../lib/vault-secrets.mjs";
+import { resolvePaperclipSecretsForMaintain } from "../lib/vault-secrets.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
 
@@ -53,13 +53,15 @@ function readCfg() {
 /**
  * @param {ReturnType<typeof resolvePaperclipDeployments>[number]} deployment
  * @param {Record<string, string>} flags
- * @param {{ betterAuthSecret: string; dbPassword: string }} secrets
+ * @param {ReturnType<typeof createPaperclipVaultAccess>} vault
  * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
-async function maintainOne(deployment, flags, secrets, vaultAccess) {
+async function maintainOne(deployment, flags, vault, vaultAccess) {
   const { systemId, proxmox: px, paperclip, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
   const resetDb = flagGet(flags, "reset-db", "reset_db") !== undefined;
+  const resetDbYes = flagGet(flags, "yes") !== undefined;
+  const resetDbConfirmed = resetDb && resetDbYes;
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -79,6 +81,17 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const paperclipCfg = isObject(paperclip) ? paperclip : {};
   const installCfg = isObject(install) ? install : {};
+
+  let secrets;
+  try {
+    const guestSecrets = readRemotePaperclipSecrets(pveSsh.user, pveSsh.host, vmid, installCfg);
+    secrets = await resolvePaperclipSecretsForMaintain(vault, paperclipCfg, guestSecrets);
+  } catch (e) {
+    const msg = String(/** @type {Error} */ (e).message || e);
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} secrets: ${msg}\n`);
+    return { ok: false, system_id: systemId, host_id: hostId, vmid, message: msg };
+  }
+
   const result = await maintainPaperclipInCt(
     pveSsh.user,
     pveSsh.host,
@@ -86,7 +99,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     paperclipCfg,
     installCfg,
     secrets,
-    { skipUpgrade, resetDb },
+    { skipUpgrade, resetDb: resetDbConfirmed },
   );
 
   const log = provisionLogFromConsole(console);
@@ -104,7 +117,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
-    reset_db: resetDb,
+    reset_db: resetDbConfirmed,
     db_volume_reset: result.db_volume_reset ?? false,
     url: result.url ?? null,
     upstream_url: result.upstream_url ?? null,
@@ -126,6 +139,16 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const resetDb = flagGet(flags, "reset-db", "reset_db") !== undefined;
+  const resetDbYes = flagGet(flags, "yes") !== undefined;
+  if (resetDb && !resetDbYes) {
+    const msg = "refusing --reset-db without --yes (destroys paperclip-pgdata and paperclip-data volumes)";
+    errout.write(`[hdc] ${target} ${verb}: ${msg}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, target, verb, message: msg }, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
   let deployments;
@@ -141,25 +164,10 @@ async function main() {
   }
 
   const vault = createPaperclipVaultAccess();
-  const defaultsPaperclip =
-    isObject(cfg.defaults) && isObject(cfg.defaults.paperclip) ? cfg.defaults.paperclip : {};
-  let secrets;
-  try {
-    secrets = await resolvePaperclipSecrets(vault, defaultsPaperclip);
-  } catch (e) {
-    const msg = String(/** @type {Error} */ (e).message || e);
-    errout.write(`[hdc] ${target} ${verb}: ${msg}\n`);
-    process.stdout.write(
-      `${JSON.stringify({ ok: false, target, verb, message: msg }, null, 2)}\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await maintainOne(deployment, flags, secrets, vaultAccess));
+      results.push(await maintainOne(deployment, flags, vault, vaultAccess));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);
