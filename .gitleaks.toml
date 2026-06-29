@@ -12,6 +12,7 @@ paths = [
   '''\.test\.mjs$''',
   '''services\.example\.yaml$''',
   '''scrub-public-examples\.mjs$''',
+  '''pve-version\.mjs$''',
 ]
 
 regexes = [
