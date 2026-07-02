@@ -8,6 +8,8 @@ import { configureWebUiOnGuest } from "./hdc-runner-configure-ui.mjs";
 import { configurePaperclipBridgeOnGuest } from "./hdc-runner-configure-bridge.mjs";
 
 const JOB_SOURCE = join(dirname(fileURLToPath(import.meta.url)), "hdc-runner-job.mjs");
+const AGENT_MANAGER_SOURCE = join(dirname(fileURLToPath(import.meta.url)), "run-agent-manager.mjs");
+const AGENT_TASK_SOURCE = join(dirname(fileURLToPath(import.meta.url)), "run-agent-task.mjs");
 
 /**
  * @param {Record<string, string>} envMap
@@ -40,11 +42,14 @@ export function renderRunnerDotEnv(envMap) {
 export function buildSchedulesJson(runner) {
   const schedules = runner.schedules.map((sched) => {
     const id = typeof sched.id === "string" ? sched.id.trim() : "";
+    const type = typeof sched.type === "string" ? sched.type.trim() : "cli";
     return {
       id,
+      type,
       cron: sched.cron,
       cli: sched.cli,
       cli_args: sched.cli_args ?? [],
+      agent_role: typeof sched.agent_role === "string" ? sched.agent_role.trim() : undefined,
       resolved_mail: resolveScheduleMail(runner, sched),
       resolved_discord: resolveScheduleDiscord(runner, sched),
     };
@@ -71,7 +76,10 @@ export function buildPruneKeepScheduleIds(runner) {
 export function configureHdcRunnerOnGuest(exec, runner, envMap, log, opts = {}) {
   const meta = runner.meta_root;
   const jobDest = `${meta}/bin/run-scheduled-job.mjs`;
+  const agentManagerDest = `${meta}/bin/run-agent-manager.mjs`;
   const jobBody = readFileSync(JOB_SOURCE, "utf8");
+  const agentManagerBody = readFileSync(AGENT_MANAGER_SOURCE, "utf8");
+  const agentTaskBody = readFileSync(AGENT_TASK_SOURCE, "utf8");
   const systemId = typeof opts.systemId === "string" ? opts.systemId.trim() : "";
   const dotEnv = renderRunnerDotEnv({
     ...envMap,
@@ -93,7 +101,7 @@ export function configureHdcRunnerOnGuest(exec, runner, envMap, log, opts = {}) 
   /** @type {string[]} */
   const scriptParts = [
     "set -e",
-    `mkdir -p '${meta}/bin' /var/log/hdc-runner`,
+    `mkdir -p '${meta}/bin' /var/log/hdc-runner /var/log/hdc-runner/agents`,
     `chown -R hdc:hdc '${meta}' /var/log/hdc-runner 2>/dev/null || true`,
     `cat > '${meta}/.env' <<'HDC_RUNNER_ENV_EOF'`,
     dotEnv,
@@ -109,6 +117,16 @@ export function configureHdcRunnerOnGuest(exec, runner, envMap, log, opts = {}) 
     "HDC_RUNNER_JOB_EOF",
     `chmod 755 '${jobDest}'`,
     `chown hdc:hdc '${jobDest}' 2>/dev/null || true`,
+    `cat > '${agentManagerDest}' <<'HDC_RUNNER_AGENT_MGR_EOF'`,
+    agentManagerBody,
+    "HDC_RUNNER_AGENT_MGR_EOF",
+    `chmod 755 '${agentManagerDest}'`,
+    `chown hdc:hdc '${agentManagerDest}' 2>/dev/null || true`,
+    `cat > '${meta}/bin/run-agent-task.mjs' <<'HDC_RUNNER_AGENT_TASK_EOF'`,
+    agentTaskBody,
+    "HDC_RUNNER_AGENT_TASK_EOF",
+    `chmod 755 '${meta}/bin/run-agent-task.mjs'`,
+    `chown hdc:hdc '${meta}/bin/run-agent-task.mjs' 2>/dev/null || true`,
   ];
 
   if (vwUrl) {

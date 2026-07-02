@@ -167,6 +167,120 @@ async function sendDiscordNotification(opts) {
   return { ok: true };
 }
 
+/**
+ * @param {object} opts
+ */
+async function runAgentSchedule(opts) {
+  const { scheduleId, schedule, uiJobId } = opts;
+  const agentRole = String(schedule.agent_role ?? "hdc-manager").trim();
+  const startedAt = opts.startedAt ?? new Date().toISOString();
+  const startLine = `\n=== ${startedAt} agent job ${scheduleId} (${agentRole}) started ===\n`;
+  appendJobLog(scheduleId, startLine);
+  if (uiJobId) appendUiJobLog(uiJobId, startLine);
+  process.stderr.write(`[hdc-runner] agent job ${scheduleId}: started (${agentRole})\n`);
+
+  const apiKey = String(process.env.CURSOR_API_KEY ?? "").trim();
+  if (!apiKey) {
+    process.stderr.write(`[hdc-runner] agent job ${scheduleId}: CURSOR_API_KEY missing\n`);
+    process.exit(1);
+  }
+
+  const libRoot = join(INSTALL_ROOT, "packages/services/hdc-runner/lib");
+  let exitCode = 1;
+  let stderr = "";
+  let stdout = "";
+
+  if (agentRole === "hdc-manager") {
+    const managerScript = join(META_ROOT, "bin/run-agent-manager.mjs");
+    const args = [managerScript, scheduleId];
+    process.stderr.write(`[hdc-runner] agent job ${scheduleId}: node ${args.join(" ")}\n`);
+    const r = spawnSync(process.execPath, args, {
+      cwd: INSTALL_ROOT,
+      encoding: "utf8",
+      env: process.env,
+      maxBuffer: CLI_MAX_BUFFER,
+    });
+    stderr = r.stderr ?? "";
+    stdout = r.stdout ?? "";
+    exitCode = r.status ?? 1;
+  } else {
+    const agentRunUrl = pathToFileURL(join(libRoot, "hdc-runner-agent-run.mjs")).href;
+    const tasksUrl = pathToFileURL(join(libRoot, "hdc-runner-tasks.mjs")).href;
+    const { buildAgentPrompt, runCursorAgent, loadManagerTriageInstructions } = await import(agentRunUrl);
+    const { writeTaskReport, listTasks } = await import(tasksUrl);
+
+    const autoPath = join(INSTALL_ROOT, ".cursor", "automations", `${scheduleId.replace(/^agent-/, "")}.md`);
+    let instructions = "";
+    try {
+      if (existsSync(autoPath)) {
+        instructions = readFileSync(autoPath, "utf8");
+      }
+    } catch {
+      instructions = loadManagerTriageInstructions(INSTALL_ROOT);
+    }
+
+    const prompt = buildAgentPrompt({
+      installRoot: INSTALL_ROOT,
+      privateRoot: PRIVATE_ROOT,
+      role: agentRole,
+      instructions,
+    });
+
+    const logPath = `/var/log/hdc-runner/agents/${scheduleId}-${Date.now()}.log`;
+    const r = runCursorAgent({
+      workspace: INSTALL_ROOT,
+      apiKey,
+      role: agentRole,
+      prompt,
+      logPath,
+    });
+    stderr = r.stderr ?? "";
+    stdout = r.stdout ?? "";
+    exitCode = r.exitCode ?? 1;
+
+    const tasks = listTasks(PRIVATE_ROOT, { includeDone: true });
+    writeTaskReport(PRIVATE_ROOT, tasks, { source: scheduleId });
+  }
+
+  const ok = exitCode === 0;
+  appendJobLog(
+    scheduleId,
+    `\n--- ${new Date().toISOString()} exit=${exitCode} ---\n${stderr}\n${stdout}\n`,
+  );
+  if (uiJobId) {
+    appendUiJobLog(
+      uiJobId,
+      `\n--- ${new Date().toISOString()} exit=${exitCode} ---\n${stderr}\n${stdout}\n`,
+    );
+    updateUiJobMeta(uiJobId, {
+      status: ok ? "completed" : "failed",
+      exit_code: exitCode,
+      finished_at: new Date().toISOString(),
+    });
+    clearActiveJob();
+  }
+
+  const discord = schedule.resolved_discord ?? {};
+  const shouldDiscord = discord.enabled === true && (!discord.on_failure_only || !ok);
+  if (shouldDiscord) {
+    const discordPrefix = discord.title_prefix || "[HDC]";
+    const discordWebhookKey =
+      typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
+        ? discord.webhook_vault_key.trim()
+        : "HDC_OPS_DISCORD_WEBHOOK_URL";
+    const title = `${discordPrefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
+    const message = buildDiscordMessage({ ok, stderr, stdout, reportPath: null });
+    await sendDiscordNotification({
+      title,
+      message,
+      silent: ok,
+      webhookVaultKey: discordWebhookKey,
+    });
+  }
+
+  process.exit(exitCode);
+}
+
 async function main() {
   const scheduleId = process.argv[2]?.trim();
   const uiJobId = process.argv[3]?.trim() || null;
@@ -179,8 +293,20 @@ async function main() {
   process.env.HDC_PRIVATE_ROOT = PRIVATE_ROOT;
 
   const schedule = loadSchedule(scheduleId);
+  const scheduleType = typeof schedule.type === "string" ? schedule.type.trim() : "cli";
   const cli = Array.isArray(schedule.cli) ? schedule.cli.map(String) : [];
   const cliArgs = Array.isArray(schedule.cli_args) ? schedule.cli_args.map(String) : [];
+
+  if (scheduleType === "agent") {
+    await runAgentSchedule({
+      scheduleId,
+      schedule,
+      uiJobId,
+      startedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
   if (!cli.length) {
     process.stderr.write(`schedule ${scheduleId}: empty cli\n`);
     process.exit(1);

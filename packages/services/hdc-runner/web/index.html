@@ -23,6 +23,7 @@
       <h1>HDC Runner</h1>
       <nav id="nav">
         <button type="button" data-view="dashboard" class="active">Dashboard</button>
+        <button type="button" data-view="tasks">Tasks</button>
         <button type="button" data-view="schedules">Schedules</button>
         <button type="button" data-view="run">Run package</button>
         <button type="button" data-view="jobs">Jobs</button>
@@ -39,6 +40,27 @@
         <h2>Dashboard</h2>
         <div id="dashboard-stats" class="cards"></div>
         <div id="active-job-banner" class="banner hidden"></div>
+      </section>
+
+      <section id="view-tasks" class="view hidden">
+        <h2>Agent tasks</h2>
+        <p class="muted">Guest-authoritative task queue. Approve tasks here, then run assigned agents.</p>
+        <div class="table-wrap">
+          <table id="tasks-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Role</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Title</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <pre id="task-report" class="log"></pre>
       </section>
 
       <section id="view-schedules" class="view hidden">

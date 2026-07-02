@@ -202,4 +202,71 @@ export function spawnJob(opts) {
   return { jobId, pid: child.pid };
 }
 
+/**
+ * @param {string} metaRoot
+ * @param {string} jobId
+ * @param {{ ok?: boolean; exitCode?: number }} result
+ */
+export function completeJob(metaRoot, jobId, result) {
+  const ok = result.ok === true;
+  const exitCode = result.exitCode ?? (ok ? 0 : 1);
+  const current = readJobMeta(metaRoot, jobId) ?? { id: jobId };
+  writeJobMeta(metaRoot, {
+    ...current,
+    id: jobId,
+    status: ok ? "completed" : "failed",
+    exit_code: exitCode,
+    finished_at: new Date().toISOString(),
+  });
+  writeActiveJob(metaRoot, null);
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.metaRoot
+ * @param {string} opts.installRoot
+ * @param {string} opts.taskId
+ */
+export function spawnAgentTaskJob(opts) {
+  const jobId = randomUUID();
+  const logPath = join(jobsDir(opts.metaRoot), `${jobId}.log`);
+  ensureJobsDir(opts.metaRoot);
+
+  /** @type {Record<string, unknown>} */
+  const meta = {
+    id: jobId,
+    type: "agent-task",
+    task_id: opts.taskId,
+    status: "running",
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    exit_code: null,
+    log_path: logPath,
+  };
+  writeJobMeta(opts.metaRoot, meta);
+
+  const scriptPath = join(opts.metaRoot, "bin/run-agent-task.mjs");
+  const scriptArgs = [scriptPath, opts.taskId, jobId];
+  appendFileSync(logPath, `=== ${meta.started_at} agent-task ${opts.taskId} started ===\n`, "utf8");
+
+  const child = spawn(process.execPath, scriptArgs, {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: process.env,
+    cwd: opts.installRoot,
+  });
+  child.unref();
+
+  meta.pid = child.pid;
+  writeJobMeta(opts.metaRoot, meta);
+  writeActiveJob(opts.metaRoot, {
+    id: jobId,
+    pid: child.pid,
+    type: "agent-task",
+    started_at: meta.started_at,
+  });
+
+  return { jobId, pid: child.pid };
+}
+
 export { MAX_JOB_LOG };

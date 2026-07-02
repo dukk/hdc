@@ -1,7 +1,7 @@
 ---
 name: hdc-manager
 description: >-
-  HDC manager escalation and triage: task queue, Discord for decisions, email context
+  HDC manager escalation and triage: task files, Discord for decisions, email context
   for failures, delegation to subagents. Use with hdc-manager subagent or triage automations.
 disable-model-invocation: true
 ---
@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## Startup checklist
 
-1. Read `hdc-private/operations/task-queue.json`
+1. List `hdc-private/operations/tasks/*.md` and read `operations/task-report.md`
 2. Read `hdc-private/operations/delegation-policy.md`
 3. List latest files in `operations/reports/` (monitor, security, research)
 4. Scan `packages/services/hdc-runner/reports/` for recent failures (hdc-private)
@@ -30,7 +30,7 @@ disable-model-invocation: true
 | hdc-runner job failed | Rely on postfix-relay email; summarize in triage digest |
 | Public down > 15m | Discord + task priority `high` |
 | Cert expiry < 7d (nginx-waf query) | Discord + assign SRE task |
-| Approved task ready | Delegate `@hdc-sre` with task id |
+| Approved task ready | Spawn worker agent (guest) or delegate `@hdc-sre` (IDE) |
 
 ## Discord notify
 
@@ -40,12 +40,16 @@ node tools/hdc/lib/notify-discord.mjs --title "HDC decision needed" --message "T
 
 Vault key: `HDC_OPS_DISCORD_WEBHOOK_URL` (Discord channel webhook URL).
 
+## Task file CRUD
+
+Create `operations/tasks/<id>.md` with YAML frontmatter (see hdc-agent-team skill). After changes, regenerate `operations/task-report.md`.
+
 ## Approval workflow
 
-1. Operator replies in Cursor chat (or Discord thread if wired later).
-2. Set task `status` to `approved`.
-3. Delegate to role in task (`hdc-sre` most common).
-4. On completion, set `done` and reference operation report path.
+1. Operator approves via web UI (`PATCH /api/tasks/:id`), A2A, or Cursor chat.
+2. Set task `status` to `approved` in frontmatter.
+3. On hdc-runner, manager orchestrator spawns `agent -p` for the task's `role`.
+4. On completion, set `done` and update `task-report.md`.
 
 ## Never without `approved`
 
@@ -53,6 +57,6 @@ Vault key: `HDC_OPS_DISCORD_WEBHOOK_URL` (Discord channel webhook URL).
 - bind / cloudflare / nginx-waf production changes
 - `inventory apply`
 
-## Daily triage output
+## Hourly triage output
 
-Optional: `operations/reports/manager-triage-<YYYY-MM-DD>.md` with open tasks, decisions needed, and delegated work.
+Write `operations/reports/manager-triage-<YYYY-MM-DD>.md` with open tasks, decisions sent, and worker runs started.

@@ -29,6 +29,21 @@ const DEFAULT_PAPERCLIP_BRIDGE = {
   hdc_runner_url: "http://127.0.0.1:9120",
 };
 
+const DEFAULT_AGENTS = {
+  enabled: true,
+  cursor_api_key_vault_key: "HDC_CURSOR_API_KEY",
+  workspace: DEFAULT_INSTALL_ROOT,
+  private_root: DEFAULT_PRIVATE_ROOT,
+  max_concurrent_agent_runs: 1,
+  manager_schedule_id: "agent-manager-hourly",
+};
+
+/** Guest-authoritative paths excluded from operator → guest rsync delete/push */
+export const GUEST_STATE_SYNC_EXCLUDES = [
+  "operations/tasks/**",
+  "operations/task-report.md",
+];
+
 /**
  * @param {unknown} bridgeBlock
  */
@@ -126,6 +141,37 @@ export function buildWebConfigJson(web) {
 }
 
 /**
+ * @param {unknown} agentsBlock
+ */
+export function normalizeHdcRunnerAgentsBlock(agentsBlock) {
+  const a = isObject(agentsBlock) ? agentsBlock : {};
+  const maxRuns = Number(a.max_concurrent_agent_runs);
+  return {
+    enabled: a.enabled !== false,
+    cursor_api_key_vault_key:
+      typeof a.cursor_api_key_vault_key === "string" && a.cursor_api_key_vault_key.trim()
+        ? a.cursor_api_key_vault_key.trim()
+        : DEFAULT_AGENTS.cursor_api_key_vault_key,
+    workspace:
+      typeof a.workspace === "string" && a.workspace.trim()
+        ? a.workspace.trim()
+        : DEFAULT_AGENTS.workspace,
+    private_root:
+      typeof a.private_root === "string" && a.private_root.trim()
+        ? a.private_root.trim()
+        : DEFAULT_AGENTS.private_root,
+    max_concurrent_agent_runs:
+      Number.isFinite(maxRuns) && maxRuns > 0
+        ? Math.floor(maxRuns)
+        : DEFAULT_AGENTS.max_concurrent_agent_runs,
+    manager_schedule_id:
+      typeof a.manager_schedule_id === "string" && a.manager_schedule_id.trim()
+        ? a.manager_schedule_id.trim()
+        : DEFAULT_AGENTS.manager_schedule_id,
+  };
+}
+
+/**
  * @param {unknown} runnerBlock
  */
 export function normalizeHdcRunnerBlock(runnerBlock) {
@@ -154,10 +200,18 @@ export function normalizeHdcRunnerBlock(runnerBlock) {
     sync: isObject(r.sync)
       ? { ...r.sync }
       : {
-          exclude: [".git", "node_modules", "**/reports", ".cursor", ".vscode"],
+          exclude: [
+            ".git",
+            "node_modules",
+            "**/reports",
+            ".cursor",
+            ".vscode",
+            ...GUEST_STATE_SYNC_EXCLUDES,
+          ],
         },
     web: normalizeHdcRunnerWebBlock(r.web),
     paperclip_bridge: normalizePaperclipBridgeBlock(r.paperclip_bridge),
+    agents: normalizeHdcRunnerAgentsBlock(r.agents),
   };
 }
 
@@ -194,6 +248,11 @@ export function hdcRunnerSettingsForDeployment(defaults, deployment) {
       ...base.paperclip_bridge,
       ...over.paperclip_bridge,
       enabled: over.paperclip_bridge.enabled || base.paperclip_bridge.enabled,
+    },
+    agents: {
+      ...base.agents,
+      ...over.agents,
+      enabled: over.agents.enabled !== false && base.agents.enabled !== false,
     },
   };
 }
@@ -274,5 +333,8 @@ export function syncExcludePatterns(runner) {
   const ex = Array.isArray(sync.exclude) ? sync.exclude : [];
   const patterns = ex.map((x) => String(x).trim()).filter(Boolean);
   if (!patterns.includes("/.env")) patterns.push("/.env");
+  for (const p of GUEST_STATE_SYNC_EXCLUDES) {
+    if (!patterns.includes(p)) patterns.push(p);
+  }
   return patterns;
 }

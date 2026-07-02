@@ -225,7 +225,7 @@ export function dailyRecipeSteps() {
     if (id === "safeline") {
       steps.push(maintainService(id, ["--skip-sites"]));
     } else if (id === "uptime-kuma") {
-      steps.push(maintainService(id, ["--skip-monitors"]));
+      steps.push(maintainService(id, ["--skip-monitors", "--skip-upgrade"]));
     } else {
       steps.push(maintainService(id));
     }

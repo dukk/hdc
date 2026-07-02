@@ -54,6 +54,13 @@
           "cron": "30 4 * * 0",
           "cli": ["run", "service", "bind", "maintain"],
           "cli_args": ["--no-reboot", "--skip-resources"]
+        },
+        {
+          "id": "agent-manager-hourly",
+          "cron": "0 * * * *",
+          "type": "agent",
+          "agent_role": "hdc-manager",
+          "cli_args": []
         }
       ],
       "sync": {
@@ -78,6 +85,14 @@
         "port": 9121,
         "secret_vault_key": "HDC_PAPERCLIP_AGENT_BRIDGE_SECRET",
         "hdc_runner_url": "http://127.0.0.1:9120"
+      },
+      "agents": {
+        "enabled": true,
+        "cursor_api_key_vault_key": "HDC_CURSOR_API_KEY",
+        "workspace": "/opt/hdc",
+        "private_root": "/opt/hdc-private",
+        "max_concurrent_agent_runs": 1,
+        "manager_schedule_id": "agent-manager-hourly"
       }
     },
     "install": {

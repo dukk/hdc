@@ -75,3 +75,26 @@ export async function resolvePaperclipBridgeSecret(vault, bridge) {
   });
   return { bridgeSecret, vaultKey: key };
 }
+
+/**
+ * Resolve Cursor API key for agent CLI on guest (.env push).
+ *
+ * @param {ReturnType<typeof import("./vault-deps.mjs").createHdcRunnerVaultAccess>} vault
+ * @param {ReturnType<typeof import("./hdc-runner-settings.mjs").normalizeHdcRunnerAgentsBlock>} agents
+ */
+export async function resolveCursorApiKey(vault, agents) {
+  if (!agents.enabled) return { apiKey: null, vaultKey: null };
+  await vault.unlock({});
+  const key = agents.cursor_api_key_vault_key;
+  let apiKey = String(await vault.getSecret(key, { optional: true })).trim();
+  if (!apiKey) {
+    apiKey = String(await vault.getSecret("HDC_PAPERCLIP_CURSOR_API_KEY", { optional: true })).trim();
+  }
+  if (!apiKey) {
+    throw new Error(
+      `missing vault secret ${key} (or HDC_PAPERCLIP_CURSOR_API_KEY) — run: node tools/hdc/cli.mjs secrets set ${key}`,
+    );
+  }
+  errout.write(`[hdc] hdc-runner: secret loaded ${key}\n`);
+  return { apiKey, vaultKey: key };
+}

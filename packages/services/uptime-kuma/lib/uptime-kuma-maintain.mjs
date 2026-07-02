@@ -45,6 +45,13 @@ export function buildHealthCheckScript() {
   ].join("\n");
 }
 
+export function buildHealthVerifyScript() {
+  return [
+    "set -euo pipefail",
+    "systemctl is-active --quiet uptime-kuma",
+  ].join("\n");
+}
+
 /**
  * @param {string} user
  * @param {string} pveHost
@@ -61,12 +68,12 @@ export async function maintainUptimeKumaInCt(user, pveHost, vmid, uptimeKuma, op
   }
 
   if (opts.skipUpgrade) {
-    errout.write(`[hdc] uptime-kuma maintain: --skip-upgrade — restart only …\n`);
-    const r = pctExec(user, pveHost, vmid, buildHealthCheckScript());
+    errout.write(`[hdc] uptime-kuma maintain: --skip-upgrade — health verify only (no restart) …\n`);
+    const r = pctExec(user, pveHost, vmid, buildHealthVerifyScript());
     if (r.status !== 0) {
       return { ok: false, message: `health check failed (exit ${r.status})`, upgraded: false };
     }
-    return { ok: true, message: "restarted", upgraded: false };
+    return { ok: true, message: "healthy", upgraded: false };
   }
 
   const installed = readInstalledReleaseTag(user, pveHost, vmid);
@@ -142,11 +149,12 @@ export async function maintainUptimeKumaOverSsh(host, user, uptimeKuma, opts = {
   errout.write(`[hdc] uptime-kuma maintain: ${user}@${host} …\n`);
 
   if (opts.skipUpgrade) {
-    const r = sshRemote(user, host, buildHealthCheckScript());
+    errout.write(`[hdc] uptime-kuma maintain: --skip-upgrade — health verify only (no restart) …\n`);
+    const r = sshRemote(user, host, buildHealthVerifyScript());
     if (r.status !== 0) {
       return { ok: false, message: `health check failed (exit ${r.status})`, upgraded: false };
     }
-    return { ok: true, message: "restarted", upgraded: false };
+    return { ok: true, message: "healthy", upgraded: false };
   }
 
   const installed = readInstalledReleaseTagOverSsh(host, user);

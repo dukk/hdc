@@ -15,6 +15,11 @@ import {
 } from "./hdc-runner-install.mjs";
 import { ensureRunnerDirectories, syncHdcTreesToGuest } from "./hdc-runner-sync.mjs";
 import {
+  ensureAgentGuestDirectories,
+  ensureCursorCliOnGuest,
+  syncAgentBundleToGuest,
+} from "./hdc-runner-sync-agents.mjs";
+import {
   runGuestDiscordTest,
   runGuestScheduleTest,
 } from "./hdc-runner-guest-test.mjs";
@@ -26,7 +31,7 @@ import {
   createHdcRunnerVaultAccess,
   resolveVaultwardenMasterPassword,
 } from "./vault-deps.mjs";
-import { resolveHdcRunnerUiSecrets, resolvePaperclipBridgeSecret } from "./vault-secrets.mjs";
+import { resolveHdcRunnerUiSecrets, resolvePaperclipBridgeSecret, resolveCursorApiKey } from "./vault-secrets.mjs";
 
 /**
  * @param {ReturnType<typeof import("./deployments.mjs").resolveHdcRunnerDeployments>[number]} deployment
@@ -105,6 +110,28 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
       if (!npmResult.ok) {
         return { ...result, ok: false, message: npmResult.message };
       }
+
+      if (runner.agents?.enabled !== false) {
+        const agentDirs = ensureAgentGuestDirectories(exec, runner);
+        result.agent_directories = agentDirs;
+        if (!agentDirs.ok) {
+          return { ...result, ok: false, message: agentDirs.message };
+        }
+
+        const agentSync = syncAgentBundleToGuest({
+          publicRoot: root,
+          remoteUser: guestSsh.user,
+          remoteHost: guestSsh.host,
+          remotePort: guestSsh.port,
+          installRoot: runner.install_root,
+          dryRun: false,
+          log,
+        });
+        result.agent_bundle_sync = agentSync;
+        if (!agentSync.ok) {
+          return { ...result, ok: false, message: agentSync.message };
+        }
+      }
     }
   } else {
     result.sync = { ok: true, skipped: true, message: "skipped by flag" };
@@ -169,6 +196,29 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
       const msg = e instanceof Error ? e.message : String(e);
       return { ...result, ok: false, message: `paperclip bridge secret: ${msg}` };
     }
+  }
+
+  if (runner.agents?.enabled !== false) {
+    try {
+      const cursorSecrets = await resolveCursorApiKey(vaultAccess, runner.agents);
+      if (cursorSecrets.apiKey) {
+        envMap.CURSOR_API_KEY = cursorSecrets.apiKey;
+      }
+      envMap.HDC_RUNNER_MAX_AGENT_RUNS = String(runner.agents.max_concurrent_agent_runs ?? 1);
+      result.agent_secrets = { vault_key: cursorSecrets.vaultKey };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ...result, ok: false, message: `cursor api key: ${msg}` };
+    }
+  }
+
+  if (runner.agents?.enabled !== false && !dryRun) {
+    const cursorCli = ensureCursorCliOnGuest(exec, log);
+    result.cursor_cli = cursorCli;
+    if (!cursorCli.ok) {
+      return { ...result, ok: false, message: cursorCli.message };
+    }
+    ensureAgentGuestDirectories(exec, runner);
   }
 
   const skipUi = flagGet(flags, "skip-ui", "skip_ui") !== undefined;

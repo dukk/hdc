@@ -8,6 +8,7 @@ import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-confi
 import { homepageConfigFilePaths } from "../../homepage/lib/homepage-config-load.mjs";
 import { parseHomepageServicesYaml } from "../../homepage/lib/homepage-services-parse.mjs";
 import {
+  resolveMonitorRetryFields,
   shouldIgnoreTlsForUrl,
   slugifyMonitorId,
 } from "./uptime-kuma-config.mjs";
@@ -62,6 +63,7 @@ export function homepageServiceToMonitor(service, groupName) {
       group,
       tags: [],
       interval: 60,
+      ...resolveMonitorRetryFields({}),
       ignore_tls: shouldIgnoreTlsForUrl(siteMonitor),
       managed: true,
       notes: typeof service.description === "string" ? service.description : null,
@@ -77,6 +79,7 @@ export function homepageServiceToMonitor(service, groupName) {
     group,
     tags: [],
     interval: 60,
+    ...resolveMonitorRetryFields({}),
     ignore_tls: false,
     managed: true,
     notes: typeof service.description === "string" ? service.description : null,

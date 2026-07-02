@@ -60,6 +60,7 @@ document.querySelectorAll("#nav button").forEach((btn) => {
     document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
     document.getElementById(`view-${btn.dataset.view}`).classList.remove("hidden");
     if (btn.dataset.view === "schedules") loadSchedules();
+    if (btn.dataset.view === "tasks") loadTasks();
     if (btn.dataset.view === "jobs") loadJobs();
     if (btn.dataset.view === "inventory") loadInventory(currentInvCat);
     if (btn.dataset.view === "run") loadPackages();
@@ -106,6 +107,53 @@ async function loadDashboard() {
   } else {
     banner.classList.add("hidden");
   }
+}
+
+async function loadTasks() {
+  const [data, report] = await Promise.all([
+    api("/tasks"),
+    api("/tasks/report"),
+  ]);
+  const tbody = document.querySelector("#tasks-table tbody");
+  tbody.innerHTML = "";
+  for (const t of data.tasks ?? []) {
+    const tr = document.createElement("tr");
+    const canApprove = t.status === "pending";
+    const canRun = t.status === "pending" || t.status === "approved";
+    tr.innerHTML = `
+      <td><code>${escapeHtml(t.id)}</code></td>
+      <td>${escapeHtml(t.role)}</td>
+      <td>${escapeHtml(t.priority)}</td>
+      <td>${escapeHtml(t.status)}</td>
+      <td>${escapeHtml(t.title)}</td>
+      <td>
+        ${canApprove ? `<button type="button" class="btn btn-sm btn-secondary" data-action="approve" data-id="${escapeHtml(t.id)}">Approve</button>` : ""}
+        ${canRun ? `<button type="button" class="btn btn-sm" data-action="run" data-id="${escapeHtml(t.id)}">Run agent</button>` : ""}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+  document.getElementById("task-report").textContent = report.markdown ?? "";
+  tbody.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      try {
+        if (btn.dataset.action === "approve") {
+          await api(`/tasks/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: "approved" }),
+          });
+        }
+        if (btn.dataset.action === "run") {
+          await api(`/tasks/${encodeURIComponent(id)}/run`, { method: "POST" });
+        }
+        loadTasks();
+        loadDashboard();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
 }
 
 async function loadSchedules() {
@@ -219,7 +267,9 @@ async function loadJobs() {
     const label =
       j.type === "schedule"
         ? `schedule:${j.schedule_id}`
-        : `${j.tier}/${j.package}/${j.verb}`;
+        : j.type === "agent-task"
+          ? `agent-task:${j.task_id}`
+          : `${j.tier}/${j.package}/${j.verb}`;
     div.innerHTML = `<span><strong>${escapeHtml(label)}</strong> <span class="muted">${j.status} · ${j.started_at ?? ""}</span></span><span class="${j.exit_code === 0 ? "exit-ok" : j.status === "running" ? "" : "exit-fail"}">${j.exit_code ?? j.status}</span>`;
     div.addEventListener("click", () => showJobLog(j.id));
     list.appendChild(div);

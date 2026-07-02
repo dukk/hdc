@@ -72,6 +72,17 @@
                   "secret_vault_key": { "type": "string" },
                   "hdc_runner_url": { "type": "string" }
                 }
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "cursor_api_key_vault_key": { "type": "string" },
+                  "workspace": { "type": "string" },
+                  "private_root": { "type": "string" },
+                  "max_concurrent_agent_runs": { "type": "integer", "minimum": 1 },
+                  "manager_schedule_id": { "type": "string" }
+                }
               }
             }
           }

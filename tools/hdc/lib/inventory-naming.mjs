@@ -80,6 +80,11 @@ export function deploymentSystemIdPattern(roleSlug) {
   return new RegExp(`^${slug}-[a-z]+$`);
 }
 
+/** Uptime Kuma: `uptime-kuma-a` (LAN) or `uptime-kuma-ext-a` (external/OCI). */
+export function uptimeKumaDeploymentSystemIdPattern() {
+  return /^uptime-kuma(-ext)?-[a-z]+$/;
+}
+
 /**
  * @param {string} systemId
  * @param {string} roleSlug

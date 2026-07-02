@@ -100,6 +100,30 @@ Default `allowed_verbs`: `query`, `maintain` only. `deploy` and `teardown` are n
 | GET | `/api/inventory/:category` | `systems`, `services`, `networks`, `targets` |
 | GET | `/api/inventory/:category/:id` | Full sidecar JSON |
 
+### Agent tasks (guest-authoritative)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/agents` | Yes | Agent roster from synced `.cursor/agents/` |
+| GET | `/api/tasks` | Yes | List tasks (frontmatter summary) |
+| GET | `/api/tasks/report` | Yes | Raw `task-report.md` |
+| GET | `/api/tasks/:id` | Yes | Task metadata + body |
+| PATCH | `/api/tasks/:id` | Session only | Approve/block (`status`, `priority`, …) |
+| POST | `/api/tasks/:id/run` | Yes | Spawn Cursor CLI worker for task (202 + `job_id`) |
+
+### A2A (Agent-to-Agent protocol subset)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/.well-known/agent.json` | Public | Agent Card discovery |
+| GET | `/a2a/agent-card` | Public | Agent Card |
+| GET | `/a2a/agents` | Bearer | Agent roster |
+| GET | `/a2a/tasks` | Bearer | List tasks |
+| GET | `/a2a/tasks/:id` | Bearer | Get task |
+| POST | `/a2a/message:send` | Bearer | Create task or reference existing |
+
+Send header `A2A-Version: 0.3.0` on A2A requests. Bearer auth uses `HDC_HDC_RUNNER_API_TOKEN`.
+
 ## Policy (web-config.json)
 
 | Field | Purpose |

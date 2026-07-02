@@ -10,6 +10,7 @@ import {
   monitorToSocketPayload,
   normalizeUptimeKumaMonitorConfig,
   resolveGroupFromParent,
+  resolveMonitorRetryFields,
   shouldIgnoreTlsForUrl,
   slugifyMonitorId,
   tagNamesFromRow,
@@ -31,6 +32,7 @@ const sampleConfigMonitor = {
   group: "Infrastructure",
   tags: ["critical"],
   interval: 60,
+  ...resolveMonitorRetryFields({}),
   ignore_tls: false,
   managed: true,
   notes: null,
@@ -192,9 +194,26 @@ describe("uptime-kuma config", () => {
     expect(payload.type).toBe("http");
     expect(payload.url).toBe("http://192.0.2.4/admin");
     expect(payload.description).toBe("");
+    expect(payload.maxretries).toBe(3);
+    expect(payload.retryInterval).toBe(60);
+    expect(payload.timeout).toBe(48);
     expect(payload.accepted_statuscodes).toEqual(["200-299"]);
     expect(payload.conditions).toEqual([]);
     expect(payload.kafkaProducerBrokers).toEqual([]);
+  });
+
+  it("monitorToSocketPayload honors retry tuning fields", () => {
+    const payload = monitorToSocketPayload({
+      ...sampleConfigMonitor,
+      max_retries: 5,
+      retry_interval: 30,
+      timeout: 20,
+      accepted_status_codes: ["200-399"],
+    });
+    expect(payload.maxretries).toBe(5);
+    expect(payload.retryInterval).toBe(30);
+    expect(payload.timeout).toBe(20);
+    expect(payload.accepted_statuscodes).toEqual(["200-399"]);
   });
 
   it("monitorToSocketPayload sets parent and live id when provided", () => {

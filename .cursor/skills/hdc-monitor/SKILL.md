@@ -59,4 +59,4 @@ Only run maintain with Manager approval unless reconciling monitors already in c
 - <task-id>: …
 ```
 
-Append matching entries to `operations/task-queue.json`.
+Append matching entries as new files under `operations/tasks/` (one `.md` per task).

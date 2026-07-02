@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveDeploymentConfigSlice,
   normalizeUptimeKumaConfig,
+  instanceFlagToSystemId,
 } from "../../../packages/services/uptime-kuma/lib/deployments.mjs";
 import { buildNotificationIdList } from "../../../packages/services/uptime-kuma/lib/uptime-kuma-notifications-sync.mjs";
 
@@ -27,12 +28,32 @@ describe("uptime-kuma per-deployment config", () => {
         deployments: [],
       },
       {
-        system_id: "uptime-kuma-b",
+        system_id: "uptime-kuma-ext-a",
         monitors: [{ id: "public", name: "P", type: "http", url: "https://p", managed: true }],
       },
     );
     expect(slice.monitors).toHaveLength(1);
     expect(/** @type {Record<string, unknown>} */ (slice.monitors[0]).id).toBe("public");
+  });
+
+  it("accepts uptime-kuma-ext-a system_id", () => {
+    const cfg = normalizeUptimeKumaConfig({
+      schema_version: 5,
+      deployments: [
+        {
+          system_id: "uptime-kuma-ext-a",
+          mode: "oci-vm",
+          oci: { instance_id: "uptime-kuma-ext-a" },
+        },
+      ],
+    });
+    expect(cfg.deployments[0].system_id).toBe("uptime-kuma-ext-a");
+  });
+
+  it("maps --instance ext-a to uptime-kuma-ext-a", () => {
+    expect(instanceFlagToSystemId("ext-a")).toBe("uptime-kuma-ext-a");
+    expect(instanceFlagToSystemId("uptime-kuma-ext-a")).toBe("uptime-kuma-ext-a");
+    expect(instanceFlagToSystemId("a")).toBe("uptime-kuma-a");
   });
 
   it("builds notificationIDList from apply_to_monitors", () => {

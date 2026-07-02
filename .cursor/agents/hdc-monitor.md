@@ -36,7 +36,7 @@ node tools/hdc/cli.mjs run service gatus query -- --live
    - Down or degraded services (inventory ids when known)
    - Monitor config drift (uptime-kuma managed monitors)
    - Recommended actions
-4. Append tasks to `hdc-private/operations/task-queue.json` for issues needing SRE (`role: hdc-sre`).
+4. Create task files under `hdc-private/operations/tasks/` for issues needing SRE (`role: hdc-sre`).
 5. Set `needs_decision: true` and priority `critical`/`high` for public outages or cert expiry < 7d.
 
 ## Constraints

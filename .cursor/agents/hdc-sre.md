@@ -14,7 +14,7 @@ You implement and maintain HDC automation. Read **`.cursor/skills/hdc-ops/SKILL.
 
 ## Before acting
 
-1. Find the task in `hdc-private/operations/task-queue.json`.
+1. Find the task file `hdc-private/operations/tasks/<id>.md`.
 2. Confirm status is **`approved`** for deploy, teardown, `--prune`, or destructive maintain.
 3. Read `delegation-policy.md` for safe autonomous maintains (no prune).
 
@@ -28,7 +28,7 @@ You implement and maintain HDC automation. Read **`.cursor/skills/hdc-ops/SKILL.
 
 ## Task completion
 
-- Mark task `done` in task queue.
+- Mark task `done` in `operations/tasks/<id>.md` and update `task-report.md`.
 - Note outcome in the related digest or operation report path.
 
 ## Rules

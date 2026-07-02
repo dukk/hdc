@@ -65,9 +65,15 @@ export async function resolveHomepageImmichWidgetEnv(opts) {
 
   const immichVault = createImmichVaultAccess();
   const apiKey = await resolveImmichApiKey(immichVault, mergedImmich, {
-    required: true,
+    required: false,
     promptLabel: `Immich API key for homepage widget (${vaultKey})`,
   });
+  if (!apiKey) {
+    errout.write(
+      `[hdc] homepage: WARN immich_widget skipped — set ${vaultKey} to enable the Immich dashboard widget.\n`,
+    );
+    return null;
+  }
 
   errout.write(`[hdc] homepage: Immich widget env ready (${url}, vault ${JSON.stringify(vaultKey)}).\n`);
 

@@ -3,6 +3,11 @@ import {
   UPTIME_KUMA_USERNAME_ENV,
 } from "./vault-deps.mjs";
 
+export const DEFAULT_MONITOR_MAX_RETRIES = 3;
+export const DEFAULT_MONITOR_RETRY_INTERVAL = 60;
+export const DEFAULT_MONITOR_TIMEOUT = 48;
+export const DEFAULT_MONITOR_ACCEPTED_STATUS_CODES = ["200-299"];
+
 /** @typedef {{
  *   id: string;
  *   name: string;
@@ -13,6 +18,10 @@ import {
  *   tags: string[];
  *   notifications: string[];
  *   interval: number;
+ *   max_retries: number;
+ *   retry_interval: number;
+ *   timeout: number;
+ *   accepted_status_codes: string[];
  *   ignore_tls: boolean;
  *   managed: boolean;
  *   notes: string | null;
@@ -259,6 +268,62 @@ export function resolveUptimeKumaApiUrl(raw, defaults = {}, deployment = {}) {
 }
 
 /**
+ * @param {unknown} value
+ * @param {number} fallback
+ */
+function positiveInt(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+/**
+ * @param {unknown} raw
+ * @param {string[] | undefined} existing
+ */
+function normalizeAcceptedStatusCodes(raw, existing) {
+  if (Array.isArray(raw)) {
+    const codes = raw.filter((c) => typeof c === "string" && c.trim()).map((c) => String(c).trim());
+    if (codes.length) return codes;
+  }
+  if (existing?.length) return existing;
+  return [...DEFAULT_MONITOR_ACCEPTED_STATUS_CODES];
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+export function monitorRetryFieldsFromRow(row) {
+  return {
+    max_retries: positiveInt(row.maxretries ?? row.max_retries, DEFAULT_MONITOR_MAX_RETRIES),
+    retry_interval: positiveInt(row.retryInterval ?? row.retry_interval, DEFAULT_MONITOR_RETRY_INTERVAL),
+    timeout: positiveInt(row.timeout, DEFAULT_MONITOR_TIMEOUT),
+    accepted_status_codes: normalizeAcceptedStatusCodes(row.accepted_statuscodes ?? row.accepted_status_codes),
+  };
+}
+
+/**
+ * @param {Partial<ConfigMonitor>} entry
+ */
+export function resolveMonitorRetryFields(entry) {
+  return {
+    max_retries: positiveInt(entry.max_retries, DEFAULT_MONITOR_MAX_RETRIES),
+    retry_interval: positiveInt(entry.retry_interval, DEFAULT_MONITOR_RETRY_INTERVAL),
+    timeout: positiveInt(entry.timeout, DEFAULT_MONITOR_TIMEOUT),
+    accepted_status_codes: normalizeAcceptedStatusCodes(entry.accepted_status_codes),
+  };
+}
+
+/**
+ * @param {string[]} a
+ * @param {string[]} b
+ */
+function statusCodesEqual(a, b) {
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.length === right.length && left.every((v, i) => v === right[i]);
+}
+
+/**
  * @param {unknown} raw
  */
 export function normalizeUptimeKumaMonitorConfig(raw) {
@@ -294,6 +359,12 @@ export function normalizeUptimeKumaMonitorConfig(raw) {
                 .map((t) => String(t).trim())
             : [],
           interval: Number(m.interval ?? 60) || 60,
+          ...resolveMonitorRetryFields({
+            max_retries: m.max_retries,
+            retry_interval: m.retry_interval,
+            timeout: m.timeout,
+            accepted_status_codes: m.accepted_status_codes,
+          }),
           ignore_tls: m.ignore_tls === true,
           managed: m.managed === true,
           notes: typeof m.notes === "string" ? m.notes : null,
@@ -328,6 +399,10 @@ export function monitorHasDrift(cfg, live) {
   if ((cfg.group ?? null) !== (live.group ?? null)) return true;
   if (!tagsEqual(cfg.tags, live.tags)) return true;
   if (cfg.interval !== live.interval) return true;
+  if (cfg.max_retries !== live.max_retries) return true;
+  if (cfg.retry_interval !== live.retry_interval) return true;
+  if (cfg.timeout !== live.timeout) return true;
+  if (!statusCodesEqual(cfg.accepted_status_codes, live.accepted_status_codes)) return true;
   if (cfg.ignore_tls !== live.ignore_tls) return true;
   return false;
 }
@@ -362,6 +437,7 @@ export function liveMonitorRowToConfig(row, existing = null, monitorById = new M
   const tags = existing?.tags?.length ? existing.tags : rowTags;
 
   const importManagedDefault = opts.importManagedDefault !== false;
+  const retryFields = monitorRetryFieldsFromRow(row);
 
   return {
     id: existing?.id ?? slugifyMonitorId(name),
@@ -372,6 +448,12 @@ export function liveMonitorRowToConfig(row, existing = null, monitorById = new M
     group,
     tags,
     interval: Number(row.interval ?? 60) || 60,
+    ...resolveMonitorRetryFields({
+      max_retries: existing?.max_retries ?? retryFields.max_retries,
+      retry_interval: existing?.retry_interval ?? retryFields.retry_interval,
+      timeout: existing?.timeout ?? retryFields.timeout,
+      accepted_status_codes: existing?.accepted_status_codes ?? retryFields.accepted_status_codes,
+    }),
     ignore_tls: row.ignoreTls === true || row.ignore_tls === true,
     managed: existing?.managed ?? (importManagedDefault ? true : false),
     notes: existing?.notes ?? null,
@@ -404,13 +486,14 @@ export function liveMonitorRowToLive(row, existing = null, monitorById = new Map
  * @param {number | null} [id]
  */
 export function groupMonitorToSocketPayload(name, forEdit = false, id = null) {
+  const retryFields = resolveMonitorRetryFields({});
   /** @type {Record<string, unknown>} */
   const payload = {
     type: "group",
     name,
     interval: 60,
-    retryInterval: 60,
-    maxretries: 1,
+    retryInterval: retryFields.retry_interval,
+    maxretries: retryFields.max_retries,
     resendInterval: 0,
     upsideDown: false,
     notificationIDList: {},
@@ -434,13 +517,14 @@ export function groupMonitorToSocketPayload(name, forEdit = false, id = null) {
  * @param {{ parentId?: number | null; liveId?: number | null; notificationIDList?: Record<string, boolean> }} [opts]
  */
 export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
+  const retryFields = resolveMonitorRetryFields(entry);
   /** @type {Record<string, unknown>} */
   const payload = {
     type: entry.type,
     name: entry.name,
     interval: entry.interval,
-    retryInterval: 60,
-    maxretries: 1,
+    retryInterval: retryFields.retry_interval,
+    maxretries: retryFields.max_retries,
     resendInterval: 0,
     upsideDown: false,
     notificationIDList: opts.notificationIDList ?? {},
@@ -448,7 +532,7 @@ export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
     description: entry.notes ?? "",
     httpBodyEncoding: "json",
     conditions: [],
-    accepted_statuscodes: ["200-299"],
+    accepted_statuscodes: retryFields.accepted_status_codes,
     kafkaProducerBrokers: [],
     kafkaProducerSaslOptions: { mechanism: "None" },
     rabbitmqNodes: [],
@@ -471,7 +555,7 @@ export function monitorToSocketPayload(entry, forEdit = false, opts = {}) {
     payload.ignoreTls = entry.ignore_tls === true;
     payload.expiryNotification = false;
     payload.authMethod = "";
-    payload.timeout = 48;
+    payload.timeout = retryFields.timeout;
   } else if (entry.type === "ping") {
     payload.hostname = entry.hostname ?? "";
     payload.packetSize = 56;

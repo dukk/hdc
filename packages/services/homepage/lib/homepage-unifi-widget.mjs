@@ -4,7 +4,6 @@ import { controllerFromPackageConfig } from "../../../infrastructure/unifi-netwo
 import { UNIFI_API_KEY_VAULT_KEY } from "../../../infrastructure/unifi-network/lib/vault-deps.mjs";
 import { tryLoadPackageConfigOrExample } from "../../../lib/package-run-config.mjs";
 import {
-  readRequiredVaultSecret,
   vaultKeyFromWidget,
   widgetBlockEnabled,
 } from "./homepage-widget-utils.mjs";
@@ -64,11 +63,13 @@ export async function resolveHomepageUnifiWidgetEnv(opts) {
     };
   }
 
-  const apiKey = await readRequiredVaultSecret(
-    vaultAccess,
-    vaultKey,
-    `homepage unifi_widget requires Integration API key in ${vaultKey} (Settings → Control plane → Integrations)`,
-  );
+  const apiKey = (await vaultAccess.getSecret(vaultKey, { optional: true })).trim();
+  if (!apiKey) {
+    errout.write(
+      `[hdc] homepage: WARN unifi_widget skipped — set ${vaultKey} (UniFi Integrations API key) to enable the widget.\n`,
+    );
+    return null;
+  }
 
   /** @type {string[]} */
   const lines = [`HOMEPAGE_VAR_UNIFI_URL=${url}`, `HOMEPAGE_VAR_UNIFI_KEY=${apiKey}`];

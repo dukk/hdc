@@ -246,6 +246,16 @@ async function ensureGroupMonitors(client, monitors, live, opts) {
         const msg = e instanceof Error ? e.message : String(e);
         log(`failed create group "${name}": ${msg}`);
       }
+    } else if (!dryRun) {
+      try {
+        await client.editMonitor(groupMonitorToSocketPayload(name, true, groupId));
+        log(`synced group monitor "${name}" (notifications disabled)`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log(`failed sync group "${name}": ${msg}`);
+      }
+    } else {
+      log(`dry-run: would sync group monitor "${name}" (notifications disabled)`);
     }
 
     if (groupId != null && groupId > 0) {

@@ -1,4 +1,7 @@
-import { deploymentSystemIdPattern, lxcSystemId } from "../../../../tools/hdc/lib/inventory-naming.mjs";
+import {
+  lxcSystemId,
+  uptimeKumaDeploymentSystemIdPattern,
+} from "../../../../tools/hdc/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
 
 const UPTIME_KUMA_ROLE = "uptime-kuma";
@@ -97,8 +100,10 @@ function validateDeployments(deployments) {
   for (const d of deployments) {
     const sid = typeof d.system_id === "string" ? d.system_id.trim() : "";
     if (!sid) throw new Error("each deployment needs system_id");
-    if (!deploymentSystemIdPattern(UPTIME_KUMA_ROLE).test(sid)) {
-      throw new Error(`system_id ${JSON.stringify(sid)} must match uptime-kuma-<letter>`);
+    if (!uptimeKumaDeploymentSystemIdPattern().test(sid)) {
+      throw new Error(
+        `system_id ${JSON.stringify(sid)} must match uptime-kuma-<letter> or uptime-kuma-ext-<letter>`,
+      );
     }
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
@@ -212,7 +217,9 @@ export function listUptimeKumaDeploymentSummaries(cfg) {
 export function instanceFlagToSystemId(instance) {
   if (!instance) return undefined;
   const t = instance.trim();
-  if (deploymentSystemIdPattern(UPTIME_KUMA_ROLE).test(t)) return t;
+  const pattern = uptimeKumaDeploymentSystemIdPattern();
+  if (pattern.test(t)) return t;
+  if (/^ext-[a-z]+$/.test(t)) return `${UPTIME_KUMA_ROLE}-${t}`;
   return lxcSystemId(UPTIME_KUMA_ROLE, t);
 }
 

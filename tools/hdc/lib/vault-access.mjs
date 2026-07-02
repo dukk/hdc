@@ -429,6 +429,7 @@ export function createVaultAccess(deps) {
       );
       bwSetPassword(vwCli, session, key, value);
       vaultwardenSecretCache.set(key, value);
+      await setLocalSecret(key, value);
     } catch (e) {
       if (isAutoSecretBackend(deps.env)) {
         deps.warn(`Vaultwarden backend unavailable (${/** @type {Error} */ (e).message}); saving ${key} to local vault.`);

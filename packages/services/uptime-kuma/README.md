@@ -5,15 +5,15 @@ Deploy Uptime Kuma on Proxmox LXC or Oracle Cloud VM (Node 22, systemd, port 300
 ## Prerequisites
 
 - **Config:** [`config.example.json`](config.example.json) → `config.json` (schema v5: per-deployment `monitors[]`, `notifications[]`, `uptime_kuma_auth`)
-- **Inventory:** `uptime-kuma-a` (Proxmox); optional `uptime-kuma-b` (OCI); service [`inventory/manual/services/uptime-kuma.json`](../../../inventory/manual/services/uptime-kuma.json)
-- **Auth:** per-deployment `HDC_UPTIME_KUMA_USERNAME` / vault password (e.g. `HDC_UPTIME_KUMA_PASSWORD`, `HDC_UPTIME_KUMA_PASSWORD_B`). API keys are read-only upstream.
+- **Inventory:** `uptime-kuma-a` (Proxmox); optional `uptime-kuma-ext-a` (OCI); service [`inventory/manual/services/uptime-kuma.json`](../../../inventory/manual/services/uptime-kuma.json)
+- **Auth:** per-deployment `HDC_UPTIME_KUMA_USERNAME` / vault password (e.g. `HDC_UPTIME_KUMA_PASSWORD`, `HDC_UPTIME_KUMA_PASSWORD_EXT_A`). API keys are read-only upstream.
 
 ## Two-instance pattern
 
 | Instance | Mode | Monitors | Alerts |
 |----------|------|----------|--------|
 | `uptime-kuma-a` | `proxmox-lxc` | Root `monitors/` (LAN + infra) | Manual / email |
-| `uptime-kuma-b` | `oci-vm` | `monitors-public/` (HTTPS edge) | Discord `#hdc-ops` via `notifications[]` |
+| `uptime-kuma-ext-a` | `oci-vm` | `monitors-public/` (HTTPS edge) | Discord `#hdc-ops` via `notifications[]` |
 
 OCI UK API is reached over SSH (`api_via_ssh: true`); do not expose port 3001 on the public NSG.
 
@@ -28,8 +28,8 @@ OCI UK API is reached over SSH (`api_via_ssh: true`); do not expose port 3001 on
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma deploy -- --instance a
-node tools/hdc/cli.mjs run service uptime-kuma deploy -- --instance b
-node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance b
+node tools/hdc/cli.mjs run service uptime-kuma deploy -- --instance ext-a
+node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance ext-a
 node tools/hdc/cli.mjs run service uptime-kuma query -- --live
 ```
 
@@ -47,7 +47,7 @@ node tools/hdc/cli.mjs run service uptime-kuma query -- --live
 
    ```bash
    node tools/hdc/cli.mjs run service uptime-kuma maintain -- --dry-run
-   node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance b
+   node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance ext-a
    ```
 
 ## Discord notifications
@@ -72,16 +72,16 @@ Add to config (root or per-deployment):
 
 ## OCI deploy (`oci-vm`)
 
-1. Configure [`oci-compute`](../../infrastructure/oci-compute/) (VCN, NSG, instance `uptime-kuma-b`).
-2. `node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-b --yes`
-3. Set `deployments[].configure.ssh.host` to the public IP; deploy UK: `--instance b`
-4. First-run admin via SSH tunnel; then `maintain --instance b` to sync public monitors + Discord.
+1. Configure [`oci-compute`](../../infrastructure/oci-compute/) (VCN, NSG, instance `uptime-kuma-ext-a`).
+2. `node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-ext-a --yes`
+3. Set `deployments[].configure.ssh.host` to the public IP; deploy UK: `--instance ext-a`
+4. First-run admin via SSH tunnel; then `maintain --instance ext-a` to sync public monitors + Discord.
 
 See hdc-private `packages/services/uptime-kuma/plan.md` for Console setup and rollback.
 
 ## Common flags
 
-`--instance a|b`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-upgrade`, `--skip-monitors`, `--skip-notifications`, `--prune`, `--dry-run`, `--monitor <id>`, `--yes` (teardown/import).
+`--instance a|ext-a`, `--system-id uptime-kuma-ext-a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--skip-upgrade`, `--skip-monitors`, `--skip-notifications`, `--prune`, `--dry-run`, `--monitor <id>`, `--yes` (teardown/import).
 
 `maintain daily` passes `--skip-monitors` for this package (guest upgrade only).
 

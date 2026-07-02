@@ -58,10 +58,10 @@
       }
     },
     {
-      "system_id": "uptime-kuma-b",
+      "system_id": "uptime-kuma-ext-a",
       "mode": "oci-vm",
       "oci": {
-        "instance_id": "uptime-kuma-b"
+        "instance_id": "uptime-kuma-ext-a"
       },
       "configure": {
         "ssh": {
@@ -72,8 +72,8 @@
       "uptime_kuma_auth": {
         "api_url": "http://127.0.0.1:3001",
         "api_via_ssh": true,
-        "username_env": "HDC_UPTIME_KUMA_USERNAME_B",
-        "password_vault_key": "HDC_UPTIME_KUMA_PASSWORD_B"
+        "username_env": "HDC_UPTIME_KUMA_USERNAME_EXT_A",
+        "password_vault_key": "HDC_UPTIME_KUMA_PASSWORD_EXT_A"
       },
       "notifications": [
         {

@@ -54,6 +54,13 @@
             "items": { "type": "string", "minLength": 1 }
           },
           "interval": { "type": "integer", "minimum": 20, "maximum": 86400 },
+          "max_retries": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "retry_interval": { "type": "integer", "minimum": 1, "maximum": 86400 },
+          "timeout": { "type": "integer", "minimum": 1, "maximum": 300 },
+          "accepted_status_codes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
           "ignore_tls": { "type": "boolean" },
           "managed": { "type": "boolean" },
           "notes": { "type": ["string", "null"] }

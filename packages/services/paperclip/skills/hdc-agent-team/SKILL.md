@@ -1,6 +1,6 @@
 ---
 name: hdc-agent-team
-description: Use when coordinating HDC homelab work across agents — task queue, delegation policy, escalation, and role boundaries. Do not use for executing hdc CLI directly without hdc-runner skill.
+description: Use when coordinating HDC homelab work across agents — task files, delegation policy, escalation, and role boundaries. Do not use for executing hdc CLI directly without hdc-runner skill.
 slug: hdc-agent-team
 ---
 
@@ -10,33 +10,17 @@ slug: hdc-agent-team
 
 | Path | Purpose |
 |------|---------|
-| `operations/task-queue.json` | Work queue |
+| `operations/tasks/<id>.md` | Work queue (one task per file) |
+| `operations/task-report.md` | Manager-maintained status summary |
 | `operations/delegation-policy.md` | Approval rules |
 | `operations/ip-allocations.md` | IP groups and next-free addresses |
 | `operations/reports/` | Monitor, security, research digests |
 
-Inventory and configs sync to `/opt/hdc-private` on hdc-runner-a.
+Task state is **guest-authoritative** on hdc-runner. Use hdc-runner web UI or A2A for approvals.
 
-## Task queue schema (v1)
+## Task file schema
 
-```json
-{
-  "schema_version": 1,
-  "tasks": [
-    {
-      "id": "2026-06-13-monitor-immich",
-      "role": "hdc-sre",
-      "priority": "high",
-      "status": "pending",
-      "title": "Immich monitor down",
-      "evidence": ["operations/reports/monitor-2026-06-13T08-00.md"],
-      "suggested_commands": ["run service immich query --live"],
-      "needs_decision": false,
-      "created_at": "2026-06-13T08:05:00Z"
-    }
-  ]
-}
-```
+See `.cursor/skills/hdc-agent-team/SKILL.md` in the hdc repo for frontmatter fields.
 
 Status: `pending` | `approved` | `in_progress` | `blocked` | `done`
 
@@ -46,7 +30,7 @@ Priority: `critical` | `high` | `medium` | `low`
 
 | Agent | May execute | Must not |
 |-------|-------------|----------|
-| HDC Manager | Prioritize, delegate, notify | deploy/prune without approval |
+| HDC Manager | Prioritize, assign, notify | deploy/prune without approval |
 | HDC Monitor | Health queries via hdc-runner, digests | Change service configs |
 | HDC SRE | Approved maintains/deploys | Skip approval for destructive verbs |
 | HDC Security | Security queries, crowdsec bouncer sync | Ad-hoc firewall edits |

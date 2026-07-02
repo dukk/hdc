@@ -1,6 +1,7 @@
 import { stderr as errout } from "node:process";
 
 import { loadPackageConfigFromPackageRoot } from "../../../lib/package-run-config.mjs";
+import { regenerateServiceAccountTokenViaOperatorApi } from "../../../infrastructure/proxmox/lib/proxmox-service-account-api.mjs";
 import {
   parsePveApiTokenSecret,
   proxmoxHostEnvSlug,
@@ -8,6 +9,7 @@ import {
   proxmoxWidgetUsernameFromToken,
   runProxmoxServiceAccountMaintain,
   serviceAccountById,
+  verifyProxmoxServiceAccountToken,
 } from "../../../infrastructure/proxmox/lib/proxmox-service-account-maintain.mjs";
 
 /** @param {unknown} v */
@@ -78,24 +80,90 @@ export async function resolveHomepageProxmoxWidgetEnv(opts) {
     );
   }
 
-  errout.write(
-    `[hdc] homepage: ensuring Proxmox service account ${JSON.stringify(settings.serviceAccountId)} …\n`,
-  );
-
   const vault = vaultAccess;
-  const saResult = await runProxmoxServiceAccountMaintain({
-    packageRoot: proxmoxPackageRoot,
-    log: (line) => errout.write(`[hdc] homepage proxmox: ${line}\n`),
-    warn: (line) => errout.write(`[hdc] homepage proxmox: WARN ${line}\n`),
-    vault,
-    env,
-    spawnSync,
-    dryRun,
-    readLineQuestion,
-    filterIds: [settings.serviceAccountId],
-  });
-  if (!saResult.ok) {
-    throw new Error(`Proxmox service account ${JSON.stringify(settings.serviceAccountId)} ensure failed`);
+
+  /** @param {string} vaultKey */
+  async function readVaultToken(vaultKey) {
+    return (await vault.getSecret(vaultKey, { optional: true })).trim();
+  }
+
+  /** @param {string} vaultKey @param {string} value */
+  async function persistVaultSecret(vaultKey, value) {
+    if (!value) return;
+    try {
+      await vault.setSecret(vaultKey, value);
+    } catch {
+      /* Vaultwarden sync is best-effort; local vault already holds the value. */
+    }
+  }
+
+  let skipEnsure = false;
+  let rawToken = dryRun ? "" : await readVaultToken(account.token_vault_key);
+
+  if (!dryRun && rawToken && settings.hosts.length) {
+    const verifyBase = proxmoxHostWebUiFromConfig(proxmoxCfg, settings.hosts[0]);
+    if (verifyBase) {
+      try {
+        await verifyProxmoxServiceAccountToken({ baseUrl: verifyBase, tokenRaw: rawToken, env });
+        skipEnsure = true;
+        errout.write(
+          `[hdc] homepage: Proxmox service account token OK (${JSON.stringify(account.token_vault_key)}); skipping SSH ensure.\n`,
+        );
+        await persistVaultSecret(account.token_vault_key, rawToken);
+        const password = await readVaultToken(account.password_vault_key);
+        await persistVaultSecret(account.password_vault_key, password);
+      } catch (e) {
+        errout.write(
+          `[hdc] homepage: Proxmox token verify failed (${String(/** @type {Error} */ (e).message || e)}); trying operator API repair …\n`,
+        );
+        const leadHostId = settings.hosts[0];
+        try {
+          const apiResult = await regenerateServiceAccountTokenViaOperatorApi({
+            packageRoot: proxmoxPackageRoot,
+            hostId: leadHostId,
+            account,
+            vault,
+            env,
+            log: (line) => errout.write(`[hdc] homepage proxmox api: ${line}\n`),
+            warn: (line) => errout.write(`[hdc] homepage proxmox api: WARN ${line}\n`),
+          });
+          if (apiResult.ok && apiResult.tokenRaw) {
+            rawToken = apiResult.tokenRaw;
+            skipEnsure = true;
+            errout.write(
+              `[hdc] homepage: Proxmox service account repaired via operator API (${JSON.stringify(account.token_vault_key)}).\n`,
+            );
+          } else {
+            errout.write("[hdc] homepage: Proxmox operator API repair failed; running SSH ensure …\n");
+          }
+        } catch (apiErr) {
+          errout.write(
+            `[hdc] homepage: Proxmox operator API repair failed (${String(/** @type {Error} */ (apiErr).message || apiErr)}); running SSH ensure …\n`,
+          );
+        }
+      }
+    }
+  }
+
+  if (!skipEnsure) {
+    errout.write(
+      `[hdc] homepage: ensuring Proxmox service account ${JSON.stringify(settings.serviceAccountId)} …\n`,
+    );
+
+    const saResult = await runProxmoxServiceAccountMaintain({
+      packageRoot: proxmoxPackageRoot,
+      log: (line) => errout.write(`[hdc] homepage proxmox: ${line}\n`),
+      warn: (line) => errout.write(`[hdc] homepage proxmox: WARN ${line}\n`),
+      vault,
+      env,
+      spawnSync,
+      dryRun,
+      readLineQuestion,
+      filterIds: [settings.serviceAccountId],
+    });
+    if (!saResult.ok) {
+      throw new Error(`Proxmox service account ${JSON.stringify(settings.serviceAccountId)} ensure failed`);
+    }
   }
 
   if (dryRun) {
@@ -106,14 +174,15 @@ export async function resolveHomepageProxmoxWidgetEnv(opts) {
     };
   }
 
-  const data = (await vault.readSecrets({})) ?? {};
-  const rawToken =
-    typeof data[account.token_vault_key] === "string" ? data[account.token_vault_key].trim() : "";
+  if (!rawToken) {
+    rawToken = await readVaultToken(account.token_vault_key);
+  }
   if (!rawToken) {
     throw new Error(
       `vault missing ${JSON.stringify(account.token_vault_key)} after service account ensure — run proxmox maintain`,
     );
   }
+  await persistVaultSecret(account.token_vault_key, rawToken);
 
   const username = proxmoxWidgetUsernameFromToken(rawToken);
   const secret = parsePveApiTokenSecret(rawToken);

@@ -1,4 +1,4 @@
-﻿{
+{
 	"folders": [
 		{
 			"path": "."
@@ -75,6 +75,7 @@
 			"clamav",
 			"clamd",
 			"clamscan",
+			"cloudbeaver",
 			"cloudimg",
 			"cloudinit",
 			"commitlog",
@@ -302,6 +303,7 @@
 			"LIGHTTPD",
 			"listchanges",
 			"listmonk",
+			"litellm",
 			"llamacpp",
 			"llmster",
 			"lmstudio",
@@ -393,6 +395,7 @@
 			"oneshot",
 			"onlyid",
 			"OPENSEARCH",
+			"openspeedtest",
 			"opperating",
 			"Opti",
 			"ossec",
@@ -462,6 +465,7 @@
 			"Qvwo",
 			"qwen",
 			"rackdc",
+			"Rackula",
 			"randr",
 			"raspberrypi",
 			"rdata",
@@ -484,6 +488,7 @@
 			"rtpend",
 			"rtpstart",
 			"runuser",
+			"safeline",
 			"SASL",
 			"Scanopy",
 			"SCANOPYENV",
@@ -566,6 +571,7 @@
 			"upgradeall",
 			"upid",
 			"uppercases",
+			"uptimekuma",
 			"USERDNSDOMAIN",
 			"usermod",
 			"userpass",
@@ -589,6 +595,7 @@
 			"vzcreate",
 			"vzstart",
 			"vztmpl",
+			"Wallos",
 			"wazuh",
 			"webdir",
 			"WEBPASSWORD",

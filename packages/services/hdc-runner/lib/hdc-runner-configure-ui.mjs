@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildWebConfigJson } from "./hdc-runner-settings.mjs";
+import { posixPath } from "./posix-path.mjs";
 
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_SOURCE = join(LIB_DIR, "..", "web");
@@ -14,7 +15,9 @@ const ADHOC_JOB_SOURCE = join(LIB_DIR, "run-adhoc-job.mjs");
 export function renderSystemdUiUnit(runner) {
   const installRoot = runner.install_root;
   const metaRoot = runner.meta_root;
-  const serverPath = join(installRoot, "packages/services/hdc-runner/lib/hdc-runner-ui-server.mjs");
+  const serverPath = posixPath(
+    join(installRoot, "packages/services/hdc-runner/lib/hdc-runner-ui-server.mjs"),
+  );
   return [
     "[Unit]",
     "Description=HDC Runner Web UI",
@@ -92,6 +95,8 @@ export function buildWebUiDeployScriptParts(runner, opts = {}) {
     "systemctl daemon-reload",
     "systemctl enable hdc-runner-ui",
     "systemctl restart hdc-runner-ui",
+    "sleep 2",
+    "systemctl is-active --quiet hdc-runner-ui",
   );
 
   return parts;
@@ -118,10 +123,22 @@ export function configureWebUiOnGuest(exec, runner, opts = {}) {
     const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
     return { ok: false, message: detail, enabled: runner.web.enabled !== false && !opts.skipUi };
   }
+  const port = runner.web.port ?? 9120;
+  const healthRun = exec.run(
+    `curl -sf -m 5 http://127.0.0.1:${port}/api/health >/dev/null`,
+    { capture: true },
+  );
+  if (healthRun.status !== 0) {
+    const journal = exec.run("journalctl -u hdc-runner-ui -n 15 --no-pager 2>/dev/null || true", {
+      capture: true,
+    });
+    const detail = `${journal.stdout}${journal.stderr}`.trim() || "hdc-runner-ui not healthy after restart";
+    return { ok: false, message: detail, enabled: true, port };
+  }
   return {
     ok: true,
     message: "web UI configured",
     enabled: true,
-    port: runner.web.port,
+    port,
   };
 }

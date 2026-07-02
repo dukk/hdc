@@ -210,15 +210,15 @@ Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpasswor
 ## Uptime Kuma in this repo
 
 - **Config:** [`packages/services/uptime-kuma/config.json`](packages/services/uptime-kuma/config.json) (copy from [`config.example.json`](packages/services/uptime-kuma/config.example.json); keep local config out of git). Optional **split layout:** keep `monitors/` and `status_pages/` folders beside `config.json` with one JSON object per file; root `config.json` lists `{ "$hdc.include": "monitors/<id>.json" }` entries (see [`config.example.json`](packages/services/uptime-kuma/config.example.json)). `query --import --yes` and `--import-from-homepage --yes` preserve split layout when detected; inline arrays remain supported.
-- **Per-deployment (schema v5):** Root/`defaults` supply shared `monitors[]`, `tags[]`, `status_pages[]`, `notifications[]`, and `uptime_kuma_auth`. Each `deployments[]` entry may override `monitors` (replace), `notifications` (replace), and `uptime_kuma_auth` (deep-merge). Use separate monitor trees (e.g. `monitors-public/*.json`) and credentials per instance (`HDC_UPTIME_KUMA_PASSWORD_B`, …). `maintain` syncs notifications then monitors per selected deployment; `--skip-notifications` skips notification reconcile.
+- **Per-deployment (schema v5):** Root/`defaults` supply shared `monitors[]`, `tags[]`, `status_pages[]`, `notifications[]`, and `uptime_kuma_auth`. Each `deployments[]` entry may override `monitors` (replace), `notifications` (replace), and `uptime_kuma_auth` (deep-merge). Use separate monitor trees (e.g. `monitors-public/*.json`) and credentials per instance (`HDC_UPTIME_KUMA_PASSWORD_EXT_A`, …). `maintain` syncs notifications then monitors per selected deployment; `--skip-notifications` skips notification reconcile.
 - **Modes:** `proxmox-lxc` (default) or `oci-vm` (Oracle Cloud via [`oci-compute`](packages/infrastructure/oci-compute/); SSH install, no guest Linux baseline). OCI instances use `uptime_kuma_auth.api_via_ssh: true` and `api_url: http://127.0.0.1:3001` — hdc opens an SSH local forward for Socket.IO sync (port 3001 not exposed on WAN).
 - **Discord notifications:** `notifications[]` with `type: discord`, `discord_webhook_vault_key` (e.g. `HDC_OPS_DISCORD_WEBHOOK_URL`), `managed: true`, and `apply_to_monitors: true` (or per-monitor `notifications: ["id"]`).
-- **Inventory:** [`inventory/manual/systems/uptime-kuma-a.json`](inventory/manual/systems/uptime-kuma-a.json), optional `uptime-kuma-b.json` (OCI); service sidecar [`inventory/manual/services/uptime-kuma.json`](inventory/manual/services/uptime-kuma.json).
+- **Inventory:** [`inventory/manual/systems/uptime-kuma-a.json`](inventory/manual/systems/uptime-kuma-a.json), optional `uptime-kuma-ext-a.json` (OCI); service sidecar [`inventory/manual/services/uptime-kuma.json`](inventory/manual/services/uptime-kuma.json).
 - **Schema:** [`tools/hdc/schema/uptime-kuma.config.schema.json`](tools/hdc/schema/uptime-kuma.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC or `oci-vm`: install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a\|b`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `deploy` | Proxmox LXC or `oci-vm`: install from GitHub release tarball (Node 22, Chromium, systemd on port 3001; `--instance a\|ext-a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
 | `maintain` | Upgrade when `uptime_kuma.release` is behind latest; reconcile `notifications[]` then `monitors[]` via Socket.IO per deployment (`--skip-monitors`, `--skip-notifications`, `--prune`, `--dry-run`, `--monitor <id>`, `--instance`); `--skip-upgrade` for restart/health only |
 | `query` | Guest `systemctl`/HTTP probe; monitor drift vs live (`--live`); `--import-from-homepage --yes` seeds `monitors[]` from homepage `services.yaml`; `--import --yes` pulls live monitors/tags/status pages into config (name/slug keyed; no UK database IDs) |
 | `teardown` | Destroy LXC or `oci-compute` VM (`--dry-run`, `--yes`, `--instance`) |
@@ -229,8 +229,8 @@ Example:
 
 ```bash
 node tools/hdc/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
-node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance b
-node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-b --dry-run
+node tools/hdc/cli.mjs run service uptime-kuma maintain -- --instance ext-a
+node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-ext-a --dry-run
 ```
 
 ## SolidTime in this repo
@@ -1108,12 +1108,12 @@ Example: `node tools/hdc/cli.mjs run service llama-cpp deploy -- --instance a --
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI, rsync hdc + hdc-private from operator, cron schedules, guest baseline (mail relay; skips ClamAV), web UI systemd unit |
-| `maintain` | Rsync operator trees to guest; refresh `.env` (Vaultwarden master password + web UI secrets from operator vault), cron, job wrapper, web UI; `--skip-sync`, `--skip-ui`, `--prune`, `--dry-run` |
+| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI + Cursor CLI, rsync hdc + hdc-private from operator, sync `.cursor` agent bundle, cron schedules, guest baseline (mail relay; skips ClamAV), web UI systemd unit |
+| `maintain` | Rsync operator trees to guest (excludes guest task state); refresh `.env` (Vaultwarden, web UI, `CURSOR_API_KEY`), cron, job wrapper, agent manager scripts, web UI; `--skip-sync`, `--skip-ui`, `--prune`, `--dry-run` |
 | `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs, web UI health |
 | `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. **`hdc_runner.web`:** LAN web UI on port 9120 (default); session auth via vault `HDC_HDC_RUNNER_UI_PASSWORD` and auto-generated `HDC_HDC_RUNNER_UI_SESSION_SECRET`; **Bearer token** via vault `HDC_HDC_RUNNER_API_TOKEN` for Paperclip agents; optional `allowed_schedule_ids` / `allowed_packages` policy. Ad-hoc runs limited to `query` and `maintain`. API reference: [`packages/services/hdc-runner/API.md`](packages/services/hdc-runner/API.md). **`hdc_runner.paperclip_bridge`:** HTTP adapter bridge on port 9121 for Paperclip heartbeat → schedule runs. Browse `http://<guest-ip>:9120` after maintain.
+Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. Schedules with `"type": "agent"` and `agent_role` run Cursor CLI subagents (e.g. `agent-manager-hourly` hourly triage). **`hdc_runner.agents`:** syncs `.cursor/agents`, skills, automations; vault `HDC_CURSOR_API_KEY` (or `HDC_PAPERCLIP_CURSOR_API_KEY`) pushed as `CURSOR_API_KEY` on guest. **`hdc_runner.web`:** LAN web UI on port 9120 (default); session auth via vault `HDC_HDC_RUNNER_UI_PASSWORD` and auto-generated `HDC_HDC_RUNNER_UI_SESSION_SECRET`; **Bearer token** via vault `HDC_HDC_RUNNER_API_TOKEN` for Paperclip agents and A2A; Tasks tab for approving guest-authoritative task files under `/opt/hdc-private/operations/tasks/`. Ad-hoc runs limited to `query` and `maintain`. API reference: [`packages/services/hdc-runner/API.md`](packages/services/hdc-runner/API.md) (includes `/api/tasks` and A2A at `/.well-known/agent.json`). **`hdc_runner.paperclip_bridge`:** HTTP adapter bridge on port 9121 for Paperclip heartbeat → schedule runs. Browse `http://<guest-ip>:9120` after maintain.
 
 Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay; Discord ops alerts use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (#hdc-ops webhook in Vaultwarden collection). Discord messages include the host running hdc (`HDC_OPS_DISCORD_HOST` optional); scheduled job success posts are silent (no channel ping), failures ping.
 
@@ -1530,7 +1530,7 @@ Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordin
 
 | Agent | Role |
 | --- | --- |
-| [`hdc-manager`](.cursor/agents/hdc-manager.md) | Task queue triage, delegation, Discord/email escalation |
+| [`hdc-manager`](.cursor/agents/hdc-manager.md) | Task triage, agent assignment, Discord/email escalation |
 | [`hdc-monitor`](.cursor/agents/hdc-monitor.md) | Uptime Kuma, Nagios, Proxmox health digests |
 | [`hdc-sre`](.cursor/agents/hdc-sre.md) | Approved deploy/maintain, package and CLI changes |
 | [`hdc-security-expert`](.cursor/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
@@ -1540,13 +1540,15 @@ Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordin
 
 Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/SKILL.md), [`hdc-manager`](.cursor/skills/hdc-manager/SKILL.md), [`hdc-monitor`](.cursor/skills/hdc-monitor/SKILL.md), [`hdc-security`](.cursor/skills/hdc-security/SKILL.md).
 
-**Operations state (hdc-private):** `operations/task-queue.json`, `operations/delegation-policy.md`, `operations/ip-allocations.md`, `operations/reports/`, `operations/proposals/`.
+**Operations state (hdc-runner guest):** `operations/tasks/*.md`, `operations/task-report.md`, `operations/delegation-policy.md`, `operations/ip-allocations.md`, `operations/reports/`, `operations/proposals/`. Agent definitions sync to `/opt/hdc/.cursor/` on each `hdc-runner maintain`.
+
+**Task approvals:** Use the hdc-runner web UI Tasks tab or `PATCH /api/tasks/:id` (session auth). External agents use A2A at `http://<runner-ip>:9120/a2a` and `/.well-known/agent.json`.
+
+**Scheduled agent runs:** `agent-manager-hourly` cron on hdc-runner invokes Cursor CLI (`agent -p`) for manager triage and approved worker tasks. See [`packages/services/hdc-runner/API.md`](packages/services/hdc-runner/API.md).
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
 **Discord alerts:** `node tools/hdc/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`; messages include OS hostname or `HDC_OPS_DISCORD_HOST`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
-
-**Scheduled runs:** hdc-runner cron (query jobs) + Cursor Automations drafts in [`.cursor/automations/`](.cursor/automations/README.md).
 
 Legacy alias: [`hdc-ops`](.cursor/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
 

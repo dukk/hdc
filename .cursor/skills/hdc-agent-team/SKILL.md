@@ -1,45 +1,49 @@
 ---
 name: hdc-agent-team
 description: >-
-  Shared conventions for the HDC Cursor subagent team: task queue, digests, escalation,
+  Shared conventions for the HDC Cursor subagent team: task files, digests, escalation,
   and hdc-private operations paths. Use when any hdc-manager/monitor/sre/security agent runs.
 disable-model-invocation: true
 ---
 
 # HDC agent team conventions
 
-## Paths (hdc-private)
+## Paths (hdc-private on hdc-runner guest)
 
 | Path | Purpose |
 | --- | --- |
-| `operations/task-queue.json` | Canonical work queue |
+| `operations/tasks/<id>.md` | Canonical work queue (one task per file; YAML frontmatter) |
+| `operations/task-report.md` | Manager-maintained status summary (auto-regenerated) |
 | `operations/delegation-policy.md` | Approval rules |
 | `operations/ip-allocations.md` | IP group boundaries and next-free addresses (Servers network — see file) |
 | `operations/reports/` | Monitor, security, research digests |
 | `operations/proposals/security/` | Security architect output |
 | `operations/proposals/network/` | Network architect output |
 
-Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT` in `.env`.
+**Guest-authoritative:** Task files and `task-report.md` live on the **hdc-runner guest** at `/opt/hdc-private/operations/…`. The operator workstation does not hold live task state — use the hdc-runner web UI (`/api/tasks`) or A2A (`/a2a/tasks`) for approvals and status.
 
-## Task queue schema (v1)
+Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT` in `.env` (on guest: `/opt/hdc-private`).
 
-```json
-{
-  "schema_version": 1,
-  "tasks": [
-    {
-      "id": "2026-06-13-monitor-immich",
-      "role": "hdc-sre",
-      "priority": "high",
-      "status": "pending",
-      "title": "Immich monitor down",
-      "evidence": ["operations/reports/monitor-2026-06-13T08-00.md"],
-      "suggested_commands": ["node tools/hdc/cli.mjs run service immich query -- --live"],
-      "needs_decision": false,
-      "created_at": "2026-06-13T08:05:00Z"
-    }
-  ]
-}
+## Task file schema
+
+Each task is `operations/tasks/<id>.md`:
+
+```yaml
+---
+id: 2026-06-29-monitor-immich
+role: hdc-sre
+priority: high
+status: pending
+title: "Immich monitor down"
+created_at: 2026-06-29T08:05:00Z
+updated_at: 2026-06-29T08:05:00Z
+needs_decision: false
+evidence:
+  - operations/reports/monitor-2026-06-29T08-00.md
+suggested_commands:
+  - node tools/hdc/cli.mjs run service immich query -- --live
+---
+Task description body (markdown).
 ```
 
 **Status:** `pending` | `approved` | `in_progress` | `blocked` | `done`
@@ -69,10 +73,15 @@ Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT` in `.env`
 
 ## Digest filename pattern
 
-- Monitor: `operations/reports/monitor-<ISO8601-basic>.md` (e.g. `monitor-2026-06-13T08-00.md`)
+- Monitor: `operations/reports/monitor-<ISO8601-basic>.md` (e.g. `monitor-2026-06-29T08-00.md`)
 - Security: `operations/reports/security-<ISO8601-basic>.md`
 - Research: `operations/reports/research-<YYYY-MM-DD>.md`
+- Manager: `operations/reports/manager-triage-<YYYY-MM-DD>.md`
 
-## Subagent delegation
+## Delegation on hdc-runner
 
-Manager uses Task tool with explicit handoff: task id, evidence paths, suggested commands.
+The manager runs hourly via Cursor CLI (`agent-manager-hourly` schedule). On the guest, the manager creates/updates task `.md` files and spawns worker `agent -p` runs for approved tasks. In the IDE, the manager may still use the Task tool for local sessions.
+
+## Deprecated
+
+`operations/task-queue.json` is deprecated — use per-task files under `operations/tasks/` instead.

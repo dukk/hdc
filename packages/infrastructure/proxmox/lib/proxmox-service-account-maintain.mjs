@@ -331,6 +331,18 @@ async function verifyServiceToken(opts) {
 }
 
 /**
+ * Verify a service-account API token against cluster/resources (for consumers that skip SSH ensure).
+ * @param {object} opts
+ * @param {string} opts.baseUrl
+ * @param {string} opts.tokenRaw
+ * @param {NodeJS.ProcessEnv} opts.env
+ * @param {string} [opts.verifyPath]
+ */
+export async function verifyProxmoxServiceAccountToken(opts) {
+  return verifyServiceToken(opts);
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.packageRoot
  * @param {(line: string) => void} opts.log

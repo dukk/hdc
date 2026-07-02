@@ -30,6 +30,7 @@ import {
 import {
   canStartJob,
   spawnJob,
+  spawnAgentTaskJob,
   listJobs,
   readJobMeta,
   readJobLog,
@@ -44,6 +45,15 @@ import {
   parseArgsString,
 } from "./hdc-runner-ui-packages.mjs";
 import { validatePackagePolicy, validateSchedulePolicy } from "./hdc-runner-ui-policy.mjs";
+import { handleA2aRequest } from "./hdc-runner-a2a.mjs";
+import {
+  getTaskApiPayload,
+  getTasksApiPayload,
+  listAgentRoster,
+  patchTaskApi,
+  readTaskReport,
+} from "./hdc-runner-ui-tasks.mjs";
+import { readTask } from "./hdc-runner-tasks.mjs";
 
 const META_ROOT = process.env.HDC_RUNNER_META_ROOT || "/opt/hdc-runner";
 const INSTALL_ROOT = process.env.HDC_RUNNER_INSTALL_ROOT || "/opt/hdc";
@@ -152,6 +162,22 @@ async function handleRequest(req, res, webConfig, uiPassword, sessionSecret, api
 
   if (path === "/api/health" && req.method === "GET") {
     return jsonResponse(res, 200, { ok: true });
+  }
+
+  if (
+    (path === "/.well-known/agent.json" || path.startsWith("/a2a")) &&
+    (await handleA2aRequest({
+      req,
+      res,
+      url,
+      privateRoot: PRIVATE_ROOT,
+      installRoot: INSTALL_ROOT,
+      user: resolveAuthUser(req, sessionSecret, apiToken),
+      jsonResponse,
+      readJsonBody,
+    }))
+  ) {
+    return;
   }
 
   if (path === "/api/auth/login" && req.method === "POST") {
@@ -315,6 +341,71 @@ async function handleRequest(req, res, webConfig, uiPassword, sessionSecret, api
     const result = getInventoryRecord(INSTALL_ROOT, PRIVATE_ROOT, category, id);
     if (result.error) return jsonResponse(res, 404, result);
     return jsonResponse(res, 200, result);
+  }
+
+  if (path === "/api/agents" && req.method === "GET") {
+    return jsonResponse(res, 200, { agents: listAgentRoster(INSTALL_ROOT) });
+  }
+
+  if (path === "/api/tasks/report" && req.method === "GET") {
+    const report = readTaskReport(PRIVATE_ROOT);
+    return jsonResponse(res, 200, { markdown: report ?? "" });
+  }
+
+  if (path === "/api/tasks" && req.method === "GET") {
+    return jsonResponse(res, 200, getTasksApiPayload(PRIVATE_ROOT));
+  }
+
+  const taskRunMatch = path.match(/^\/api\/tasks\/([^/]+)\/run$/);
+  if (taskRunMatch && req.method === "POST") {
+    const taskId = decodeURIComponent(taskRunMatch[1]);
+    try {
+      const task = readTask(PRIVATE_ROOT, taskId);
+      if (task.status !== "approved" && task.status !== "pending") {
+        return jsonResponse(res, 409, { error: `task status ${task.status} cannot be run` });
+      }
+      if (!canStartJob(META_ROOT, webConfig.max_concurrent_jobs ?? 1)) {
+        return jsonResponse(res, 409, { error: "another job is already running" });
+      }
+      if (task.status === "pending") {
+        patchTaskApi(PRIVATE_ROOT, taskId, { status: "approved" }, { user, sessionOnly: false });
+      }
+      const spawned = spawnAgentTaskJob({
+        metaRoot: META_ROOT,
+        installRoot: INSTALL_ROOT,
+        taskId,
+      });
+      return jsonResponse(res, 202, { ok: true, job_id: spawned.jobId, pid: spawned.pid });
+    } catch (e) {
+      return jsonResponse(res, 404, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  const taskMatch = path.match(/^\/api\/tasks\/([^/]+)$/);
+  if (taskMatch && req.method === "GET") {
+    try {
+      const taskId = decodeURIComponent(taskMatch[1]);
+      return jsonResponse(res, 200, getTaskApiPayload(PRIVATE_ROOT, taskId));
+    } catch (e) {
+      return jsonResponse(res, 404, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  if (taskMatch && req.method === "PATCH") {
+    if (user === "api-token") {
+      return jsonResponse(res, 403, { error: "session authentication required for task approval" });
+    }
+    try {
+      const taskId = decodeURIComponent(taskMatch[1]);
+      const body = /** @type {Record<string, unknown>} */ (await readJsonBody(req));
+      const result = patchTaskApi(PRIVATE_ROOT, taskId, body, { user, sessionOnly: true });
+      if (!result.ok) {
+        return jsonResponse(res, result.status ?? 400, { error: result.error });
+      }
+      return jsonResponse(res, 200, { task: result.task });
+    } catch (e) {
+      return jsonResponse(res, 400, { error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   if (req.method === "GET" && !path.startsWith("/api/")) {

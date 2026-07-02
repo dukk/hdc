@@ -84,7 +84,7 @@ export async function fetchStatusPagePublicData(baseUrl, slug) {
  * @param {{ username: string; password: string; timeoutMs?: number }} auth
  */
 export function createUptimeKumaClient(baseUrl, auth) {
-  const timeoutMs = auth.timeoutMs ?? 15000;
+  const timeoutMs = auth.timeoutMs ?? 45000;
   const url = baseUrl.replace(/\/$/, "");
 
   /** @type {import("socket.io-client").Socket | null} */

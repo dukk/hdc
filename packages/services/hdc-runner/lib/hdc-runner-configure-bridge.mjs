@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { posixPath } from "./posix-path.mjs";
+
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const BRIDGE_SOURCE = join(LIB_DIR, "..", "..", "paperclip", "lib", "paperclip-agent-bridge.mjs");
 
@@ -25,7 +27,9 @@ function bridgeSourcePath(installRoot) {
 export function renderPaperclipBridgeSystemdUnit(bridge, runner) {
   const installRoot = runner.install_root;
   const metaRoot = runner.meta_root;
-  const bridgePath = join(installRoot, "packages/services/paperclip/lib/paperclip-agent-bridge.mjs");
+  const bridgePath = posixPath(
+    join(installRoot, "packages/services/paperclip/lib/paperclip-agent-bridge.mjs"),
+  );
   return [
     "[Unit]",
     "Description=HDC Paperclip agent bridge",
@@ -64,7 +68,9 @@ export function buildPaperclipBridgeDeployParts(runner, opts = {}) {
   const sourcePath = bridgeSourcePath(runner.install_root);
   const body = readFileSync(sourcePath, "utf8");
   const unit = renderPaperclipBridgeSystemdUnit(bridge, runner);
-  const dest = join(runner.install_root, "packages/services/paperclip/lib/paperclip-agent-bridge.mjs");
+  const dest = posixPath(
+    join(runner.install_root, "packages/services/paperclip/lib/paperclip-agent-bridge.mjs"),
+  );
 
   return [
     `mkdir -p '${dirname(dest)}'`,
@@ -78,6 +84,8 @@ export function buildPaperclipBridgeDeployParts(runner, opts = {}) {
     "systemctl daemon-reload",
     "systemctl enable hdc-paperclip-bridge",
     "systemctl restart hdc-paperclip-bridge",
+    "sleep 2",
+    "systemctl is-active --quiet hdc-paperclip-bridge",
   ];
 }
 
@@ -96,10 +104,21 @@ export function configurePaperclipBridgeOnGuest(exec, runner, opts = {}) {
     const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
     return { ok: false, enabled: runner.paperclip_bridge?.enabled === true, message: detail };
   }
+  const port = runner.paperclip_bridge?.port ?? 9121;
+  const healthRun = exec.run(`curl -sf -m 5 http://127.0.0.1:${port}/api/health >/dev/null`, {
+    capture: true,
+  });
+  if (healthRun.status !== 0) {
+    const journal = exec.run("journalctl -u hdc-paperclip-bridge -n 15 --no-pager 2>/dev/null || true", {
+      capture: true,
+    });
+    const detail = `${journal.stdout}${journal.stderr}`.trim() || "hdc-paperclip-bridge not healthy after restart";
+    return { ok: false, enabled: runner.paperclip_bridge?.enabled === true, port, message: detail };
+  }
   return {
     ok: true,
     enabled: runner.paperclip_bridge?.enabled === true,
-    port: runner.paperclip_bridge?.port,
+    port,
     message: "paperclip bridge configured",
   };
 }

@@ -16,7 +16,7 @@ node tools/hdc/cli.mjs run service crowdsec query -- --live
 node tools/hdc/cli.mjs run service nginx-waf query
 ```
 
-Write `hdc-private/operations/reports/security-<timestamp>.md`. Enqueue Manager tasks for critical findings with `needs_decision: true`.
+Write `hdc-private/operations/reports/security-<timestamp>.md`. Create Manager task files under `operations/tasks/` for critical findings with `needs_decision: true`.
 
 You may run `crowdsec maintain --sync-bouncers` only when bouncer drift is confirmed and delegation policy allows. Never deploy or use ad-hoc firewall rules.
 
