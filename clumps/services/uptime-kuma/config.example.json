@@ -6,8 +6,22 @@
     "password_vault_key": "HDC_UPTIME_KUMA_PASSWORD"
   },
   "monitors": [
-    { "$hdc.include": "monitors/pi-hole-a.json" },
-    { "$hdc.include": "monitors/bind-a.json" }
+    {
+      "id": "pi-hole-a",
+      "name": "Pi-hole A",
+      "type": "http",
+      "url": "http://pi-hole-a.home.example.invalid/admin",
+      "group": "DNS",
+      "managed": true
+    },
+    {
+      "id": "bind-a",
+      "name": "BIND A",
+      "type": "ping",
+      "hostname": "bind-a.home.example.invalid",
+      "group": "DNS",
+      "managed": true
+    }
   ],
   "tags": [
     {
