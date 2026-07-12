@@ -18,7 +18,7 @@ const deployments = [
   {
     system_id: "uptime-kuma-a",
     proxmox: {
-      lxc: { ip_config: "10.0.0.105/24,gw=10.0.0.1" },
+      lxc: { ip_config: "192.0.2.105/24,gw=192.0.2.1" },
     },
   },
   {
@@ -49,11 +49,11 @@ describe("homepage uptime-kuma widget", () => {
   it("resolveUptimeKumaWidgetUrl falls back to proxmox.lxc.ip_config", () => {
     const deploy = {
       system_id: "uptime-kuma-a",
-      proxmox: { lxc: { ip_config: "10.0.0.105/24,gw=10.0.0.1" } },
+      proxmox: { lxc: { ip_config: "192.0.2.105/24,gw=192.0.2.1" } },
       uptime_kuma: {},
     };
     const bareDefaults = { uptime_kuma: { port: 3001 } };
-    expect(resolveUptimeKumaWidgetUrl(bareDefaults, deploy)).toBe("http://10.0.0.105:3001");
+    expect(resolveUptimeKumaWidgetUrl(bareDefaults, deploy)).toBe("http://192.0.2.105:3001");
   });
 
   it("resolveUptimeKumaWidgetInstances resolves LAN and OCI deployments", () => {

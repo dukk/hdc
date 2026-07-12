@@ -73,6 +73,15 @@ export function patchSettingsYaml(baseYaml, searxng) {
     "$1valkey://valkey:6379/0",
   );
 
+  // Upstream master settings can include engines the Docker tag rejects at startup.
+  yaml = yaml.replace(
+    /(^[ \t]*-[ \t]+name:[ \t]*abcnyheter[ \t]*\n)((?:[ \t]+[^\n]*\n)*)/m,
+    (match, head, body) => {
+      if (/^[ \t]+disabled:[ \t]*true[ \t]*$/m.test(body)) return match;
+      return `${head}    disabled: true\n${body}`;
+    },
+  );
+
   return yaml.endsWith("\n") ? yaml : `${yaml}\n`;
 }
 
@@ -137,6 +146,9 @@ export function buildFetchSettingsScript(composeDirPath, searxng) {
     "yaml = re.sub(r'(server:\\s*\\n(?:[ \\t]+[^\\n]*\\n)*?[ \\t]+base_url:\\s*).+', lambda m: m.group(1) + base_url_val, yaml, count=1)",
     "yaml = re.sub(r'(server:\\s*\\n(?:[ \\t]+[^\\n]*\\n)*?[ \\t]+limiter:\\s*).+', lambda m: m.group(1) + limiter, yaml, count=1)",
     "yaml = re.sub(r'(valkey:\\s*\\n(?:[ \\t]+[^\\n]*\\n)*?[ \\t]+url:\\s*).+', lambda m: m.group(1) + 'valkey://valkey:6379/0', yaml, count=1)",
+    "m = re.search(r'(^[ \\t]*-[ \\t]+name:[ \\t]*abcnyheter[ \\t]*\\n)((?:[ \\t]+[^\\n]*\\n)*)', yaml, flags=re.M)",
+    "if m and not re.search(r'^[ \\t]+disabled:[ \\t]*true[ \\t]*$', m.group(2), flags=re.M):",
+    "    yaml = yaml[:m.start()] + m.group(1) + '    disabled: true\\n' + m.group(2) + yaml[m.end():]",
     "if 'engines:' not in yaml:",
     "    raise SystemExit('upstream settings.yml missing engines:')",
     "p.write_text(yaml if yaml.endswith('\\n') else yaml + '\\n')",

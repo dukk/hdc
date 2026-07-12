@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 /**
  * Query nginx WAF health on configured nodes.
+ *
+ * Flags:
+ *   --live                    Include live vhost drift
+ *   --failing-only            Only include sites whose upstream probes failed
+ *   --inventory-crosscheck    For failing upstreams, map IP → inventory system + optional Proxmox status
+ *   --from-operator           Also curl failing upstreams from the operator host
  */
 import { basename, dirname, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
@@ -17,6 +24,11 @@ import { createConfigureExec } from "../lib/nginx-waf-configure.mjs";
 import { queryCertExpiry } from "../lib/letsencrypt.mjs";
 import { queryLiveVhostDrift } from "../lib/nginx-waf-vhost-drift.mjs";
 import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
+import { loadManualSystemSidecar, primaryIpFromSystem } from "../../../lib/inventory-sidecar.mjs";
+import { hdcPrivateRoot } from "../../../../apps/hdc-cli/lib/private-repo.mjs";
+import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
+import { resolvePveSshForHost } from "../../../infrastructure/proxmox/lib/proxmox-pve-ssh.mjs";
+import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
 
 import {
   modsecurityProfilePath,
@@ -203,11 +215,104 @@ function queryEnabledSites(exec) {
  * @param {string} upstream
  */
 function probeUpstream(exec, upstream) {
-  const r = exec.run(`curl -fsS -o /dev/null -w '%{http_code}' --connect-timeout 3 ${upstream} 2>/dev/null || echo fail`, {
-    capture: true,
-  });
+  // Avoid `curl -f` + `|| echo fail`: on connect failure curl prints `000` then
+  // echo appends `fail` → `000fail`, which previously scored as ok.
+  const r = exec.run(
+    `curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 ${JSON.stringify(upstream)} 2>/dev/null || true`,
+    { capture: true },
+  );
   const code = r.stdout.trim();
-  return { upstream, ok: code !== "fail" && r.status === 0, http_code: code };
+  const ok = /^[1-9]\d{2}$/.test(code);
+  return { upstream, ok, http_code: code };
+}
+
+/**
+ * @param {string} upstream
+ */
+function upstreamHostPort(upstream) {
+  try {
+    const u = new URL(upstream);
+    return { host: u.hostname, port: u.port || (u.protocol === "https:" ? "443" : "80") };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} ip
+ * @param {string} root
+ * @param {string | null} privateRoot
+ */
+function inventorySystemsForIp(ip, root, privateRoot) {
+  /** @type {{ system_id: string; path: string }[]} */
+  const hits = [];
+  const dirs = [
+    join(root, "inventory", "manual", "systems"),
+    privateRoot ? join(privateRoot, "inventory", "manual", "systems") : null,
+  ].filter(Boolean);
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (const dir of dirs) {
+    if (!dir || !existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith(".json") || name.startsWith("_")) continue;
+      const systemId = name.replace(/\.json$/, "");
+      if (seen.has(systemId)) continue;
+      const system = loadManualSystemSidecar(root, systemId);
+      if (!system) continue;
+      const sip = primaryIpFromSystem(system);
+      if (sip === ip) {
+        seen.add(systemId);
+        hits.push({ system_id: systemId, path: `inventory/manual/systems/${systemId}.json` });
+      }
+    }
+  }
+  return hits;
+}
+
+/**
+ * @param {string} systemId
+ * @param {string} root
+ * @param {string} proxmoxRoot
+ */
+function proxmoxPowerForSystem(systemId, root, proxmoxRoot) {
+  const system = loadManualSystemSidecar(root, systemId);
+  if (!system) return null;
+  const px = system.proxmox && typeof system.proxmox === "object" ? /** @type {Record<string, unknown>} */ (system.proxmox) : null;
+  if (!px) return null;
+  const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
+  const qemu = px.qemu && typeof px.qemu === "object" ? /** @type {Record<string, unknown>} */ (px.qemu) : null;
+  const lxc = px.lxc && typeof px.lxc === "object" ? /** @type {Record<string, unknown>} */ (px.lxc) : null;
+  const vmidRaw = qemu?.vmid ?? lxc?.vmid;
+  const vmid = typeof vmidRaw === "number" ? vmidRaw : Number(vmidRaw);
+  if (!hostId || !Number.isFinite(vmid)) return null;
+  try {
+    const ssh = resolvePveSshForHost(proxmoxRoot, hostId);
+    const kind = lxc ? "pct" : "qm";
+    const r = sshRemote(ssh.user, ssh.host, `${kind} status ${vmid}`, { capture: true });
+    return {
+      host_id: hostId,
+      vmid,
+      type: lxc ? "lxc" : "qemu",
+      ok: r.status === 0,
+      status: (r.stdout || r.stderr || "").trim(),
+    };
+  } catch (e) {
+    return { host_id: hostId, vmid, error: String(/** @type {Error} */ (e).message || e) };
+  }
+}
+
+/**
+ * @param {string} upstream
+ */
+function operatorCurl(upstream) {
+  const r = spawnSync(
+    "curl",
+    ["-sS", "-o", "/dev/null", "-w", "%{http_code}", "--connect-timeout", "3", upstream],
+    { encoding: "utf8" },
+  );
+  const code = (r.stdout || "").trim();
+  return { ok: /^[1-9]\d{2}$/.test(code), http_code: code, status: r.status };
 }
 
 async function main() {
@@ -216,6 +321,13 @@ async function main() {
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
   const liveDrift = flagGet(flags, "live") !== undefined;
+  const failingOnly = flagGet(flags, "failing-only", "failing_only") !== undefined;
+  const inventoryCrosscheck =
+    flagGet(flags, "inventory-crosscheck", "inventory_crosscheck") !== undefined;
+  const fromOperator = flagGet(flags, "from-operator", "from_operator") !== undefined;
+  const root = repoRoot();
+  const privateRoot = hdcPrivateRoot(root) ?? null;
+  const proxmoxRoot = join(root, "clumps", "infrastructure", "proxmox");
   const groupContexts = resolveNginxWafGroups(cfg, flags);
   /** @type {Map<string, ReturnType<typeof resolveNginxWafGroups>[number]>} */
   const ctxBySystemId = new Map();
@@ -244,7 +356,7 @@ async function main() {
     const enabledSites = queryEnabledSites(exec);
 
     /** @type {Record<string, unknown>[]} */
-    const siteProbes = [];
+    let siteProbes = [];
     /** @type {Record<string, unknown>[]} */
     const sitePolicies = [];
     for (const site of sites) {
@@ -259,12 +371,43 @@ async function main() {
       }
     }
 
+    if (failingOnly) {
+      siteProbes = siteProbes.filter((p) => {
+        const probe = /** @type {{ ok?: boolean }} */ (p.probe);
+        return probe && probe.ok === false;
+      });
+    }
+
+    if (inventoryCrosscheck || fromOperator) {
+      for (const row of siteProbes) {
+        const probe = /** @type {{ upstream?: string; ok?: boolean }} */ (row.probe);
+        if (!probe?.upstream || probe.ok !== false) continue;
+        const hp = upstreamHostPort(probe.upstream);
+        if (!hp) continue;
+        if (fromOperator) {
+          row.operator_probe = operatorCurl(probe.upstream);
+        }
+        if (inventoryCrosscheck) {
+          const systems = inventorySystemsForIp(hp.host, root, privateRoot);
+          row.inventory = systems.map((s) => ({
+            ...s,
+            proxmox: proxmoxPowerForSystem(s.system_id, root, proxmoxRoot),
+          }));
+        }
+      }
+    }
+
     /** @type {Record<string, unknown>[]} */
     const certs = domains.map((domain) => ({
       ...queryCertExpiry(exec, domain),
     }));
 
     const vhostAudit = liveDrift ? queryLiveVhostDrift(exec, sites) : null;
+
+    const failingCount = siteProbes.filter((p) => {
+      const probe = /** @type {{ ok?: boolean }} */ (p.probe);
+      return probe && probe.ok === false;
+    }).length;
 
     nodes.push({
       system_id: d.systemId,
@@ -283,9 +426,10 @@ async function main() {
         block_common_exploits: global.groupPolicyPlan?.blockCommonExploits ?? false,
       },
       enabled_sites: enabledSites,
-      site_policies: sitePolicies,
+      site_policies: failingOnly ? undefined : sitePolicies,
       site_probes: siteProbes,
-      certificates: certs,
+      failing_upstream_count: failingCount,
+      certificates: failingOnly ? undefined : certs,
       ...(vhostAudit
         ? {
             live_sites: vhostAudit.live_sites,
@@ -296,7 +440,8 @@ async function main() {
         nginx.active &&
         configTest.ok &&
         modsec.ok !== false &&
-        (vhostAudit ? vhostAudit.ok : true),
+        (vhostAudit ? vhostAudit.ok : true) &&
+        (!failingOnly || failingCount === 0),
     });
   }
 
@@ -307,6 +452,9 @@ async function main() {
         ok,
         target,
         verb,
+        failing_only: failingOnly,
+        inventory_crosscheck: inventoryCrosscheck,
+        from_operator: fromOperator,
         nodes,
         generated_at: new Date().toISOString(),
       },

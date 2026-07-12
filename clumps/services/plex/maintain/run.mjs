@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
-import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
+import { createNodeCliDeps } from "../../../../apps/hdc-cli/lib/node-cli-deps.mjs";
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { normalizePlexConfig, resolvePlexDeployments } from "../lib/deployments.mjs";
 import { maintainPlexOnSynology } from "../lib/plex-synology.mjs";
@@ -64,7 +64,7 @@ async function main() {
     return;
   }
 
-  const log = provisionLogFromConsole(console);
+  const cliDeps = createNodeCliDeps();
   /** @type {Record<string, unknown>[]} */
   const results = [];
 
@@ -74,7 +74,11 @@ async function main() {
       const result = await maintainPlexOnSynology(
         deployment,
         { skipUpgrade },
-        { log: (line) => errout.write(`${line}\n`) },
+        {
+          log: (line) => errout.write(`${line}\n`),
+          warn: (line) => errout.write(`[hdc] ${target} ${verb}: WARN ${line}\n`),
+          readLineQuestion: cliDeps.readLineQuestion,
+        },
       );
       results.push({ system_id: deployment.systemId, ...result });
     } catch (e) {

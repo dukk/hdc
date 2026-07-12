@@ -18,7 +18,14 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { resolveSolidtimeDeployments } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/solidtime-install.mjs";
-import { maintainSolidtimeInCt, applySolidtimeMailInCt } from "../lib/solidtime-maintain.mjs";
+import {
+  maintainSolidtimeInCt,
+  applySolidtimeMailInCt,
+  applySolidtimeProxyEnvInCt,
+  ensureSolidtimeKeysInCt,
+  ensureSolidtimeProductionEnvInCt,
+  ensureSolidtimeSystemdInCt,
+} from "../lib/solidtime-maintain.mjs";
 import { solidtimeReportExtraSections } from "../lib/solidtime-report.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
@@ -78,6 +85,30 @@ async function maintainOne(deployment, flags, vaultAccess) {
     checkLatest,
     versionOverride: versionOverride || undefined,
   });
+  const proxy_env = applySolidtimeProxyEnvInCt(pveSsh.user, pveSsh.host, vmid, solidtimeCfg);
+  if (proxy_env.ok) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} ${proxy_env.message}\n`);
+  } else {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} proxy env failed: ${proxy_env.message}\n`);
+  }
+  const keys = ensureSolidtimeKeysInCt(pveSsh.user, pveSsh.host, vmid);
+  if (keys.ok) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} ${keys.message}\n`);
+  } else {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} keys failed: ${keys.message}\n`);
+  }
+  const production_env = ensureSolidtimeProductionEnvInCt(pveSsh.user, pveSsh.host, vmid);
+  if (production_env.ok) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} ${production_env.message}\n`);
+  } else {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} production env failed: ${production_env.message}\n`);
+  }
+  const systemd = ensureSolidtimeSystemdInCt(pveSsh.user, pveSsh.host, vmid);
+  if (systemd.ok) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} ${systemd.message}\n`);
+  } else {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId} systemd failed: ${systemd.message}\n`);
+  }
   const mail = applySolidtimeMailInCt(pveSsh.user, pveSsh.host, vmid, solidtimeCfg);
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
@@ -92,8 +123,19 @@ async function maintainOne(deployment, flags, vaultAccess) {
     host_id: hostId,
     vmid,
     ...result,
+    proxy_env,
+    keys,
+    production_env,
+    systemd,
     mail,
-    ok: result.ok && baseline.ok && mail.ok !== false,
+    ok:
+      result.ok &&
+      baseline.ok &&
+      proxy_env.ok !== false &&
+      keys.ok !== false &&
+      production_env.ok !== false &&
+      systemd.ok !== false &&
+      mail.ok !== false,
     ...guestBaselineResultFields(baseline),
   };
 }

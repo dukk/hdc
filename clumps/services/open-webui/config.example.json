@@ -17,7 +17,7 @@
       }
     },
     "open_webui": {
-      "image_tag": "v0.6.26",
+      "image_tag": "v0.10.2",
       "host_port": 3000,
       "secret_key_vault_key": "HDC_OPEN_WEBUI_SECRET_KEY",
       "webui_auth": true,
@@ -36,6 +36,15 @@
           "id": "ollama-c",
           "url": "http://REPLACE_AFTER_DEPLOY:11434",
           "notes": "ollama-c on hypervisor-b — set URL after ollama-c has an IP"
+        }
+      ],
+      "openai_backends": [
+        {
+          "id": "litellm-a",
+          "url": "http://192.0.2.116:4000/v1",
+          "api_key_vault_key": "HDC_LITELLM_MASTER_KEY",
+          "model_ids": ["qwen35-cloud", "claude-sonnet"],
+          "notes": "LiteLLM OpenAI-compatible gateway — set URL after litellm-a has an IP"
         }
       ]
     },

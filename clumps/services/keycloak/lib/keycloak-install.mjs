@@ -2,12 +2,13 @@ import { stderr as errout } from "node:process";
 
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
-import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
+import { resolvePveSshForHost } from "../../../infrastructure/proxmox/lib/proxmox-pve-ssh.mjs";
 import {
   composeDir,
   normalizeExternalUrl,
   renderComposeYaml,
   renderKeycloakEnv,
+  warnPublicUrlMismatch,
 } from "./keycloak-render.mjs";
 
 export { resolvePveSshForHost };
@@ -61,15 +62,18 @@ function buildInstallScript(composeDirPath, composeYaml, envContent) {
 
 /**
  * @param {string} composeDirPath
+ * @param {string} composeYaml
  * @param {string} envContent
  * @param {{ skipUpgrade?: boolean }} [opts]
  */
-function buildMaintainScript(composeDirPath, envContent, opts = {}) {
+function buildMaintainScript(composeDirPath, composeYaml, envContent, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   const lines = [
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
-    `test -f '${dir}/docker-compose.yml'`,
+    `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
+    composeYaml.trimEnd(),
+    "HDCOMPOSE",
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
@@ -105,6 +109,7 @@ export function buildComposeDownScript(composeDirPath) {
  */
 export async function installKeycloakInCt(user, pveHost, vmid, keycloak, install, secrets) {
   errout.write(`[hdc] keycloak install: Docker Compose in CT ${vmid} …\n`);
+  warnPublicUrlMismatch(keycloak, { write: (s) => errout.write(s) });
   const ready = await waitForCt(user, pveHost, vmid, 2000, "keycloak install");
   if (!ready) {
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
@@ -138,13 +143,15 @@ export async function installKeycloakInCt(user, pveHost, vmid, keycloak, install
  */
 export async function maintainKeycloakInCt(user, pveHost, vmid, keycloak, install, secrets, opts = {}) {
   errout.write(`[hdc] keycloak maintain: refreshing stack in CT ${vmid} …\n`);
+  warnPublicUrlMismatch(keycloak, { write: (s) => errout.write(s) });
   const ready = await waitForCt(user, pveHost, vmid, 2000, "keycloak maintain");
   if (!ready) {
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
   const envContent = renderKeycloakEnv(keycloak, secrets);
+  const composeYaml = renderComposeYaml(keycloak);
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, envContent, opts);
+  const inner = buildMaintainScript(dir, composeYaml, envContent, opts);
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, message: `maintain failed (exit ${r.status})` };

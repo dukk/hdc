@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { stderr as errout } from "node:process";
 
+import { resolvePrimaryOllamaBackend } from "./hermes-config-render.mjs";
 import {
   dashboardAuthSecretVaultKey,
   dashboardPasswordVaultKey,
@@ -104,15 +105,29 @@ export async function resolveHermesSecrets(vault, hermes) {
     }
   }
 
+  const primaryBackend = resolvePrimaryOllamaBackend(cfg);
+  /** @type {string | null} */
+  let customApiKey = null;
+  if (primaryBackend?.api_key_vault_key) {
+    customApiKey = await loadSecret(vault, primaryBackend.api_key_vault_key, {
+      label: "custom provider API key (LiteLLM)",
+    });
+    if (!extraEnv.OPENAI_API_KEY) {
+      extraEnv.OPENAI_API_KEY = customApiKey;
+    }
+  }
+
   return {
     openrouterApiKey,
     dashboardPassword,
     dashboardAuthSecret,
+    customApiKey,
     extraEnv,
     vaultKeys: {
       openrouter: openrouter.vaultKey,
       dashboardPassword: dashboardPasswordKey,
       dashboardAuthSecret: dashboardAuthSecretKey,
+      customApi: primaryBackend?.api_key_vault_key ?? null,
     },
   };
 }

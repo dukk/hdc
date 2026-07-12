@@ -1,12 +1,11 @@
-import { join } from "node:path";
 import { stderr as errout } from "node:process";
 
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
-import { loadProxmoxConfigFromRepo } from "../../../infrastructure/proxmox/lib/proxmox-package-config.mjs";
-import { resolveProxmoxHost } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
-import { parseSshUrl } from "../../../../apps/hdc-cli/lib/users-bootstrap-hdc.mjs";
+import { resolvePveSshForHost } from "../../../infrastructure/proxmox/lib/proxmox-pve-ssh.mjs";
 import { normalizeInstallBackend } from "./deployments.mjs";
+
+export { resolvePveSshForHost };
 
 const GITHUB_RELEASES = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest";
 const GITHUB_RELEASE_BASE = "https://github.com/ggml-org/llama.cpp/releases/download";
@@ -14,30 +13,6 @@ const GITHUB_RELEASE_BASE = "https://github.com/ggml-org/llama.cpp/releases/down
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
-/**
- * @param {string} proxmoxRoot
- * @param {string} hostId
- */
-export function resolvePveSshForHost(proxmoxRoot, hostId) {
-  const publicRoot = join(proxmoxRoot, "..", "..", "..");
-  const { data: pveCfg } = loadProxmoxConfigFromRepo(publicRoot);
-  const hostRec = resolveProxmoxHost(pveCfg, hostId);
-  if (!hostRec?.ssh) {
-    throw new Error(`Proxmox host ${JSON.stringify(hostId)} has no ssh:// URL in proxmox config`);
-  }
-  const parsed = parseSshUrl(hostRec.ssh);
-  if (!parsed?.host) {
-    throw new Error(`Invalid ssh URL for Proxmox host ${JSON.stringify(hostId)}`);
-  }
-  const user =
-    parsed.user ||
-    (typeof process.env.HDC_PROXMOX_SSH_USER === "string" &&
-    process.env.HDC_PROXMOX_SSH_USER.trim()
-      ? process.env.HDC_PROXMOX_SSH_USER.trim()
-      : "root");
-  return { user, host: parsed.host };
 }
 
 /**

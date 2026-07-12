@@ -31,7 +31,31 @@
               "allow_new_accounts": { "type": "boolean" },
               "mongo_username": { "type": "string" },
               "mongo_database": { "type": "string" },
-              "mongo_password_vault_key": { "type": "string" }
+              "mongo_password_vault_key": { "type": "string" },
+              "api": {
+                "type": "object",
+                "properties": {
+                  "username_vault_key": { "type": "string" },
+                  "password_vault_key": { "type": "string" },
+                  "url": { "type": ["string", "null"] }
+                }
+              },
+              "devices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "node_id": { "type": ["string", "null"] },
+                    "platform": {
+                      "type": "string",
+                      "enum": ["windows", "linux", "unknown"]
+                    },
+                    "managed": { "type": "boolean" }
+                  }
+                }
+              }
             }
           },
           "install": {

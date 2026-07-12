@@ -10,7 +10,7 @@ describe("uptime-kuma-ssh-tunnel", () => {
   it("parseLocalApiPort reads localhost ports", () => {
     expect(parseLocalApiPort("http://127.0.0.1:3001")).toBe(3001);
     expect(parseLocalApiPort("http://localhost:3001/")).toBe(3001);
-    expect(parseLocalApiPort("http://10.0.0.1:3001")).toBeNull();
+    expect(parseLocalApiPort("http://192.0.2.1:3001")).toBeNull();
   });
 
   it("rewriteLocalApiPort updates localhost port", () => {

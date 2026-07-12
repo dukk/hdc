@@ -1,7 +1,8 @@
 import {
+  normalizeBackends,
   normalizeModelList,
-  normalizeOllamaBackends,
   ollamaBackendEnvVar,
+  openaiBackendEnvVar,
 } from "./litellm-render.mjs";
 
 /** @param {unknown} v */
@@ -54,7 +55,7 @@ function renderFallbacksYaml(fallbacks) {
  */
 export function renderLitellmConfigYaml(litellm) {
   const cfg = isObject(litellm) ? litellm : {};
-  const backends = normalizeOllamaBackends(cfg.ollama_backends);
+  const backends = normalizeBackends(cfg);
   const models = normalizeModelList(cfg.model_list, backends);
 
   /** @type {string[]} */
@@ -66,10 +67,18 @@ export function renderLitellmConfigYaml(litellm) {
     lines.push("    litellm_params:");
     if (entry.provider === "ollama") {
       lines.push(yamlLine("model", `ollama/${entry.model}`, 6));
-      const backendId = entry.ollama_backend_id ?? backends[0]?.id;
+      const backendId = entry.ollama_backend_id ?? backends.ollama[0]?.id;
       if (backendId) {
         lines.push(yamlLine("api_base", `os.environ/${ollamaBackendEnvVar(backendId)}`, 6));
       }
+    } else if (entry.provider === "openai") {
+      lines.push(yamlLine("model", `openai/${entry.model}`, 6));
+      const backendId = entry.openai_backend_id ?? backends.openai[0]?.id;
+      if (backendId) {
+        lines.push(yamlLine("api_base", `os.environ/${openaiBackendEnvVar(backendId)}`, 6));
+      }
+      // vLLM has no auth; LiteLLM still expects a key field for openai/* — use a placeholder
+      lines.push(yamlLine("api_key", "EMPTY", 6));
     } else if (entry.provider === "openrouter") {
       lines.push(yamlLine("model", `openrouter/${entry.model}`, 6));
       lines.push(yamlLine("api_key", "os.environ/OPENROUTER_API_KEY", 6));

@@ -32,6 +32,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "gitlab",
   "immich",
   "it-tools",
+  "omni-tools",
   "keycloak",
   "listmonk",
   "mailcow",
@@ -55,6 +56,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "uptime-kuma",
   "vaultwarden",
   "vikunja",
+  "wallabag",
   "wallos",
   "wazuh",
   "zabbix",
@@ -273,9 +275,24 @@ export function dailyRecipeSteps() {
 
   steps.push(maintainService("pi-hole", ["--skip-core-update"]));
   steps.push(maintainService("mosquitto", ["--skip-cert-renew"]));
-  steps.push(maintainService("ollama", ["--skip-models"]));
+  steps.push(maintainService("vllm", ["--skip-upgrade"]));
   steps.push(maintainService("lms", ["--skip-models"]));
-  steps.push(maintainService("llama-cpp", ["--skip-restart"]));
+  steps.push({
+    tier: "service",
+    id: "ollama",
+    verb: "maintain",
+    args: ["--skip-models"],
+    requiresConfig: true,
+    skipReason: "torn down — replaced by vllm; config retained",
+  });
+  steps.push({
+    tier: "service",
+    id: "llama-cpp",
+    verb: "maintain",
+    args: ["--skip-restart"],
+    requiresConfig: true,
+    skipReason: "torn down — replaced by vllm; config retained",
+  });
   steps.push(maintainService("trivy"));
   steps.push({
     tier: "service",

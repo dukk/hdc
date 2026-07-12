@@ -23,6 +23,157 @@ function shellSingleQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+/** SolidTime docs wildcard for reverse-proxy TLS termination. */
+export const SOLIDTIME_TRUSTED_PROXIES = "0.0.0.0/0,2000:0:0:0:0:0:0:0/3";
+
+/**
+ * @param {string | null | undefined} appUrl
+ * @returns {boolean}
+ */
+export function isSolidtimeHttpsAppUrl(appUrl) {
+  return typeof appUrl === "string" && /^https:\/\//i.test(appUrl.trim());
+}
+
+/**
+ * Idempotent bash lines to set APP_FORCE_HTTPS / SESSION_SECURE_COOKIE / TRUSTED_PROXIES.
+ * When app_url is https://… (TLS at reverse proxy), enable force-HTTPS + trusted proxies.
+ * @param {string} envPath path to Laravel .env (e.g. `.env` or `/opt/solidtime/.env`)
+ * @param {boolean} https
+ * @returns {string[]}
+ */
+export function buildSolidtimeProxyEnvBashLines(envPath, https) {
+  const force = https ? "true" : "false";
+  const secure = https ? "true" : "false";
+  const qPath = shellSingleQuote(envPath);
+  const lines = [
+    `ENV_FILE=${qPath}`,
+    'test -f "$ENV_FILE"',
+    `sed -i "s|^APP_FORCE_HTTPS=.*|APP_FORCE_HTTPS=${force}|" "$ENV_FILE"`,
+    `grep -q "^APP_FORCE_HTTPS=" "$ENV_FILE" || echo "APP_FORCE_HTTPS=${force}" >> "$ENV_FILE"`,
+    `sed -i "s|^SESSION_SECURE_COOKIE=.*|SESSION_SECURE_COOKIE=${secure}|" "$ENV_FILE"`,
+    `grep -q "^SESSION_SECURE_COOKIE=" "$ENV_FILE" || echo "SESSION_SECURE_COOKIE=${secure}" >> "$ENV_FILE"`,
+  ];
+  if (https) {
+    const trusted = SOLIDTIME_TRUSTED_PROXIES;
+    lines.push(
+      `sed -i "s|^TRUSTED_PROXIES=.*|TRUSTED_PROXIES=${trusted}|" "$ENV_FILE"`,
+      `grep -q "^TRUSTED_PROXIES=" "$ENV_FILE" || echo "TRUSTED_PROXIES=${trusted}" >> "$ENV_FILE"`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * Bash lines: APP_KEY if missing, strip bad PASSPORT_* env, passport:keys --force (file-based).
+ * Must run from /opt/solidtime after composer install. Fails if key files missing.
+ * @returns {string[]}
+ */
+export function buildSolidtimeKeysBashLines() {
+  return [
+    "cd /opt/solidtime",
+    'export PATH="/usr/local/bin:$PATH"',
+    'test -f /opt/solidtime/.env',
+    'test -f /opt/solidtime/artisan',
+    'test -d /opt/solidtime/vendor',
+    "",
+    "# APP_KEY: generate only when missing/empty (do not rotate a working key)",
+    "APP_KEY_VAL=$(grep -E '^APP_KEY=' /opt/solidtime/.env | head -1 | cut -d= -f2- | tr -d '\"' | tr -d \"'\" | tr -d '[:space:]')",
+    'if [ -z "$APP_KEY_VAL" ] || [ "$APP_KEY_VAL" = "base64:" ]; then',
+    "  php artisan key:generate --force",
+    "fi",
+    "",
+    "# Invalid/empty PASSPORT_* env overrides file keys and causes CryptKey failures",
+    'sed -i "/^PASSPORT_PRIVATE_KEY=/d" /opt/solidtime/.env',
+    'sed -i "/^PASSPORT_PUBLIC_KEY=/d" /opt/solidtime/.env',
+    "",
+    "php artisan passport:keys --force",
+    "test -s /opt/solidtime/storage/oauth-private.key",
+    "test -s /opt/solidtime/storage/oauth-public.key",
+    "chown www-data:www-data /opt/solidtime/storage/oauth-private.key /opt/solidtime/storage/oauth-public.key",
+    "chmod 640 /opt/solidtime/storage/oauth-private.key /opt/solidtime/storage/oauth-public.key",
+  ];
+}
+
+/**
+ * Bash lines: QUEUE_CONNECTION=database, clear bogus GOTENBERG_URL, storage:link.
+ * @param {string} envPath
+ * @returns {string[]}
+ */
+export function buildSolidtimeProductionEnvBashLines(envPath = "/opt/solidtime/.env") {
+  const qPath = shellSingleQuote(envPath);
+  return [
+    `ENV_FILE=${qPath}`,
+    'test -f "$ENV_FILE"',
+    'sed -i "s|^QUEUE_CONNECTION=.*|QUEUE_CONNECTION=database|" "$ENV_FILE"',
+    'grep -q "^QUEUE_CONNECTION=" "$ENV_FILE" || echo "QUEUE_CONNECTION=database" >> "$ENV_FILE"',
+    'sed -i "s|^GOTENBERG_URL=.*|GOTENBERG_URL=|" "$ENV_FILE"',
+    'grep -q "^GOTENBERG_URL=" "$ENV_FILE" || echo "GOTENBERG_URL=" >> "$ENV_FILE"',
+    "cd /opt/solidtime",
+    'export PATH="/usr/local/bin:$PATH"',
+    "php artisan storage:link || true",
+    "test -e /opt/solidtime/public/storage || php artisan storage:link",
+  ];
+}
+
+/**
+ * Bash lines: install/enable solidtime-queue.service + solidtime-scheduler.timer.
+ * @returns {string[]}
+ */
+export function buildSolidtimeSystemdUnitsBashLines() {
+  return [
+    "cat > /etc/systemd/system/solidtime-queue.service <<'UNITEOF'",
+    "[Unit]",
+    "Description=SolidTime Laravel queue worker",
+    "After=network.target postgresql.service php8.3-fpm.service",
+    "Wants=postgresql.service",
+    "",
+    "[Service]",
+    "Type=simple",
+    "User=www-data",
+    "Group=www-data",
+    "WorkingDirectory=/opt/solidtime",
+    "ExecStart=/usr/bin/php /opt/solidtime/artisan queue:work --sleep=1 --tries=3 --max-time=3600",
+    "Restart=always",
+    "RestartSec=3",
+    "",
+    "[Install]",
+    "WantedBy=multi-user.target",
+    "UNITEOF",
+    "",
+    "cat > /etc/systemd/system/solidtime-scheduler.service <<'UNITEOF'",
+    "[Unit]",
+    "Description=SolidTime Laravel scheduler (oneshot)",
+    "After=network.target",
+    "",
+    "[Service]",
+    "Type=oneshot",
+    "User=www-data",
+    "Group=www-data",
+    "WorkingDirectory=/opt/solidtime",
+    "ExecStart=/usr/bin/php /opt/solidtime/artisan schedule:run",
+    "UNITEOF",
+    "",
+    "cat > /etc/systemd/system/solidtime-scheduler.timer <<'UNITEOF'",
+    "[Unit]",
+    "Description=Run SolidTime scheduler every minute",
+    "",
+    "[Timer]",
+    "OnCalendar=*-*-* *:*:00",
+    "Persistent=true",
+    "Unit=solidtime-scheduler.service",
+    "",
+    "[Install]",
+    "WantedBy=timers.target",
+    "UNITEOF",
+    "",
+    "systemctl daemon-reload",
+    "systemctl enable --now solidtime-queue.service",
+    "systemctl enable --now solidtime-scheduler.timer",
+    "systemctl is-active --quiet solidtime-queue.service",
+    "systemctl is-active --quiet solidtime-scheduler.timer",
+  ];
+}
+
 /**
  * @param {Record<string, unknown>} solidtime
  * @param {string} dbPassword
@@ -34,6 +185,7 @@ export function buildInstallScript(solidtime, dbPassword) {
   const tarballUrl = releaseTarballUrl(version);
   const appUrl =
     typeof solidtime.app_url === "string" && solidtime.app_url.trim() ? solidtime.app_url.trim() : "";
+  const httpsAppUrl = isSolidtimeHttpsAppUrl(appUrl);
   const enableRegistration = solidtime.enable_registration !== false;
   const mailMailer =
     typeof solidtime.mail_mailer === "string" && solidtime.mail_mailer.trim()
@@ -113,26 +265,20 @@ export function buildInstallScript(solidtime, dbPassword) {
     'sed -i "s|^FILESYSTEM_DISK=.*|FILESYSTEM_DISK=local|" .env',
     'sed -i "s|^PUBLIC_FILESYSTEM_DISK=.*|PUBLIC_FILESYSTEM_DISK=public|" .env',
     'sed -i "s|^MAIL_MAILER=.*|MAIL_MAILER=${MAIL_MAILER}|" .env',
-    'sed -i "s|^SESSION_SECURE_COOKIE=.*|SESSION_SECURE_COOKIE=false|" .env',
-    'grep -q "^SESSION_SECURE_COOKIE=" .env || echo "SESSION_SECURE_COOKIE=false" >> .env',
-    'sed -i "s|^APP_FORCE_HTTPS=.*|APP_FORCE_HTTPS=false|" .env',
-    'grep -q "^APP_FORCE_HTTPS=" .env || echo "APP_FORCE_HTTPS=false" >> .env',
-    "",
-    "php artisan self-host:generate-keys >/tmp/solidtime.keys 2>/dev/null || true",
-    'if [ -s /tmp/solidtime.keys ]; then',
-    "  while IFS= read -r line; do",
-    '    KEY="${line%%=*}"',
-    '    [ -z "$KEY" ] || [ "${KEY:0:1}" = "#" ] && continue',
-    '    sed -i "/^${KEY}=/d" .env',
-    '    echo "$line" >> .env',
-    "  done < /tmp/solidtime.keys",
-    "fi",
-    "rm -f /tmp/solidtime.keys",
+    ...buildSolidtimeProxyEnvBashLines(".env", httpsAppUrl),
+    'sed -i "s|^QUEUE_CONNECTION=.*|QUEUE_CONNECTION=database|" .env',
+    'grep -q "^QUEUE_CONNECTION=" .env || echo "QUEUE_CONNECTION=database" >> .env',
+    'sed -i "s|^GOTENBERG_URL=.*|GOTENBERG_URL=|" .env',
+    'grep -q "^GOTENBERG_URL=" .env || echo "GOTENBERG_URL=" >> .env',
+    'sed -i "/^PASSPORT_PRIVATE_KEY=/d" .env',
+    'sed -i "/^PASSPORT_PUBLIC_KEY=/d" .env',
     "",
     "/usr/local/bin/composer install --no-dev --optimize-autoloader",
     "npm install",
     "npm run build",
+    ...buildSolidtimeKeysBashLines(),
     "php artisan migrate --force",
+    "php artisan storage:link",
     "php artisan optimize:clear",
     "",
     "cat > /etc/caddy/Caddyfile <<'CADDYEOF'",
@@ -147,6 +293,7 @@ export function buildInstallScript(solidtime, dbPassword) {
     "chown -R www-data:www-data /opt/solidtime",
     "systemctl enable --now php8.3-fpm",
     "systemctl restart caddy",
+    ...buildSolidtimeSystemdUnitsBashLines(),
     `echo "$VERSION" > /opt/solidtime/.hdc-installed-version`,
     "test -f /opt/solidtime/public/index.php",
   ].join("\n");

@@ -3,6 +3,7 @@
  * Maintain Keycloak: refresh compose env and optional image updates.
  *
  * Usage: hdc run service keycloak maintain -- [--instance a | --system-id keycloak-a] [--skip-upgrade]
+ *        [--reapply-lxc-features]  Re-apply nesting/keyctl + Docker AppArmor workaround (default: always for privileged CTs)
  */
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { basename, dirname, join } from "node:path";
@@ -18,6 +19,11 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { databasePasswordVaultKey, resolveKeycloakDeployments } from "../lib/deployments.mjs";
 import { maintainKeycloakInCt, resolvePveSshForHost } from "../lib/keycloak-install.mjs";
+import {
+  ensureLxcDockerApparmorWorkaround,
+  pctRestart,
+  pctSetFeatures,
+} from "../../../lib/pve-pct-remote.mjs";
 import { adminPasswordVaultKey } from "../lib/keycloak-render.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
@@ -87,6 +93,61 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
 
   errout.write(`[hdc] ${target} ${verb}: ${systemId} vmid ${vmid} on ${hostId} …\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+
+  const unprivileged =
+    lxc.unprivileged === undefined ? 1 : Number(lxc.unprivileged) === 0 ? 0 : 1;
+  const skipLxcFeatures = flagGet(flags, "skip-lxc-features", "skip_lxc_features") !== undefined;
+  /** @type {Record<string, unknown> | null} */
+  let lxcFeaturesResult = null;
+  if (unprivileged === 0 && !skipLxcFeatures) {
+    const lxcFeatures = typeof lxc.features === "string" ? lxc.features.trim() : "nesting=1,keyctl=1";
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: re-applying LXC features + Docker AppArmor workaround …\n`,
+    );
+    if (lxcFeatures) {
+      const fr = pctSetFeatures(pveSsh.user, pveSsh.host, vmid, lxcFeatures, { capture: true });
+      if (fr.status !== 0) {
+        return {
+          ok: false,
+          system_id: systemId,
+          host_id: hostId,
+          vmid,
+          message: `pct set -features failed (exit ${fr.status}): ${(fr.stderr || fr.stdout).trim()}`,
+        };
+      }
+    }
+    const ar = ensureLxcDockerApparmorWorkaround(pveSsh.user, pveSsh.host, vmid, { capture: true });
+    if (ar.status !== 0) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        vmid,
+        message: `LXC AppArmor workaround failed (exit ${ar.status}): ${(ar.stderr || ar.stdout).trim()}`,
+      };
+    }
+    let restarted = false;
+    if (/changed=1/.test(ar.stdout || "")) {
+      const rr = pctRestart(pveSsh.user, pveSsh.host, vmid, { capture: true });
+      if (rr.status !== 0) {
+        return {
+          ok: false,
+          system_id: systemId,
+          host_id: hostId,
+          vmid,
+          message: `pct restart failed (exit ${rr.status}): ${(rr.stderr || rr.stdout).trim()}`,
+        };
+      }
+      restarted = true;
+    }
+    lxcFeaturesResult = {
+      ok: true,
+      features: lxcFeatures,
+      apparmor_changed: /changed=1/.test(ar.stdout || ""),
+      restarted,
+    };
+  }
+
   const secrets = await loadSecrets(deployment, vault);
   const result = await maintainKeycloakInCt(
     pveSsh.user,
@@ -113,6 +174,7 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
     vmid,
     skip_upgrade: skipUpgrade,
     message: result.message,
+    lxc_features: lxcFeaturesResult,
     ...guestBaselineResultFields(baseline),
   };
 }

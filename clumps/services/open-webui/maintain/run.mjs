@@ -22,6 +22,7 @@ import {
   secretKeyVaultKeyFromConfig,
 } from "../lib/deployments.mjs";
 import { maintainOpenWebuiInCt, resolvePveSshForHost } from "../lib/open-webui-install.mjs";
+import { normalizeOpenaiBackends } from "../lib/open-webui-render.mjs";
 import { createOpenWebuiVaultAccess } from "../lib/vault-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
@@ -57,8 +58,10 @@ function readCfg() {
  * @param {ReturnType<typeof resolveOpenWebuiDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {string} secretKey
+ * @param {Record<string, string>} openaiKeysById
+ * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
  */
-async function maintainOne(deployment, flags, secretKey, vaultAccess) {
+async function maintainOne(deployment, flags, secretKey, openaiKeysById, vaultAccess) {
   const { systemId, proxmox: px, openWebui, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
 
@@ -87,7 +90,7 @@ async function maintainOne(deployment, flags, secretKey, vaultAccess) {
     openWebuiCfg,
     installCfg,
     secretKey,
-    { skipUpgrade },
+    { skipUpgrade, openaiKeysById },
   );
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
@@ -154,10 +157,42 @@ async function main() {
     return;
   }
 
+  /** @type {Record<string, string>} */
+  const openaiKeysById = {};
+  /** @type {Map<string, string>} */
+  const openaiVaultKeyValues = new Map();
+  for (const deployment of deployments) {
+    const ow = isObject(deployment.openWebui) ? deployment.openWebui : {};
+    for (const b of normalizeOpenaiBackends(ow.openai_backends)) {
+      if (!openaiVaultKeyValues.has(b.api_key_vault_key)) {
+        errout.write(
+          `[hdc] ${target} ${verb}: loading OpenAI API key from vault ${b.api_key_vault_key} …\n`,
+        );
+        const val = String(
+          await vault.getSecret(b.api_key_vault_key, {
+            promptLabel: `vault secret ${b.api_key_vault_key}`,
+          }),
+        ).trim();
+        if (!val) {
+          errout.write(
+            `[hdc] ${target} ${verb}: secret required — set vault ${b.api_key_vault_key}\n`,
+          );
+          process.stdout.write(
+            `${JSON.stringify({ ok: false, target, verb, message: `missing vault ${b.api_key_vault_key}` }, null, 2)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        openaiVaultKeyValues.set(b.api_key_vault_key, val);
+      }
+      openaiKeysById[b.id] = /** @type {string} */ (openaiVaultKeyValues.get(b.api_key_vault_key));
+    }
+  }
+
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await maintainOne(deployment, flags, secretKey, vaultAccess));
+      results.push(await maintainOne(deployment, flags, secretKey, openaiKeysById, vaultAccess));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

@@ -31,6 +31,11 @@ import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 import { createKeycloakVaultAccess } from "../lib/vault-deps.mjs";
+import {
+  ensureLxcDockerApparmorWorkaround,
+  pctRestart,
+  pctSetFeatures,
+} from "../../../lib/pve-pct-remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -167,7 +172,8 @@ async function deployOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||
@@ -229,6 +235,67 @@ async function deployOne(deployment, flags, log, runOpts) {
     guestResourceOptsFromBlock(lxc, flags),
   );
 
+  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
+  const unprivileged =
+    lxc.unprivileged === undefined ? 1 : Number(lxc.unprivileged) === 0 ? 0 : 1;
+  const lxcFeatures = typeof lxc.features === "string" ? lxc.features.trim() : "";
+  if (unprivileged === 0 && lxcFeatures) {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: applying LXC features via pct on ${pveSsh.host} …\n`,
+    );
+    const fr = pctSetFeatures(pveSsh.user, pveSsh.host, guestVmid, lxcFeatures, { capture: true });
+    if (fr.status !== 0) {
+      const msg = `pct set -features failed (exit ${fr.status}): ${(fr.stderr || fr.stdout).trim()}`;
+      errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${msg}\n`);
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+        message: msg,
+      };
+    }
+  }
+
+  if (unprivileged === 0) {
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: ensuring Docker AppArmor workaround on ${pveSsh.host} …\n`,
+    );
+    const ar = ensureLxcDockerApparmorWorkaround(pveSsh.user, pveSsh.host, guestVmid, {
+      capture: true,
+    });
+    if (ar.status !== 0) {
+      const msg = `LXC AppArmor workaround failed (exit ${ar.status}): ${(ar.stderr || ar.stdout).trim()}`;
+      errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${msg}\n`);
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        result: provisionResult,
+        message: msg,
+      };
+    }
+    if (/changed=1/.test(ar.stdout)) {
+      errout.write(
+        `[hdc] ${target} ${verb}: ${systemId}: restarting CT ${guestVmid} to apply LXC config …\n`,
+      );
+      const rr = pctRestart(pveSsh.user, pveSsh.host, guestVmid, { capture: true });
+      if (rr.status !== 0) {
+        const msg = `pct restart failed (exit ${rr.status}): ${(rr.stderr || rr.stdout).trim()}`;
+        return {
+          ok: false,
+          system_id: systemId,
+          host_id: hostId,
+          mode,
+          result: provisionResult,
+          message: msg,
+        };
+      }
+    }
+  }
+
   if (shouldInstall(install)) {
     try {
       await ensureLxcStarted({
@@ -252,7 +319,6 @@ async function deployOne(deployment, flags, log, runOpts) {
     }
   }
 
-  const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const keycloakCfg = isObject(keycloak) ? keycloak : {};
   if (shouldInstall(install)) {
     const secrets = await loadSecrets(deployment, runOpts.vault);

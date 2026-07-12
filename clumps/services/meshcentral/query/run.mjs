@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Query MeshCentral deployments (config summary + optional live CT status).
+ * Query MeshCentral deployments (config summary + optional live CT / device API status).
  *
  * Usage: hdc run service meshcentral query -- [--instance a]
  *        hdc run service meshcentral query -- --live
+ *        hdc run service meshcentral query -- --live --device lan-1
+ *        hdc run service meshcentral query -- --import --yes
+ *        hdc run service meshcentral query -- --import --yes --skip-hardware
  */
 import { readFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -11,6 +14,8 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
+import { writeResolvedRepoJson } from "../../../../apps/hdc-cli/lib/private-repo.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import {
   listMeshcentralDeploymentSummaries,
@@ -19,12 +24,24 @@ import {
 } from "../lib/deployments.mjs";
 import { resolvePveSshForHost } from "../lib/meshcentral-install.mjs";
 import { queryMeshcentralInCt } from "../lib/query-status.mjs";
+import { parseDeviceSelectors, resolveDevices } from "../lib/meshcentral-devices.mjs";
+import { applyDevicesToConfig, mergeDevicesFromLive } from "../lib/meshcentral-inventory.mjs";
+import { collectDisk, collectHardware } from "../lib/meshcentral-ops.mjs";
+import {
+  loadClientHostsFromConfigs,
+  upsertSystemSidecarsFromDevices,
+} from "../lib/meshcentral-system-inventory.mjs";
+import {
+  listNormalizedDevices,
+  meshcentralFromDeployments,
+  openMeshcentralSession,
+} from "../lib/meshcentral-session.mjs";
 import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clumpRoot = join(here, "..");
 const CLUMP_CONFIG_EXAMPLE = "clumps/services/meshcentral/config.example.json";
-/** @type {{ data: Record<string, unknown>; path: string; source: string } | null} */
+/** @type {{ data: Record<string, unknown>; path: string; source: string; resolved?: import("../../../../apps/hdc-cli/lib/private-repo.mjs").ResolvedRepoFile } | null} */
 let _pkgConfig = null;
 
 function ensurePackageConfig() {
@@ -52,6 +69,144 @@ function loadCfg() {
   return loaded;
 }
 
+/**
+ * @param {Record<string, unknown>} cfg
+ * @param {Record<string, string>} flags
+ * @param {string[]} argv
+ */
+async function queryDevicesApi(cfg, flags, argv) {
+  const log = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  let deployments;
+  try {
+    deployments = resolveMeshcentralDeployments(cfg, flags);
+  } catch (e) {
+    return { ok: false, message: String(/** @type {Error} */ (e).message || e) };
+  }
+  const meshcentral = meshcentralFromDeployments(deployments);
+  const vault = createPackageVaultAccess();
+  await vault.unlock({});
+  const session = await openMeshcentralSession({ vault, meshcentral, log });
+  try {
+    const { live, configDevices } = await listNormalizedDevices(session.client, meshcentral);
+    const selectors = parseDeviceSelectors(flags, argv);
+    /** @type {Record<string, unknown>[]} */
+    let devices = live.map((d) => ({ ...d }));
+
+    if (selectors.length) {
+      const resolved = resolveDevices({ liveDevices: live, configDevices, selectors });
+      if (!resolved.ok) {
+        return { ok: false, message: resolved.message, devices: live };
+      }
+      /** @type {Record<string, unknown>[]} */
+      const detailed = [];
+      for (const d of resolved.devices) {
+        /** @type {Record<string, unknown>} */
+        const row = { ...d };
+        if (d.online && d.node_id) {
+          log(`collecting disk for ${d.id || d.name} …`);
+          row.disk = await collectDisk(session.client, d, { log });
+        } else {
+          row.disk = { ok: false, message: "device offline" };
+        }
+        detailed.push(row);
+      }
+      devices = detailed;
+    }
+
+    let imported = null;
+    const doImport = flagGet(flags, "import") !== undefined;
+    const yes = flagGet(flags, "yes") !== undefined;
+    const skipHardware = flagGet(flags, "skip-hardware") !== undefined;
+    if (doImport) {
+      if (!yes) {
+        return {
+          ok: false,
+          message: "query --import requires --yes",
+          devices: live,
+          api_url: session.url,
+        };
+      }
+      const clientHosts = loadClientHostsFromConfigs(root);
+      log(`loaded ${clientHosts.length} client host(s) for id matching`);
+      const merged = mergeDevicesFromLive(meshcentral, live, { clientHosts });
+      const nextCfg = applyDevicesToConfig(cfg, merged);
+      // Force fresh load so we have ResolvedRepoFile for write.
+      _pkgConfig = null;
+      const loaded = ensurePackageConfig();
+      if (!loaded.resolved) {
+        throw new Error("config resolved path missing; cannot write devices[]");
+      }
+      writeResolvedRepoJson(loaded.resolved, nextCfg);
+      log(`imported ${merged.length} device(s) into config devices[]`);
+
+      /** @type {Map<string, { ok: boolean; hardware?: Record<string, unknown>[]; mac?: string | null; message?: string }>} */
+      const hardwareById = new Map();
+      if (!skipHardware) {
+        /** @type {Map<string, Record<string, unknown>>} */
+        const liveByNodeId = new Map();
+        for (const d of live) {
+          if (typeof d.node_id === "string" && d.node_id) liveByNodeId.set(d.node_id, d);
+        }
+        for (const dev of merged) {
+          const id = typeof dev.id === "string" ? dev.id : "";
+          const nodeId = typeof dev.node_id === "string" ? dev.node_id : "";
+          const liveRow = nodeId ? liveByNodeId.get(nodeId) : null;
+          if (!id || !liveRow?.online || !nodeId) {
+            if (id) {
+              hardwareById.set(id, { ok: false, message: "device offline or missing node_id" });
+            }
+            continue;
+          }
+          log(`collecting hardware for ${id} …`);
+          const hw = await collectHardware(
+            session.client,
+            { ...dev, ...liveRow, node_id: nodeId },
+            { log },
+          );
+          hardwareById.set(id, hw);
+          if (!hw.ok) {
+            log(`hardware collect failed for ${id}: ${hw.message || "unknown error"}`);
+          }
+        }
+      } else {
+        log("skipping hardware collect (--skip-hardware)");
+      }
+
+      const systems = upsertSystemSidecarsFromDevices({
+        publicRoot: root,
+        mergedDevices: merged,
+        liveDevices: live,
+        hardwareById,
+        log,
+      });
+      log(`upserted ${systems.written.length} system sidecar(s)`);
+
+      imported = {
+        count: merged.length,
+        devices: merged,
+        systems: systems.written,
+        hardware_skipped: skipHardware,
+      };
+      _pkgConfig = {
+        data: nextCfg,
+        path: loaded.path,
+        source: loaded.source,
+        resolved: loaded.resolved,
+      };
+    }
+
+    return {
+      ok: true,
+      api_url: session.url,
+      device_count: live.length,
+      devices,
+      imported,
+    };
+  } finally {
+    await session.client.close();
+  }
+}
+
 async function main() {
   let loaded = loadCfg();
   let cfg = loaded.ok && isObject(loaded.data) ? loaded.data : null;
@@ -75,8 +230,12 @@ async function main() {
     }
   }
 
-  const flags = parseArgvFlags(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const flags = parseArgvFlags(argv);
   const live = flagGet(flags, "live") !== undefined;
+  const doImport = flagGet(flags, "import") !== undefined;
+  const deviceSelectors = parseDeviceSelectors(flags, argv);
+  const wantApi = live || doImport || deviceSelectors.length > 0;
 
   errout.write(`[hdc] ${target} ${verb}: config ${rel} ${loaded.ok ? "loaded" : "not loaded"}.\n`);
 
@@ -98,6 +257,8 @@ async function main() {
 
   /** @type {Record<string, unknown>[]} */
   const liveResults = [];
+  /** @type {Record<string, unknown> | null} */
+  let apiDevices = null;
 
   if (live && cfg && !configError) {
     let selected;
@@ -142,6 +303,19 @@ async function main() {
     }
   }
 
+  if (wantApi && cfg && !configError) {
+    errout.write(`[hdc] ${target} ${verb}: querying MeshCentral device API …\n`);
+    try {
+      apiDevices = await queryDevicesApi(cfg, flags, argv);
+      if (apiDevices && apiDevices.ok === false) {
+        configError = typeof apiDevices.message === "string" ? apiDevices.message : "device API failed";
+      }
+    } catch (e) {
+      configError = String(/** @type {Error} */ (e).message || e);
+      apiDevices = { ok: false, message: configError };
+    }
+  }
+
   const payload = {
     ok: !configError && (loaded.ok || loaded.missing),
     target,
@@ -154,6 +328,16 @@ async function main() {
     deployments,
     live,
     live_results: live ? liveResults : undefined,
+    devices: apiDevices?.devices,
+    device_api: apiDevices
+      ? {
+          ok: apiDevices.ok,
+          api_url: apiDevices.api_url,
+          device_count: apiDevices.device_count,
+          imported: apiDevices.imported,
+          message: apiDevices.message,
+        }
+      : undefined,
   };
 
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

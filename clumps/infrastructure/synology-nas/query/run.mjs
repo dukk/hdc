@@ -3,6 +3,7 @@
  * Synology NAS health query (DSM version, volumes, RAID, disks).
  *
  * Usage: hdc run infrastructure synology-nas query -- [--instance a|b] [--system-id nas-a]
+ *        Includes docker ps container list under health.docker.containers when Docker CLI is present.
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -26,7 +27,8 @@ import {
 import { createSynologyVaultAccess } from "../lib/vault-deps.mjs";
 import { createNodeCliDeps } from "../../../../apps/hdc-cli/lib/node-cli-deps.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
-import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
+import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
+import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -32,6 +32,8 @@ echo "===DOCKER_VERSION==="
 docker version --format '{{.Server.Version}}' 2>/dev/null || true
 echo "===COMPOSE_VERSION==="
 docker compose version --short 2>/dev/null || true
+echo "===DOCKER_PS==="
+docker ps --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true
 `.trim();
 
 /** Ensure Container Manager / Docker package and docker CLI (maintain). */
@@ -149,6 +151,10 @@ export function parseDockerSectionOutput(raw) {
       current = "compose";
       continue;
     }
+    if (line === "===DOCKER_PS===") {
+      current = "ps";
+      continue;
+    }
     if (line === "===ACTION===") {
       current = "action";
       continue;
@@ -172,6 +178,21 @@ export function parseDockerSectionOutput(raw) {
   const composeVersion = (sections.compose ?? "").trim() || null;
   const action = (sections.action ?? "").trim() || null;
   const result = (sections.result ?? "").trim() || null;
+  /** @type {{ id: string; name: string; image: string; status: string; ports: string }[]} */
+  const containers = [];
+  for (const line of (sections.ps ?? "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    const parts = t.split("\t");
+    if (parts.length < 4) continue;
+    containers.push({
+      id: parts[0] ?? "",
+      name: parts[1] ?? "",
+      image: parts[2] ?? "",
+      status: parts[3] ?? "",
+      ports: parts[4] ?? "",
+    });
+  }
 
   return {
     package: pkg,
@@ -183,6 +204,7 @@ export function parseDockerSectionOutput(raw) {
     action,
     result,
     composeAvailable: Boolean(composeVersion),
+    containers,
   };
 }
 

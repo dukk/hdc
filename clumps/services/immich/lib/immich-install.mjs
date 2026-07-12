@@ -83,7 +83,7 @@ export function buildInstallScript(
 /**
  * @param {string} composeDirPath
  * @param {string} envContent
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; composeUrl?: string; envExampleUrl?: string }} [opts]
  */
 export function buildMaintainScript(composeDirPath, envContent, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
@@ -91,11 +91,21 @@ export function buildMaintainScript(composeDirPath, envContent, opts = {}) {
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
     `test -f '${dir}/docker-compose.yml'`,
+  ];
+  if (!opts.skipUpgrade && opts.composeUrl) {
+    const escapedCompose = opts.composeUrl.replace(/'/g, `'\\''`);
+    lines.push(`curl -fsSL '${escapedCompose}' -o '${dir}/docker-compose.yml'`);
+    if (opts.envExampleUrl) {
+      const escapedEnv = opts.envExampleUrl.replace(/'/g, `'\\''`);
+      lines.push(`curl -fsSL '${escapedEnv}' -o '${dir}/.env.example'`);
+    }
+  }
+  lines.push(
     `cat > '${dir}/.env' <<'HDCIMMICHENV'`,
     envContent.trimEnd(),
     "HDCIMMICHENV",
     `cd '${dir}'`,
-  ];
+  );
   if (!opts.skipUpgrade) {
     lines.push("docker compose pull");
   }
@@ -194,7 +204,12 @@ export async function maintainImmichOnHost(exec, immich, install, dbPassword, op
 
   const envContent = renderImmichEnv(immich, install, dbPassword);
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, envContent, { skipUpgrade: opts.skipUpgrade });
+  const release = typeof immich.release === "string" ? immich.release : "latest";
+  const inner = buildMaintainScript(dir, envContent, {
+    skipUpgrade: opts.skipUpgrade,
+    composeUrl: composeFileUrl(release),
+    envExampleUrl: envExampleUrl(release),
+  });
   const r = exec.run(inner);
   if (r.status !== 0) {
     const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;

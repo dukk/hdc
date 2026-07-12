@@ -1,0 +1,21 @@
+{
+  "id": "crowdsec",
+  "title": "CrowdSec local API and bouncers",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/systems/crowdsec-a.json",
+    "inventory/manual/services/crowdsec.json"
+  ],
+  "operation_report": {
+    "next_steps": [
+      "Run query --live to confirm CrowdSec LAPI health on the CT.",
+      "Use maintain --sync-bouncers after nginx-waf nodes are reachable over SSH."
+    ]
+  },
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" },
+    "teardown": { "script": "run.mjs" }
+  }
+}

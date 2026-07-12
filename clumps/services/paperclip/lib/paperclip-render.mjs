@@ -116,6 +116,20 @@ export function openaiApiKeyVaultKey(paperclip) {
 }
 
 /**
+ * Optional OpenAI-compatible base URL (e.g. LiteLLM).
+ * @param {Record<string, unknown>} paperclip
+ */
+export function openaiBaseUrl(paperclip) {
+  const raw =
+    typeof paperclip.openai_base_url === "string" ? paperclip.openai_base_url.trim() : "";
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(`paperclip.openai_base_url must be http(s)://… got ${JSON.stringify(raw)}`);
+  }
+  return raw.replace(/\/+$/, "");
+}
+
+/**
  * @param {Record<string, unknown>} paperclip
  */
 export function googleGeminiApiKeyVaultKey(paperclip) {
@@ -269,6 +283,11 @@ export function renderPaperclipEnv(paperclip, secrets, ctIp = null) {
   const openaiApiKey = String(secrets.openaiApiKey || "").trim();
   if (openaiApiKey) {
     lines.push(`OPENAI_API_KEY=${openaiApiKey}`);
+  }
+
+  const openaiUrl = openaiBaseUrl(paperclip);
+  if (openaiUrl) {
+    lines.push(`OPENAI_BASE_URL=${openaiUrl}`);
   }
 
   const googleGeminiApiKey = String(secrets.googleGeminiApiKey || "").trim();

@@ -29,6 +29,7 @@ import {
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { repairUbuntuQemuConsole } from "../../../lib/qemu-ubuntu-console-repair.mjs";
 
 import { resolveLlamaCppDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../../ollama/lib/guest-exists.mjs";
@@ -188,7 +189,8 @@ async function deployLxcOne(deployment, flags, log, runOpts = {}) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       systemId.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 63) ||
@@ -395,7 +397,8 @@ async function deployQemuOne(deployment, flags, log) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
 
     provisionResult = await cloneQemuGuest({
       log,
@@ -487,6 +490,17 @@ async function deployQemuOne(deployment, flags, log) {
       gateway,
       log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
     });
+
+    const consoleFix = repairUbuntuQemuConsole({
+      user: pveSsh.user,
+      host: pveSsh.host,
+      vmid: guestVmid,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    if (!consoleFix.ok) {
+      const detail = `${consoleFix.stderr}${consoleFix.stdout}`.trim() || consoleFix.message;
+      throw new Error(`Ubuntu console repair failed on vmid ${guestVmid}: ${detail}`);
+    }
 
     await startQemuGuest({
       apiBase: auth.host.apiBase,

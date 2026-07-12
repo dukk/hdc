@@ -8,6 +8,7 @@ coverage/
 clumps/**/reports/
 clumps/**/*.json
 !clumps/**/*.example.json
+!clumps/**/manifest.json
 
 inventory/manual/**/*.json
 !inventory/manual/systems/_example.json
@@ -18,4 +19,4 @@ inventory/automated/
 vault.enc
 **/client_secret*.json
 apps/hdc-cli/scripts/test-*.mjs
-tmp-*.txt
+/tmp-*

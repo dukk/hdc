@@ -34,6 +34,7 @@ import { createOllamaExec, syncOllamaModels } from "../lib/ollama-models.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { installOllamaInCt, resolvePveSshForHost } from "../lib/ollama-install.mjs";
 import { sshRemote } from "../../../lib/pve-pct-remote.mjs";
+import { repairUbuntuQemuConsole } from "../../../lib/qemu-ubuntu-console-repair.mjs";
 import { installOllamaInQemu } from "../lib/ollama-qemu-install.mjs";
 import { resolveLxcRootPassword } from "../lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
@@ -483,6 +484,17 @@ async function deployOne(deployment, flags, log, runOpts = {}) {
         gateway,
         log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
       });
+
+      const consoleFix = repairUbuntuQemuConsole({
+        user: pveSsh.user,
+        host: pveSsh.host,
+        vmid: guestVmid,
+        log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+      });
+      if (!consoleFix.ok) {
+        const detail = `${consoleFix.stderr}${consoleFix.stdout}`.trim() || consoleFix.message;
+        throw new Error(`Ubuntu console repair failed on vmid ${guestVmid}: ${detail}`);
+      }
 
       await startQemuGuest({
         apiBase: auth.host.apiBase,

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "marked": "^15.0.12",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "ws": "^8.21.0"
   }
 }

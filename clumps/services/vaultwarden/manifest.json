@@ -1,0 +1,24 @@
+{
+  "id": "vaultwarden",
+  "title": "Vaultwarden (Bitwarden-compatible password manager)",
+  "env_required": ["HDC_VAULTWARDEN_ADMIN_TOKEN"],
+  "inventory_docs": [
+    "inventory/manual/systems/vaultwarden-a.json",
+    "inventory/manual/services/vaultwarden.json"
+  ],
+  "operation_report": {
+    "next_steps": [
+      "Set access.nodes[0].ip on inventory/manual/systems/vaultwarden-a.json from query --live upstream_url.",
+      "Add a BIND forward A record for the vaultwarden.domain hostname pointing at the CT IP.",
+      "Configure nginx-waf sites[] with proxy_pass to the CT upstream (http://<ct-ip>:80).",
+      "Open admin_url from deploy output and authenticate with HDC_VAULTWARDEN_ADMIN_TOKEN.",
+      "Confirm signups_allowed is false unless you intend open registration."
+    ]
+  },
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" },
+    "teardown": { "script": "run.mjs" }
+  }
+}

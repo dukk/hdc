@@ -653,7 +653,10 @@ function scanHomepageWidgetUris(publicRoot, env, map, systemIps) {
       }).data;
       const controller = controllerFromPackageConfig(unifiData);
       const controllerUrl = controller?.url ? normalizeServiceUrl(controller.url) : null;
-      if (controllerUrl && !controllerUrl.includes("10.0.0.1")) {
+      // Raw RFC1918 controller URLs (e.g. the LAN gateway) are not useful as
+      // Vaultwarden URIs; prefer the public DNS name instead.
+      const privateLanUrl = /^https?:\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)/;
+      if (controllerUrl && !privateLanUrl.test(controllerUrl)) {
         setVaultKeyUris(map, vaultKey, [controllerUrl]);
       } else {
         applyInfraExceptions(map, vaultKey, ["https://unifi.hdc.dukk.org"]);

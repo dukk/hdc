@@ -3,6 +3,7 @@ import { CliExit } from "./cli-exit.mjs";
 import { isLocalOnlyVaultKey, isAutoSecretBackend, resolveSecretBackendMode } from "./secret-backend.mjs";
 import {
   bwDeleteItem,
+  bwGetLoginCredentials,
   bwGetPassword,
   bwItemExistsInOrg,
   bwListItemNames,
@@ -46,6 +47,12 @@ export function clearVaultPassphraseProcessCache() {
  * @property {boolean} [allowEmpty]
  * @property {boolean} [optional] When true, return "" if the secret is missing instead of prompting.
  * @property {(value: string) => boolean | Promise<boolean>} [verify] If provided, must return true before saving.
+ */
+
+/**
+ * @typedef {object} GetSecretLoginOptions
+ * @property {boolean} [optional] When true, return null if credentials are missing instead of throwing.
+ * @property {string} [fallbackUsername] Used when the vault stores only a password (local backend).
  */
 
 /**
@@ -218,7 +225,10 @@ export function createVaultAccess(deps) {
         const local = await readLocalSecrets(unlockOpts);
         if (local) {
           for (const [k, v] of Object.entries(local)) {
-            if (isLocalOnlyVaultKey(k)) out[k] = v;
+            if (typeof v !== "string" || !v) continue;
+            // Always apply local-only bootstrap keys; also fill gaps for secrets
+            // that exist only in ~/.hdc/vault.enc (not yet pushed to Vaultwarden).
+            if (isLocalOnlyVaultKey(k) || !out[k]) out[k] = v;
           }
         }
         return out;
@@ -409,6 +419,76 @@ export function createVaultAccess(deps) {
   }
 
   /**
+   * Read a Bitwarden login item's username + password (e.g. HDC_MESHCENTRAL_USER).
+   * Local vault stores password only; supply fallbackUsername when needed.
+   *
+   * @param {string} key
+   * @param {GetSecretLoginOptions} [options]
+   * @returns {Promise<{ username: string; password: string } | null>}
+   */
+  async function getSecretLogin(key, options = {}) {
+    const { optional = false, fallbackUsername } = options;
+    const useLocalOnly = isLocalOnlyVaultKey(key) || backendMode() === "local";
+    const fallbackUser =
+      typeof fallbackUsername === "string" ? fallbackUsername.trim() : "";
+
+    /** @returns {Promise<{ username: string; password: string } | null>} */
+    async function fromLocalPassword() {
+      const password = await getSecretLocal(key, { optional: true });
+      if (password && fallbackUser) return { username: fallbackUser, password };
+      return null;
+    }
+
+    if (!useLocalOnly) {
+      try {
+        const session = await ensureBwUnlocked(
+          vwCli,
+          async (k) => {
+            const data = await readLocalSecrets({ createIfMissing: false });
+            if (data === null) return null;
+            const v = data[k];
+            return typeof v === "string" && v.length > 0 ? v : null;
+          },
+          async (k, value) => {
+            await setLocalSecret(k, value);
+          },
+        );
+        const creds = bwGetLoginCredentials(vwCli, session, key);
+        if (creds) return creds;
+        if (isAutoSecretBackend(deps.env)) {
+          const localCreds = await fromLocalPassword();
+          if (localCreds) return localCreds;
+        }
+        if (optional) return null;
+        throw new Error(
+          `Vaultwarden login item ${key} must have both username and password set`,
+        );
+      } catch (e) {
+        const msg = String(/** @type {Error} */ (e).message || e);
+        if (msg.includes("must have both")) {
+          if (optional) return null;
+          throw e;
+        }
+        if (isAutoSecretBackend(deps.env)) {
+          deps.warn(
+            `Vaultwarden backend unavailable (${msg}); using local vault for ${key} login.`,
+          );
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    const localCreds = await fromLocalPassword();
+    if (localCreds) return localCreds;
+    if (optional) return null;
+    throw new Error(
+      `Login credentials for ${key} require a Vaultwarden login item with username+password` +
+        (fallbackUser ? " (or local password plus fallbackUsername)" : ""),
+    );
+  }
+
+  /**
    * @param {string} key
    * @param {string} value
    */
@@ -548,6 +628,7 @@ export function createVaultAccess(deps) {
     readSecrets,
     writeSecrets,
     getSecret,
+    getSecretLogin,
     setSecret,
     deleteSecret,
     unlockVaultwarden,

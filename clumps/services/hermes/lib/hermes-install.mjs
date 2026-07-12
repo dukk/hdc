@@ -174,10 +174,13 @@ function secretsToEnvInput(secrets) {
 
 /**
  * @param {Record<string, unknown>} hermes
+ * @param {Awaited<ReturnType<import("./vault-secrets.mjs").resolveHermesSecrets>>} [secrets]
  */
-function renderConfigForHermes(hermes) {
+function renderConfigForHermes(hermes, secrets) {
   try {
-    return renderHermesConfigYaml(hermes);
+    return renderHermesConfigYaml(hermes, {
+      apiKey: secrets?.customApiKey ?? null,
+    });
   } catch (e) {
     const msg = String(/** @type {Error} */ (e).message || e);
     throw new Error(`hermes config.yaml render failed: ${msg}`);
@@ -192,7 +195,7 @@ function renderConfigForHermes(hermes) {
  * @param {{ maintain?: boolean; skipUpgrade?: boolean; waitDashboard?: boolean }} [opts]
  */
 async function runHermesStackOnGuest(exec, hermes, install, secrets, opts = {}) {
-  const configYaml = renderConfigForHermes(hermes);
+  const configYaml = renderConfigForHermes(hermes, secrets);
   const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
   const composeYaml = renderComposeYaml(hermes, install);
   const composeTagEnv = renderComposeEnvFile(hermes);
@@ -243,7 +246,7 @@ export async function installHermesInCt(user, pveHost, vmid, hermes, install, se
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const configYaml = renderConfigForHermes(hermes);
+  const configYaml = renderConfigForHermes(hermes, secrets);
   const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
   const composeYaml = renderComposeYaml(hermes, install);
   const composeTagEnv = renderComposeEnvFile(hermes);
@@ -320,7 +323,7 @@ export async function maintainHermesInCt(user, pveHost, vmid, hermes, install, s
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const configYaml = renderConfigForHermes(hermes);
+  const configYaml = renderConfigForHermes(hermes, secrets);
   const envContent = renderHermesEnv(hermes, secretsToEnvInput(secrets), secrets.extraEnv);
   const composeTagEnv = renderComposeEnvFile(hermes);
   const dir = composeDir(install);

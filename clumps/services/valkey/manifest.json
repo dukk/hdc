@@ -1,0 +1,17 @@
+{
+  "id": "valkey",
+  "title": "Valkey Cluster",
+  "env_required": ["HDC_VALKEY_PASSWORD"],
+  "inventory_docs": [
+    "inventory/manual/systems/vm-valkey-a.json",
+    "inventory/manual/systems/vm-valkey-b.json",
+    "inventory/manual/systems/vm-valkey-c.json",
+    "inventory/manual/services/valkey.json",
+    "clumps/services/valkey/config.json (copy config.example.json)"
+  ],
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" }
+  }
+}

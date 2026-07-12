@@ -108,6 +108,7 @@ async function main() {
             vmid,
             d.keycloak,
             d.install,
+            lxc,
           );
           liveResults.push({ system_id: d.systemId, ok: true, ...status });
         } catch (e) {

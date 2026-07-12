@@ -1,6 +1,6 @@
 import { deploymentSystemIdPattern, lxcSystemId } from "../../../../apps/hdc-cli/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
-import { normalizeOllamaBackends } from "./open-webui-render.mjs";
+import { normalizeOllamaBackends, normalizeOpenaiBackends } from "./open-webui-render.mjs";
 
 const OPEN_WEBUI_ROLE = "open-webui";
 
@@ -104,7 +104,11 @@ function validateDeployments(deployments) {
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const ow = isObject(d.open_webui) ? d.open_webui : {};
-    normalizeOllamaBackends(ow.ollama_backends);
+    const ollama = normalizeOllamaBackends(ow.ollama_backends);
+    const openai = normalizeOpenaiBackends(ow.openai_backends);
+    if (!ollama.length && !openai.length) {
+      throw new Error(`${sid}: open_webui needs at least one ollama_backends[] or openai_backends[] entry`);
+    }
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
     if (mode === "proxmox-lxc" || mode === "" || !mode) {
       const px = isObject(d.proxmox) ? d.proxmox : {};
@@ -135,6 +139,7 @@ export function listOpenWebuiDeploymentSummaries(cfg) {
     const install = isObject(d.install) ? d.install : {};
     const ow = isObject(d.open_webui) ? d.open_webui : {};
     const backends = normalizeOllamaBackends(ow.ollama_backends);
+    const openaiBackends = normalizeOpenaiBackends(ow.openai_backends);
     const port = typeof ow.host_port === "number" ? ow.host_port : Number(ow.host_port);
     return {
       system_id: d.system_id,
@@ -145,6 +150,7 @@ export function listOpenWebuiDeploymentSummaries(cfg) {
       image_tag: typeof ow.image_tag === "string" ? ow.image_tag : "main",
       host_port: Number.isFinite(port) ? port : 3000,
       ollama_backend_ids: backends.map((b) => b.id),
+      openai_backend_ids: openaiBackends.map((b) => b.id),
     };
   });
 }

@@ -1,0 +1,41 @@
+{
+  "id": "azure",
+  "title": "Azure app registrations",
+  "env_required": ["HDC_AZURE_TENANT_ID", "HDC_AZURE_CLIENT_ID"],
+  "inventory_docs": [
+    "inventory/manual/targets/azure.json",
+    "clumps/infrastructure/azure/config.json"
+  ],
+  "services": [
+    {
+      "id": "app-discovery",
+      "title": "Entra app discovery",
+      "verb": "query",
+      "summary": "List tenant app registrations and diff vs config (JSON on stdout)."
+    },
+    {
+      "id": "app-deploy",
+      "title": "Entra app deploy",
+      "verb": "deploy",
+      "summary": "Create managed app registrations missing from the tenant."
+    },
+    {
+      "id": "app-maintain",
+      "title": "Entra app maintain",
+      "verb": "maintain",
+      "summary": "Reconcile redirect URIs and API permissions for managed apps."
+    }
+  ],
+  "verbs": {
+    "query": { "script": "run.mjs" },
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" }
+  },
+  "operation_report": {
+    "next_steps": [
+      "Run `hdc run infrastructure azure query --` after deploy or maintain.",
+      "Bootstrap: `query -- --import --yes` to refresh hdc-private applications[].",
+      "Grant admin consent in Entra portal when required_resource_access changes."
+    ]
+  }
+}
