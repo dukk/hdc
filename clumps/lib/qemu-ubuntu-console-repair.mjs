@@ -54,7 +54,7 @@ export function repairUbuntuQemuConsole(opts) {
  * @param {number} opts.vmid
  * @param {string} [opts.cloudinitStorage] Storage for cloudinit volume (default local-lvm)
  * @param {string} [opts.ideSlot] Drive slot (default ide2)
- * @param {string} [opts.ipconfig0] e.g. ip=10.0.0.25/24,gw=10.0.0.1
+ * @param {string} [opts.ipconfig0] e.g. ip=192.0.2.25/24,gw=192.0.2.1
  * @param {string} [opts.ciuser]
  * @param {string} [opts.nameserver]
  * @param {string} [opts.searchdomain]

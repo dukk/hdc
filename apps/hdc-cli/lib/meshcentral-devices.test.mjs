@@ -91,7 +91,7 @@ describe("meshcentral-devices", () => {
       name: "LAN-1",
       conn: 1,
       pwr: 1,
-      host: "10.0.0.50",
+      host: "192.0.2.50",
       osdesc: "Windows 11",
     });
     expect(n).toMatchObject({
@@ -99,7 +99,7 @@ describe("meshcentral-devices", () => {
       name: "LAN-1",
       online: true,
       platform: "windows",
-      ip: "10.0.0.50",
+      ip: "192.0.2.50",
     });
   });
 
@@ -295,7 +295,7 @@ describe("meshcentral-system-inventory", () => {
       schema_version: 1,
       id: "lan-1",
       kind: "system",
-      access: { nodes: [{ name: "primary", mac: "11:22:33:44:55:66", ip: "10.0.0.1" }] },
+      access: { nodes: [{ name: "primary", mac: "11:22:33:44:55:66", ip: "192.0.2.1" }] },
       hardware: [{ type: "memory", total_gb: 8 }],
     };
     const merged = mergeSystemSidecar({
@@ -313,7 +313,7 @@ describe("meshcentral-system-inventory", () => {
       mac: null,
     });
     expect(merged.access.nodes[0].mac).toBe("11:22:33:44:55:66");
-    expect(merged.access.nodes[0].ip).toBe("10.0.0.1");
+    expect(merged.access.nodes[0].ip).toBe("192.0.2.1");
     expect(merged.hardware).toEqual([{ type: "memory", total_gb: 8 }]);
   });
 });

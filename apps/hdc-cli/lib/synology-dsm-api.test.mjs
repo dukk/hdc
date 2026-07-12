@@ -9,11 +9,11 @@ import {
 
 describe("synologyDsmBaseUrl", () => {
   it("defaults to https :5001", () => {
-    expect(synologyDsmBaseUrl("10.0.0.10")).toBe("https://10.0.0.10:5001");
+    expect(synologyDsmBaseUrl("192.0.2.10")).toBe("https://192.0.2.10:5001");
   });
 
   it("supports http :5000", () => {
-    expect(synologyDsmBaseUrl("10.0.0.10", { scheme: "http" })).toBe("http://10.0.0.10:5000");
+    expect(synologyDsmBaseUrl("192.0.2.10", { scheme: "http" })).toBe("http://192.0.2.10:5000");
   });
 });
 
@@ -42,7 +42,7 @@ describe("dsmLogin / dsmPackageControl", () => {
     });
 
     const session = await dsmLogin({
-      baseUrl: "https://10.0.0.10:5001",
+      baseUrl: "https://192.0.2.10:5001",
       account: "dukk",
       password: "secret",
       httpRequest,
@@ -60,7 +60,7 @@ describe("dsmLogin / dsmPackageControl", () => {
 describe("probeHttpIdentity", () => {
   it("treats 200 as ok", async () => {
     const httpRequest = vi.fn(async () => ({ statusCode: 200, body: "<MediaContainer/>" }));
-    const r = await probeHttpIdentity("10.0.0.10", 32400, { httpRequest });
+    const r = await probeHttpIdentity("192.0.2.10", 32400, { httpRequest });
     expect(r.ok).toBe(true);
     expect(r.statusCode).toBe(200);
   });

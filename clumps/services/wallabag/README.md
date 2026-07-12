@@ -30,7 +30,7 @@ node apps/hdc-cli/cli.mjs run service wallabag maintain --
 
 ## After deploy
 
-1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://10.0.0.154:80`).
+1. **CT IP:** from deploy/query `upstream_url` (e.g. `http://192.0.2.154:80`).
 2. **Inventory:** set `access.nodes[0].ip` on `wallabag-a.json`.
 3. **BIND:** A `wallabag-a` → CT IP; CNAME `wallabag` → `nginx-waf-a.hdc.dukk.org.`
 4. **nginx-waf:** site → `http://<ct-ip>:80` with `internal-lan`.
