@@ -18,7 +18,7 @@ describe("vault-key-uris", () => {
   });
 
   it("urlFromHostPort builds LAN URLs", () => {
-    expect(urlFromHostPort("10.0.0.125", 9120)).toBe("http://10.0.0.125:9120");
+    expect(urlFromHostPort("192.0.2.125", 9120)).toBe("http://192.0.2.125:9120");
     expect(urlFromHostPort("bad", 80)).toBeNull();
   });
 
@@ -31,8 +31,8 @@ describe("vault-key-uris", () => {
 
   it("sortVaultKeyUris prefers public hostnames before LAN IPs", () => {
     expect(
-      sortVaultKeyUris(["http://10.0.0.125:9120", "https://paperclip.hdc.dukk.org"]),
-    ).toEqual(["https://paperclip.hdc.dukk.org", "http://10.0.0.125:9120"]);
+      sortVaultKeyUris(["http://192.0.2.125:9120", "https://paperclip.hdc.dukk.org"]),
+    ).toEqual(["https://paperclip.hdc.dukk.org", "http://192.0.2.125:9120"]);
   });
 
   it("vaultKeyUrisEqual compares sorted unique lists", () => {

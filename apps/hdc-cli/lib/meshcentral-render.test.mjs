@@ -19,7 +19,7 @@ describe("meshcentral-render", () => {
   const meshcentral = {
     image_tag: "latest",
     public_url: "https://meshcentral.example.invalid",
-    trusted_proxies: ["10.0.0.40", "10.0.0.41"],
+    trusted_proxies: ["192.0.2.40", "192.0.2.41"],
     allow_new_accounts: false,
   };
   const install = { compose_dir: "/opt/meshcentral" };
@@ -35,7 +35,7 @@ describe("meshcentral-render", () => {
     expect(resolvePublicUrl(meshcentral)).toBe("https://meshcentral.example.invalid");
     expect(resolveHostname(meshcentral)).toBe("meshcentral.example.invalid");
     expect(resolveHostname({ hostname: "mc.lan" })).toBe("mc.lan");
-    expect(trustedProxies(meshcentral)).toEqual(["10.0.0.40", "10.0.0.41"]);
+    expect(trustedProxies(meshcentral)).toEqual(["192.0.2.40", "192.0.2.41"]);
     expect(trustedProxies({})).toEqual(DEFAULT_TRUSTED_PROXIES);
     expect(allowNewAccounts(meshcentral)).toBe(false);
     expect(allowNewAccounts({ allow_new_accounts: true })).toBe(true);
@@ -67,8 +67,8 @@ describe("meshcentral-render", () => {
   });
 
   it("serviceSummary includes agent hint", () => {
-    const summary = serviceSummary("10.0.0.207", meshcentral);
-    expect(summary.ct_ip).toBe("10.0.0.207");
+    const summary = serviceSummary("192.0.2.207", meshcentral);
+    expect(summary.ct_ip).toBe("192.0.2.207");
     expect(summary.public_url).toBe("https://meshcentral.example.invalid");
     expect(summary.agent_hint).toContain("https://meshcentral.example.invalid");
   });

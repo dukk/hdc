@@ -1,0 +1,22 @@
+{
+  "id": "omni-tools",
+  "title": "OmniTools web utilities",
+  "env_required": [],
+  "inventory_docs": [
+    "inventory/manual/systems/omni-tools-a.json",
+    "inventory/manual/services/omni-tools.json"
+  ],
+  "operation_report": {
+    "next_steps": [
+      "Open http://<ct-ip>:8080 from the LAN to use OmniTools.",
+      "Set access.nodes[0].ip on inventory/manual/systems/omni-tools-a.json from query --live upstream_url.",
+      "Optional later: set omni_tools.public_url, add BIND A record and nginx-waf upstream when exposing via HTTPS."
+    ]
+  },
+  "verbs": {
+    "deploy": { "script": "run.mjs" },
+    "maintain": { "script": "run.mjs" },
+    "query": { "script": "run.mjs" },
+    "teardown": { "script": "run.mjs" }
+  }
+}

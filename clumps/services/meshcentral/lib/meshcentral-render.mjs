@@ -4,7 +4,7 @@ function isObject(v) {
 }
 
 /** Default nginx-waf peer LAN IPs (vm-nginx-waf-a/b). */
-export const DEFAULT_TRUSTED_PROXIES = ["10.0.0.40", "10.0.0.41"];
+export const DEFAULT_TRUSTED_PROXIES = ["192.0.2.40", "192.0.2.41"];
 
 /** MeshCentral HTTP port inside the container when TLS is offloaded to nginx-waf. */
 export const MESHCENTRAL_HTTP_PORT = 4430;

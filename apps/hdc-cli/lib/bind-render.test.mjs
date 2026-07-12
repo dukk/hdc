@@ -111,8 +111,8 @@ describe("bind-render", () => {
       serial: "2026070201",
       primaryNs: "bind-a.hdc.dukk.org.",
       secondaryNs: "bind-b.hdc.dukk.org.",
-      primaryIp: "10.0.0.2",
-      secondaryIp: "10.0.0.3",
+      primaryIp: "192.0.2.2",
+      secondaryIp: "192.0.2.3",
       hostmaster: "hostmaster.hdc.dukk.org",
       records: [],
     });

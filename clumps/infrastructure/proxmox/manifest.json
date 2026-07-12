@@ -39,12 +39,19 @@
       "id": "cluster-snapshot",
       "title": "Cluster inventory snapshot",
       "verb": "query",
-      "summary": "Query hypervisors and guests from config.json; JSON systems[] on stdout."
+      "summary": "Query hypervisors and guests from config.json; JSON systems[] on stdout. Flags: --guest, --find-template, --host-capacity."
+    },
+    {
+      "id": "guest-destroy",
+      "title": "Destroy guest by VMID",
+      "verb": "teardown",
+      "summary": "Stop and destroy QEMU/LXC by --vmid (optional --any-node --purge --yes)."
     }
   ],
   "verbs": {
     "deploy": { "script": "run.mjs" },
     "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "query": { "script": "run.mjs" },
+    "teardown": { "script": "run.mjs" }
   }
 }

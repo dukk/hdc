@@ -443,7 +443,7 @@ describe("vaultwarden-cli", () => {
       },
     });
     bwSetPassword(deps, "sess", "HDC_URI", "secret", {
-      uris: ["https://svc.example", "http://10.0.0.1:8080"],
+      uris: ["https://svc.example", "http://192.0.2.1:8080"],
     });
     expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[0] === "create")).toBe(true);
   });

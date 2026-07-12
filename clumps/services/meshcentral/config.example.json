@@ -3,7 +3,7 @@
   "defaults": {
     "mode": "proxmox-lxc",
     "proxmox": {
-      "network": { "gateway": "10.0.0.1" },
+      "network": { "gateway": "192.0.2.1" },
       "lxc": {
         "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
         "storage": "local-lvm",
@@ -21,7 +21,7 @@
       "image_tag": "latest",
       "public_url": "https://meshcentral.example.invalid",
       "hostname": null,
-      "trusted_proxies": ["10.0.0.40", "10.0.0.41"],
+      "trusted_proxies": ["192.0.2.40", "192.0.2.41"],
       "allow_new_accounts": false,
       "mongo_username": "meshcentral",
       "mongo_database": "meshcentral",
