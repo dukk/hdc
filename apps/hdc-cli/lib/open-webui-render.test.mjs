@@ -17,7 +17,8 @@ describe("open-webui render", () => {
   it("normalizeOllamaBackends requires http(s) urls", () => {
     expect(normalizeOllamaBackends(backends)).toEqual(backends);
     expect(() => normalizeOllamaBackends([{ id: "x", url: "tcp://bad" }])).toThrow(/http/);
-    expect(() => normalizeOllamaBackends([])).toThrow(/non-empty/);
+    expect(normalizeOllamaBackends([])).toEqual([]);
+    expect(normalizeOllamaBackends(undefined)).toEqual([]);
   });
 
   it("ollamaBaseUrlsJoined uses semicolons", () => {
