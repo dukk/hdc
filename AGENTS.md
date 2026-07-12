@@ -132,7 +132,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 
 - Each package: [`clumps/<folder>/manifest.json`](clumps/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
 - **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `azure-compute`, `gcp-oauth`, `gcp-compute`, `oci-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
-- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `a2a-registry`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`, `paperclip`.
+- **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `a2a-registry`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `it-tools`, `omni-tools`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`, `paperclip`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `clumps/clients/` — per-clump `config.json` (e.g. [`clumps/clients/windows/config.json`](clumps/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
 ### Package script logging
@@ -440,6 +440,23 @@ node apps/hdc-cli/cli.mjs run service ollama maintain -- --prune --dry-run
 node apps/hdc-cli/cli.mjs run service ollama query -- --live
 ```
 
+## vLLM in this repo
+
+- **Config:** [`clumps/services/vllm/config.json`](clumps/services/vllm/config.json) (copy from [`config.example.json`](clumps/services/vllm/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/vm-vllm-a.json`](inventory/manual/systems/vm-vllm-a.json) (QEMU + GPU), [`vm-vllm-b.json`](inventory/manual/systems/vm-vllm-b.json) (QEMU CPU); service sidecar [`inventory/manual/services/vllm.json`](inventory/manual/services/vllm.json).
+- **Schema:** [`apps/hdc-cli/schema/vllm.config.schema.json`](apps/hdc-cli/schema/vllm.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU: clone Ubuntu template, optional `hostpci[]` GPU, Docker `vllm/vllm-openai` (CUDA) or `vllm/vllm-openai-cpu` (CPU); `--instance a\|b`, `--destroy-existing`, `--redeploy-existing` |
+| `maintain` | Re-push compose + `.env`, `docker compose pull` + `up -d`; guest Linux baseline (`--skip-upgrade` skips image pull) |
+| `query` | Config summary; `--live` for Docker + `/health` + `/v1/models` |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Vault: `HDC_HF_TOKEN` (Hugging Face hub; required for gated models such as Gemma). Consumers should use **LiteLLM** (`openai` backends), not vLLM directly. QEMU guests need `cpu: host` (deploy sets this) so AVX is visible to the container. On thin-pool-full template nodes, clone with `storage: local-lvm-data` and optional `migrate_target_storage` for the destination node.
+
+Example: `node apps/hdc-cli/cli.mjs run service vllm deploy -- --instance a`
+
 ## Scanopy in this repo
 
 - **Config:** [`clumps/services/scanopy/config.json`](clumps/services/scanopy/config.json) (copy from [`config.example.json`](clumps/services/scanopy/config.example.json); keep local config out of git).
@@ -714,12 +731,12 @@ Example: `node apps/hdc-cli/cli.mjs run service hermes deploy -- --instance a`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Proxmox LXC on `hypervisor-a` (2 vCPU, 4 GiB RAM, 16 GiB rootfs) + Docker Open WebUI pointing at `open_webui.ollama_backends[]` via `OLLAMA_BASE_URLS` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `deploy` | Proxmox LXC on `hypervisor-a` (2 vCPU, 4 GiB RAM, 16 GiB rootfs) + Docker Open WebUI pointing at `open_webui.ollama_backends[]` via `OLLAMA_BASE_URLS` and optional `openai_backends[]` (LiteLLM / OpenAI-compatible) via `OPENAI_API_*` (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`, `--wipe-volumes`) |
 | `maintain` | Re-push `.env` from config, `docker compose pull` + `up -d` (omit `--skip-upgrade` for image refresh) |
 | `query` | Config summary; `--live` for Docker/HTTP probe on `host_port` (default 3000) |
 | `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Vault: `HDC_OPEN_WEBUI_SECRET_KEY` (required for deploy/maintain). Set `ollama_backends[].url` to reachable Ollama APIs (e.g. `http://192.0.2.25:11434` for `vm-ollama-a`); does not bundle Ollama — use the `ollama` package for inference hosts.
+Vault: `HDC_OPEN_WEBUI_SECRET_KEY` (required for deploy/maintain); per `openai_backends[].api_key_vault_key` (e.g. `HDC_LITELLM_MASTER_KEY`). Set `ollama_backends[].url` to reachable Ollama APIs (e.g. `http://192.0.2.25:11434` for `vm-ollama-a`); does not bundle Ollama — use the `ollama` package for inference hosts. Optional LiteLLM: `openai_backends[].url` like `http://192.0.2.116:4000/v1`.
 
 Example: `node apps/hdc-cli/cli.mjs run service open-webui deploy --`
 
@@ -806,13 +823,20 @@ Example: `node apps/hdc-cli/cli.mjs run service memos deploy -- --instance a`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 20 GiB rootfs) + Docker MeshCentral + MongoDB (`deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Re-push compose + `.env` from vault; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
-| `query` | Config summary; `--live` for Docker + HTTP probe on port 80 |
+| `maintain` | Re-push compose + `.env` from vault; `docker compose pull` + `up -d`; guest Linux baseline; **or** device ops: `--device` + `--power wake\|on\|off\|reset\|sleep`, `--updates`, `--install`/`--remove`, `--disk`, `--dry-run` |
+| `query` | Config summary; `--live` for Docker/HTTP (port 4430) **and** MeshCentral device list via API; `--device` for disk/info; `--import --yes` upserts `meshcentral.devices[]` |
 | `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Set `meshcentral.public_url` (`https://…`) for TLS offload behind nginx-waf. Vault: `HDC_MESHCENTRAL_MONGO_PASSWORD` (auto-generated on first deploy if missing). BIND CNAME `meshcentral` → nginx-waf; upstream `http://<ct-ip>:80` with WebSockets. Create the first admin account in the web UI after deploy.
+Set `meshcentral.public_url` (`https://…`) for TLS offload behind nginx-waf. Vault: `HDC_MESHCENTRAL_MONGO_PASSWORD` (auto-generated on first deploy if missing); `HDC_MESHCENTRAL_USERNAME` / `HDC_MESHCENTRAL_PASSWORD` (MeshCentral account for device API). BIND CNAME `meshcentral` → nginx-waf; upstream `http://<ct-ip>:4430` with WebSockets. Create the first admin account in the web UI after deploy, then install agents. Device management coexists with WinRM/SSH client packages.
 
-Example: `node apps/hdc-cli/cli.mjs run service meshcentral deploy -- --instance a`
+Examples:
+
+```bash
+node apps/hdc-cli/cli.mjs run service meshcentral deploy -- --instance a
+node apps/hdc-cli/cli.mjs run service meshcentral query -- --live
+node apps/hdc-cli/cli.mjs run service meshcentral query -- --import --yes
+node apps/hdc-cli/cli.mjs run service meshcentral maintain -- --device lan-1 --power wake
+```
 
 ## Rackula in this repo
 
@@ -881,6 +905,23 @@ Example: `node apps/hdc-cli/cli.mjs run service a2a-registry deploy -- --instanc
 No vault secrets for v1. LAN UI: `http://<ct-ip>:8080`. Optional `it_tools.public_url` when adding nginx-waf later.
 
 Example: `node apps/hdc-cli/cli.mjs run service it-tools deploy -- --instance a`
+
+## OmniTools in this repo
+
+- **Config:** [`clumps/services/omni-tools/config.json`](clumps/services/omni-tools/config.json) (copy from [`config.example.json`](clumps/services/omni-tools/config.example.json); keep local config out of git).
+- **Inventory:** [`inventory/manual/systems/omni-tools-a.json`](inventory/manual/systems/omni-tools-a.json); service sidecar [`inventory/manual/services/omni-tools.json`](inventory/manual/services/omni-tools.json).
+- **Schema:** [`apps/hdc-cli/schema/omni-tools.config.schema.json`](apps/hdc-cli/schema/omni-tools.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox LXC (1 vCPU, 512 MiB RAM, 8 GiB rootfs) + Docker OmniTools (`iib0011/omni-tools:latest`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-push `docker-compose.yml`; `docker compose pull` + `up -d`; guest Linux baseline (omit `--skip-clamav`) |
+| `query` | Config summary; `--live` for Docker + HTTP probe on `host_port` (default 8080) |
+| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
+
+No vault secrets for v1. LAN UI: `http://<ct-ip>:8080`. Optional `omni_tools.public_url` when adding nginx-waf later.
+
+Example: `node apps/hdc-cli/cli.mjs run service omni-tools deploy -- --instance a`
 
 ## Stirling PDF in this repo
 

@@ -1,34 +1,11 @@
-import { stderr as errout, env } from "node:process";
+import { stderr as errout } from "node:process";
 
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
-import { loadProxmoxPackageConfig } from "../../../infrastructure/proxmox/lib/proxmox-package-config.mjs";
-import { resolveProxmoxHost } from "../../../infrastructure/proxmox/lib/proxmox-config.mjs";
-import { parseSshUrl } from "../../../../apps/hdc-cli/lib/users-bootstrap-hdc.mjs";
+import { resolvePveSshForHost } from "../../../infrastructure/proxmox/lib/proxmox-pve-ssh.mjs";
+
+export { resolvePveSshForHost };
 
 const GITHUB_RELEASES = "https://api.github.com/repos/ollama/ollama/releases/latest";
-
-/**
- * @param {string} proxmoxRoot
- * @param {string} hostId
- */
-export function resolvePveSshForHost(proxmoxRoot, hostId) {
-  const loaded = loadProxmoxPackageConfig(proxmoxRoot);
-  const pveCfg = loaded.data;
-  const hostRec = resolveProxmoxHost(pveCfg, hostId);
-  if (!hostRec?.ssh) {
-    throw new Error(`Proxmox host ${JSON.stringify(hostId)} has no ssh:// URL in proxmox config`);
-  }
-  const parsed = parseSshUrl(hostRec.ssh);
-  if (!parsed?.host) {
-    throw new Error(`Invalid ssh URL for Proxmox host ${JSON.stringify(hostId)}`);
-  }
-  const user =
-    parsed.user ||
-    (typeof env.HDC_PROXMOX_SSH_USER === "string" && env.HDC_PROXMOX_SSH_USER.trim()
-      ? env.HDC_PROXMOX_SSH_USER.trim()
-      : "root");
-  return { user, host: parsed.host };
-}
 
 /**
  * @param {string} user

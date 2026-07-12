@@ -104,8 +104,9 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  * @param {Record<string, unknown>} openWebui
  * @param {Record<string, unknown>} install
  * @param {string} secretKey
+ * @param {{ openaiKeysById?: Record<string, string>; wipeVolumes?: boolean }} [opts]
  */
-export async function installOpenWebuiInCt(user, pveHost, vmid, openWebui, install, secretKey) {
+export async function installOpenWebuiInCt(user, pveHost, vmid, openWebui, install, secretKey, opts = {}) {
   errout.write(`[hdc] open-webui install: Docker Compose in CT ${vmid} …\n`);
 
   const ready = await waitForCt(user, pveHost, vmid, 2000, "open-webui install");
@@ -113,7 +114,12 @@ export async function installOpenWebuiInCt(user, pveHost, vmid, openWebui, insta
     return { ok: false, method: "docker-compose", message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderOpenWebuiEnv(openWebui, secretKey);
+  if (opts.wipeVolumes) {
+    errout.write(`[hdc] open-webui install: wiping compose volumes in CT ${vmid} …\n`);
+    composeDownInCt(user, pveHost, vmid, install);
+  }
+
+  const envContent = renderOpenWebuiEnv(openWebui, secretKey, opts.openaiKeysById ?? {});
   const composeYaml = renderComposeYaml();
   const dir = composeDir(install);
   const inner = buildInstallScript(dir, composeYaml, envContent);
@@ -133,7 +139,7 @@ export async function installOpenWebuiInCt(user, pveHost, vmid, openWebui, insta
   return {
     ok: true,
     method: "docker-compose",
-    message: "installed",
+    message: opts.wipeVolumes ? "installed (volumes wiped)" : "installed",
     web_ui_url: webUiUrl,
   };
 }
@@ -145,7 +151,7 @@ export async function installOpenWebuiInCt(user, pveHost, vmid, openWebui, insta
  * @param {Record<string, unknown>} openWebui
  * @param {Record<string, unknown>} install
  * @param {string} secretKey
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; openaiKeysById?: Record<string, string> }} [opts]
  */
 export async function maintainOpenWebuiInCt(user, pveHost, vmid, openWebui, install, secretKey, opts = {}) {
   errout.write(`[hdc] open-webui maintain: refreshing stack in CT ${vmid} …\n`);
@@ -155,7 +161,7 @@ export async function maintainOpenWebuiInCt(user, pveHost, vmid, openWebui, inst
     return { ok: false, message: `CT ${vmid} not reachable via pct exec` };
   }
 
-  const envContent = renderOpenWebuiEnv(openWebui, secretKey);
+  const envContent = renderOpenWebuiEnv(openWebui, secretKey, opts.openaiKeysById ?? {});
   const dir = composeDir(install);
   const inner = buildMaintainScript(dir, envContent, opts);
   const r = pctExec(user, pveHost, vmid, inner);

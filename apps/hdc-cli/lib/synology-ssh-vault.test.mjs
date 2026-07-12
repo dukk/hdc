@@ -2,14 +2,28 @@ import { describe, expect, it } from "vitest";
 
 import {
   vaultKeyForSynologySshPassword,
+  vaultKeysForSynologySshPassword,
   wrapSynologySudoCommand,
   synologySshUserFromEnv,
 } from "../../../clumps/infrastructure/synology-nas/lib/synology-ssh.mjs";
 
 describe("vaultKeyForSynologySshPassword", () => {
-  it("maps nas-a to NAS_1 suffix", () => {
+  it("maps nas-a / nas-b to NAS_A / NAS_B suffixes", () => {
     expect(vaultKeyForSynologySshPassword("nas-a")).toBe("HDC_SYNOLOGY_SSH_PASSWORD_NAS_A");
     expect(vaultKeyForSynologySshPassword("nas-b")).toBe("HDC_SYNOLOGY_SSH_PASSWORD_NAS_B");
+  });
+});
+
+describe("vaultKeysForSynologySshPassword", () => {
+  it("includes legacy NAS_1 / NAS_2 aliases", () => {
+    expect(vaultKeysForSynologySshPassword("nas-a")).toEqual([
+      "HDC_SYNOLOGY_SSH_PASSWORD_NAS_A",
+      "HDC_SYNOLOGY_SSH_PASSWORD_NAS_1",
+    ]);
+    expect(vaultKeysForSynologySshPassword("nas-b")).toEqual([
+      "HDC_SYNOLOGY_SSH_PASSWORD_NAS_B",
+      "HDC_SYNOLOGY_SSH_PASSWORD_NAS_2",
+    ]);
   });
 });
 

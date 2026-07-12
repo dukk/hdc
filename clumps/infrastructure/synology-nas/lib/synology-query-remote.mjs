@@ -162,6 +162,7 @@ export function parseHealthCollectOutput(raw) {
       version: dockerParsed.dockerVersion,
       compose: dockerParsed.composeAvailable,
       compose_version: dockerParsed.composeVersion,
+      containers: Array.isArray(dockerParsed.containers) ? dockerParsed.containers : [],
     },
     rawExcerpt: raw.slice(0, 4000),
   };

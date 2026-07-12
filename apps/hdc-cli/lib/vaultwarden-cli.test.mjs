@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bwGetPassword,
+  bwGetLoginCredentials,
   bwGetLoginUris,
   bwListItemNames,
   bwReadOrgSecrets,
@@ -262,6 +263,47 @@ describe("vaultwarden-cli", () => {
     expect(deps.spawnSync.mock.calls.some((c) => c[1]?.[0] === "get" && c[1]?.[1] === "password")).toBe(
       false,
     );
+  });
+
+  it("bwGetLoginCredentials returns username and password from login item", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "item-mc",
+              name: "HDC_MESHCENTRAL_USER",
+              organizationId: ORG_ID,
+              login: { username: "mc-admin", password: "mc-pass", uris: [] },
+            },
+          ]),
+        },
+      },
+    });
+    expect(bwGetLoginCredentials(deps, "sess", "HDC_MESHCENTRAL_USER")).toEqual({
+      username: "mc-admin",
+      password: "mc-pass",
+    });
+  });
+
+  it("bwGetLoginCredentials returns null when username missing", () => {
+    const deps = makeDeps({
+      responses: {
+        [`list items --collectionid ${COLL_ID}`]: {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              id: "item-mc",
+              name: "HDC_MESHCENTRAL_USER",
+              organizationId: ORG_ID,
+              login: { username: "", password: "mc-pass", uris: [] },
+            },
+          ]),
+        },
+      },
+    });
+    expect(bwGetLoginCredentials(deps, "sess", "HDC_MESHCENTRAL_USER")).toBeNull();
   });
 
   it("bwReadOrgSecrets bulk-reads from list items without per-item get password", () => {

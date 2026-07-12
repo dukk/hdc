@@ -4,13 +4,39 @@ function isObject(v) {
 }
 
 /**
+ * Public hostname URL for KC_HOSTNAME (nginx-waf / edge TLS).
+ * Prefers `external_url`; falls back to `public_url` when external is unset.
  * @param {Record<string, unknown>} keycloak
  */
 export function normalizeExternalUrl(keycloak) {
-  const url = typeof keycloak.external_url === "string" ? keycloak.external_url.trim() : "";
-  if (!url) throw new Error("keycloak.external_url is required");
-  if (!/^https?:\/\//i.test(url)) throw new Error("keycloak.external_url must start with http:// or https://");
+  const external =
+    typeof keycloak.external_url === "string" ? keycloak.external_url.trim() : "";
+  const publicUrl =
+    typeof keycloak.public_url === "string" ? keycloak.public_url.trim() : "";
+  const url = external || publicUrl;
+  if (!url) throw new Error("keycloak.external_url (or public_url) is required");
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error("keycloak.external_url must start with http:// or https://");
+  }
   return url.replace(/\/+$/, "");
+}
+
+/**
+ * Warn when public_url and external_url both set but disagree (OIDC issuer mismatch).
+ * @param {Record<string, unknown>} keycloak
+ * @param {{ write?: (s: string) => void }} [opts]
+ */
+export function warnPublicUrlMismatch(keycloak, opts = {}) {
+  const write = typeof opts.write === "function" ? opts.write : (s) => process.stderr.write(s);
+  const external =
+    typeof keycloak.external_url === "string" ? keycloak.external_url.trim().replace(/\/+$/, "") : "";
+  const publicUrl =
+    typeof keycloak.public_url === "string" ? keycloak.public_url.trim().replace(/\/+$/, "") : "";
+  if (!external || !publicUrl) return;
+  if (external.toLowerCase() === publicUrl.toLowerCase()) return;
+  write(
+    `[hdc] keycloak: public_url (${publicUrl}) differs from external_url (${external}); KC_HOSTNAME uses external_url\n`,
+  );
 }
 
 /**
@@ -113,16 +139,23 @@ export function composeDir(install) {
  */
 export function renderKeycloakEnv(keycloak, secrets) {
   const db = databaseConfig(keycloak);
+  const hostnameUrl = normalizeExternalUrl(keycloak);
+  const admin = adminUser(keycloak);
   const lines = [
     "# hdc-generated — docker compose",
     `KEYCLOAK_IMAGE_TAG=${imageTag(keycloak)}`,
     `KEYCLOAK_HOST_PORT=${hostPort(keycloak)}`,
-    `KEYCLOAK_EXTERNAL_URL=${normalizeExternalUrl(keycloak)}`,
-    `KEYCLOAK_ADMIN=${adminUser(keycloak)}`,
-    `KEYCLOAK_ADMIN_PASSWORD=${secrets.adminPassword}`,
+    // Keycloak 26 production behind edge TLS (nginx-waf)
+    `KC_HOSTNAME=${hostnameUrl}`,
+    "KC_HTTP_ENABLED=true",
     "KC_HEALTH_ENABLED=true",
     "KC_METRICS_ENABLED=true",
     "KC_PROXY_HEADERS=xforwarded",
+    // Bootstrap admin (Keycloak 26+) plus legacy aliases
+    `KC_BOOTSTRAP_ADMIN_USERNAME=${admin}`,
+    `KC_BOOTSTRAP_ADMIN_PASSWORD=${secrets.adminPassword}`,
+    `KEYCLOAK_ADMIN=${admin}`,
+    `KEYCLOAK_ADMIN_PASSWORD=${secrets.adminPassword}`,
   ];
   if (db.mode === "bundled") {
     lines.push(
@@ -154,6 +187,9 @@ export function renderKeycloakEnv(keycloak, secrets) {
  */
 export function renderComposeYaml(keycloak) {
   const db = databaseConfig(keycloak);
+  const securityOpt = `    security_opt:
+      - apparmor:unconfined
+`;
   if (db.mode === "bundled") {
     return `services:
   keycloak:
@@ -167,7 +203,7 @@ export function renderComposeYaml(keycloak) {
       - "9000:9000"
     env_file:
       - .env
-
+${securityOpt}
   postgres:
     image: postgres:16
     restart: unless-stopped
@@ -175,7 +211,7 @@ export function renderComposeYaml(keycloak) {
       - .env
     volumes:
       - keycloak-postgres-data:/var/lib/postgresql/data
-
+${securityOpt}
 volumes:
   keycloak-postgres-data: {}
 `;
@@ -190,5 +226,5 @@ volumes:
       - "9000:9000"
     env_file:
       - .env
-`;
+${securityOpt}`;
 }

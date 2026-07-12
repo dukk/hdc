@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 /**
- * Maintain MeshCentral: re-push docker-compose.yml + .env, refresh Docker images, guest Linux baseline.
+ * Maintain MeshCentral: re-push compose stack, guest baseline, and optional device ops.
  *
  * Usage: hdc run service meshcentral maintain -- [--instance a | --system-id meshcentral-a]
  *        hdc run service meshcentral maintain -- [--skip-upgrade] [--skip-clamav]
+ *        hdc run service meshcentral maintain -- --device lan-1 --power wake
+ *        hdc run service meshcentral maintain -- --device lan-1 --updates
+ *        hdc run service meshcentral maintain -- --device lan-1 --install "Git.Git"
+ *        hdc run service meshcentral maintain -- --device lan-1 --remove "Git.Git"
+ *        hdc run service meshcentral maintain -- --device lan-1 --disk
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -20,6 +25,19 @@ import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { resolveMeshcentralDeployments } from "../lib/deployments.mjs";
 import { maintainMeshcentralInCt, resolvePveSshForHost } from "../lib/meshcentral-install.mjs";
 import { resolveMeshcentralSecrets } from "../lib/vault-secrets.mjs";
+import { parseDeviceSelectors, resolveDevices } from "../lib/meshcentral-devices.mjs";
+import { applyDevicePower } from "../lib/meshcentral-power.mjs";
+import {
+  collectDisk,
+  installPackage,
+  removePackage,
+  runOsUpdates,
+} from "../lib/meshcentral-ops.mjs";
+import {
+  listNormalizedDevices,
+  meshcentralFromDeployments,
+  openMeshcentralSession,
+} from "../lib/meshcentral-session.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 
@@ -50,7 +68,7 @@ function readCfg() {
 }
 
 /**
- * @param {ReturnType<typeof resolveRustdeskDeployments>[number]} deployment
+ * @param {ReturnType<typeof resolveMeshcentralDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/package-vault-access.mjs").PackageVaultAccess} vaultAccess
  */
@@ -128,8 +146,139 @@ async function maintainOne(deployment, flags, vaultAccess) {
   };
 }
 
+/**
+ * @param {Record<string, unknown>} cfg
+ * @param {Record<string, string>} flags
+ * @param {string[]} argv
+ * @param {ReturnType<typeof createPackageVaultAccess>} vaultAccess
+ */
+async function maintainDevices(cfg, flags, argv, vaultAccess) {
+  const log = (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`);
+  const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
+  const power = flagGet(flags, "power");
+  const doUpdates = flagGet(flags, "updates") !== undefined;
+  const installPkg = flagGet(flags, "install");
+  const removePkg = flagGet(flags, "remove");
+  const doDisk = flagGet(flags, "disk") !== undefined;
+  const selectors = parseDeviceSelectors(flags, argv);
+
+  if (!selectors.length) {
+    return { ok: false, message: "device ops require --device <id|name|node_id>" };
+  }
+  if (!power && !doUpdates && !installPkg && !removePkg && !doDisk) {
+    return {
+      ok: false,
+      message: "specify at least one of --power, --updates, --install, --remove, --disk",
+    };
+  }
+
+  const deployments = resolveMeshcentralDeployments(cfg, flags);
+  const meshcentral = meshcentralFromDeployments(deployments);
+  const session = await openMeshcentralSession({ vault: vaultAccess, meshcentral, log });
+  try {
+    const { live, configDevices } = await listNormalizedDevices(session.client, meshcentral);
+    const resolved = resolveDevices({ liveDevices: live, configDevices, selectors });
+    if (!resolved.ok) {
+      return { ok: false, message: resolved.message };
+    }
+
+    /** @type {Record<string, unknown>[]} */
+    const results = [];
+    let allOk = true;
+
+    for (const device of resolved.devices) {
+      /** @type {Record<string, unknown>} */
+      const row = {
+        id: device.id,
+        name: device.name,
+        node_id: device.node_id,
+        platform: device.platform,
+        online: device.online,
+      };
+      let deviceOk = true;
+      const nodeId = typeof device.node_id === "string" ? device.node_id : "";
+      if (!nodeId) {
+        row.ok = false;
+        row.message = "missing MeshCentral node_id (run query --import --yes)";
+        allOk = false;
+        results.push(row);
+        continue;
+      }
+
+      if (power) {
+        if (power !== "wake" && power !== "on" && !device.online) {
+          row.ok = false;
+          row.message = `device offline; cannot power ${power} (use --power wake)`;
+          allOk = false;
+          results.push(row);
+          continue;
+        }
+        row.power = await applyDevicePower(session.client, [nodeId], power, { dryRun, log });
+        if (!row.power.ok) deviceOk = false;
+      }
+
+      const needsAgent = doUpdates || installPkg || removePkg || doDisk;
+      if (needsAgent && !device.online && !dryRun) {
+        row.ok = false;
+        row.message = "device offline; agent required for updates/software/disk";
+        allOk = false;
+        results.push(row);
+        continue;
+      }
+
+      if (doDisk) {
+        row.disk = await collectDisk(session.client, device, { dryRun, log });
+        if (!row.disk.ok) deviceOk = false;
+      }
+      if (doUpdates) {
+        row.updates = await runOsUpdates(session.client, device, { dryRun, log });
+        if (!row.updates.ok) deviceOk = false;
+      }
+      if (installPkg && installPkg !== "1") {
+        row.install = await installPackage(session.client, device, installPkg, { dryRun, log });
+        if (!row.install.ok) deviceOk = false;
+      }
+      if (removePkg && removePkg !== "1") {
+        row.remove = await removePackage(session.client, device, removePkg, { dryRun, log });
+        if (!row.remove.ok) deviceOk = false;
+      }
+
+      row.ok = deviceOk;
+      if (!deviceOk) allOk = false;
+      results.push(row);
+    }
+
+    return { ok: allOk, dry_run: dryRun, count: results.length, results };
+  } finally {
+    await session.client.close();
+  }
+}
+
+/**
+ * True when argv requests device-level ops (skip guest compose maintain if only device ops).
+ * @param {Record<string, string>} flags
+ * @param {string[]} argv
+ */
+function hasDeviceOps(flags, argv) {
+  const selectors = parseDeviceSelectors(flags, argv);
+  if (!selectors.length) return false;
+  return (
+    flagGet(flags, "power") !== undefined ||
+    flagGet(flags, "updates") !== undefined ||
+    flagGet(flags, "install") !== undefined ||
+    flagGet(flags, "remove") !== undefined ||
+    flagGet(flags, "disk") !== undefined
+  );
+}
+
 async function main() {
-  errout.write(`[hdc] ${target} ${verb}: refresh MeshCentral Docker stack (stderr log; JSON on stdout).\n`);
+  const argv = process.argv.slice(2);
+  const flags = parseArgvFlags(argv);
+  const deviceOnly = hasDeviceOps(flags, argv);
+
+  errout.write(
+    `[hdc] ${target} ${verb}: ${deviceOnly ? "MeshCentral device ops" : "refresh MeshCentral Docker stack"} (stderr log; JSON on stdout).\n`,
+  );
 
   if (!existsSync(ensurePackageConfig().path)) {
     process.stdout.write(
@@ -140,9 +289,34 @@ async function main() {
   }
 
   const cfg = readCfg();
-  const flags = parseArgvFlags(process.argv.slice(2));
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
+
+  if (deviceOnly) {
+    let devicePayload;
+    try {
+      devicePayload = await maintainDevices(cfg, flags, argv, vaultAccess);
+    } catch (e) {
+      const msg = String(/** @type {Error} */ (e).message || e);
+      errout.write(`[hdc] ${target} ${verb}: device ops failed: ${msg}\n`);
+      devicePayload = { ok: false, message: msg };
+    }
+    const ok = Boolean(devicePayload.ok);
+    const payload = { ok, target, verb, device_ops: devicePayload };
+    runOperationReportTail({
+      clumpRoot,
+      repoRoot: root,
+      verb,
+      argv,
+      payload,
+      ok,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),
+    });
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    process.exitCode = ok ? 0 : 1;
+    return;
+  }
+
   let deployments;
   try {
     deployments = resolveMeshcentralDeployments(cfg, flags);
@@ -172,7 +346,7 @@ async function main() {
     clumpRoot,
     repoRoot: root,
     verb,
-    argv: process.argv.slice(2),
+    argv,
     payload,
     ok,
     log: (line) => errout.write(`[hdc] ${target} ${verb}: ${line}\n`),

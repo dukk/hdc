@@ -838,6 +838,20 @@ function extractSecretFromBwItem(item) {
 }
 
 /**
+ * Extract username + password from a Bitwarden login item (or null if incomplete).
+ * @param {Record<string, unknown>} item
+ * @returns {{ username: string; password: string } | null}
+ */
+export function extractLoginCredentialsFromBwItem(item) {
+  const login = item.login && typeof item.login === "object" ? /** @type {Record<string, unknown>} */ (item.login) : null;
+  if (!login) return null;
+  const username = typeof login.username === "string" ? login.username.trim() : "";
+  const password = typeof login.password === "string" ? login.password : "";
+  if (!username || !password) return null;
+  return { username, password };
+}
+
+/**
  * @param {VaultwardenCliDeps} deps
  * @param {string} session
  * @param {string} itemName
@@ -868,6 +882,32 @@ export function bwGetPassword(deps, session, itemName) {
   }
   try {
     return extractSecretFromBwItem(bwGetItem(deps, session, itemId));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read login username + password from an org login item (e.g. HDC_MESHCENTRAL_USER).
+ * @param {VaultwardenCliDeps} deps
+ * @param {string} session
+ * @param {string} itemName
+ * @returns {{ username: string; password: string } | null}
+ */
+export function bwGetLoginCredentials(deps, session, itemName) {
+  const { organizationId } = resolveBwOrgContext(deps, session);
+  const cachedItem = bwFindOrgFullItem(deps, session, itemName, organizationId);
+  if (cachedItem) {
+    const fromList = extractLoginCredentialsFromBwItem(cachedItem);
+    if (fromList) return fromList;
+  }
+  const itemId =
+    cachedItem && typeof cachedItem.id === "string"
+      ? cachedItem.id
+      : bwFindItemId(deps, session, itemName, organizationId);
+  if (!itemId) return null;
+  try {
+    return extractLoginCredentialsFromBwItem(bwGetItem(deps, session, itemId));
   } catch {
     return null;
   }

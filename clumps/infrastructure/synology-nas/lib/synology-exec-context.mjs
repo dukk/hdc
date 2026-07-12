@@ -52,7 +52,13 @@ export async function createSynologyExecContext(opts) {
         spawnSync: spawn,
         env,
         identities,
-        readLineQuestion: deps.readLineQuestion ?? (async () => ""),
+        readLineQuestion:
+          deps.readLineQuestion ??
+          (async () => {
+            throw new Error(
+              `SSH password prompt required for Synology but no readLineQuestion was provided — set vault HDC_SYNOLOGY_SSH_PASSWORD_<SYSTEM_ID>`,
+            );
+          }),
         warn,
         dryRun: false,
       });

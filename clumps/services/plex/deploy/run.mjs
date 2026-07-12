@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
 import { deployTargetInventory, logDeployInventoryStatus } from "../../../lib/deploy-inventory.mjs";
-import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { createNodeCliDeps } from "../../../../apps/hdc-cli/lib/node-cli-deps.mjs";
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { normalizePlexConfig, resolvePlexDeployments } from "../lib/deployments.mjs";
 import { deployPlexOnSynology } from "../lib/plex-synology.mjs";
@@ -66,14 +66,18 @@ async function main() {
     return;
   }
 
-  const log = provisionLogFromConsole(console);
+  const cliDeps = createNodeCliDeps();
   /** @type {Record<string, unknown>[]} */
   const results = [];
 
   for (const deployment of toDeploy) {
     errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} synology-package …\n`);
     try {
-      const result = await deployPlexOnSynology(deployment, { log: (line) => errout.write(`${line}\n`) });
+      const result = await deployPlexOnSynology(deployment, {
+        log: (line) => errout.write(`${line}\n`),
+        warn: (line) => errout.write(`[hdc] ${target} ${verb}: WARN ${line}\n`),
+        readLineQuestion: cliDeps.readLineQuestion,
+      });
       results.push({ system_id: deployment.systemId, ...result });
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);

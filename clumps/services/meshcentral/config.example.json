@@ -25,7 +25,13 @@
       "allow_new_accounts": false,
       "mongo_username": "meshcentral",
       "mongo_database": "meshcentral",
-      "mongo_password_vault_key": "HDC_MESHCENTRAL_MONGO_PASSWORD"
+      "mongo_password_vault_key": "HDC_MESHCENTRAL_MONGO_PASSWORD",
+      "api": {
+        "username_vault_key": "HDC_MESHCENTRAL_USERNAME",
+        "password_vault_key": "HDC_MESHCENTRAL_PASSWORD",
+        "url": null
+      },
+      "devices": []
     },
     "install": {
       "enabled": true,

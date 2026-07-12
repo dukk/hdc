@@ -9,6 +9,7 @@ import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
+import { createNodeCliDeps } from "../../../../apps/hdc-cli/lib/node-cli-deps.mjs";
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import {
@@ -80,10 +81,15 @@ async function main() {
       configError = String(/** @type {Error} */ (e).message || e);
     }
     if (selected) {
+      const cliDeps = createNodeCliDeps();
       for (const d of selected) {
         errout.write(`[hdc] ${target} ${verb}: live query ${d.systemId} …\n`);
         try {
-          const status = await queryPlexOnSynology(d);
+          const status = await queryPlexOnSynology(d, {
+            log: (line) => errout.write(`${line}\n`),
+            warn: (line) => errout.write(`[hdc] ${target} ${verb}: WARN ${line}\n`),
+            readLineQuestion: cliDeps.readLineQuestion,
+          });
           liveResults.push({
             system_id: d.systemId,
             ok: status.package_installed === true && status.package_running === true && status.http_ok === true,

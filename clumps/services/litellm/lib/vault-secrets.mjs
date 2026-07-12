@@ -4,8 +4,8 @@ import { stderr as errout } from "node:process";
 import {
   dbPasswordVaultKey,
   masterKeyVaultKey,
+  normalizeBackends,
   normalizeModelList,
-  normalizeOllamaBackends,
   openrouterApiKeyVaultKey,
   saltKeyVaultKey,
 } from "./litellm-render.mjs";
@@ -86,7 +86,7 @@ export async function resolveLitellmSecrets(vault, litellm) {
     "database password",
   );
 
-  const backends = normalizeOllamaBackends(cfg.ollama_backends);
+  const backends = normalizeBackends(cfg);
   const models = normalizeModelList(cfg.model_list, backends);
   const needsOpenrouter = models.some((m) => m.provider === "openrouter");
   let openrouterApiKey = null;

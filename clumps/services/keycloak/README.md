@@ -8,6 +8,10 @@ Keycloak on Proxmox LXC via Docker Compose, with either bundled PostgreSQL sidec
 - **Inventory:** [`inventory/manual/systems/keycloak-a.json`](../../../inventory/manual/systems/keycloak-a.json), [`inventory/manual/services/keycloak.json`](../../../inventory/manual/services/keycloak.json)
 - **Vault:** `HDC_KEYCLOAK_ADMIN_PASSWORD` and `HDC_KEYCLOAK_DB_PASSWORD` (for bundled DB; optional for external based on config)
 
+## Hostname / reverse proxy
+
+Set `keycloak.external_url` to the public HTTPS URL served by nginx-waf (e.g. `https://keycloak.hdc.dukk.org`). Deploy/maintain map that to `KC_HOSTNAME` and set `KC_HTTP_ENABLED=true` + `KC_PROXY_HEADERS=xforwarded` for edge TLS. Optional `public_url` should match `external_url`; a mismatch is logged as a warning.
+
 ## Database modes
 
 - `database.mode: "bundled"`: compose includes `postgres` sidecar

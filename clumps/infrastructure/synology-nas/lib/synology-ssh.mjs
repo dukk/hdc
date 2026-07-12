@@ -16,6 +16,23 @@ export function vaultKeyForSynologySshPassword(systemId) {
 }
 
 /**
+ * Legacy vault keys from older docs (`NAS_1` / `NAS_2` for instances a/b).
+ * @param {string} systemId
+ * @returns {string[]}
+ */
+export function vaultKeysForSynologySshPassword(systemId) {
+  const primary = vaultKeyForSynologySshPassword(systemId);
+  /** @type {string[]} */
+  const keys = [primary];
+  const id = String(systemId || "")
+    .trim()
+    .toLowerCase();
+  if (id === "nas-a") keys.push(`${SYNOLOGY_SSH_PASSWORD_PREFIX}_NAS_1`);
+  if (id === "nas-b") keys.push(`${SYNOLOGY_SSH_PASSWORD_PREFIX}_NAS_2`);
+  return [...new Set(keys)];
+}
+
+/**
  * @param {NodeJS.ProcessEnv} env
  * @param {string} userEnv
  * @param {string} fallbackUser
@@ -63,18 +80,27 @@ function sshReachableWithPassword(target, spawnSync, env, password) {
 async function promptAndStoreSshPassword(opts) {
   const { target, vaultKey, vault, spawnSync, env, readLineQuestion, warn } = opts;
   const label = `SSH password for ${target.user}@${target.host} (${target.id})`;
+  let emptyAttempts = 0;
   for (;;) {
     const value = await readLineQuestion(`${label}: `, { mask: true });
-    if (!value.trim()) {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    if (!trimmed) {
+      emptyAttempts += 1;
       warn("Empty password; try again or Ctrl+C to abort.");
+      // Non-interactive callers often pass async () => "" — fail fast instead of looping forever.
+      if (emptyAttempts >= 2 || !process.stdin.isTTY) {
+        throw new Error(
+          `SSH password required for ${target.user}@${target.host} — set vault ${vaultKey} (hdc secrets set ${vaultKey})`,
+        );
+      }
       continue;
     }
-    if (!sshReachableWithPassword(target, spawnSync, env, value.trim())) {
+    if (!sshReachableWithPassword(target, spawnSync, env, trimmed)) {
       warn(`[${target.id}] password verification failed for ${target.user}@${target.host}.`);
       continue;
     }
-    await vault.setSecret(vaultKey, value.trim());
-    return value.trim();
+    await vault.setSecret(vaultKey, trimmed);
+    return trimmed;
   }
 }
 
@@ -97,20 +123,49 @@ export async function resolveSynologySshAuth(opts) {
     return { mode: "pubkey", password: null };
   }
 
-  const vaultKey = vaultKeyForSynologySshPassword(target.id);
+  const vaultKeys = vaultKeysForSynologySshPassword(target.id);
+  const vaultKey = vaultKeys[0];
   /** @type {string | null} */
   let password = null;
+  const allowPasswordPrompt =
+    Boolean(process.stdin.isTTY) &&
+    process.env.CURSOR_AGENT !== "1" &&
+    process.env.CI !== "true" &&
+    process.env.HDC_NONINTERACTIVE !== "1";
+
   if (!dryRun) {
-    const data = (await vault.readSecrets({})) ?? {};
-    const stored = typeof data[vaultKey] === "string" ? data[vaultKey].trim() : "";
-    if (stored && sshReachableWithPassword(target, spawnSync, env, stored)) {
-      password = stored;
-    } else if (stored) {
-      warn(`[${target.id}] stored vault password for ${vaultKey} did not work — will prompt.`);
+    /** @type {string[]} */
+    const tried = [];
+    for (const key of vaultKeys) {
+      // Prefer getSecret so local-vault fill-ins work under Vaultwarden backend.
+      const stored = String((await vault.getSecret(key, { optional: true })) ?? "").trim();
+      if (!stored) continue;
+      tried.push(key);
+      if (sshReachableWithPassword(target, spawnSync, env, stored)) {
+        password = stored;
+        if (key !== vaultKey) {
+          warn(`[${target.id}] using legacy vault key ${key}; storing as ${vaultKey}.`);
+          await vault.setSecret(vaultKey, stored);
+        }
+        break;
+      }
+      warn(`[${target.id}] stored vault password for ${key} did not work.`);
+    }
+    // Do not fall through to an interactive prompt after a rejected vault password —
+    // agent/CI shells often report isTTY but nobody is typing (hangs forever).
+    if (!password && tried.length > 0) {
+      throw new Error(
+        `SSH auth failed for ${target.user}@${target.host}: vault password(s) ${tried.join(", ")} rejected (and pubkey unavailable). Fix with: hdc secrets set ${vaultKey} (or install SSH keys).`,
+      );
     }
   }
 
   if (!dryRun && !password) {
+    if (!allowPasswordPrompt) {
+      throw new Error(
+        `SSH auth failed for ${target.user}@${target.host} (pubkey + vault keys ${vaultKeys.join(", ")}); set a working password with hdc secrets set ${vaultKey} or install SSH keys (non-interactive; no password prompt)`,
+      );
+    }
     password = await promptAndStoreSshPassword({
       target,
       vaultKey,

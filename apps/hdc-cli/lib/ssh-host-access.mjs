@@ -108,7 +108,17 @@ export function createSshAskpassHelper(password) {
   const path = join(tmpdir(), `hdc-askpass-${process.pid}${isWin ? ".cmd" : ".sh"}`);
   const envKey = "HDC_SSH_ASKPASS_PW";
   if (isWin) {
-    writeFileSync(path, `@echo off\r\n@echo %${envKey}%\r\n`, "utf8");
+    // `echo` appends CRLF and breaks SSH passwords; write bytes with no trailing newline.
+    writeFileSync(
+      path,
+      [
+        "@echo off",
+        "setlocal EnableExtensions",
+        `powershell -NoProfile -Command "[Console]::Out.Write([Environment]::GetEnvironmentVariable('${envKey}','Process'))"`,
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
   } else {
     writeFileSync(path, `#!/bin/sh\nprintf '%s' "$${envKey}"\n`, "utf8");
     chmodSync(path, 0o700);
@@ -159,6 +169,8 @@ export function buildSshArgv(target, opts) {
   if (mode === "password") {
     args.push("-o", "PreferredAuthentications=password,keyboard-interactive");
     args.push("-o", "PubkeyAuthentication=no");
+    // One try — wrong passwords otherwise re-prompt until ConnectTimeout/spawn timeout.
+    args.push("-o", "NumberOfPasswordPrompts=1");
   } else {
     args.push("-o", "PreferredAuthentications=publickey");
     args.push("-o", "PasswordAuthentication=no");

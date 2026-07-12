@@ -3,7 +3,7 @@
  * Deploy Open WebUI on Proxmox LXC (Docker Compose, remote Ollama backends).
  *
  * Usage: hdc run service open-webui deploy -- [--instance a | --system-id open-webui-a] [--skip-install]
- *        hdc run service open-webui deploy -- [--skip-existing | --redeploy-existing]
+ *        hdc run service open-webui deploy -- [--skip-existing | --redeploy-existing] [--wipe-volumes]
  */
 import { lxcHostnameFromSystemId } from "../../../../apps/hdc-cli/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
@@ -32,7 +32,7 @@ import {
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/open-webui-install.mjs";
-import { hostPort, resolveWebUiUrl } from "../lib/open-webui-render.mjs";
+import { hostPort, normalizeOpenaiBackends, resolveWebUiUrl } from "../lib/open-webui-render.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import {
   ensureLxcDockerApparmorWorkaround,
@@ -92,7 +92,7 @@ function existingGuestPolicy(flags) {
  * @param {ReturnType<typeof resolveOpenWebuiDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
- * @param {{ ctPasswordCache?: { value: string | null }; secretKey: string }} runOpts
+ * @param {{ ctPasswordCache?: { value: string | null }; secretKey: string; openaiKeysById?: Record<string, string> }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, openWebui, install } = deployment;
@@ -166,7 +166,8 @@ async function deployOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||
@@ -329,6 +330,7 @@ async function deployOne(deployment, flags, log, runOpts) {
   const installCfg = isObject(install) ? install : {};
 
   if (shouldInstall(install)) {
+    const wipeVolumes = flagGet(flags, "wipe-volumes", "wipe_volumes") !== undefined;
     installResult = await installOpenWebuiInCt(
       pveSsh.user,
       pveSsh.host,
@@ -336,6 +338,7 @@ async function deployOne(deployment, flags, log, runOpts) {
       openWebuiCfg,
       installCfg,
       runOpts.secretKey,
+      { openaiKeysById: runOpts.openaiKeysById ?? {}, wipeVolumes },
     );
   } else {
     installResult = { ok: true, method: "skipped", message: "skipped" };
@@ -418,6 +421,46 @@ async function main() {
   }
   errout.write(`[hdc] ${target} ${verb}: secret loaded from vault ${skKey}\n`);
 
+  /** @type {Record<string, string>} */
+  const openaiKeysById = {};
+  /** @type {Set<string>} */
+  const openaiVaultKeysLoaded = new Set();
+  /** @type {Map<string, string>} */
+  const openaiVaultKeyValues = new Map();
+  for (const deployment of deployments) {
+    const ow = isObject(deployment.openWebui) ? deployment.openWebui : {};
+    for (const b of normalizeOpenaiBackends(ow.openai_backends)) {
+      if (!openaiVaultKeyValues.has(b.api_key_vault_key)) {
+        errout.write(
+          `[hdc] ${target} ${verb}: loading OpenAI API key from vault ${b.api_key_vault_key} …\n`,
+        );
+        const val = String(
+          await vault.getSecret(b.api_key_vault_key, {
+            promptLabel: `vault secret ${b.api_key_vault_key}`,
+          }),
+        ).trim();
+        if (!val) {
+          errout.write(
+            `[hdc] ${target} ${verb}: secret required — set vault ${b.api_key_vault_key}\n`,
+          );
+          process.stdout.write(
+            `${JSON.stringify({ ok: false, target, verb, message: `missing vault ${b.api_key_vault_key}` }, null, 2)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        openaiVaultKeyValues.set(b.api_key_vault_key, val);
+        openaiVaultKeysLoaded.add(b.api_key_vault_key);
+      }
+      openaiKeysById[b.id] = /** @type {string} */ (openaiVaultKeyValues.get(b.api_key_vault_key));
+    }
+  }
+  if (openaiVaultKeysLoaded.size) {
+    errout.write(
+      `[hdc] ${target} ${verb}: loaded ${openaiVaultKeysLoaded.size} OpenAI API key(s) from vault\n`,
+    );
+  }
+
   const log = provisionLogFromConsole(console);
   /** @type {{ value: string | null }} */
   const ctPasswordCache = { value: null };
@@ -425,7 +468,9 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache, secretKey }));
+      results.push(
+        await deployOne(deployment, flags, log, { ctPasswordCache, secretKey, openaiKeysById }),
+      );
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

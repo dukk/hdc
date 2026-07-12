@@ -32,7 +32,18 @@
               "openrouter_api_key_vault_key": { "type": "string" },
               "ollama_backends": {
                 "type": "array",
-                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "url"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" },
+                    "notes": { "type": "string" }
+                  }
+                }
+              },
+              "openai_backends": {
+                "type": "array",
                 "items": {
                   "type": "object",
                   "required": ["id", "url"],
@@ -51,9 +62,10 @@
                   "required": ["model_name", "provider", "model"],
                   "properties": {
                     "model_name": { "type": "string" },
-                    "provider": { "enum": ["ollama", "openrouter"] },
+                    "provider": { "enum": ["ollama", "openai", "openrouter"] },
                     "model": { "type": "string" },
-                    "ollama_backend_id": { "type": "string" }
+                    "ollama_backend_id": { "type": "string" },
+                    "openai_backend_id": { "type": "string" }
                   }
                 }
               },

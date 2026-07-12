@@ -2,6 +2,11 @@
  * Query Proxmox VE nodes from `clumps/infrastructure/proxmox/config.json` (clusters + hosts),
  * then emit a JSON snapshot on stdout (systems[] for hypervisors and guests). No repo inventory paths are read or written.
  *
+ * Diagnostic flags (stdout JSON; skip full cluster snapshot):
+ *   --guest <vmid|system-id>   Status, guest-agent ping, optional ICMP/SSH
+ *   --find-template <vmid>     Locate QEMU template across cluster nodes
+ *   --host-capacity <host-id>  free/df/qm list/pct list via SSH
+ *
  * Auth: Proxmox API token (see Datacenter → Permissions → API Tokens). Stored in the vault
  * as HDC_PROXMOX_API_TOKEN or per-host HDC_PROXMOX_API_TOKEN_<HOST_ID> (e.g. HDC_PROXMOX_API_TOKEN_HYPERVISOR_A).
  * Env override: HDC_PROXMOX_API_TOKEN. Self-signed TLS: HDC_PROXMOX_TLS_INSECURE=1 or HDC_TLS_INSECURE=1 (global default).
@@ -137,6 +142,28 @@ function byVmid(a, b) {
 
 async function main() {
   const t0 = Date.now();
+  const argv = process.argv.slice(2);
+
+  try {
+    const { maybeRunProxmoxQueryDiag } = await import("../lib/proxmox-query-diag.mjs");
+    const diag = await maybeRunProxmoxQueryDiag(argv, clumpRoot);
+    if (diag) {
+      const payload = {
+        target,
+        verb: "query",
+        ...diag,
+        collected_at: new Date().toISOString(),
+      };
+      if (diag.ok === false) process.exitCode = 1;
+      output.write(`${JSON.stringify(payload, null, 2)}\n`);
+      return;
+    }
+  } catch (e) {
+    errout.write(`[proxmox] query diag failed: ${/** @type {Error} */ (e).stack || e}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const rejectUnauthorized = hdcTlsRejectUnauthorized(env, SPEC_TLS_INSECURE);
   const tlsInsecureVia = hdcTlsInsecureSourceEnv(env, SPEC_TLS_INSECURE);
 

@@ -48,6 +48,9 @@
  *   --no-discord-notify    Skip Discord #hdc-ops notification for this run
  *   --report <path>        Override markdown report output path
  *   --skip-templates       Skip Ubuntu LTS template verify/build
+ *   --migrate --vmid N --target-host <id>  Offline-migrate QEMU guest (early exit)
+ *   --repair-console --vmid N              Ubuntu cloud template serial→VGA repair (early exit)
+ *   --regen-cloudinit --vmid N [--ipconfig0 …]  Recreate cloud-init drive (early exit)
  */
 import { dirname, join } from "node:path";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
@@ -177,6 +180,27 @@ function flagValueFromArgv(argv, flag) {
 
 async function main() {
   const argv = process.argv.slice(2);
+
+  try {
+    const { maybeRunProxmoxMaintainGuestOps } = await import("../lib/proxmox-maintain-guest-ops.mjs");
+    const guestOps = await maybeRunProxmoxMaintainGuestOps(argv, clumpRoot);
+    if (guestOps.handled) {
+      const payload = {
+        target: "proxmox",
+        verb: "maintain",
+        ...(guestOps.result ?? {}),
+      };
+      if (guestOps.ok === false) process.exitCode = 1;
+      errout.write(`[proxmox] maintain: guest op finished (${guestOps.ok ? "ok" : "failed"}).\n`);
+      process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+      return;
+    }
+  } catch (e) {
+    errout.write(`[proxmox] maintain guest op failed: ${/** @type {Error} */ (e).stack || e}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const skipTemplates = argv.includes("--skip-templates");
   const skipStorage = argv.includes("--skip-storage");
   const skipBackups = argv.includes("--skip-backups");

@@ -133,6 +133,23 @@ export function vikunjaMailEnvLines(vikunja) {
 }
 
 /**
+ * SMTP env lines for Wallabag docker .env when mail.enabled.
+ * Uses mailEnabledFromConfig only (no `to` required). Symfony MAILER_DSN, no AUTH.
+ * @param {Record<string, unknown>} wallabag
+ */
+export function wallabagMailEnvLines(wallabag) {
+  const mail = mailBlockFromService(wallabag);
+  if (!mailEnabledFromConfig(mail)) return [];
+  const relay = loadMailRelayAppSettings();
+  const from =
+    mail && typeof mail.from === "string" && mail.from.trim()
+      ? mail.from.trim()
+      : relay.from;
+  const dsn = `smtp://${relay.host}:${relay.port}`;
+  return [`SYMFONY__ENV__MAILER_DSN=${dsn}`, `SYMFONY__ENV__FROM_EMAIL=${from}`];
+}
+
+/**
  * SMTP env lines for AFFiNE docker .env when mail.enabled.
  * Uses mailEnabledFromConfig only (no `to` required — outbound invites/notifications).
  * Omits MAILER_USER/PASSWORD so AFFiNE does not attempt AUTH on the internal relay.

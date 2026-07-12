@@ -16,7 +16,8 @@ import {
 } from "../lib/deployments.mjs";
 import { createConfigureExec } from "../lib/nginx-configure.mjs";
 import { queryCertExpiry } from "../lib/letsencrypt.mjs";
-import { siteId, tlsDomainsFromSites } from "../lib/nginx-render.mjs";import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
+import { siteId, tlsDomainsFromSites } from "../lib/nginx-render.mjs";
+import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,12 +78,15 @@ function queryEnabledSites(exec) {
  * @param {string} upstream
  */
 function probeUpstream(exec, upstream) {
+  // Avoid `curl -f` + `|| echo fail`: on connect failure curl prints `000` then
+  // echo appends `fail` → `000fail`, which previously scored as ok.
   const r = exec.run(
-    `curl -fsS -o /dev/null -w '%{http_code}' --connect-timeout 3 ${upstream} 2>/dev/null || echo fail`,
+    `curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 ${JSON.stringify(upstream)} 2>/dev/null || true`,
     { capture: true },
   );
   const code = r.stdout.trim();
-  return { upstream, ok: code !== "fail" && r.status === 0, http_code: code };
+  const ok = /^[1-9]\d{2}$/.test(code);
+  return { upstream, ok, http_code: code };
 }
 
 async function main() {

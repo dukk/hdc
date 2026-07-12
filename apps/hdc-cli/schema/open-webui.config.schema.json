@@ -38,6 +38,23 @@
                     "notes": { "type": "string" }
                   }
                 }
+              },
+              "openai_backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "url", "api_key_vault_key"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" },
+                    "api_key_vault_key": { "type": "string" },
+                    "model_ids": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "notes": { "type": "string" }
+                  }
+                }
               }
             }
           },

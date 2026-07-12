@@ -19,22 +19,28 @@ function normalizeOllamaBaseUrl(url) {
 
 /**
  * @param {Record<string, unknown>} hermes
+ * @returns {{ id: string; base_url: string; api_key_vault_key: string | null; backends: { id: string; url: string }[] } | null}
  */
 export function resolvePrimaryOllamaBackend(hermes) {
   const raw = hermes.ollama_backends;
   if (!Array.isArray(raw) || raw.length === 0) return null;
 
-  /** @type {{ id: string; url: string; primary: boolean }[]} */
+  /** @type {{ id: string; url: string; primary: boolean; api_key_vault_key: string | null }[]} */
   const backends = [];
   for (const item of raw) {
     if (!isObject(item)) continue;
     const id = typeof item.id === "string" ? item.id.trim() : "";
     const url = typeof item.url === "string" ? item.url.trim() : "";
     if (!id || !url) continue;
+    const apiKeyVaultKey =
+      typeof item.api_key_vault_key === "string" && item.api_key_vault_key.trim()
+        ? item.api_key_vault_key.trim()
+        : null;
     backends.push({
       id,
       url,
       primary: item.primary === true,
+      api_key_vault_key: apiKeyVaultKey,
     });
   }
   if (!backends.length) return null;
@@ -43,6 +49,7 @@ export function resolvePrimaryOllamaBackend(hermes) {
   return {
     id: primary.id,
     base_url: normalizeOllamaBaseUrl(primary.url),
+    api_key_vault_key: primary.api_key_vault_key,
     backends: backends.map((b) => ({ id: b.id, url: b.url })),
   };
 }
@@ -71,11 +78,13 @@ function yamlLine(key, value, indent = 0) {
 /**
  * Build Hermes Agent config.yaml content (non-secret settings).
  * @param {Record<string, unknown>} hermes
+ * @param {{ apiKey?: string | null }} [opts]
  */
-export function renderHermesConfigYaml(hermes) {
+export function renderHermesConfigYaml(hermes, opts = {}) {
   const cfg = isObject(hermes) ? hermes : {};
   const modelBlock = isObject(cfg.model) ? cfg.model : {};
   const ollama = resolvePrimaryOllamaBackend(cfg);
+  const apiKey = typeof opts.apiKey === "string" && opts.apiKey.trim() ? opts.apiKey.trim() : "";
 
   const defaultModel =
     typeof modelBlock.default === "string" && modelBlock.default.trim()
@@ -86,7 +95,7 @@ export function renderHermesConfigYaml(hermes) {
 
   if (ollama && !defaultModel) {
     throw new Error(
-      "hermes.model.default is required when hermes.ollama_backends[] is configured — set the Ollama model tag (e.g. qwen3.5:cloud)",
+      "hermes.model.default is required when hermes.ollama_backends[] is configured — set the model id (e.g. gemma4-e4b)",
     );
   }
 
@@ -99,6 +108,9 @@ export function renderHermesConfigYaml(hermes) {
     if (ollama) {
       lines.push(yamlLine("provider", "custom", 2));
       lines.push(yamlLine("base_url", ollama.base_url, 2));
+      if (apiKey) {
+        lines.push(yamlLine("api_key", apiKey, 2));
+      }
     }
     const ctx =
       typeof modelBlock.context_length === "number"

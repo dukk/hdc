@@ -1,6 +1,6 @@
 import { deploymentSystemIdPattern, lxcSystemId } from "../../../../apps/hdc-cli/lib/inventory-naming.mjs";
 import { flagGet } from "../../../lib/parse-argv-flags.mjs";
-import { normalizeModelList, normalizeOllamaBackends } from "./litellm-render.mjs";
+import { normalizeBackends, normalizeModelList } from "./litellm-render.mjs";
 
 const LITELLM_ROLE = "litellm";
 
@@ -104,7 +104,7 @@ function validateDeployments(deployments) {
     if (ids.has(sid)) throw new Error(`duplicate system_id ${JSON.stringify(sid)}`);
     ids.add(sid);
     const litellm = isObject(d.litellm) ? d.litellm : {};
-    const backends = normalizeOllamaBackends(litellm.ollama_backends);
+    const backends = normalizeBackends(litellm);
     normalizeModelList(litellm.model_list, backends);
     const mode = typeof d.mode === "string" ? d.mode.trim() : "";
     if (mode === "proxmox-lxc" || mode === "" || !mode) {
@@ -135,7 +135,7 @@ export function listLitellmDeploymentSummaries(cfg) {
     const vmid = typeof lxc.vmid === "number" ? lxc.vmid : Number(lxc.vmid);
     const install = isObject(d.install) ? d.install : {};
     const litellm = isObject(d.litellm) ? d.litellm : {};
-    const backends = normalizeOllamaBackends(litellm.ollama_backends);
+    const backends = normalizeBackends(litellm);
     const models = normalizeModelList(litellm.model_list, backends);
     const port = typeof litellm.host_port === "number" ? litellm.host_port : Number(litellm.host_port);
     return {
@@ -146,7 +146,8 @@ export function listLitellmDeploymentSummaries(cfg) {
       install_enabled: install.enabled !== false,
       image_tag: typeof litellm.image_tag === "string" ? litellm.image_tag : "main-stable",
       host_port: Number.isFinite(port) ? port : 4000,
-      ollama_backend_ids: backends.map((b) => b.id),
+      ollama_backend_ids: backends.ollama.map((b) => b.id),
+      openai_backend_ids: backends.openai.map((b) => b.id),
       model_names: models.map((m) => m.model_name),
     };
   });

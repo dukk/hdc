@@ -9,7 +9,7 @@
   "operation_report": {
     "next_steps": [
       "Browse https://meshcentral.hdc.dukk.org (or meshcentral.public_url) and create the first admin account.",
-      "Ensure Vaultwarden login item HDC_MESHCENTRAL_USER has MeshCentral username + password.",
+      "Set vault secrets HDC_MESHCENTRAL_USERNAME and HDC_MESHCENTRAL_PASSWORD for the MeshCentral API account.",
       "Set access.nodes[0].ip on inventory/manual/systems/meshcentral-a.json from query --live ct_ip.",
       "Install agents using the public URL; TLS is terminated at nginx-waf.",
       "Run query --import --yes to sync meshcentral.devices[] from live agents.",

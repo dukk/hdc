@@ -4,12 +4,14 @@ function isObject(v) {
 }
 
 /**
+ * Optional Ollama backends. Empty / omitted is allowed when openai_backends is non-empty.
  * @param {unknown} backends
  * @returns {{ id: string; url: string }[]}
  */
 export function normalizeOllamaBackends(backends) {
-  if (!Array.isArray(backends) || backends.length === 0) {
-    throw new Error("litellm.ollama_backends must be a non-empty array");
+  if (backends === undefined || backends === null) return [];
+  if (!Array.isArray(backends)) {
+    throw new Error("litellm.ollama_backends must be an array when set");
   }
   /** @type {{ id: string; url: string }[]} */
   const out = [];
@@ -30,10 +32,53 @@ export function normalizeOllamaBackends(backends) {
     seen.add(id);
     out.push({ id, url: url.replace(/\/+$/, "") });
   }
-  if (!out.length) {
-    throw new Error("litellm.ollama_backends must contain at least one valid entry");
+  return out;
+}
+
+/**
+ * Optional OpenAI-compatible backends (e.g. vLLM). Empty / omitted is allowed when ollama_backends is non-empty.
+ * @param {unknown} backends
+ * @returns {{ id: string; url: string }[]}
+ */
+export function normalizeOpenaiBackends(backends) {
+  if (backends === undefined || backends === null) return [];
+  if (!Array.isArray(backends)) {
+    throw new Error("litellm.openai_backends must be an array when set");
+  }
+  /** @type {{ id: string; url: string }[]} */
+  const out = [];
+  const seen = new Set();
+  for (const raw of backends) {
+    if (!isObject(raw)) continue;
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    if (!id || !url) {
+      throw new Error("each openai_backends entry needs id and url");
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error(`openai_backends ${JSON.stringify(id)}: url must be http(s)://…`);
+    }
+    if (seen.has(id)) {
+      throw new Error(`duplicate openai_backends id ${JSON.stringify(id)}`);
+    }
+    seen.add(id);
+    out.push({ id, url: url.replace(/\/+$/, "") });
   }
   return out;
+}
+
+/**
+ * @param {Record<string, unknown>} litellm
+ * @returns {{ ollama: { id: string; url: string }[]; openai: { id: string; url: string }[] }}
+ */
+export function normalizeBackends(litellm) {
+  const cfg = isObject(litellm) ? litellm : {};
+  const ollama = normalizeOllamaBackends(cfg.ollama_backends);
+  const openai = normalizeOpenaiBackends(cfg.openai_backends);
+  if (!ollama.length && !openai.length) {
+    throw new Error("litellm needs at least one ollama_backends[] or openai_backends[] entry");
+  }
+  return { ollama, openai };
 }
 
 /**
@@ -45,16 +90,25 @@ export function ollamaBackendEnvVar(backendId) {
 }
 
 /**
+ * @param {string} backendId
+ */
+export function openaiBackendEnvVar(backendId) {
+  const slug = backendId.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").toUpperCase();
+  return `OPENAI_API_BASE_${slug || "DEFAULT"}`;
+}
+
+/**
  * @param {unknown} modelList
- * @param {{ id: string; url: string }[]} backends
- * @returns {{ model_name: string; provider: string; model: string; ollama_backend_id?: string }[]}
+ * @param {{ ollama: { id: string; url: string }[]; openai: { id: string; url: string }[] }} backends
+ * @returns {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }[]}
  */
 export function normalizeModelList(modelList, backends) {
   if (!Array.isArray(modelList) || modelList.length === 0) {
     throw new Error("litellm.model_list must be a non-empty array");
   }
-  const backendIds = new Set(backends.map((b) => b.id));
-  /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string }[]} */
+  const ollamaIds = new Set(backends.ollama.map((b) => b.id));
+  const openaiIds = new Set(backends.openai.map((b) => b.id));
+  /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }[]} */
   const out = [];
   const seen = new Set();
   for (const raw of modelList) {
@@ -65,24 +119,39 @@ export function normalizeModelList(modelList, backends) {
     if (!modelName || !provider || !model) {
       throw new Error("each model_list entry needs model_name, provider, and model");
     }
-    if (provider !== "ollama" && provider !== "openrouter") {
-      throw new Error(`model_list ${JSON.stringify(modelName)}: provider must be ollama or openrouter`);
+    if (provider !== "ollama" && provider !== "openrouter" && provider !== "openai") {
+      throw new Error(
+        `model_list ${JSON.stringify(modelName)}: provider must be ollama, openai, or openrouter`,
+      );
     }
     if (seen.has(modelName)) {
       throw new Error(`duplicate model_list model_name ${JSON.stringify(modelName)}`);
     }
     seen.add(modelName);
-    /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string }} */
+    /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }} */
     const entry = { model_name: modelName, provider, model };
     if (provider === "ollama") {
       const backendId =
-        typeof raw.ollama_backend_id === "string" ? raw.ollama_backend_id.trim() : backends[0]?.id ?? "";
-      if (!backendId || !backendIds.has(backendId)) {
+        typeof raw.ollama_backend_id === "string"
+          ? raw.ollama_backend_id.trim()
+          : backends.ollama[0]?.id ?? "";
+      if (!backendId || !ollamaIds.has(backendId)) {
         throw new Error(
           `model_list ${JSON.stringify(modelName)}: ollama_backend_id must reference litellm.ollama_backends[].id`,
         );
       }
       entry.ollama_backend_id = backendId;
+    } else if (provider === "openai") {
+      const backendId =
+        typeof raw.openai_backend_id === "string"
+          ? raw.openai_backend_id.trim()
+          : backends.openai[0]?.id ?? "";
+      if (!backendId || !openaiIds.has(backendId)) {
+        throw new Error(
+          `model_list ${JSON.stringify(modelName)}: openai_backend_id must reference litellm.openai_backends[].id`,
+        );
+      }
+      entry.openai_backend_id = backendId;
     }
     out.push(entry);
   }
@@ -219,7 +288,7 @@ export function renderLitellmEnv(litellm, secrets) {
   const tag = normalizeImageTag(litellm);
   const pgTag = postgresImageTag(litellm);
   const port = hostPort(litellm);
-  const backends = normalizeOllamaBackends(litellm.ollama_backends);
+  const backends = normalizeBackends(litellm);
   normalizeModelList(litellm.model_list, backends);
 
   const masterKey = String(secrets.masterKey || "").trim();
@@ -246,8 +315,11 @@ export function renderLitellmEnv(litellm, secrets) {
     `STORE_MODEL_IN_DB=${storeInDb ? "True" : "False"}`,
   ];
 
-  for (const backend of backends) {
+  for (const backend of backends.ollama) {
     lines.push(`${ollamaBackendEnvVar(backend.id)}=${backend.url}`);
+  }
+  for (const backend of backends.openai) {
+    lines.push(`${openaiBackendEnvVar(backend.id)}=${backend.url}`);
   }
 
   const openrouterKey = secrets.openrouterApiKey ? String(secrets.openrouterApiKey).trim() : "";

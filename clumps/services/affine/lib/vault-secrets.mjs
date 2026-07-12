@@ -38,15 +38,23 @@ async function loadOrGenerateSecret(vault, key, label) {
  */
 async function loadRequiredSecret(vault, key, label) {
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
-  if (existing) {
-    errout.write(`[hdc] affine: ${label} loaded from vault ${key}\n`);
-    return existing;
+  const existing =
+    typeof vault.getSecret === "function"
+      ? String((await vault.getSecret(key, { optional: true })) || "").trim()
+      : "";
+  if (!existing) {
+    const data = await vault.readSecrets({});
+    const fromBulk = data && typeof data[key] === "string" ? data[key].trim() : "";
+    if (fromBulk) {
+      errout.write(`[hdc] affine: ${label} loaded from vault ${key}\n`);
+      return fromBulk;
+    }
+    throw new Error(
+      `missing vault secret ${key} (${label}) — run: node apps/hdc-cli/cli.mjs secrets set ${key}`,
+    );
   }
-  throw new Error(
-    `missing vault secret ${key} (${label}) — run: node apps/hdc-cli/cli.mjs secrets set ${key}`,
-  );
+  errout.write(`[hdc] affine: ${label} loaded from vault ${key}\n`);
+  return existing;
 }
 
 /**
