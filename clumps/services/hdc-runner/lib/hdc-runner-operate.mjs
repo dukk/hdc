@@ -8,6 +8,7 @@ import {
   pruneStaleCronFiles,
 } from "./hdc-runner-configure.mjs";
 import {
+  ensureHdcAppNpmDepsOnGuest,
   ensureHdcNpmDepsOnGuest,
   ensureOperatorSshKeysOnGuest,
   ensureCronServiceOnGuest,
@@ -32,6 +33,11 @@ import {
   resolveVaultwardenApiKeyCredentials,
   resolveVaultwardenMasterPassword,
 } from "./vault-deps.mjs";
+import {
+  ensureRunnerOutboundSshKeyOnGuest,
+  installRunnerPubKeyOnSshTargets,
+  resolveNginxWafSshTargets,
+} from "./hdc-runner-ssh-access.mjs";
 import { resolveHdcRunnerUiSecrets, resolvePaperclipBridgeSecret, resolveCursorApiKey } from "./vault-secrets.mjs";
 
 /**
@@ -86,6 +92,25 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
   const keysResult = ensureOperatorSshKeysOnGuest(exec, log);
   result.operator_ssh_keys = keysResult;
 
+  const runnerKeyResult = ensureRunnerOutboundSshKeyOnGuest(exec, log);
+  result.runner_outbound_ssh = runnerKeyResult;
+  if (!runnerKeyResult.ok) {
+    return { ...result, ok: false, message: runnerKeyResult.message };
+  }
+
+  if (!dryRun && runnerKeyResult.public_key) {
+    const wafTargets = resolveNginxWafSshTargets(root);
+    const propagateResult = installRunnerPubKeyOnSshTargets(
+      runnerKeyResult.public_key,
+      wafTargets,
+      log,
+    );
+    result.runner_ssh_targets = propagateResult;
+    if (!propagateResult.ok && !propagateResult.skipped) {
+      return { ...result, ok: false, message: propagateResult.message };
+    }
+  }
+
   const skipSync = flagGet(flags, "skip-sync", "skip_sync") !== undefined;
   if (!skipSync) {
     const guestSsh = resolveRunnerGuestSsh(deployment, proxmoxRoot);
@@ -110,6 +135,12 @@ export async function applyHdcRunnerOnDeployment(deployment, ctx) {
       result.npm_deps = npmResult;
       if (!npmResult.ok) {
         return { ...result, ok: false, message: npmResult.message };
+      }
+
+      const appNpmResult = ensureHdcAppNpmDepsOnGuest(exec, runner.install_root, log);
+      result.app_npm_deps = appNpmResult;
+      if (!appNpmResult.ok) {
+        return { ...result, ok: false, message: appNpmResult.message };
       }
 
       if (runner.agents?.enabled !== false) {

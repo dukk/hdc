@@ -168,6 +168,39 @@ export function ensureHdcNpmDepsOnGuest(exec, installRoot, log) {
   return { ok: true, message: "npm deps installed" };
 }
 
+/** @type {readonly string[]} */
+const HDC_APP_NPM_DIRS = ["apps/hdc-mcp", "apps/hdc-ops-agent"];
+
+/**
+ * Install npm deps for hdc-mcp and hdc-ops-agent on the guest.
+ *
+ * @param {import("../../postfix-relay/lib/postfix-relay-configure.mjs").ConfigureExec} exec
+ * @param {string} installRoot
+ * @param {{ info: (msg: string) => void }} log
+ */
+export function ensureHdcAppNpmDepsOnGuest(exec, installRoot, log) {
+  const root = String(installRoot ?? "/opt/hdc").trim() || "/opt/hdc";
+  /** @type {{ path: string; ok: boolean; message: string }[]} */
+  const results = [];
+  for (const rel of HDC_APP_NPM_DIRS) {
+    const appRoot = `${root}/${rel}`;
+    log.info(`${exec.label}: npm install --omit=dev in ${rel}`);
+    const r = exec.run(
+      `test -f '${appRoot}/package.json' && cd '${appRoot}' && npm install --omit=dev --no-audit --no-fund`,
+      { capture: true },
+    );
+    const ok = r.status === 0;
+    const message = ok
+      ? "installed"
+      : `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
+    results.push({ path: rel, ok, message });
+    if (!ok) {
+      return { ok: false, message: `${rel}: ${message}`, results };
+    }
+  }
+  return { ok: true, message: "app npm deps installed", results };
+}
+
 /**
  * Ensure cron is installed and running (idempotent on existing guests).
  *

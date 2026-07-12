@@ -10,7 +10,7 @@ HDC can send a magic packet before `hdc run client windows|client-ubuntu|raspber
 
 ## Network
 
-- Prefer a **directed broadcast** for the client subnet in each client package `config.json` (`wol.broadcast`, e.g. `192.0.2.255` in `packages/clients/windows/config.json` or `packages/clients/ubuntu/config.json`).
+- Prefer a **directed broadcast** for the client subnet in each client clump `config.json` (`wol.broadcast`, e.g. `192.0.2.255` in `clumps/clients/windows/config.json` or `clumps/clients/ubuntu/config.json`).
 - WoL is layer-2: the machine running hdc must reach that broadcast domain (same VLAN or a router that forwards directed broadcasts).
 
 ## Config

@@ -12,8 +12,8 @@ Single-node Wazuh manager on `vm-wazuh-a` (`192.0.2.202`). Linux Proxmox guests 
 Store with:
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_WAZUH_API_PASSWORD
-node tools/hdc/cli.mjs secrets set HDC_WAZUH_AGENT_PASSWORD
+node apps/hdc-cli/cli.mjs secrets set HDC_WAZUH_API_PASSWORD
+node apps/hdc-cli/cli.mjs secrets set HDC_WAZUH_AGENT_PASSWORD
 ```
 
 Push to Vaultwarden for scheduled jobs (`secrets push --force`) when using `HDC_SECRET_BACKEND=auto`. Keep `HDC_VAULT_PASSPHRASE` or Vaultwarden master password available to `maintain daily` and `hdc-runner`.
@@ -21,9 +21,9 @@ Push to Vaultwarden for scheduled jobs (`secrets push --force`) when using `HDC_
 ## Deploy and maintain
 
 ```bash
-node tools/hdc/cli.mjs run service wazuh deploy -- --instance a
-node tools/hdc/cli.mjs run service wazuh maintain --
-node tools/hdc/cli.mjs run service wazuh query -- --live
+node apps/hdc-cli/cli.mjs run service wazuh deploy -- --instance a
+node apps/hdc-cli/cli.mjs run service wazuh maintain --
+node apps/hdc-cli/cli.mjs run service wazuh query -- --live
 ```
 
 `maintain` syncs Docker Compose, manager email (`wazuh_manager.conf`), OpenSearch notification channel `hdc-wazuh-alerts`, and (by default) an OpenSearch Alerting monitor `hdc-wazuh-high-severity`. Skip with `--skip-wazuh-mail` or `--skip-dashboard-monitors`.
@@ -33,11 +33,11 @@ node tools/hdc/cli.mjs run service wazuh query -- --live
 Proxmox `provision.guest_agents.wazuh.manager_host` must point at the manager IP. Run **guest `maintain`** on each Linux VM/LXC (not HAOS, Windows, or Synology):
 
 ```bash
-node tools/hdc/cli.mjs run service bind maintain --
-node tools/hdc/cli.mjs run service nginx-waf maintain --
+node apps/hdc-cli/cli.mjs run service bind maintain --
+node apps/hdc-cli/cli.mjs run service nginx-waf maintain --
 ```
 
-Confirm in reports: `wazuh_agent: agent ensured`. Agent package version is pinned to `defaults.wazuh.release` in the wazuh package config.
+Confirm in reports: `wazuh_agent: agent ensured`. Agent package version is pinned to `defaults.wazuh.release` in the wazuh clump config.
 
 ## Log collection
 
@@ -56,7 +56,7 @@ Two paths:
 1. **Manager email** — SMTP via internal postfix-relay (`192.0.2.60`); `email_to` supports comma-separated recipients.
 2. **Dashboard notifications** — channel `hdc-wazuh-alerts` to addresses in `defaults.mail.to[]`.
 
-Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`packages/services/wazuh/config.json`](../../packages/services/wazuh/config.example.json).
+Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`clumps/services/wazuh/config.json`](../../clumps/services/wazuh/config.example.json).
 
 ## Troubleshooting
 

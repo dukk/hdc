@@ -32,6 +32,17 @@ describe("homepage unifi widget", () => {
     expect(result?.lines[0]).toContain("HOMEPAGE_VAR_UNIFI_");
     expect(result?.lines[0]).toContain("HDC_UNIFI_NETWORK_API_KEY");
     expect(result?.url).toMatch(/^https:\/\//);
+    expect(result?.site).toBeNull();
+  });
+
+  it("dry-run injects site only when unifi_widget.site is set", async () => {
+    const result = await resolveHomepageUnifiWidgetEnv({
+      homepage: { unifi_widget: { enabled: true, site: "My Site" } },
+      unifiNetworkPackageRoot,
+      vaultAccess: /** @type {never} */ (null),
+      dryRun: true,
+    });
+    expect(result?.site).toBe("My Site");
   });
 
   it("returns null when widget disabled", async () => {
@@ -57,7 +68,6 @@ describe("homepage-services-lint unifi", () => {
           type: unifi
           url: "{{HOMEPAGE_VAR_UNIFI_URL}}"
           key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
-          site: "{{HOMEPAGE_VAR_UNIFI_SITE}}"
 `,
       homepage: { unifi_widget: { enabled: true } },
       packageRoot,

@@ -15,6 +15,6 @@ You may also create matching automations in the **Cursor Automations** editor fo
 
 **Tools:** Enable shell/terminal and file read for all. Research automation may use web search.
 
-**Discord:** Manager should run `node tools/hdc/lib/notify-discord.mjs` when tasks have `needs_decision: true` (requires vault `HDC_OPS_DISCORD_WEBHOOK_URL`).
+**Discord:** Manager should run `node apps/hdc-cli/lib/notify-discord.mjs` when tasks have `needs_decision: true` (requires vault `HDC_OPS_DISCORD_WEBHOOK_URL`).
 
 **Email:** hdc-runner cron jobs email failures via postfix-relay automatically; Manager summarizes but does not duplicate unless asked.

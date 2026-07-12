@@ -13,7 +13,7 @@ Provision the **Home Data Center** Paperclip company with HDC skills and agents 
 ## 1. Push hdc-runner API + bridge
 
 ```bash
-node tools/hdc/cli.mjs run service hdc-runner maintain --
+node apps/hdc-cli/cli.mjs run service hdc-runner maintain --
 ```
 
 This auto-generates `HDC_HDC_RUNNER_API_TOKEN` and `HDC_PAPERCLIP_AGENT_BRIDGE_SECRET` when missing.
@@ -33,23 +33,23 @@ In Paperclip UI: Settings → API keys → create key with agent/company managem
 Store in vault:
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_PAPERCLIP_API_KEY
+node apps/hdc-cli/cli.mjs secrets set HDC_PAPERCLIP_API_KEY
 ```
 
 ## 3. Automated bootstrap
 
-Config block: `packages/services/paperclip/config.json` → `defaults.paperclip.company`
+Config block: `clumps/services/paperclip/config.json` → `defaults.paperclip.company`
 
 Dry run:
 
 ```bash
-node tools/hdc/cli.mjs run service paperclip query -- --bootstrap-company --dry-run
+node apps/hdc-cli/cli.mjs run service paperclip query -- --bootstrap-company --dry-run
 ```
 
 Apply:
 
 ```bash
-node tools/hdc/cli.mjs run service paperclip query -- --bootstrap-company --yes
+node apps/hdc-cli/cli.mjs run service paperclip query -- --bootstrap-company --yes
 ```
 
 Imports skills from GitHub and creates/syncs agents:
@@ -78,7 +78,7 @@ Import a skill:
 curl -X POST "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/skills/import" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"source":"https://github.com/dukk/hdc/tree/main/packages/services/paperclip/skills/hdc-runner"}'
+  -d '{"source":"https://github.com/dukk/hdc/tree/main/clumps/services/paperclip/skills/hdc-runner"}'
 ```
 
 Create agent:
@@ -103,7 +103,7 @@ curl -X POST "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/agents" \
 | `HDC_RUNNER_API_TOKEN` | From vault `HDC_HDC_RUNNER_API_TOKEN` |
 | `HDC_PAPERCLIP_BRIDGE_SECRET` | From vault (HTTP adapter agents) |
 
-Optional: `HDC_PAPERCLIP_CURSOR_API_KEY` for Cursor Cloud adapters (also in guest `.env` via hdc maintain). OpenAI and Gemini keys map to guest `OPENAI_API_KEY` and `GOOGLE_API_KEY` when set in package `.env` or vault.
+Optional: `HDC_PAPERCLIP_CURSOR_API_KEY` for Cursor Cloud adapters (also in guest `.env` via hdc maintain). OpenAI and Gemini keys map to guest `OPENAI_API_KEY` and `GOOGLE_API_KEY` when set in clump `.env` or vault.
 
 ## 6. LLM providers (Ollama, OpenAI, Gemini)
 
@@ -115,7 +115,7 @@ Optional: `HDC_PAPERCLIP_CURSOR_API_KEY` for Cursor Cloud adapters (also in gues
 | `HDC_PAPERCLIP_GOOGLE_GEMINI_API_KEY` | `GOOGLE_API_KEY` |
 | `paperclip.ollama_backends[]` (primary) | `OLLAMA_BASE_URL` |
 
-Configure backends in `packages/services/paperclip/config.json`:
+Configure backends in `clumps/services/paperclip/config.json`:
 
 ```json
 "ollama_backends": [
@@ -124,7 +124,7 @@ Configure backends in `packages/services/paperclip/config.json`:
 ]
 ```
 
-Then run `node tools/hdc/cli.mjs run service paperclip maintain --`.
+Then run `node apps/hdc-cli/cli.mjs run service paperclip maintain --`.
 
 **Paperclip UI (optional local models — HDC agents stay on Cursor):**
 
@@ -132,7 +132,7 @@ Then run `node tools/hdc/cli.mjs run service paperclip maintain --`.
 2. Adapter → choose **Ollama**, **OpenCode local**, or **OpenAI-compatible**.
 3. Primary Ollama (`vm-ollama-a`): leave `baseUrl` empty or set `http://192.0.2.111:11434`.
 4. Secondary Ollama (`vm-ollama-b`): set `baseUrl` to `http://192.0.2.112:11434`.
-5. Select a model pulled on that host (see `packages/services/ollama/config.json`).
+5. Select a model pulled on that host (see `clumps/services/ollama/config.json`).
 6. Run **Test environment** so Paperclip discovers models from `GET /api/tags`.
 
 For OpenAI/Codex or Gemini local adapters, server-side keys from guest `.env` are used automatically; you may also bind the same values as company secrets under **Company Settings → Secrets** in authenticated mode.
@@ -146,6 +146,6 @@ For OpenAI/Codex or Gemini local adapters, server-side keys from guest `.env` ar
 
 ## References
 
-- hdc-runner API: [`packages/services/hdc-runner/API.md`](../../packages/services/hdc-runner/API.md)
-- Skills: [`packages/services/paperclip/skills/`](../../packages/services/paperclip/skills/)
+- hdc-runner API: [`clumps/services/hdc-runner/API.md`](../../clumps/services/hdc-runner/API.md)
+- Skills: [`clumps/services/paperclip/skills/`](../../clumps/services/paperclip/skills/)
 - Delegation policy: `hdc-private/operations/delegation-policy.md`

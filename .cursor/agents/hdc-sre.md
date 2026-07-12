@@ -20,11 +20,11 @@ You implement and maintain HDC automation. Read **`.cursor/skills/hdc-ops/SKILL.
 
 ## Workflow
 
-1. `node tools/hdc/cli.mjs list` — discover packages.
-2. Run work: `node tools/hdc/cli.mjs run <tier> <package> <verb> [-- <args>]`.
+1. `node apps/hdc-cli/cli.mjs list` — discover packages.
+2. Run work: `node apps/hdc-cli/cli.mjs run <tier> <clump> <verb> [-- <args>]`.
 3. Greenfield deploys: follow `hdc-service-deploy` skill (read `operations/ip-allocations.md` for static IP, plan in hdc-private, operator approval).
-4. After inventory JSON edits: validate against `tools/hdc/schema/` (planned `docs lint` not wired yet).
-5. After `tools/hdc/` changes: `npm run test`.
+4. After inventory JSON edits: validate against `apps/hdc-cli/schema/` (planned `docs lint` not wired yet).
+5. After `apps/hdc-cli/` changes: `npm run test`.
 
 ## Task completion
 
@@ -34,5 +34,5 @@ You implement and maintain HDC automation. Read **`.cursor/skills/hdc-ops/SKILL.
 ## Rules
 
 - Node.js 18+. Never commit `.env` or secret values.
-- Prefer tracked `packages/` scripts over one-off shell.
+- Prefer tracked `clumps/` scripts over one-off shell.
 - stderr for progress; stdout clean for JSON query output.

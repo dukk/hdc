@@ -25,9 +25,9 @@ End-to-end workflow for **configure → plan → approve → deploy → validate
 ## Entry points
 
 ```bash
-node tools/hdc/cli.mjs list
-node tools/hdc/cli.mjs run service <id> query --
-node tools/hdc/cli.mjs run service <id> deploy -- [--instance a] [flags]
+node apps/hdc-cli/cli.mjs list
+node apps/hdc-cli/cli.mjs run service <id> query --
+node apps/hdc-cli/cli.mjs run service <id> deploy -- [--instance a] [flags]
 ```
 
 Windows: `hdc.cmd` from repo root. Config and inventory live in **hdc-private** when present (`HDC_PRIVATE_ROOT` or `../hdc-private`).
@@ -38,11 +38,11 @@ Windows: `hdc.cmd` from repo root. Config and inventory live in **hdc-private** 
 
 | Situation | Action |
 |-----------|--------|
-| Package exists under `packages/services/<id>/` | Deploy or re-deploy existing service |
+| Package exists under `clumps/services/<id>/` | Deploy or re-deploy existing service |
 | No package yet | New package — plan must include scaffolding (see [New package](#new-package-scaffolding)) |
 | `configure-only` in config | Guest already exists; plan SSH/configure steps only (nginx, nginx-waf) |
 
-Identify: `manifest.json`, `AGENTS.md` section, `config.example.json`, `tools/hdc/schema/<id>.config.schema.json`.
+Identify: `manifest.json`, `AGENTS.md` section, `config.example.json`, `apps/hdc-cli/schema/<id>.config.schema.json`.
 
 ---
 
@@ -57,7 +57,7 @@ Use **AskQuestion** when available; otherwise ask in chat. Batch into **1–2 ro
 | **Service id** | Manifest id (e.g. `searxng`, `vaultwarden`) or new slug |
 | **Deploy backend** | `proxmox-lxc`, `proxmox-qemu`, `proxmox-qemu-haos`, `proxmox-qemu-iso`, `synology-docker`, `configure-only` |
 | **Proxmox node** | `proxmox.host_id` / inventory `hosted_on_system_id` (e.g. `hypervisor-a`) |
-| **Static IP** | CIDR + gateway; read `hdc-private/operations/ip-allocations.md` — pick the matching IP group and **Next free** address; cross-check BIND (`packages/services/bind/config.json`) and inventory |
+| **Static IP** | CIDR + gateway; read `hdc-private/operations/ip-allocations.md` — pick the matching IP group and **Next free** address; cross-check BIND (`clumps/services/bind/config.json`) and inventory |
 | **Instance letter** | `-a`, `-b` — [hdc-inventory-naming](../../../.cursor/rules/hdc-inventory-naming.mdc) |
 | **Public HTTPS?** | LAN-only vs `https://` hostname — drives dependency section |
 
@@ -75,9 +75,9 @@ Use **AskQuestion** when available; otherwise ask in chat. Batch into **1–2 ro
 Before writing the plan:
 
 1. Read `hdc-private/operations/ip-allocations.md` — classify workload IP group and note **Next free** candidate.
-2. Read public `packages/services/<id>/` (manifest, example config, README).
-3. Read hdc-private overrides: `packages/services/<id>/config.json`, `inventory/manual/systems/<system-id>.json`, `inventory/manual/services/<id>.json`.
-4. `node tools/hdc/cli.mjs run service <id> query --` (add `--live` if safe and useful).
+2. Read public `clumps/services/<id>/` (manifest, example config, README).
+3. Read hdc-private overrides: `clumps/services/<id>/config.json`, `inventory/manual/systems/<system-id>.json`, `inventory/manual/services/<id>.json`.
+4. `node apps/hdc-cli/cli.mjs run service <id> query --` (add `--live` if safe and useful).
 5. Proxmox capacity unknown → **proxmox-resource-planning** or `run infrastructure proxmox query --`.
 
 Do **not** run `deploy` in this phase.
@@ -86,8 +86,8 @@ Do **not** run `deploy` in this phase.
 
 ## Phase 3 — Write `plan.md` (approval gate)
 
-**Default path:** `hdc-private/packages/services/<service-id>/plan.md`  
-**Fallback:** `packages/services/<id>/plan.md` in public hdc — warn that operator-specific data may be committed.
+**Default path:** `hdc-private/clumps/services/<service-id>/plan.md`  
+**Fallback:** `clumps/services/<id>/plan.md` in public hdc — warn that operator-specific data may be committed.
 
 1. Copy structure from [plan-template.md](plan-template.md); replace `{{placeholders}}`.
 2. Include copy-paste **CLI sequence**, file paths, vault key names, rollback/teardown commands.
@@ -100,28 +100,28 @@ Do **not** run `deploy` in this phase.
 
 ## Phase 4 — Prepare (after approval only)
 
-1. Ensure hdc-private `config.json` exists (`config.example.json` → copy, or `node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs`).
+1. Ensure hdc-private `config.json` exists (`config.example.json` → copy, or `node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs`).
 2. Create/update inventory sidecars (`kind: system`, `kind: services`) — id matches filename; naming rules enforced.
-3. `node tools/hdc/cli.mjs secrets set <KEY>` for each required secret (masked).
-4. Validate JSON against `tools/hdc/schema/*.schema.json` (use `docs lint` if implemented in CLI).
+3. `node apps/hdc-cli/cli.mjs secrets set <KEY>` for each required secret (masked).
+4. Validate JSON against `apps/hdc-cli/schema/*.schema.json` (use `docs lint` if implemented in CLI).
 
 ---
 
 ## Phase 5 — Deploy and fix loop
 
 ```bash
-node tools/hdc/cli.mjs run service <id> deploy -- [--instance a] [package flags]
+node apps/hdc-cli/cli.mjs run service <id> deploy -- [--instance a] [package flags]
 ```
 
-**On success:** note IP, ports, and report path on stderr (`packages/services/<id>/reports/deploy-*.md` in hdc-private). Update `hdc-private/operations/ip-allocations.md` assignment row for the new static IP.
+**On success:** note IP, ports, and report path on stderr (`clumps/services/<id>/reports/deploy-*.md` in hdc-private). Update `hdc-private/operations/ip-allocations.md` assignment row for the new static IP.
 
 **On failure:**
 
 1. Read stderr + latest deploy report.
 2. Classify: config / inventory typo | Proxmox conflict (vmid, IP) | missing vault | script bug.
-3. Fix with **minimal scope** — prefer hdc-private config and inventory; edit `packages/**/*.mjs` only when the script is wrong.
+3. Fix with **minimal scope** — prefer hdc-private config and inventory; edit `clumps/**/*.mjs` only when the script is wrong.
 4. Retry with same flags; use package flags (`--skip-existing`, `--redeploy-existing`, `--skip-install`) per README.
-5. If `tools/hdc/` changed: `npm run test`.
+5. If `apps/hdc-cli/` changed: `npm run test`.
 
 **QEMU:** `agent=1` + in-guest `qemu-guest-agent` per [proxmox-qemu-guest-agent](../../../.cursor/rules/proxmox-qemu-guest-agent.mdc).
 
@@ -132,10 +132,10 @@ node tools/hdc/cli.mjs run service <id> deploy -- [--instance a] [package flags]
 Follow order in [dependencies.md](dependencies.md). Example after guest is up:
 
 ```bash
-node tools/hdc/cli.mjs run service bind maintain --
-node tools/hdc/cli.mjs run service nginx-waf maintain -- --site <site-id>
-node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone <zone>
-node tools/hdc/cli.mjs run service nagios maintain --
+node apps/hdc-cli/cli.mjs run service bind maintain --
+node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --site <site-id>
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone <zone>
+node apps/hdc-cli/cli.mjs run service nagios maintain --
 ```
 
 Use upstream from deploy output (e.g. `http://<ct-ip>:5678`). For nginx-waf behind Cloudflare, set `client_ip: cloudflare` on the site when appropriate.
@@ -147,7 +147,7 @@ If the user approved only deploy in section 10, **skip this phase** and remind t
 ## Phase 7 — Validate and close
 
 ```bash
-node tools/hdc/cli.mjs run service <id> query -- --live
+node apps/hdc-cli/cli.mjs run service <id> query -- --live
 ```
 
 - Update `inventory/manual/systems/<system-id>.json` — `access.nodes[].ip`, `web_ui`.
@@ -158,12 +158,12 @@ node tools/hdc/cli.mjs run service <id> query -- --live
 
 ## New package scaffolding
 
-When no `packages/services/<id>/` exists, the plan must include:
+When no `clumps/services/<id>/` exists, the plan must include:
 
 | Artifact | Notes |
 |----------|--------|
 | `manifest.json` | `id`, `verbs`, `env_required`, `inventory_docs`, `operation_report.next_steps` |
-| `config.example.json` + schema | `tools/hdc/schema/<id>.config.schema.json` |
+| `config.example.json` + schema | `apps/hdc-cli/schema/<id>.config.schema.json` |
 | `deploy/maintain/query/run.mjs` (+ `teardown` if destructive) | Match logging rules |
 | `lib/` | deployments resolver, install helpers |
 | README | Prerequisites, flags, after-deploy |

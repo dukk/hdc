@@ -42,6 +42,28 @@ function loadDotEnv(path) {
 }
 
 /**
+ * Sync Vaultwarden ciphers before CLI jobs when using vaultwarden backend.
+ */
+function syncVaultwardenIfNeeded() {
+  if (process.env.HDC_SECRET_BACKEND !== "vaultwarden") return;
+  const bw = spawnSync("which", ["bw"], { encoding: "utf8" });
+  if (bw.status !== 0) return;
+  const r = spawnSync("bw", ["sync"], {
+    encoding: "utf8",
+    env: process.env,
+    timeout: 120_000,
+  });
+  if (r.status === 0) {
+    process.stderr.write("[hdc-runner] bw sync: ok\n");
+  } else {
+    const detail = `${r.stderr ?? ""}${r.stdout ?? ""}`.trim();
+    process.stderr.write(
+      `[hdc-runner] bw sync: failed (non-fatal)${detail ? `: ${detail}` : ""}\n`,
+    );
+  }
+}
+
+/**
  * @param {string} scheduleId
  */
 function loadSchedule(scheduleId) {
@@ -291,6 +313,7 @@ async function main() {
 
   loadDotEnv(join(META_ROOT, ".env"));
   process.env.HDC_PRIVATE_ROOT = PRIVATE_ROOT;
+  syncVaultwardenIfNeeded();
 
   const schedule = loadSchedule(scheduleId);
   const scheduleType = typeof schedule.type === "string" ? schedule.type.trim() : "cli";
@@ -318,6 +341,10 @@ async function main() {
   if (uiJobId) appendUiJobLog(uiJobId, startLine);
   process.stderr.write(`[hdc-runner] job ${scheduleId}: started at ${startedAt}\n`);
 
+  const cliPath = join(INSTALL_ROOT, "apps/hdc-cli/cli.mjs");
+  const opsDailyPath = join(INSTALL_ROOT, "apps/hdc-ops-agent/bin/run-daily.mjs");
+  const isOpsDaily = cli.length === 1 && cli[0] === "run-daily";
+
   const discord = schedule.resolved_discord ?? {};
   const discordPrefix = discord.title_prefix || "[HDC]";
   const discordWebhookKey =
@@ -325,7 +352,7 @@ async function main() {
       ? discord.webhook_vault_key.trim()
       : "HDC_OPS_DISCORD_WEBHOOK_URL";
 
-  if (discord.enabled === true) {
+  if (discord.enabled === true && !isOpsDaily) {
     const startResult = await sendDiscordNotification({
       title: `${discordPrefix} ${scheduleId} — started`,
       message: `Scheduled job started at ${startedAt}`,
@@ -341,9 +368,12 @@ async function main() {
     }
   }
 
-  const cliPath = join(INSTALL_ROOT, "apps/hdc-cli/cli.mjs");
-  const args =
-    cliArgs.length > 0 ? [cliPath, ...cli, "--", ...cliArgs] : [cliPath, ...cli];
+  const scriptPath = isOpsDaily ? opsDailyPath : cliPath;
+  const args = isOpsDaily
+    ? [scriptPath, ...cliArgs]
+    : cliArgs.length > 0
+      ? [cliPath, ...cli, "--", ...cliArgs]
+      : [cliPath, ...cli];
 
   process.stderr.write(`[hdc-runner] job ${scheduleId}: node ${args.join(" ")}\n`);
   const r = spawnSync(process.execPath, args, {
@@ -409,7 +439,7 @@ async function main() {
     }
   }
 
-  const shouldDiscord = discord.enabled === true && (!discord.on_failure_only || !ok);
+  const shouldDiscord = discord.enabled === true && !isOpsDaily && (!discord.on_failure_only || !ok);
   if (shouldDiscord) {
     const title = `${discordPrefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`;
     const message = buildDiscordMessage({ ok, stderr, stdout, reportPath });

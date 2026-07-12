@@ -16,7 +16,7 @@ You discover tools that could improve the home data center. Read **`.cursor/skil
 
 - Self-hosted apps, monitoring, security, and automation that fit Proxmox LXC/QEMU patterns
 - Reference [ProxmoxVE helper-scripts](https://github.com/community-scripts/ProxmoxVE) for ideas — **do not** treat install curls as hdc automation
-- Compare candidates to existing `packages/services/` and `packages/infrastructure/` ids
+- Compare candidates to existing `clumps/services/` and `clumps/infrastructure/` ids
 
 ## Output
 

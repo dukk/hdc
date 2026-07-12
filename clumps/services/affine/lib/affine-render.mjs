@@ -1,6 +1,8 @@
 // Compose structure mirrors AFFiNE release docker-compose.yml:
 // https://github.com/toeverything/affine/releases/latest/download/docker-compose.yml
 
+import { affineMailEnvLines } from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -104,7 +106,101 @@ export function composeDir(install) {
 
 /**
  * @param {Record<string, unknown>} affine
- * @param {{ dbPassword: string }} secrets
+ * @returns {Record<string, unknown> | null}
+ */
+export function copilotBlock(affine) {
+  if (!isObject(affine.copilot)) return null;
+  return /** @type {Record<string, unknown>} */ (affine.copilot);
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ */
+export function copilotEnabled(affine) {
+  const c = copilotBlock(affine);
+  if (!c) return false;
+  return c.enabled === true || c.enabled === 1 || c.enabled === "true";
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ */
+export function copilotApiKeyVaultKey(affine) {
+  const c = copilotBlock(affine);
+  const key =
+    c && typeof c.api_key_vault_key === "string" && c.api_key_vault_key.trim()
+      ? c.api_key_vault_key.trim()
+      : "HDC_LITELLM_MASTER_KEY";
+  return key;
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ */
+export function copilotBaseUrl(affine) {
+  const c = copilotBlock(affine);
+  const raw = c && typeof c.base_url === "string" ? c.base_url.trim() : "";
+  return raw || "http://127.0.0.1:4000/v1";
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ */
+export function copilotModel(affine) {
+  const c = copilotBlock(affine);
+  const raw = c && typeof c.model === "string" ? c.model.trim() : "";
+  return raw || "qwen35-cloud";
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ */
+export function copilotOldApiStyle(affine) {
+  const c = copilotBlock(affine);
+  if (!c) return true;
+  if (c.old_api_style === false || c.old_api_style === 0 || c.old_api_style === "false") {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Guest `$CONFIG_LOCATION/config.json` for Copilot → LiteLLM (OpenAI-compatible).
+ * @param {Record<string, unknown>} affine
+ * @param {{ copilotApiKey?: string }} secrets
+ * @returns {string | null} JSON text, or null when copilot disabled
+ */
+export function renderAffineCopilotConfig(affine, secrets) {
+  if (!copilotEnabled(affine)) return null;
+  const apiKey = String(secrets.copilotApiKey || "").trim();
+  if (!apiKey) {
+    throw new Error(
+      `AFFiNE copilot.enabled requires vault ${copilotApiKeyVaultKey(affine)}`,
+    );
+  }
+  const doc = {
+    $schema: "https://github.com/toeverything/affine/releases/latest/download/config.schema.json",
+    copilot: {
+      enabled: true,
+      "providers.openai": {
+        apiKey,
+        baseUrl: copilotBaseUrl(affine),
+        oldApiStyle: copilotOldApiStyle(affine),
+      },
+      scenarios: {
+        override_enabled: true,
+        scenarios: {
+          chat: copilotModel(affine),
+        },
+      },
+    },
+  };
+  return `${JSON.stringify(doc, null, 2)}\n`;
+}
+
+/**
+ * @param {Record<string, unknown>} affine
+ * @param {{ dbPassword: string; copilotApiKey?: string }} secrets
  * @param {string} composeDirPath
  */
 export function renderAffineEnv(affine, secrets, composeDirPath) {
@@ -128,6 +224,7 @@ export function renderAffineEnv(affine, secrets, composeDirPath) {
     `DB_USERNAME=${dbUser}`,
     `DB_PASSWORD=${dbPassword}`,
     `DB_DATABASE=${dbName}`,
+    `AFFINE_INDEXER_ENABLED=${indexerEnabled(affine) ? "true" : "false"}`,
   ];
 
   const parsed = parsePublicUrl(affine);
@@ -140,6 +237,10 @@ export function renderAffineEnv(affine, secrets, composeDirPath) {
       lines.push("AFFINE_SERVER_HTTPS=false");
       lines.push(`AFFINE_SERVER_EXTERNAL_URL=${parsed.origin.replace(/\/+$/, "")}`);
     }
+  }
+
+  for (const line of affineMailEnvLines(affine)) {
+    lines.push(line);
   }
 
   return `${lines.join("\n")}\n`;
@@ -168,7 +269,7 @@ services:
     environment:
       - REDIS_SERVER_HOST=redis
       - DATABASE_URL=postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@postgres:5432/\${DB_DATABASE:-affine}
-      - AFFINE_INDEXER_ENABLED=false
+      - AFFINE_INDEXER_ENABLED=\${AFFINE_INDEXER_ENABLED:-false}
     restart: unless-stopped
 
   affine_migration:
@@ -183,7 +284,7 @@ services:
     environment:
       - REDIS_SERVER_HOST=redis
       - DATABASE_URL=postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@postgres:5432/\${DB_DATABASE:-affine}
-      - AFFINE_INDEXER_ENABLED=false
+      - AFFINE_INDEXER_ENABLED=\${AFFINE_INDEXER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -233,7 +334,7 @@ export function renderComposeImageEnv(affine) {
 
 /**
  * @param {Record<string, unknown>} affine
- * @param {{ dbPassword: string }} secrets
+ * @param {{ dbPassword: string; copilotApiKey?: string }} secrets
  * @param {string} composeDirPath
  */
 export function renderFullEnv(affine, secrets, composeDirPath) {

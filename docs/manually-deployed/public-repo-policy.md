@@ -6,7 +6,7 @@ The **hdc** repository on GitHub is public automation and documentation. **Live 
 
 | Artifact | Public hdc | hdc-private |
 | --- | --- | --- |
-| Package code (`packages/**`) | Yes | No (mirror paths only for configs) |
+| Package code (`clumps/**`) | Yes | No (mirror paths only for configs) |
 | `config.example.json` | Yes | Optional copy |
 | `config.json` | **Never** | Yes |
 | `inventory/**` | Only `inventory/manual/systems/_example.json` | Yes |
@@ -35,8 +35,8 @@ Do not commit real hostnames, MAC addresses, VMIDs from production, or operator 
 - `inventory/**` except `_example.json`
 - `.env` (except `.env.example`)
 - `vault.enc`, `*.pem`, `*.key`, `**/client_secret*.json`
-- Operation reports under `packages/**/reports/`
-- One-off live probes (`tools/hdc/scripts/test-*.mjs`)
+- Operation reports under `clumps/**/reports/`
+- One-off live probes (`apps/hdc-cli/scripts/test-*.mjs`)
 
 ## If something leaks
 

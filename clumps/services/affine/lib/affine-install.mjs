@@ -5,6 +5,7 @@ import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import {
   composeDir,
+  renderAffineCopilotConfig,
   renderComposeYaml,
   renderFullEnv,
   resolveUpstreamUrl,
@@ -17,11 +18,12 @@ export { resolvePveSshForHost };
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} envContent
+ * @param {string | null} [copilotConfigJson]
  */
-export function buildInstallScript(composeDirPath, composeYaml, envContent) {
+export function buildInstallScript(composeDirPath, composeYaml, envContent, copilotConfigJson = null) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
 
-  return [
+  const lines = [
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update -qq",
@@ -43,18 +45,25 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent) {
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
-    `cd '${dir}'`,
-    "docker compose pull",
-    "docker compose up -d",
-    "docker compose ps",
-  ].join("\n");
+  ];
+
+  if (typeof copilotConfigJson === "string" && copilotConfigJson.trim()) {
+    lines.push(
+      `cat > '${dir}/config/config.json' <<'HDCOPILOT'`,
+      copilotConfigJson.trimEnd(),
+      "HDCOPILOT",
+    );
+  }
+
+  lines.push(`cd '${dir}'`, "docker compose pull", "docker compose up -d", "docker compose ps");
+  return lines.join("\n");
 }
 
 /**
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} envContent
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; copilotConfigJson?: string | null }} [opts]
  */
 export function buildMaintainScript(composeDirPath, composeYaml, envContent, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
@@ -68,8 +77,17 @@ export function buildMaintainScript(composeDirPath, composeYaml, envContent, opt
     `cat > '${dir}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
-    `cd '${dir}'`,
   ];
+
+  if (typeof opts.copilotConfigJson === "string" && opts.copilotConfigJson.trim()) {
+    lines.push(
+      `cat > '${dir}/config/config.json' <<'HDCOPILOT'`,
+      opts.copilotConfigJson.trimEnd(),
+      "HDCOPILOT",
+    );
+  }
+
+  lines.push(`cd '${dir}'`);
   if (!opts.skipUpgrade) {
     lines.push("docker compose pull");
   }
@@ -103,12 +121,20 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
 }
 
 /**
+ * @param {Record<string, unknown>} affine
+ * @param {{ dbPassword: string; copilotApiKey?: string }} secrets
+ */
+function resolveCopilotConfigJson(affine, secrets) {
+  return renderAffineCopilotConfig(affine, secrets);
+}
+
+/**
  * @param {string} user
  * @param {string} pveHost
  * @param {number} vmid
  * @param {Record<string, unknown>} affine
  * @param {Record<string, unknown>} install
- * @param {{ dbPassword: string }} secrets
+ * @param {{ dbPassword: string; copilotApiKey?: string }} secrets
  */
 export async function installAffineInCt(user, pveHost, vmid, affine, install, secrets) {
   errout.write(`[hdc] affine install: Docker Compose in CT ${vmid} …\n`);
@@ -122,7 +148,11 @@ export async function installAffineInCt(user, pveHost, vmid, affine, install, se
   const dir = composeDir(install);
   const envContent = renderFullEnv(affine, secrets, dir);
   const composeYaml = renderComposeYaml();
-  const inner = buildInstallScript(dir, composeYaml, envContent);
+  const copilotConfigJson = resolveCopilotConfigJson(affine, secrets);
+  if (copilotConfigJson) {
+    errout.write(`[hdc] affine install: writing Copilot config.json (LiteLLM) …\n`);
+  }
+  const inner = buildInstallScript(dir, composeYaml, envContent, copilotConfigJson);
 
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
@@ -150,7 +180,7 @@ export async function installAffineInCt(user, pveHost, vmid, affine, install, se
  * @param {number} vmid
  * @param {Record<string, unknown>} affine
  * @param {Record<string, unknown>} install
- * @param {{ dbPassword: string }} secrets
+ * @param {{ dbPassword: string; copilotApiKey?: string }} secrets
  * @param {{ skipUpgrade?: boolean }} [opts]
  */
 export async function maintainAffineInCt(user, pveHost, vmid, affine, install, secrets, opts = {}) {
@@ -165,7 +195,14 @@ export async function maintainAffineInCt(user, pveHost, vmid, affine, install, s
   const dir = composeDir(install);
   const envContent = renderFullEnv(affine, secrets, dir);
   const composeYaml = renderComposeYaml();
-  const inner = buildMaintainScript(dir, composeYaml, envContent, opts);
+  const copilotConfigJson = resolveCopilotConfigJson(affine, secrets);
+  if (copilotConfigJson) {
+    errout.write(`[hdc] affine maintain: writing Copilot config.json (LiteLLM) …\n`);
+  }
+  const inner = buildMaintainScript(dir, composeYaml, envContent, {
+    skipUpgrade: opts.skipUpgrade,
+    copilotConfigJson,
+  });
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, message: `maintain failed (exit ${r.status})` };

@@ -41,7 +41,7 @@ needs_decision: false
 evidence:
   - operations/reports/monitor-2026-06-29T08-00.md
 suggested_commands:
-  - node tools/hdc/cli.mjs run service immich query -- --live
+  - node apps/hdc-cli/cli.mjs run service immich query -- --live
 ---
 Task description body (markdown).
 ```
@@ -66,9 +66,9 @@ Task description body (markdown).
 
 ## Rules
 
-- **Never invent** hostnames, IPs, VLANs, or credentials — use `operations/ip-allocations.md`, inventory, and package configs.
-- **Secrets:** env var names only; values in vault (`node tools/hdc/cli.mjs secrets set …`).
-- **CLI:** `node tools/hdc/cli.mjs` from hdc repo root (Windows: `hdc.cmd`).
+- **Never invent** hostnames, IPs, VLANs, or credentials — use `operations/ip-allocations.md`, inventory, and clump configs.
+- **Secrets:** env var names only; values in vault (`node apps/hdc-cli/cli.mjs secrets set …`).
+- **CLI:** `node apps/hdc-cli/cli.mjs` from hdc repo root (Windows: `hdc.cmd`).
 - **Destructive work** requires task status `approved` per `delegation-policy.md`.
 
 ## Digest filename pattern

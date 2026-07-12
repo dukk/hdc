@@ -40,18 +40,12 @@ export async function resolveHomepageUnifiWidgetEnv(opts) {
   }
   const url = controller.url.replace(/\/+$/, "");
 
-  const siteRaw =
-    typeof loaded.data.default_site_id === "string" ? loaded.data.default_site_id.trim() : "";
-  const site =
-    typeof homepage.unifi_widget === "object" &&
-    homepage.unifi_widget !== null &&
-    !Array.isArray(homepage.unifi_widget) &&
-    typeof /** @type {Record<string, unknown>} */ (homepage.unifi_widget).site === "string" &&
-    /** @type {Record<string, unknown>} */ (homepage.unifi_widget).site.trim()
-      ? /** @type {Record<string, unknown>} */ (homepage.unifi_widget).site.trim()
-      : siteRaw;
-
+  // Homepage matches site against classic /stat/sites `desc`, not Integration API
+  // default_site_id. Only inject when operators set homepage.unifi_widget.site
+  // explicitly; otherwise Homepage uses classic name === "default".
   const widget = /** @type {Record<string, unknown>} */ (homepage.unifi_widget);
+  const site =
+    typeof widget?.site === "string" && widget.site.trim() ? widget.site.trim() : "";
   const vaultKey = vaultKeyFromWidget(widget, "api_key_vault_key", UNIFI_API_KEY_VAULT_KEY);
 
   if (dryRun) {

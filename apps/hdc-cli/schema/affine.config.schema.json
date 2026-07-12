@@ -29,7 +29,24 @@
               "indexer_enabled": { "type": "boolean" },
               "db_username": { "type": "string" },
               "db_database": { "type": "string" },
-              "db_password_vault_key": { "type": "string" }
+              "db_password_vault_key": { "type": "string" },
+              "mail": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "from": { "type": "string" }
+                }
+              },
+              "copilot": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "base_url": { "type": "string" },
+                  "api_key_vault_key": { "type": "string" },
+                  "model": { "type": "string" },
+                  "old_api_style": { "type": "boolean" }
+                }
+              }
             }
           },
           "install": {

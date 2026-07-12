@@ -1,18 +1,18 @@
 ---
 description: >-
   ARCHIVED — Nagios is not deployed (2026-06). Reference only if restoring the nagios
-  package. When re-enabled, wire monitoring inventory and hdc package ids.
+  package. When re-enabled, wire monitoring inventory and hdc clump ids.
 globs: inventory/**/*,docs/manually-deployed/**/*
 alwaysApply: false
 ---
 
 # Nagios monitoring for manual inventory (archived)
 
-> **Status:** Nagios servers were decommissioned; package scripts remain in `packages/services/nagios/`. Restore from `config.example.json` before following this rule.
+> **Status:** Nagios servers were decommissioned; clump scripts remain in `clumps/services/nagios/`. Restore from `config.example.json` before following this rule.
 
-- Monitored **hosts** are generated from **BIND forward A records** in `packages/services/bind/config.json` at `nagios deploy` / `maintain` time — you do not need per-host Nagios entries in inventory for DNS-named systems.
+- Monitored **hosts** are generated from **BIND forward A records** in `clumps/services/bind/config.json` at `nagios deploy` / `maintain` time — you do not need per-host Nagios entries in inventory for DNS-named systems.
 - Nagios runs on LXC guests `nagios-a` / `nagios-b` / `nagios-c` (IPs in **Monitoring** group — `hdc-private/operations/ip-allocations.md`; hosts on `hypervisor-b` / `hypervisor-c` / `hypervisor-d`). Add `"nagios"` to `automation_targets` on those system sidecars (and `"proxmox"` for Proxmox provision).
-- For **new forward A records**, update BIND config and run `node tools/hdc/cli.mjs run service nagios maintain --` (or `deploy`) — not hypervisor `nagios.central` / NRPE.
+- For **new forward A records**, update BIND config and run `node apps/hdc-cli/cli.mjs run service nagios maintain --` (or `deploy`) — not hypervisor `nagios.central` / NRPE.
 - Optional: add matching A records in BIND (`nagios-a.hdc.example.invalid`, etc.) for human-friendly DNS; not required for checks.
-- After inventory edits, validate JSON against schemas under `tools/hdc/schema/` (planned `docs lint` is not wired in the CLI yet).
-- Redeploy: `node tools/hdc/cli.mjs run service nagios deploy --` or per instance `--instance a`.
+- After inventory edits, validate JSON against schemas under `apps/hdc-cli/schema/` (planned `docs lint` is not wired in the CLI yet).
+- Redeploy: `node apps/hdc-cli/cli.mjs run service nagios deploy --` or per instance `--instance a`.

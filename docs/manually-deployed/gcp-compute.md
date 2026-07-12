@@ -8,7 +8,7 @@ HDC package `gcp-compute` provisions **Google Compute Engine VMs** and **Cloud R
 2. **Service account** with roles such as Compute Admin, Cloud Run Admin, and Service Account User (tighten per your org policy).
 3. Repo `.env`: `HDC_GCP_COMPUTE_PROJECT_ID`
 4. Vault: `HDC_GCP_COMPUTE_SERVICE_ACCOUNT_JSON` (full key JSON from Console).
-5. hdc-private `packages/infrastructure/gcp-compute/config.json` (seed from `config.example.json`).
+5. hdc-private `clumps/infrastructure/gcp-compute/config.json` (seed from `config.example.json`).
 
 ## Cost confirmation
 
@@ -23,12 +23,12 @@ Deploy uses on-demand **fallback price tables** when the Cloud Billing Catalog A
 ## Commands
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure gcp-compute query --
-node tools/hdc/cli.mjs run infrastructure gcp-compute query -- --live
-node tools/hdc/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run
-node tools/hdc/cli.mjs run infrastructure gcp-compute deploy -- --instance a
-node tools/hdc/cli.mjs run infrastructure gcp-compute maintain --
-node tools/hdc/cli.mjs run infrastructure gcp-compute teardown -- --instance a --yes
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute query --
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute query -- --live
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --instance a
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute maintain --
+node apps/hdc-cli/cli.mjs run infrastructure gcp-compute teardown -- --instance a --yes
 ```
 
 Cloud VMs receive operator `~/.ssh` public keys via instance metadata.

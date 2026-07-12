@@ -49,6 +49,16 @@ import {
  * @property {string} [error]
  */
 
+/**
+ * @typedef {object} DailyMaintainResult
+ * @property {number} exitCode
+ * @property {boolean} dryRun
+ * @property {string} collectedAt
+ * @property {DailyStepResult[]} results
+ * @property {string} [reportPath]
+ * @property {string} [reportBody]
+ */
+
 /** @typedef {import("./daily-maintain-recipe.mjs").DailyTier} DailyTier */
 
 /**
@@ -216,9 +226,9 @@ function defaultReportPath(root, basename, env) {
  * @param {CliDeps} deps
  * @param {string} root
  * @param {string[]} argv
- * @returns {Promise<number>}
+ * @returns {Promise<DailyMaintainResult>}
  */
-export async function runDailyMaintain(deps, root, argv) {
+export async function runDailyMaintainWithResult(deps, root, argv) {
   const flags = parseDailyMaintainArgv(argv);
   const recipe = filterDailyRecipeSteps(dailyRecipeSteps(), {
     only: flags.only.size ? flags.only : undefined,
@@ -235,7 +245,12 @@ export async function runDailyMaintain(deps, root, argv) {
       await vault.unlock({});
     } catch (e) {
       deps.error(`[hdc] maintain daily: vault unlock failed: ${/** @type {Error} */ (e).message || e}`);
-      return 1;
+      return {
+        exitCode: 1,
+        dryRun: flags.dryRun,
+        collectedAt,
+        results: [],
+      };
     }
   }
 
@@ -369,25 +384,49 @@ export async function runDailyMaintain(deps, root, argv) {
     });
   }
 
+  /** @type {string | undefined} */
+  let reportPath;
+  /** @type {string | undefined} */
+  let reportBody;
   if (!flags.noReport) {
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const reportPath =
+    reportPath =
       flags.reportPath ?? defaultReportPath(root, `daily-maintain-${ts}.md`, deps.env);
-    const body = renderDailyMaintainReport(results, {
+    reportBody = renderDailyMaintainReport(results, {
       dryRun: flags.dryRun,
       collectedAt,
       argv,
     });
     try {
       mkdirSync(dirname(reportPath), { recursive: true });
-      writeFileSync(reportPath, body, "utf8");
+      writeFileSync(reportPath, reportBody, "utf8");
       deps.log(`[hdc] maintain daily: report ${reportPath}`);
     } catch (e) {
       deps.warn(`[hdc] maintain daily: failed to write report: ${/** @type {Error} */ (e).message || e}`);
+      reportPath = undefined;
+      reportBody = undefined;
     }
   }
 
-  return exitCode;
+  return {
+    exitCode,
+    dryRun: flags.dryRun,
+    collectedAt,
+    results,
+    reportPath,
+    reportBody,
+  };
+}
+
+/**
+ * @param {CliDeps} deps
+ * @param {string} root
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+export async function runDailyMaintain(deps, root, argv) {
+  const result = await runDailyMaintainWithResult(deps, root, argv);
+  return result.exitCode;
 }
 
 /**

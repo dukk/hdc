@@ -109,7 +109,7 @@ Use this structure in replies so decisions are auditable:
 
 ## 9. HDC repo hygiene
 
-- After changing structured facts, run `node tools/hdc/cli.mjs docs lint` on the sidecar JSON (companion markdown is optional and not touched by hdc).
+- After changing structured facts, run `node apps/hdc-cli/cli.mjs docs lint` on the sidecar JSON (companion markdown is optional and not touched by hdc).
 - Secrets stay in `.env`; sidecars reference **env var names** only.
 
 ## Cross-links

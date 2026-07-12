@@ -81,6 +81,8 @@ node /opt/hdc/apps/hdc-cli/cli.mjs <cli...> <cli_args...>
 
 Example: `maintain daily` with `--skip-clients` at 03:00 daily.
 
+**hdc-ops-daily** (`cli: ["run-daily"]`) runs [`apps/hdc-ops-agent/bin/run-daily.mjs`](../../apps/hdc-ops-agent/bin/run-daily.mjs) — same maintain recipe with richer Discord summaries via hdc-mcp. Disable the legacy `daily-maintain` schedule after validation to avoid duplicate runs.
+
 Test manually on the guest:
 
 ```bash

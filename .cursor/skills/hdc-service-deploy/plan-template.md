@@ -62,10 +62,10 @@ Operator must approve cost line in **Section 10** before non–dry-run cloud dep
 
 | Path (repo) | Action |
 |-------------|--------|
-| `hdc-private/packages/services/{{service_id}}/config.json` | {{create_or_update}} |
+| `hdc-private/clumps/services/{{service_id}}/config.json` | {{create_or_update}} |
 | `hdc-private/inventory/manual/systems/{{system_id}}.json` | {{create_or_update}} |
 | `hdc-private/inventory/manual/services/{{service_id}}.json` | {{create_or_update}} |
-| `packages/services/{{service_id}}/*` (public hdc) | {{only_if_scaffolding_or_script_fix}} |
+| `clumps/services/{{service_id}}/*` (public hdc) | {{only_if_scaffolding_or_script_fix}} |
 
 ---
 
@@ -77,7 +77,7 @@ Operator must approve cost line in **Section 10** before non–dry-run cloud dep
 
 ```bash
 # Run only after approval; values entered interactively (masked).
-node tools/hdc/cli.mjs secrets set {{VAULT_KEY}}
+node apps/hdc-cli/cli.mjs secrets set {{VAULT_KEY}}
 ```
 
 ---
@@ -88,13 +88,13 @@ Run from **hdc repo root** after approval.
 
 ```bash
 # Optional: ensure private config exists
-node tools/hdc/scripts/bootstrap-hdc-private-configs.mjs
+node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs
 
 # Pre-flight (read-only)
-node tools/hdc/cli.mjs run service {{service_id}} query --
+node apps/hdc-cli/cli.mjs run service {{service_id}} query --
 
 # Deploy
-node tools/hdc/cli.mjs run service {{service_id}} deploy -- {{deploy_flags}}
+node apps/hdc-cli/cli.mjs run service {{service_id}} deploy -- {{deploy_flags}}
 ```
 
 **Deploy flags for this run:** `{{deploy_flags}}`
@@ -113,10 +113,10 @@ Only run steps you explicitly approve. Upstream URLs must come from deploy/query
 
 ```bash
 # Example (fill after guest IP is known):
-# node tools/hdc/cli.mjs run service bind maintain --
-# node tools/hdc/cli.mjs run service nginx-waf maintain -- --site {{site_id}}
-# node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone {{zone}}
-# node tools/hdc/cli.mjs run service nagios maintain --
+# node apps/hdc-cli/cli.mjs run service bind maintain --
+# node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --site {{site_id}}
+# node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone {{zone}}
+# node apps/hdc-cli/cli.mjs run service nagios maintain --
 ```
 
 ---
@@ -124,22 +124,22 @@ Only run steps you explicitly approve. Upstream URLs must come from deploy/query
 ## 8. Validation
 
 ```bash
-node tools/hdc/cli.mjs run service {{service_id}} query -- --live
+node apps/hdc-cli/cli.mjs run service {{service_id}} query -- --live
 ```
 
 - [ ] Guest reachable at planned IP
 - [ ] HTTP/service health OK
 - [ ] Inventory `access.nodes[].ip` and `web_ui` updated
-- [ ] Operation report reviewed: `hdc-private/packages/services/{{service_id}}/reports/deploy-*.md`
+- [ ] Operation report reviewed: `hdc-private/clumps/services/{{service_id}}/reports/deploy-*.md`
 
 ---
 
 ## 9. Rollback
 
 ```bash
-node tools/hdc/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --dry-run
+node apps/hdc-cli/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --dry-run
 # After review:
-# node tools/hdc/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --yes
+# node apps/hdc-cli/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --yes
 ```
 
 Proxmox destroy flags (if applicable): `{{destroy_existing_notes}}`

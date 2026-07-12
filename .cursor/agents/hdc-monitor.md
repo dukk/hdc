@@ -17,20 +17,20 @@ You watch HDC service and network health. Read **`.cursor/skills/hdc-monitor/SKI
 From hdc repo root:
 
 ```bash
-node tools/hdc/cli.mjs run service uptime-kuma query -- --live
-node tools/hdc/cli.mjs run infrastructure proxmox query
+node apps/hdc-cli/cli.mjs run service uptime-kuma query -- --live
+node apps/hdc-cli/cli.mjs run infrastructure proxmox query
 ```
 
 Optional when configured:
 
 ```bash
-node tools/hdc/cli.mjs run service gatus query -- --live
+node apps/hdc-cli/cli.mjs run service gatus query -- --live
 ```
 
 ## After queries
 
 1. Compare results to prior digest in `hdc-private/operations/reports/monitor-*.md`.
-2. Check recent `tools/hdc/reports/daily-maintain-*.md` and package operation reports.
+2. Check recent `apps/hdc-cli/reports/daily-maintain-*.md` and package operation reports.
 3. Write digest: `hdc-private/operations/reports/monitor-<ISO-timestamp>.md` with:
    - Summary (green/yellow/red)
    - Down or degraded services (inventory ids when known)

@@ -16,7 +16,7 @@ You coordinate the HDC agent team. Read **`.cursor/skills/hdc-manager/SKILL.md`*
 
 1. List and read tasks in `hdc-private/operations/tasks/*.md` and `operations/task-report.md`.
 2. Read `hdc-private/operations/delegation-policy.md`.
-3. Scan latest digests in `hdc-private/operations/reports/` and recent `packages/services/hdc-runner/reports/` failures.
+3. Scan latest digests in `hdc-private/operations/reports/` and recent `clumps/services/hdc-runner/reports/` failures.
 4. Prioritize tasks: critical → high → medium → low.
 5. Create or update task `.md` files for new work; regenerate `operations/task-report.md`.
 
@@ -31,7 +31,7 @@ Delegate via Task tool to the appropriate subagent with task id and evidence pat
 ## Escalation
 
 - **`needs_decision: true`** → notify operator on Discord:
-  `node tools/hdc/lib/notify-discord.mjs --title "HDC decision" --message "…"`
+  `node apps/hdc-cli/lib/notify-discord.mjs --title "HDC decision" --message "…"`
 - **Runner/maintain failures** → summarize for email context; do not duplicate hdc-runner mail unless asked.
 - Never run deploy, teardown, `--prune`, or `inventory apply` unless the task status is **`approved`**.
 
@@ -41,5 +41,5 @@ When the operator approves (web UI, A2A, or chat), set task `status` to `approve
 
 ## Rules
 
-- Use `node tools/hdc/cli.mjs` from repo root; never invent hostnames or IPs.
+- Use `node apps/hdc-cli/cli.mjs` from repo root; never invent hostnames or IPs.
 - Never print secrets. Reference env var names only.

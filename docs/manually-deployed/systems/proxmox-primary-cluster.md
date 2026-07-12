@@ -2,7 +2,7 @@
 
 Structured inventory lives in [`example-proxmox-cluster.json`](example-proxmox-cluster.json). Regenerate the block below with:
 
-`node tools/hdc/cli.mjs docs sync`
+`node apps/hdc-cli/cli.mjs docs sync`
 
 <!-- hdc:inventory -->
 ## Hardware (synced)
@@ -32,4 +32,4 @@ Structured inventory lives in [`example-proxmox-cluster.json`](example-proxmox-c
 
 ## Nagios (central + NRPE)
 
-Central Nagios and NRPE on each hypervisor are driven by [`example-proxmox-cluster.json`](example-proxmox-cluster.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node tools/hdc/cli.mjs run service nagios deploy`.
+Central Nagios and NRPE on each hypervisor are driven by [`example-proxmox-cluster.json`](example-proxmox-cluster.json): fill `nagios.central.address` and `nagios.central.ssh` (same pattern as node `ssh` URIs). Open **TCP 5666** from the central Nagios host to each cluster node so `check_nrpe` works. Deploy: `node apps/hdc-cli/cli.mjs run service nagios deploy`.

@@ -10,7 +10,7 @@ HDC package `azure-compute` provisions **Azure Virtual Machines** and **Azure Co
    - `HDC_AZURE_COMPUTE_TENANT_ID`
    - `HDC_AZURE_COMPUTE_CLIENT_ID`
 3. Vault: `HDC_AZURE_COMPUTE_CLIENT_SECRET`
-4. hdc-private `packages/infrastructure/azure-compute/config.json` (seed from `config.example.json`).
+4. hdc-private `clumps/infrastructure/azure-compute/config.json` (seed from `config.example.json`).
 5. Optional inventory: `inventory/manual/targets/azure-compute.json`, system sidecars `virt-azure-compute-a.json`, etc.
 
 ## Cost confirmation
@@ -32,12 +32,12 @@ Flags:
 ## Commands
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure azure-compute query --
-node tools/hdc/cli.mjs run infrastructure azure-compute query -- --live
-node tools/hdc/cli.mjs run infrastructure azure-compute deploy -- --instance a --dry-run
-node tools/hdc/cli.mjs run infrastructure azure-compute deploy -- --instance a
-node tools/hdc/cli.mjs run infrastructure azure-compute maintain --
-node tools/hdc/cli.mjs run infrastructure azure-compute teardown -- --instance a --yes
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute query --
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute query -- --live
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute deploy -- --instance a --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute deploy -- --instance a
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute maintain --
+node apps/hdc-cli/cli.mjs run infrastructure azure-compute teardown -- --instance a --yes
 ```
 
 Estimates exclude egress, snapshots, reserved-instance discounts, and tax.

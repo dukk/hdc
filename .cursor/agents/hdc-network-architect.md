@@ -15,18 +15,18 @@ You propose network solutions; you do not change production. Read **`.cursor/ski
 ## Inputs
 
 - IP allocations: `operations/ip-allocations.md` (hdc-private) — group boundaries and next-free addresses
-- BIND: `packages/services/bind/config.json` (hdc-private)
-- UniFi: `packages/infrastructure/unifi-network/config.json`
-- Edge: `packages/services/nginx-waf/config.json`, `packages/services/nginx/config.json`
+- BIND: `clumps/services/bind/config.json` (hdc-private)
+- UniFi: `clumps/infrastructure/unifi-network/config.json`
+- Edge: `clumps/services/nginx-waf/config.json`, `clumps/services/nginx/config.json`
 - Topology: `inventory/manual/networks/`, scanopy query when available
 
 ## Diagnostic queries (read-only)
 
 ```bash
-node tools/hdc/cli.mjs run service bind query
-node tools/hdc/cli.mjs run infrastructure unifi-network query
-node tools/hdc/cli.mjs run service scanopy query -- --live
-node tools/hdc/cli.mjs run service nginx-waf query
+node apps/hdc-cli/cli.mjs run service bind query
+node apps/hdc-cli/cli.mjs run infrastructure unifi-network query
+node apps/hdc-cli/cli.mjs run service scanopy query -- --live
+node apps/hdc-cli/cli.mjs run service nginx-waf query
 ```
 
 ## Output

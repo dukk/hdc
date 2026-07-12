@@ -186,7 +186,7 @@ async function main() {
   const ok = results.every((r) => r.ok);
   const payload = { ok, target, verb, count: results.length, results };
   runOperationReportTail({
-    packageRoot,
+    clumpRoot: packageRoot,
     repoRoot: root,
     verb,
     argv: process.argv.slice(2),

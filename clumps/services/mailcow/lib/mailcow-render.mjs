@@ -460,6 +460,9 @@ export function buildReverseProxyConfScript(dirPath, mailcow) {
     `  fi`,
     `}`,
   ];
+  // TLS terminates at nginx-waf (or similar); mailcow must serve HTTP on :80
+  // without redirecting to HTTPS or browsers hit ERR_TOO_MANY_REDIRECTS.
+  lines.push(`set_kv HTTP_REDIRECT 'n'`);
   if (trusted.length) {
     lines.push(`set_kv TRUSTED_PROXIES '${trustedVal}'`);
   }

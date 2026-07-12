@@ -29,6 +29,24 @@ HDC_VAULTWARDEN_ORGANIZATION_ID=<uuid>   # optional when org name resolves (defa
 HDC_VAULTWARDEN_COLLECTION_ID=<uuid>     # required
 ```
 
+**Alternative (API key login):** omit `HDC_VAULTWARDEN_EMAIL` and set a personal API key instead (Account Settings → Security → Keys in the Vaultwarden web UI):
+
+```env
+HDC_VAULTWARDEN_URL=https://vault.example.invalid
+HDC_VAULTWARDEN_KEY_CLIENT_ID=user.xxxxx-xxxx-xxxx
+HDC_VAULTWARDEN_KEY_CLIENT_SECRET=xxxxxxxxxxxxxx
+HDC_VAULTWARDEN_COLLECTION_ID=<uuid>
+```
+
+Store the key values in the local hdc vault (recommended) or `.env`:
+
+```powershell
+node apps/hdc-cli/cli.mjs secrets set HDC_VAULTWARDEN_KEY_CLIENT_ID
+node apps/hdc-cli/cli.mjs secrets set HDC_VAULTWARDEN_KEY_CLIENT_SECRET
+```
+
+API key login replaces email+password for `bw login` only. **`HDC_VAULTWARDEN_MASTER_PASSWORD` is still required** for `bw unlock` (vault decryption).
+
 Resolve IDs after `secrets unlock`:
 
 ```powershell
@@ -42,13 +60,13 @@ Both `https://vault.example.invalid` and `https://vault.home.example.invalid` re
 
 | Mode | Behavior |
 | --- | --- |
-| `auto` (default) | Use Vaultwarden when URL + email are set; fall back to local vault if `bw` or server is unavailable |
+| `auto` (default) | Use Vaultwarden when URL + (email or API key pair) are set; fall back to local vault if `bw` or server is unavailable |
 | `vaultwarden` | Require Vaultwarden; fail if unlock fails |
 | `local` | Only `~/.hdc/vault.enc` (legacy behavior) |
 
 ## First-time Vaultwarden setup
 
-After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
+After [Vaultwarden is deployed](../../clumps/services/vaultwarden/README.md):
 
 1. Open `https://vault.example.invalid/admin` and create your account (or use an invitation).
 2. Point `bw` at your server:
@@ -60,7 +78,7 @@ After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
 3. Run any hdc command that needs secrets, or:
 
    ```powershell
-   node tools/hdc/cli.mjs secrets unlock
+   node apps/hdc-cli/cli.mjs secrets unlock
    ```
 
 4. Enter your **Vaultwarden master password** when prompted. hdc offers to save it as `HDC_VAULTWARDEN_MASTER_PASSWORD` in the **local** hdc vault (bootstrap only).
@@ -70,12 +88,20 @@ After [Vaultwarden is deployed](../../packages/services/vaultwarden/README.md):
 - Each hdc secret is a **Login** item in the **HDC organization** (collection from `HDC_VAULTWARDEN_COLLECTION_ID`).
 - The **item name** must equal the env key exactly, e.g. `HDC_PROXMOX_API_TOKEN`.
 - The **password** field holds the secret value (username is set to the same key name for consistency).
+- **Website URLs** (`login.uris[]`) point at HDC service UIs when applicable (public hostnames, nginx-waf aliases, and LAN `http://10.x:port` routes). Infra-only API keys (Cloudflare, AWS, SSH passwords, webhooks, …) intentionally have no website. Sync from clump configs:
+
+```powershell
+node apps/hdc-cli/cli.mjs secrets sync-uris -- --dry-run
+node apps/hdc-cli/cli.mjs secrets sync-uris --
+```
+
+`secrets set` and `secrets push` also attach URIs when hdc can derive a URL for the key. Re-run `secrets sync-uris` after nginx-waf or service URL changes.
 
 Migrate existing local vault secrets in one step:
 
 ```powershell
-node tools/hdc/cli.mjs secrets push -- --dry-run
-node tools/hdc/cli.mjs secrets push -- --force
+node apps/hdc-cli/cli.mjs secrets push -- --dry-run
+node apps/hdc-cli/cli.mjs secrets push -- --force
 ```
 
 `--force` overwrites organization items; default `--skip-existing` is safe for re-runs. Bootstrap keys are never pushed.
@@ -83,24 +109,24 @@ node tools/hdc/cli.mjs secrets push -- --force
 Store a secret:
 
 ```powershell
-node tools/hdc/cli.mjs secrets set HDC_PROXMOX_API_TOKEN
+node apps/hdc-cli/cli.mjs secrets set HDC_PROXMOX_API_TOKEN
 ```
 
 List keys:
 
 ```powershell
-node tools/hdc/cli.mjs secrets list
+node apps/hdc-cli/cli.mjs secrets list
 ```
 
 Export values to files (requires unlock; plaintext on disk — use a directory outside the repo):
 
 ```powershell
-node tools/hdc/cli.mjs secrets get HDC_PROXMOX_API_TOKEN --out $env:USERPROFILE\.hdc\export\HDC_PROXMOX_API_TOKEN
-node tools/hdc/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export
-node tools/hdc/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export --format env
+node apps/hdc-cli/cli.mjs secrets get HDC_PROXMOX_API_TOKEN --out $env:USERPROFILE\.hdc\export\HDC_PROXMOX_API_TOKEN
+node apps/hdc-cli/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export
+node apps/hdc-cli/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export --format env
 ```
 
-`dump` omits local bootstrap keys unless you pass `--include-bootstrap`. See `node tools/hdc/cli.mjs help secrets dump`.
+`dump` omits local bootstrap keys unless you pass `--include-bootstrap`. See `node apps/hdc-cli/cli.mjs help secrets dump`.
 
 ## Bootstrap keys (local hdc vault only)
 
@@ -109,6 +135,8 @@ These never sync to Vaultwarden:
 | Key | Purpose |
 | --- | --- |
 | `HDC_VAULTWARDEN_MASTER_PASSWORD` | Optional stored master password for non-interactive unlock |
+| `HDC_VAULTWARDEN_KEY_CLIENT_ID` | Personal API key client id for `bw login --apikey` (bootstrap; local vault only) |
+| `HDC_VAULTWARDEN_KEY_CLIENT_SECRET` | Personal API key client secret for `bw login --apikey` (bootstrap; local vault only) |
 | `HDC_VAULTWARDEN_ADMIN_TOKEN` | Plain Vaultwarden **admin panel** password (hdc hashes to Argon2 for `ADMIN_TOKEN` on deploy/maintain) |
 
 The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still protects `~/.hdc/vault.enc` when reading bootstrap keys.
@@ -118,23 +146,23 @@ The local vault passphrase (`HDC_VAULT_PASSPHRASE` / `secrets init`) still prote
 hdc minimizes Bitwarden CLI overhead:
 
 - **Bulk reads** — `readSecrets` / `secrets dump` load the HDC collection with one `bw list items` call and parse decrypted passwords from the response (no per-item `get password` when the list payload includes them).
-- **Session reuse** — After unlock, the `BW_SESSION` is cached for the hdc process and passed to spawned package scripts (`hdc run`, `maintain daily`) so child processes skip login/unlock when the session is still valid.
+- **Session reuse** — After unlock, the `BW_SESSION` is cached for the hdc process and passed to spawned clump scripts (`hdc run`, `maintain daily`) so child processes skip login/unlock when the session is still valid.
 - **In-process cache** — Repeated `getSecret` calls for the same key in one command reuse the cached value.
 
 Operator tips for faster runs:
 
 - Store **`HDC_VAULTWARDEN_MASTER_PASSWORD`** in the local hdc vault (via `secrets unlock`) so unlock is non-interactive.
 - Prefer the **native `bw.exe`** over npm `@bitwarden/cli` when possible (`HDC_BW_EXECUTABLE` if needed).
-- Put frequently used secrets in **package `.env`** (hdc-private) when acceptable — hdc reads env vars before calling `bw`.
+- Put frequently used secrets in **clump `.env`** (hdc-private) when acceptable — hdc reads env vars before calling `bw`.
 - Use **`HDC_SECRET_BACKEND=local`** on dev machines that do not need Vaultwarden.
 
 ## hdc-runner scheduled host
 
-The [`hdc-runner`](../packages/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault), plus org/collection IDs from `hdc_runner.env`. Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`packages/services/hdc-runner/README.md`](../packages/services/hdc-runner/README.md).
+The [`hdc-runner`](../clumps/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault). When API key login is configured, `HDC_VAULTWARDEN_KEY_CLIENT_ID` and `HDC_VAULTWARDEN_KEY_CLIENT_SECRET` are pushed the same way. Org/collection IDs come from `hdc_runner.env`. Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`clumps/services/hdc-runner/README.md`](../clumps/services/hdc-runner/README.md).
 
 ## Troubleshooting
 
 - **`bw not found`** — Install CLI or set `HDC_BW_EXECUTABLE`. On Windows, npm installs `@bitwarden/cli` as a PowerShell/cmd shim; hdc invokes `node …/bw.js` directly so `shell: false` spawn works.
 - **Unlock fails** — Verify URL, email, and master password; run `bw config server …` and `bw login` manually once.
-- **`bw login` returns `{"statusCode":404}`** — Bitwarden CLI 2026.x calls `POST /identity/accounts/prelogin/password`, which requires **Vaultwarden ≥ 1.36.0**. Upgrade with `node tools/hdc/cli.mjs run service vaultwarden maintain --` (bump `vaultwarden.image_tag` in config first if pinned below 1.36.0).
+- **`bw login` returns `{"statusCode":404}`** — Bitwarden CLI 2026.x calls `POST /identity/accounts/prelogin/password`, which requires **Vaultwarden ≥ 1.36.0**. Upgrade with `node apps/hdc-cli/cli.mjs run service vaultwarden maintain --` (bump `vaultwarden.image_tag` in config first if pinned below 1.36.0).
 - **Item not found** — Create with `secrets set <ENV_NAME>`; name must match exactly.

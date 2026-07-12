@@ -50,6 +50,13 @@
           "discord": { "enabled": true, "on_failure_only": false }
         },
         {
+          "id": "hdc-ops-daily",
+          "cron": "15 3 * * *",
+          "cli": ["run-daily"],
+          "cli_args": [],
+          "discord": { "enabled": true, "on_failure_only": false }
+        },
+        {
           "id": "bind-maintain-weekly",
           "cron": "30 4 * * 0",
           "cli": ["run", "service", "bind", "maintain"],

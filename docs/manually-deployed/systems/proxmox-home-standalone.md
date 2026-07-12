@@ -2,7 +2,7 @@
 
 Structured inventory lives in [`example-proxmox-standalone.json`](example-proxmox-standalone.json). Regenerate the block below with:
 
-`node tools/hdc/cli.mjs docs sync`
+`node apps/hdc-cli/cli.mjs docs sync`
 
 <!-- hdc:inventory -->
 ## Hardware (synced)

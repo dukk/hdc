@@ -27,7 +27,18 @@
       "indexer_enabled": false,
       "db_username": "affine",
       "db_database": "affine",
-      "db_password_vault_key": "HDC_AFFINE_DB_PASSWORD"
+      "db_password_vault_key": "HDC_AFFINE_DB_PASSWORD",
+      "mail": {
+        "enabled": false,
+        "from": "noreply@hdc.example.invalid"
+      },
+      "copilot": {
+        "enabled": false,
+        "base_url": "http://192.0.2.116:4000/v1",
+        "api_key_vault_key": "HDC_LITELLM_MASTER_KEY",
+        "model": "qwen35-cloud",
+        "old_api_style": true
+      }
     },
     "install": {
       "enabled": true,

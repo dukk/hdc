@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { stderr as errout } from "node:process";
 
-import { dbPasswordVaultKey } from "./affine-render.mjs";
+import {
+  copilotApiKeyVaultKey,
+  copilotEnabled,
+  dbPasswordVaultKey,
+} from "./affine-render.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -29,11 +33,43 @@ async function loadOrGenerateSecret(vault, key, label) {
 
 /**
  * @param {ReturnType<import("./affine-vault-deps.mjs").createAffineVaultAccess>} vault
+ * @param {string} key
+ * @param {string} label
+ */
+async function loadRequiredSecret(vault, key, label) {
+  await vault.unlock({});
+  const data = await vault.readSecrets({});
+  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  if (existing) {
+    errout.write(`[hdc] affine: ${label} loaded from vault ${key}\n`);
+    return existing;
+  }
+  throw new Error(
+    `missing vault secret ${key} (${label}) — run: node apps/hdc-cli/cli.mjs secrets set ${key}`,
+  );
+}
+
+/**
+ * @param {ReturnType<import("./affine-vault-deps.mjs").createAffineVaultAccess>} vault
  * @param {Record<string, unknown>} affine
  */
 export async function resolveAffineSecrets(vault, affine) {
   const cfg = isObject(affine) ? affine : {};
   const dbKey = dbPasswordVaultKey(cfg);
   const dbPassword = await loadOrGenerateSecret(vault, dbKey, "DB password");
-  return { dbPassword, dbKey };
+
+  /** @type {{ dbPassword: string; dbKey: string; copilotApiKey?: string; copilotApiKeyVaultKey?: string }} */
+  const out = { dbPassword, dbKey };
+
+  if (copilotEnabled(cfg)) {
+    const apiKey = await loadRequiredSecret(
+      vault,
+      copilotApiKeyVaultKey(cfg),
+      "Copilot / LiteLLM API key",
+    );
+    out.copilotApiKey = apiKey;
+    out.copilotApiKeyVaultKey = copilotApiKeyVaultKey(cfg);
+  }
+
+  return out;
 }

@@ -78,13 +78,13 @@ Reference sites: `glances`, `paperless-ngx`, `twenty`, `uptime-kuma`, `n8n`, `op
 4. **nginx-waf:** add `sites[]` entry with `proxy_pass` to `http://<guest-ip>:<port>`; `client_ip: cloudflare` when behind Cloudflare.
 5. **cloudflare:** A record to WAF WAN IP (proxied) if used.
 6. **nagios:** `run service nagios maintain --` after BIND has the A record.
-7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../packages/services/homeassistant/README.md). Without this, `https://ha.example.invalid` returns **400**.
+7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../clumps/services/homeassistant/README.md). Without this, `https://ha.example.invalid` returns **400**.
 
-See [vaultwarden README](../../../packages/services/vaultwarden/README.md) and [n8n README](../../../packages/services/n8n/README.md) for step lists.
+See [vaultwarden README](../../../clumps/services/vaultwarden/README.md) and [n8n README](../../../clumps/services/n8n/README.md) for step lists.
 
 ### Synology Docker (`synology-docker` mode)
 
-- Run `node tools/hdc/cli.mjs run infrastructure synology-nas maintain -- --instance a` (or `b`) **before** immich-style deploy.
+- Run `node apps/hdc-cli/cli.mjs run infrastructure synology-nas maintain -- --instance a` (or `b`) **before** immich-style deploy.
 - Compose path under `/volume1/docker/…` per service config.
 - Public HTTPS still uses bind + nginx-waf upstream to NAS IP:port (e.g. immich `:2283`).
 

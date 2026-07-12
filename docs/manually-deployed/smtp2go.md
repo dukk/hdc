@@ -1,13 +1,13 @@
 # SMTP2GO (hdc)
 
-Sender domains, IP allowlist, and Restrict Senders for your SMTP2GO account are managed with the **smtp2go** infrastructure package (`packages/infrastructure/smtp2go/`). Outbound SMTP relay credentials for the internal **postfix-relay** service remain separate.
+Sender domains, IP allowlist, and Restrict Senders for your SMTP2GO account are managed with the **smtp2go** infrastructure package (`clumps/infrastructure/smtp2go/`). Outbound SMTP relay credentials for the internal **postfix-relay** service remain separate.
 
 ## API key vs SMTP relay credentials
 
 | Purpose | Vault / env | Used by |
 | --- | --- | --- |
 | SMTP2GO API | `HDC_SMTP2GO_API_KEY` | `hdc run infrastructure smtp2go` |
-| SMTP submission to SMTP2GO | `HDC_POSTFIX_RELAY_SMTP_USER`, `HDC_POSTFIX_RELAY_SMTP_PASSWORD` | `packages/services/postfix-relay` |
+| SMTP submission to SMTP2GO | `HDC_POSTFIX_RELAY_SMTP_USER`, `HDC_POSTFIX_RELAY_SMTP_PASSWORD` | `clumps/services/postfix-relay` |
 
 Do not confuse the API key with the SMTP username/password on the postfix-relay host.
 
@@ -21,17 +21,17 @@ Do not confuse the API key with the SMTP username/password on the postfix-relay 
 3. Store it in the hdc vault (never commit):
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_SMTP2GO_API_KEY
+node apps/hdc-cli/cli.mjs secrets set HDC_SMTP2GO_API_KEY
 ```
 
 You may also set `HDC_SMTP2GO_API_KEY` in repo `.env` (env takes precedence over vault).
 
 ## Config
 
-Copy `packages/infrastructure/smtp2go/config.example.json` to **hdc-private** as `packages/infrastructure/smtp2go/config.json`, or bootstrap from the live account:
+Copy `clumps/infrastructure/smtp2go/config.example.json` to **hdc-private** as `clumps/infrastructure/smtp2go/config.json`, or bootstrap from the live account:
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```
 
 Set `managed: true` on resources you want `maintain` to enforce:
@@ -59,13 +59,13 @@ IP allowlist is independent: when `ip_allow_list.enabled` is true, only listed *
 
 ```bash
 # Diff live account vs config (JSON on stdout)
-node tools/hdc/cli.mjs run infrastructure smtp2go query --
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go query --
 
 # Limit to one sender domain
-node tools/hdc/cli.mjs run infrastructure smtp2go query -- --domain hdc.example.invalid
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --domain hdc.example.invalid
 
 # Refresh hdc-private config from live API
-node tools/hdc/cli.mjs run infrastructure smtp2go query -- --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --import --yes
 ```
 
 Import preserves section-level `managed` flags and sender-domain metadata (`notes`, `spf`, `dmarc`) when FQDNs match. New domains import with `managed: false`.
@@ -75,11 +75,11 @@ Query JSON includes `dns_checklist[]` per sender domain (SPF template, DKIM, ret
 ## Maintain
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain --
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --prune
-node tools/hdc/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain --
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --prune
+node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
 ```
 
 For each `managed: true` sender domain, maintain adds the domain when missing and calls verify when DKIM or return-path is not yet verified.
@@ -92,4 +92,4 @@ Re-run `query` after updating DNS until sender-domain verification succeeds.
 
 ## Postfix relay
 
-Internal guests send mail to `postfix-relay.home.example.invalid` (port 25) without SMTP2GO credentials. The relay host authenticates upstream to `[mail.smtp2go.com]:587`. See [`packages/services/postfix-relay/README.md`](../../packages/services/postfix-relay/README.md).
+Internal guests send mail to `postfix-relay.home.example.invalid` (port 25) without SMTP2GO credentials. The relay host authenticates upstream to `[mail.smtp2go.com]:587`. See [`clumps/services/postfix-relay/README.md`](../../clumps/services/postfix-relay/README.md).

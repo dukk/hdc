@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export HDC_CLI_INVOCATION="$0"
-exec node "$ROOT/tools/hdc/cli.mjs" "$@"
+exec node "$ROOT/apps/hdc-cli/cli.mjs" "$@"

@@ -1,31 +1,31 @@
 # OpenRouter (hdc)
 
-Credits and inference API keys for your [OpenRouter](https://openrouter.ai/) account are managed with the **openrouter** infrastructure package (`packages/infrastructure/openrouter/`). Consumer services (e.g. **hermes**) use separate inference vault keys for chat completions.
+Credits and inference API keys for your [OpenRouter](https://openrouter.ai/) account are managed with the **openrouter** infrastructure package (`clumps/infrastructure/openrouter/`). Consumer services (e.g. **hermes**) use separate inference vault keys for chat completions.
 
 ## Management key vs inference keys
 
 | Purpose | Vault key | Used by |
 | --- | --- | --- |
 | Management API | `HDC_OPENROUTER_MANAGEMENT_API_KEY` | `hdc run infrastructure openrouter` |
-| Hermes inference | `HDC_HERMES_OPENROUTER_API_KEY` | `packages/services/hermes` |
+| Hermes inference | `HDC_HERMES_OPENROUTER_API_KEY` | `clumps/services/hermes` |
 
 The management key is created in the OpenRouter dashboard under **Management API keys**. It cannot be used for `/chat/completions` — only for credits and key administration ([docs](https://openrouter.ai/docs/guides/overview/auth/management-api-keys)).
 
 ## Vault setup
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_OPENROUTER_MANAGEMENT_API_KEY
-node tools/hdc/cli.mjs secrets set HDC_HERMES_OPENROUTER_API_KEY
+node apps/hdc-cli/cli.mjs secrets set HDC_OPENROUTER_MANAGEMENT_API_KEY
+node apps/hdc-cli/cli.mjs secrets set HDC_HERMES_OPENROUTER_API_KEY
 ```
 
 You may also set these in repo `.env` (env takes precedence over vault).
 
 ## Config
 
-Copy `packages/infrastructure/openrouter/config.example.json` to **hdc-private** as `packages/infrastructure/openrouter/config.json`, or bootstrap from the live account:
+Copy `clumps/infrastructure/openrouter/config.example.json` to **hdc-private** as `clumps/infrastructure/openrouter/config.json`, or bootstrap from the live account:
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure openrouter query -- --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --import --yes
 ```
 
 Set `managed: true` on `api_keys[]` entries hdc should create or update. Link each consumer with `inference_api_key_vault_key` and optional `consumer` (e.g. `hermes-a`).
@@ -33,9 +33,9 @@ Set `managed: true` on `api_keys[]` entries hdc should create or update. Link ea
 ## Query and import
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure openrouter query --
-node tools/hdc/cli.mjs run infrastructure openrouter query -- --import --yes
-node tools/hdc/cli.mjs run infrastructure openrouter query -- --key-id hermes
+node apps/hdc-cli/cli.mjs run infrastructure openrouter query --
+node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --key-id hermes
 ```
 
 `--import --yes` replaces `api_keys[]` from the live Management API. HDC-local fields (`id`, `consumer`, `notes`, `inference_api_key_vault_key`, `managed`) are preserved when `openrouter_hash` or `name` matches an existing config entry.
@@ -45,9 +45,9 @@ Query exits `1` when `has_drift` (including low account credits below `credits.l
 ## Maintain
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure openrouter maintain --
-node tools/hdc/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
-node tools/hdc/cli.mjs run infrastructure openrouter maintain -- --prune
+node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain --
+node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain -- --prune
 ```
 
 For each `managed: true` key:
@@ -61,4 +61,4 @@ After maintain creates a key, run **hermes** `maintain` or `deploy` so the conta
 
 ## Hermes
 
-Hermes Agent uses `HDC_HERMES_OPENROUTER_API_KEY` as `OPENROUTER_API_KEY` in compose. Model selection remains post-deploy inside the container (`hermes model`). See [`packages/services/hermes/README.md`](../../packages/services/hermes/README.md).
+Hermes Agent uses `HDC_HERMES_OPENROUTER_API_KEY` as `OPENROUTER_API_KEY` in compose. Model selection remains post-deploy inside the container (`hermes model`). See [`clumps/services/hermes/README.md`](../../clumps/services/hermes/README.md).

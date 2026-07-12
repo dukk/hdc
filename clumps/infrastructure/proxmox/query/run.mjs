@@ -8,7 +8,7 @@
  */
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errout, env } from "node:process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import https from "node:https";
@@ -31,6 +31,7 @@ import {
   hdcTlsRejectUnauthorized,
 } from "../../../../apps/hdc-cli/lib/tls-insecure-env.mjs";
 import { defaultVaultPath } from "../../../../apps/hdc-cli/vault.mjs";
+import { loadProxmoxPackageConfig } from "../lib/proxmox-package-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = basename(dirname(here));
@@ -169,21 +170,19 @@ async function main() {
     }),
   );
 
-  const configPath = join(clumpRoot, "config.json");
-  const configRel = relFromRoot(repoRoot, configPath);
-  if (!existsSync(configPath)) {
-    errout.write(
-      `[proxmox] Missing ${configRel} — copy clumps/infrastructure/proxmox/config.example.json to config.json.\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
   /** @type {unknown} */
   let cfg;
+  /** @type {string} */
+  let configPath;
+  /** @type {string} */
+  let configRel;
   try {
-    cfg = JSON.parse(readFileSync(configPath, "utf8"));
+    const loaded = loadProxmoxPackageConfig(clumpRoot, { publicRoot: repoRoot, env });
+    cfg = loaded.data;
+    configPath = loaded.path;
+    configRel = relFromRoot(repoRoot, configPath);
   } catch (e) {
-    errout.write(`[proxmox] Invalid config JSON: ${/** @type {Error} */ (e).message}\n`);
+    errout.write(`${/** @type {Error} */ (e).message}\n`);
     process.exitCode = 1;
     return;
   }

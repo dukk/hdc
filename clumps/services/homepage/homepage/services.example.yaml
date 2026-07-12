@@ -82,5 +82,4 @@
           type: unifi
           url: "{{HOMEPAGE_VAR_UNIFI_URL}}"
           key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
-          site: "{{HOMEPAGE_VAR_UNIFI_SITE}}"
           fields: ["uptime", "wan", "wlan_users", "wlan_devices"]

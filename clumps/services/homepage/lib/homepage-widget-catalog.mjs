@@ -86,7 +86,7 @@ export const HOMEPAGE_WIDGET_CATALOG = [
     tileNames: ["UniFi"],
     widgetType: "unifi",
     configKey: "unifi_widget",
-    placeholders: ["HOMEPAGE_VAR_UNIFI_URL", "HOMEPAGE_VAR_UNIFI_KEY", "HOMEPAGE_VAR_UNIFI_SITE"],
+    placeholders: ["HOMEPAGE_VAR_UNIFI_URL", "HOMEPAGE_VAR_UNIFI_KEY"],
   },
 ];
 

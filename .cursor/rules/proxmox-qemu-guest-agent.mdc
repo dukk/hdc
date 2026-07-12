@@ -1,6 +1,6 @@
 ---
 description: QEMU guest agent — enable in VM config and install in Linux guests on deploy.
-globs: "**/*proxmox*,packages/services/**/deploy/**"
+globs: "**/*proxmox*,clumps/services/**/deploy/**"
 alwaysApply: false
 ---
 
@@ -10,23 +10,23 @@ Applies to **QEMU/KVM VMs** (`vm-*` inventory ids, `proxmox-qemu` deploy mode). 
 
 ## Requirements for new or changed QEMU deploy code
 
-1. **Proxmox VM config** — After clone/create task completes, set `agent=1` via API (`enableQemuAgentInConfig` or `waitForCloneTaskAndEnableAgent` in [`packages/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs`](packages/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs)).
+1. **Proxmox VM config** — After clone/create task completes, set `agent=1` via API (`enableQemuAgentInConfig` or `waitForCloneTaskAndEnableAgent` in [`clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs`](clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs)).
 2. **In-guest package** — When deploy reaches the guest over SSH (e.g. BIND), install `qemu-guest-agent` with `ensureQemuGuestAgentOnDeploy` (apt + `systemctl enable --now`) and verify with `agent/ping` when the VM is running.
-3. **Templates** — Ubuntu QEMU templates built by maintain should keep `agent: "1"` (see [`proxmox-qemu-template-build.mjs`](packages/infrastructure/proxmox/lib/proxmox-qemu-template-build.mjs)).
+3. **Templates** — Ubuntu QEMU templates built by maintain should keep `agent: "1"` (see [`proxmox-qemu-template-build.mjs`](clumps/infrastructure/proxmox/lib/proxmox-qemu-template-build.mjs)).
 4. **Windows** — Out of scope for hdc apt-based install; document manually if needed.
 
 ## Shared helpers
 
 | Module | Use |
 | --- | --- |
-| [`proxmox-qemu-post-clone.mjs`](packages/infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs) | Wait on clone UPID, then enable agent in config |
-| [`proxmox-qemu-guest-agent-install.mjs`](packages/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs) | Config enable, SSH install, ping verify |
-| [`proxmox-qemu-guest-agent.mjs`](packages/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs) | Maintain report only (config + ping) |
+| [`proxmox-qemu-post-clone.mjs`](clumps/infrastructure/proxmox/lib/proxmox-qemu-post-clone.mjs) | Wait on clone UPID, then enable agent in config |
+| [`proxmox-qemu-guest-agent-install.mjs`](clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs) | Config enable, SSH install, ping verify |
+| [`proxmox-qemu-guest-agent.mjs`](clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs) | Maintain report only (config + ping) |
 
 ## Verification
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure proxmox maintain -- verify-templates
+node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- verify-templates
 ```
 
 Check the maintain report **QEMU guest agent** section; running workload VMs should show `agent ok`, not `not_responding`.

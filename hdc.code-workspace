@@ -1,16 +1,19 @@
 {
 	"folders": [
 		{
+			"name": "hdc",
 			"path": "."
 		},
 		{
+			"name": "hdc-private",
 			"path": "../hdc-private"
 		}
 	],
 	"settings": {
+		"terminal.integrated.cwd": "${workspaceFolder:hdc}",
 		"files.associations": {
-			"**/packages/**/config.json": "jsonc",
-			"**/packages/**/config.example.json": "jsonc"
+			"**/clumps/**/config.json": "jsonc",
+			"**/clumps/**/config.example.json": "jsonc"
 		},
 		"cSpell.words": [
 			"AADSTS",
@@ -403,6 +406,7 @@
 			"ostemplates",
 			"ostype",
 			"OVMF",
+			"ovpn",
 			"pagerules",
 			"pamx",
 			"PARTN",

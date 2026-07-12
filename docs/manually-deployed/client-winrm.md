@@ -17,7 +17,7 @@ WinRM sessions authenticate with **username + password** (`Authentication: Negot
 **Mixed deployments:** When hosts use different account types or different MSAs:
 
 - Set a **global default** in `.env` (`HDC_WINRM_USER`) for the majority case.
-- Override per host with `auth.winrm_user` in [`packages/clients/windows/config.json`](../../packages/clients/windows/config.json), or point `auth.winrm_user_env` at a host-specific env var (e.g. `HDC_WINRM_USER_LAN_4`).
+- Override per host with `auth.winrm_user` in [`clumps/clients/windows/config.json`](../../clumps/clients/windows/config.json), or point `auth.winrm_user_env` at a host-specific env var (e.g. `HDC_WINRM_USER_LAN_4`).
 - Use a **different password** on one host via `auth.winrm_password_vault_suffix` → vault `HDC_WINRM_PASSWORD_<SUFFIX>`.
 
 **Dedicated local admin (optional):** A local account in Administrators (e.g. `.\hdc-remote`) avoids MSA username quirks and Entra join restrictions; use `auth.winrm_user` on MSA hosts only when you keep the MSA for interactive login.
@@ -41,7 +41,7 @@ Use the same username string in `HDC_WINRM_USER` or `auth.winrm_user` once this 
 
 When HTTPS WinRM (default port **5986**) is not accepting connections, hdc can enable WinRM on the target using [Sysinternals PsExec](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec). This runs **before** query/maintain when:
 
-- `winrm_bootstrap.enabled` is true in [`packages/clients/windows/config.json`](../../packages/clients/windows/config.json) (default), and
+- `winrm_bootstrap.enabled` is true in [`clumps/clients/windows/config.json`](../../clumps/clients/windows/config.json) (default), and
 - you did not pass `--no-winrm-bootstrap`.
 
 **Operator requirements:**
@@ -67,7 +67,7 @@ You can still configure WinRM by hand and disable auto-bootstrap (`winrm_bootstr
 ## Operator machine
 
 - Run hdc from **Windows** (WinRM remoting is spawned via `powershell.exe` on the operator host).
-- Store the shared remoting password once: `node tools/hdc/cli.mjs secrets set HDC_WINRM_USER_PASSWORD`.
+- Store the shared remoting password once: `node apps/hdc-cli/cli.mjs secrets set HDC_WINRM_USER_PASSWORD`.
 - Set `HDC_WINRM_USER` in `.env` (MSA example: `MicrosoftAccount\you@outlook.com`).
 - Per-host password override only when needed: `auth.winrm_password_vault_suffix` → `secrets set HDC_WINRM_PASSWORD_<SUFFIX>`.
 

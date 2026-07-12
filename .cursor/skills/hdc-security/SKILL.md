@@ -11,28 +11,28 @@ disable-model-invocation: true
 ## Query runbook
 
 ```bash
-node tools/hdc/cli.mjs run service wazuh query -- --live
-node tools/hdc/cli.mjs run service crowdsec query -- --live
-node tools/hdc/cli.mjs run service nginx-waf query
-node tools/hdc/cli.mjs run service splunk query
+node apps/hdc-cli/cli.mjs run service wazuh query -- --live
+node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
+node apps/hdc-cli/cli.mjs run service nginx-waf query
+node apps/hdc-cli/cli.mjs run service splunk query
 ```
 
 ## Active response (expert only)
 
 ```bash
-node tools/hdc/cli.mjs run service crowdsec maintain -- --sync-bouncers
+node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-bouncers
 ```
 
-WAF blocks are config-driven in `packages/services/nginx-waf/config.json` — changes need approval and SRE execution.
+WAF blocks are config-driven in `clumps/services/nginx-waf/config.json` — changes need approval and SRE execution.
 
 **Do not:** ad-hoc iptables, SSH firewall edits, or deploy without approved task.
 
 ## Config locations (hdc-private)
 
-- `packages/services/crowdsec/config.json`
-- `packages/services/wazuh/config.json`
-- `packages/services/nginx-waf/config.json`
-- `packages/infrastructure/proxmox/config.json` → `provision.guest_agents`
+- `clumps/services/crowdsec/config.json`
+- `clumps/services/wazuh/config.json`
+- `clumps/services/nginx-waf/config.json`
+- `clumps/infrastructure/proxmox/config.json` → `provision.guest_agents`
 
 ## Security architect proposal template
 

@@ -133,6 +133,29 @@ export function vikunjaMailEnvLines(vikunja) {
 }
 
 /**
+ * SMTP env lines for AFFiNE docker .env when mail.enabled.
+ * Uses mailEnabledFromConfig only (no `to` required — outbound invites/notifications).
+ * Omits MAILER_USER/PASSWORD so AFFiNE does not attempt AUTH on the internal relay.
+ * @param {Record<string, unknown>} affine
+ */
+export function affineMailEnvLines(affine) {
+  const mail = mailBlockFromService(affine);
+  if (!mailEnabledFromConfig(mail)) return [];
+  const relay = loadMailRelayAppSettings();
+  const from =
+    mail && typeof mail.from === "string" && mail.from.trim()
+      ? mail.from.trim()
+      : relay.from;
+
+  return [
+    `MAILER_HOST=${relay.host}`,
+    `MAILER_PORT=${relay.port}`,
+    `MAILER_SENDER=${from}`,
+    "MAILER_IGNORE_TLS=true",
+  ];
+}
+
+/**
  * SMTP env lines for Vaultwarden docker .env when mail.enabled.
  * @param {Record<string, unknown>} vaultwarden
  */

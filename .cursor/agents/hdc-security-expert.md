@@ -15,9 +15,9 @@ You detect and respond to security events. Read **`.cursor/skills/hdc-security/S
 ## Runbook
 
 ```bash
-node tools/hdc/cli.mjs run service wazuh query -- --live
-node tools/hdc/cli.mjs run service crowdsec query -- --live
-node tools/hdc/cli.mjs run service nginx-waf query
+node apps/hdc-cli/cli.mjs run service wazuh query -- --live
+node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
+node apps/hdc-cli/cli.mjs run service nginx-waf query
 ```
 
 Optional: `run service splunk query -- --live` when configured.

@@ -14,8 +14,8 @@ HDC package `oci-compute` provisions **Oracle Cloud Infrastructure** networking 
    - `HDC_OCI_USER_OCID`
    - `HDC_OCI_FINGERPRINT`
    - `HDC_OCI_REGION`
-4. Vault: `node tools/hdc/cli.mjs secrets set HDC_OCI_API_PRIVATE_KEY`
-5. hdc-private `packages/infrastructure/oci-compute/config.json` (copy from `config.example.json` in the public repo).
+4. Vault: `node apps/hdc-cli/cli.mjs secrets set HDC_OCI_API_PRIVATE_KEY`
+5. hdc-private `clumps/infrastructure/oci-compute/config.json` (copy from `config.example.json` in the public repo).
 
 ## Image OCIDs
 
@@ -34,17 +34,21 @@ Deploy uses fallback price tables when live OCI pricing APIs are not queried. Es
 ## Commands
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure oci-compute query --
-node tools/hdc/cli.mjs run infrastructure oci-compute query -- --live
-node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --dry-run
-node tools/hdc/cli.mjs run infrastructure oci-compute deploy -- --resource a
-node tools/hdc/cli.mjs run infrastructure oci-compute maintain -- --prune
-node tools/hdc/cli.mjs run infrastructure oci-compute teardown -- --all --yes
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute query --
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute query -- --live
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --resource a
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute maintain -- --prune
+node apps/hdc-cli/cli.mjs run infrastructure oci-compute teardown -- --all --yes
 ```
 
 ## Inventory
 
 Add virtual systems with `virt-` prefix (for example `virt-oci-a`) and optional target sidecar `inventory/manual/targets/oci-compute.json` with `automation_target: "oci-compute"`.
+
+## Networking notes
+
+OCI evaluates **both** subnet security lists and NSG rules — ingress must be allowed in each. `oci-compute maintain` syncs managed NSG TCP ingress onto public subnet security lists automatically, preserving each rule's `source` CIDR (for example `99.129.209.232/29` for a home public block vs `0.0.0.0/0` for SSH/HTTPS).
 
 ## Limitations (v1)
 

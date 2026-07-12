@@ -5,9 +5,9 @@
 node_modules/
 coverage/
 
-packages/**/reports/
-packages/**/*.json
-!packages/**/*.example.json
+clumps/**/reports/
+clumps/**/*.json
+!clumps/**/*.example.json
 
 inventory/manual/**/*.json
 !inventory/manual/systems/_example.json
@@ -17,5 +17,5 @@ inventory/automated/
 *.key
 vault.enc
 **/client_secret*.json
-tools/hdc/scripts/test-*.mjs
+apps/hdc-cli/scripts/test-*.mjs
 tmp-*.txt

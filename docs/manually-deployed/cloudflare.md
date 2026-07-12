@@ -1,6 +1,6 @@
 # Cloudflare (hdc)
 
-Public DNS zones, Page Rules, and Email Routing rules are managed with the **cloudflare** infrastructure package (`packages/infrastructure/cloudflare/`). **Workers** and **Pages** deploy is a separate package: [`cloudflare-workers.md`](cloudflare-workers.md). Internal zones remain on BIND (`packages/services/bind/`).
+Public DNS zones, Page Rules, and Email Routing rules are managed with the **cloudflare** infrastructure package (`clumps/infrastructure/cloudflare/`). **Workers** and **Pages** deploy is a separate package: [`cloudflare-workers.md`](cloudflare-workers.md). Internal zones remain on BIND (`clumps/services/bind/`).
 
 ## API token
 
@@ -14,7 +14,7 @@ Public DNS zones, Page Rules, and Email Routing rules are managed with the **clo
 4. Store the token in the hdc vault (never commit):
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_CLOUDFLARE_API_TOKEN
+node apps/hdc-cli/cli.mjs secrets set HDC_CLOUDFLARE_API_TOKEN
 ```
 
 Or set `HDC_CLOUDFLARE_API_TOKEN` in repo `.env` (takes precedence over vault when set).
@@ -29,31 +29,31 @@ If zone listing returns an empty set with a valid token, set your account id in 
 # HDC_CLOUDFLARE_ACCOUNT_ID=your-account-id
 ```
 
-Or set `cloudflare.account_id` in `packages/infrastructure/cloudflare/config.json`.
+Or set `cloudflare.account_id` in `clumps/infrastructure/cloudflare/config.json`.
 
 ## Config
 
-Copy `packages/infrastructure/cloudflare/config.example.json` to **hdc-private** as `config.json` (same path).
+Copy `clumps/infrastructure/cloudflare/config.example.json` to **hdc-private** as `config.json` (same path).
 
 ## Bootstrap from live API
 
 Import all zones matching `cloudflare.zone_filter` into hdc-private `config.json` (DNS only):
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-zones --yes
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare query -- --import-zones --yes
 ```
 
 Merge page rules or email routing into zones already listed in config:
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-page-rules --yes
-node tools/hdc/cli.mjs run infrastructure cloudflare query -- --import-email-routing --yes
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare query -- --import-page-rules --yes
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare query -- --import-email-routing --yes
 ```
 
 Preview zones and records without writing:
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare query --
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare query --
 ```
 
 Inspect `discovered_zones[]` and per-zone diffs in the JSON on stdout.
@@ -61,9 +61,9 @@ Inspect `discovered_zones[]` and per-zone diffs in the JSON on stdout.
 ## Commands
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare query --
-node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --dry-run
-node tools/hdc/cli.mjs run infrastructure cloudflare maintain -- --zone example.invalid
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare query --
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone example.invalid
 ```
 
 Use `--prune` only when you intend to **delete** live records or rules that are not listed in config for a managed zone key.

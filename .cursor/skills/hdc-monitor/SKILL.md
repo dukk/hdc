@@ -13,14 +13,14 @@ disable-model-invocation: true
 From hdc repo root:
 
 ```bash
-node tools/hdc/cli.mjs run service uptime-kuma query -- --live
-node tools/hdc/cli.mjs run infrastructure proxmox query
+node apps/hdc-cli/cli.mjs run service uptime-kuma query -- --live
+node apps/hdc-cli/cli.mjs run infrastructure proxmox query
 ```
 
 Optional:
 
 ```bash
-node tools/hdc/cli.mjs run service gatus query -- --live
+node apps/hdc-cli/cli.mjs run service gatus query -- --live
 ```
 
 ## Uptime Kuma maintain (when fixing drift)
@@ -28,9 +28,9 @@ node tools/hdc/cli.mjs run service gatus query -- --live
 Requires vault `HDC_UPTIME_KUMA_PASSWORD` and `.env` `HDC_UPTIME_KUMA_USERNAME`:
 
 ```bash
-node tools/hdc/cli.mjs run service uptime-kuma maintain --
-node tools/hdc/cli.mjs run service uptime-kuma maintain -- --monitor <id>
-node tools/hdc/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
+node apps/hdc-cli/cli.mjs run service uptime-kuma maintain --
+node apps/hdc-cli/cli.mjs run service uptime-kuma maintain -- --monitor <id>
+node apps/hdc-cli/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
 ```
 
 Only run maintain with Manager approval unless reconciling monitors already in config.
@@ -38,8 +38,8 @@ Only run maintain with Manager approval unless reconciling monitors already in c
 ## Evidence sources
 
 - Prior digest: `hdc-private/operations/reports/monitor-*.md`
-- Daily maintain: `tools/hdc/reports/daily-maintain-*.md` (hdc-private when present)
-- Package reports: `hdc-private/packages/services/*/reports/`
+- Daily maintain: `apps/hdc-cli/reports/daily-maintain-*.md` (hdc-private when present)
+- Package reports: `hdc-private/clumps/services/*/reports/`
 
 ## Digest template
 

@@ -16,7 +16,7 @@ You propose security improvements; you do not change production. Read **`.cursor
 
 - `hdc-private/operations/delegation-policy.md`
 - Security expert digests in `hdc-private/operations/reports/security-*.md`
-- Package configs: crowdsec, wazuh, nginx-waf, vaultwarden, step-ca
+- Clump configs: crowdsec, wazuh, nginx-waf, vaultwarden, step-ca
 - Inventory sidecars under `hdc-private/inventory/manual/`
 
 ## Output

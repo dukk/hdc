@@ -13,7 +13,7 @@ disable-model-invocation: true
 1. List `hdc-private/operations/tasks/*.md` and read `operations/task-report.md`
 2. Read `hdc-private/operations/delegation-policy.md`
 3. List latest files in `operations/reports/` (monitor, security, research)
-4. Scan `packages/services/hdc-runner/reports/` for recent failures (hdc-private)
+4. Scan `clumps/services/hdc-runner/reports/` for recent failures (hdc-private)
 
 ## Prioritization
 
@@ -35,7 +35,7 @@ disable-model-invocation: true
 ## Discord notify
 
 ```bash
-node tools/hdc/lib/notify-discord.mjs --title "HDC decision needed" --message "Task <id>: …"
+node apps/hdc-cli/lib/notify-discord.mjs --title "HDC decision needed" --message "Task <id>: …"
 ```
 
 Vault key: `HDC_OPS_DISCORD_WEBHOOK_URL` (Discord channel webhook URL).

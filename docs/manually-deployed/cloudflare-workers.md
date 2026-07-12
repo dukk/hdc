@@ -1,6 +1,6 @@
 # Cloudflare Workers and Pages (hdc)
 
-Workers scripts and Pages projects (including Pages Functions) are deployed with the **cloudflare-workers** infrastructure package (`packages/infrastructure/cloudflare-workers/`). Public DNS remains in the separate **cloudflare** package.
+Workers scripts and Pages projects (including Pages Functions) are deployed with the **cloudflare-workers** infrastructure package (`clumps/infrastructure/cloudflare-workers/`). Public DNS remains in the separate **cloudflare** package.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ Reuse the same token as DNS sync (`HDC_CLOUDFLARE_API_TOKEN`). Extend permission
 Store in vault:
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_CLOUDFLARE_API_TOKEN
+node apps/hdc-cli/cli.mjs secrets set HDC_CLOUDFLARE_API_TOKEN
 ```
 
 ### Account id
@@ -37,12 +37,12 @@ Required for Workers/Pages API calls:
 # HDC_CLOUDFLARE_ACCOUNT_ID=your-account-id
 ```
 
-Or set `cloudflare_workers.account_id` in `packages/infrastructure/cloudflare-workers/config.json`.
+Or set `cloudflare_workers.account_id` in `clumps/infrastructure/cloudflare-workers/config.json`.
 
 ## Project layout (hdc-private)
 
 ```
-packages/infrastructure/cloudflare-workers/
+clumps/infrastructure/cloudflare-workers/
   config.json
   workers/<id>/
     wrangler.jsonc
@@ -54,14 +54,14 @@ packages/infrastructure/cloudflare-workers/
     dist/
 ```
 
-Copy `packages/infrastructure/cloudflare-workers/config.example.json` to hdc-private as `config.json`.
+Copy `clumps/infrastructure/cloudflare-workers/config.example.json` to hdc-private as `config.json`.
 
 ## Bootstrap from live API
 
 Import script names, routes, and Pages project names (not source code):
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers query -- --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers query -- --import --yes
 ```
 
 After import, create `workers/<id>/` and `pages/<id>/` trees with wrangler config and source, then deploy.
@@ -69,12 +69,12 @@ After import, create `workers/<id>/` and `pages/<id>/` trees with wrangler confi
 ## Commands
 
 ```bash
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers query --
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers deploy -- --dry-run
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers maintain --
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers maintain -- --redeploy
-node tools/hdc/cli.mjs run infrastructure cloudflare-workers teardown -- --worker example-worker --yes
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers query --
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy -- --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers maintain --
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers maintain -- --redeploy
+node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers teardown -- --worker example-worker --yes
 ```
 
 ## Secrets
@@ -82,7 +82,7 @@ node tools/hdc/cli.mjs run infrastructure cloudflare-workers teardown -- --worke
 Declare Worker secrets in config `workers[].secrets[]` with `vault_key` names. Deploy and maintain push values via the Cloudflare API (values are never logged). Set vault keys before deploy:
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_WAITLIST_API_KEY
+node apps/hdc-cli/cli.mjs secrets set HDC_WAITLIST_API_KEY
 ```
 
 ## Daily maintain

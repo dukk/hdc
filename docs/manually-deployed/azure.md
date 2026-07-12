@@ -1,6 +1,6 @@
 # Azure app registrations (hdc)
 
-Microsoft Entra application registrations (client IDs, redirect URIs, API permissions) are managed with the **azure** infrastructure package (`packages/infrastructure/azure/`).
+Microsoft Entra application registrations (client IDs, redirect URIs, API permissions) are managed with the **azure** infrastructure package (`clumps/infrastructure/azure/`).
 
 ## Bootstrap automation app
 
@@ -24,12 +24,12 @@ HDC_AZURE_CLIENT_ID=<automation-app-client-id>
 Store the secret:
 
 ```bash
-node tools/hdc/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET
+node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET
 ```
 
 ## Config (hdc-private)
 
-Copy `packages/infrastructure/azure/config.example.json` to **hdc-private** as `config.json` (same path).
+Copy `clumps/infrastructure/azure/config.example.json` to **hdc-private** as `config.json` (same path).
 
 Optional inventory target sidecar in hdc-private:
 
@@ -52,12 +52,12 @@ Path: `inventory/manual/targets/azure.json`
 
 ## Workflow
 
-1. **Discover:** `node tools/hdc/cli.mjs run infrastructure azure query --`
-2. **Bootstrap import:** `node tools/hdc/cli.mjs run infrastructure azure query -- --import --yes` (replaces `applications[]` from live tenant; `managed: false`; skips hdc automation app)
+1. **Discover:** `node apps/hdc-cli/cli.mjs run infrastructure azure query --`
+2. **Bootstrap import:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --import --yes` (replaces `applications[]` from live tenant; `managed: false`; skips hdc automation app)
 3. Or copy `suggested_config_entry` objects from JSON stdout into `applications[]`; set `"managed": true` after review.
 4. Prefer `match.client_id` from discovery over display name alone.
-5. **Deploy** missing apps: `node tools/hdc/cli.mjs run infrastructure azure deploy --`
-6. **Maintain** drift: `node tools/hdc/cli.mjs run infrastructure azure maintain --`
+5. **Deploy** missing apps: `node apps/hdc-cli/cli.mjs run infrastructure azure deploy --`
+6. **Maintain** drift: `node apps/hdc-cli/cli.mjs run infrastructure azure maintain --`
 
 Use `--dry-run` on deploy and maintain to preview Graph changes.
 
@@ -86,4 +86,4 @@ Azure rejected `HDC_AZURE_CLIENT_ID` for tenant `HDC_AZURE_TENANT_ID`. Common ca
 
 ### Vaultwarden / `bw` unavailable
 
-If stderr shows `Vaultwarden backend unavailable … using local vault for HDC_AZURE_CLIENT_SECRET`, hdc fell back to `~/.hdc/vault.enc`. Ensure the secret exists: `node tools/hdc/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET`. Fix `bw` TLS separately if `HDC_VAULTWARDEN_URL` presents the wrong certificate.
+If stderr shows `Vaultwarden backend unavailable … using local vault for HDC_AZURE_CLIENT_SECRET`, hdc fell back to `~/.hdc/vault.enc`. Ensure the secret exists: `node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET`. Fix `bw` TLS separately if `HDC_VAULTWARDEN_URL` presents the wrong certificate.

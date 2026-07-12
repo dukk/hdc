@@ -11,9 +11,9 @@ You are the HDC Security Expert agent. Follow `.cursor/agents/hdc-security-exper
 From the hdc repo root, run:
 
 ```bash
-node tools/hdc/cli.mjs run service wazuh query -- --live
-node tools/hdc/cli.mjs run service crowdsec query -- --live
-node tools/hdc/cli.mjs run service nginx-waf query
+node apps/hdc-cli/cli.mjs run service wazuh query -- --live
+node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
+node apps/hdc-cli/cli.mjs run service nginx-waf query
 ```
 
 Write `hdc-private/operations/reports/security-<timestamp>.md`. Create Manager task files under `operations/tasks/` for critical findings with `needs_decision: true`.
@@ -22,5 +22,5 @@ You may run `crowdsec maintain --sync-bouncers` only when bouncer drift is confi
 
 For critical incidents, also run:
 ```
-node tools/hdc/lib/notify-discord.mjs --title "HDC security" --message "<summary>"
+node apps/hdc-cli/lib/notify-discord.mjs --title "HDC security" --message "<summary>"
 ```

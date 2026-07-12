@@ -154,8 +154,16 @@ function queryModsecurityStatus(exec, global) {
   const crsRuleFiles = Number.parseInt(crsCount.stdout.trim(), 10) || 0;
 
   const modProbe = exec.run("nginx -V 2>&1", { capture: true });
+  const modProbeText = `${modProbe.stdout}${modProbe.stderr}`;
   const moduleLoaded =
-    modProbe.stdout.includes("modsecurity") || modProbe.stderr.includes("modsecurity");
+    modProbeText.includes("modsecurity") ||
+    exec.run("test -f /etc/nginx/modules-enabled/50-mod-http-modsecurity.conf", {
+      capture: true,
+    }).status === 0 ||
+    exec.run(
+      "sh -c 'test -f /usr/lib/nginx/modules/ngx_http_modsecurity_module.so || test -f /usr/share/nginx/modules/ngx_http_modsecurity_module.so'",
+      { capture: true },
+    ).status === 0;
 
   const auditLog = global.modsecurityAuditLog;
   const auditPresent = exec.run(`test -f ${auditLog}`, { capture: true }).status === 0;
