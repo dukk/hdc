@@ -116,10 +116,10 @@ describe("bind-render", () => {
       hostmaster: "hostmaster.hdc.dukk.org",
       records: [],
     });
-    expect(text).toMatch(/bind-a\.hdc\t3600\tIN\tA\t10\.0\.0\.2/);
-    expect(text).toMatch(/bind-b\.hdc\t3600\tIN\tA\t10\.0\.0\.3/);
-    expect(text).not.toMatch(/\nbind-a\t3600\tIN\tA\t10\.0\.0\.2/);
-    expect(text).not.toMatch(/\nbind-b\t3600\tIN\tA\t10\.0\.0\.3/);
+    expect(text).toMatch(/bind-a\.hdc\t3600\tIN\tA\t192\.0\.2\.2/);
+    expect(text).toMatch(/bind-b\.hdc\t3600\tIN\tA\t192\.0\.2\.3/);
+    expect(text).not.toMatch(/\nbind-a\t3600\tIN\tA\t192\.0\.2\.2/);
+    expect(text).not.toMatch(/\nbind-b\t3600\tIN\tA\t192\.0\.2\.3/);
   });
 
   it("renders TXT and CNAME without mangling TXT rdata", () => {

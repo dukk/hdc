@@ -31,8 +31,8 @@ describe("vault-key-uris", () => {
 
   it("sortVaultKeyUris prefers public hostnames before LAN IPs", () => {
     expect(
-      sortVaultKeyUris(["http://192.0.2.125:9120", "https://paperclip.hdc.dukk.org"]),
-    ).toEqual(["https://paperclip.hdc.dukk.org", "http://192.0.2.125:9120"]);
+      sortVaultKeyUris(["http://10.20.0.125:9120", "https://paperclip.hdc.dukk.org"]),
+    ).toEqual(["https://paperclip.hdc.dukk.org", "http://10.20.0.125:9120"]);
   });
 
   it("vaultKeyUrisEqual compares sorted unique lists", () => {

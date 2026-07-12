@@ -9,6 +9,7 @@ clumps/**/reports/
 clumps/**/*.json
 !clumps/**/*.example.json
 !clumps/**/manifest.json
+!clumps/services/bind/zones/*.json
 
 inventory/manual/**/*.json
 !inventory/manual/systems/_example.json
