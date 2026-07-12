@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node apps/hdc-cli/cli.mjs list*)",
+      "Bash(node apps/hdc-cli/cli.mjs help*)",
+      "Bash(hdc.cmd list*)",
+      "Bash(hdc.cmd help*)",
+      "Bash(npm run test*)"
+    ],
+    "deny": [
+      "Bash(node apps/hdc-cli/cli.mjs secrets*)",
+      "Bash(hdc.cmd secrets*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/vault.enc)"
+    ]
+  }
+}

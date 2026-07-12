@@ -1558,7 +1558,7 @@ npm run test
 
 Before merging substantive CLI changes, run `npm run test:coverage` and keep thresholds green ([`vitest.config.mjs`](vitest.config.mjs)).
 
-## Agent team (Cursor subagents)
+## Agent team (Cursor and Claude Code subagents)
 
 Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`:
 
@@ -1573,6 +1573,8 @@ Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordin
 | [`hdc-research`](.cursor/agents/hdc-research.md) | Tool research briefs |
 
 Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/SKILL.md), [`hdc-manager`](.cursor/skills/hdc-manager/SKILL.md), [`hdc-monitor`](.cursor/skills/hdc-monitor/SKILL.md), [`hdc-security`](.cursor/skills/hdc-security/SKILL.md).
+
+**Claude Code:** `.cursor/` is the single canonical source for rules, skills, and agents. [CLAUDE.md](CLAUDE.md) imports `.cursor/rules/*.mdc` directly, and `.claude/skills/<name>/SKILL.md` plus `.claude/agents/<name>.md` are thin pointers into the matching `.cursor/` files (required by Claude Code's loaders; content is never duplicated). Edit `.cursor/` and both tools pick up the change. Multi-agent architecture: [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
 
 **Operations state (hdc-runner guest):** `operations/tasks/*.md`, `operations/task-report.md`, `operations/delegation-policy.md`, `operations/ip-allocations.md`, `operations/reports/`, `operations/proposals/`. Agent definitions sync to `/opt/hdc/.cursor/` on each `hdc-runner maintain`.
 
@@ -1610,5 +1612,7 @@ node apps/hdc-cli/cli.mjs run service hdc-runner maintain -- --test-schedule hdc
 | Inventory naming | [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc) |
 | Nagios + manual docs | [`.cursor/rules/hdc-nagios-monitoring.mdc`](.cursor/rules/hdc-nagios-monitoring.mdc) |
 | Agent team | [`.cursor/skills/hdc-agent-team/SKILL.md`](.cursor/skills/hdc-agent-team/SKILL.md), [`.cursor/agents/`](.cursor/agents/) |
+| Multi-agent architecture | [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md) |
+| Claude Code entry point | [`CLAUDE.md`](CLAUDE.md); thin pointers under `.claude/skills/` and `.claude/agents/` |
 | Operator workflow | [`.cursor/skills/hdc-ops/SKILL.md`](.cursor/skills/hdc-ops/SKILL.md), [`.cursor/agents/hdc-sre.md`](.cursor/agents/hdc-sre.md) |
 | Human README | [README.md](README.md) |

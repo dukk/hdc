@@ -38,5 +38,7 @@ Clump `config.json` files and inventory JSON (except [`inventory/manual/systems/
 | [`inventory/manual/`](inventory/manual/) | Operator sidecars in **hdc-private**; public repo keeps `_example.json` only |
 | [`inventory/automated/`](inventory/automated/) | Operator overlay in **hdc-private** (UniFi/Proxmox query snapshots) |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Markdown notes for manually operated gear (structured inventory lives under `inventory/manual/`) |
+| [`.cursor/`](.cursor/) | Canonical agent rules, skills, subagents, and automations (read directly by Cursor) |
+| [`.claude/`](.claude/) | Claude Code support: thin pointers into `.cursor/` skills and agents; [CLAUDE.md](CLAUDE.md) imports `.cursor/rules/` |
 
 Inventory JSON schemas (discriminated by `kind`): [`apps/hdc-cli/schema/inventory.schema.json`](apps/hdc-cli/schema/inventory.schema.json) (union), [`inventory.system.schema.json`](apps/hdc-cli/schema/inventory.system.schema.json), [`inventory.network.schema.json`](apps/hdc-cli/schema/inventory.network.schema.json), [`inventory.target.schema.json`](apps/hdc-cli/schema/inventory.target.schema.json), [`inventory.services.schema.json`](apps/hdc-cli/schema/inventory.services.schema.json).
