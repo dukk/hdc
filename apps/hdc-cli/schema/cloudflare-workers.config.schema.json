@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/cloudflare-workers.config.schema.json",
+  "title": "HDC cloudflare-workers infrastructure package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "cloudflare_workers": {
+      "type": "object",
+      "properties": {
+        "account_id": { "type": ["string", "null"] },
+        "api_base_url": { "type": "string", "format": "uri" },
+        "wrangler": {
+          "type": "object",
+          "properties": {
+            "binary": { "type": "string", "minLength": 1 }
+          }
+        },
+        "zone_filter": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["all", "include", "exclude"] },
+            "names": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "workers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "managed": { "type": "boolean" },
+          "project_dir": { "type": "string" },
+          "script_name": { "type": "string" },
+          "wrangler_env": { "type": ["string", "null"] },
+          "npm_install": { "type": "boolean" },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["pattern", "zone_name"],
+              "properties": {
+                "pattern": { "type": "string" },
+                "zone_name": { "type": "string" }
+              }
+            }
+          },
+          "secrets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "vault_key"],
+              "properties": {
+                "name": { "type": "string" },
+                "vault_key": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "managed": { "type": "boolean" },
+          "project_dir": { "type": "string" },
+          "project_name": { "type": "string" },
+          "deploy_dir": { "type": "string" },
+          "build_command": { "type": ["string", "null"] },
+          "production_branch": { "type": ["string", "null"] },
+          "npm_install": { "type": "boolean" },
+          "create_project": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/discord.config.schema.json",
+  "title": "HDC discord infrastructure package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "discord", "applications"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "discord": {
+      "type": "object",
+      "properties": {
+        "api_base_url": { "type": "string", "format": "uri" },
+        "developer_portal_url": { "type": "string", "format": "uri" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "managed": { "type": "boolean" }
+      }
+    },
+    "applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "bot_token_vault_key"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "managed": { "type": "boolean" },
+          "match": {
+            "type": "object",
+            "properties": {
+              "application_id": { "type": ["string", "null"] }
+            }
+          },
+          "display_name": { "type": "string", "minLength": 1 },
+          "bot_token_vault_key": { "type": "string", "minLength": 1 },
+          "description": { "type": ["string", "null"] },
+          "redirect_uris": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "interactions_endpoint_url": { "type": ["string", "null"] },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "bot_public": { "type": "boolean" },
+          "bot_require_code_grant": { "type": "boolean" },
+          "derive_from": {
+            "type": "object",
+            "properties": {
+              "nginx_waf_config_path": { "type": "string" },
+              "site_id": { "type": "string" },
+              "callback_path": { "type": "string" }
+            }
+          },
+          "portal_checklist": {
+            "type": "object",
+            "properties": {
+              "privileged_intents": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "notes": { "type": ["string", "null"] }
+            }
+          },
+          "consumer": { "type": ["string", "null"] },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

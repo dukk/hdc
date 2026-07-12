@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/package.manifest.schema.json",
+  "title": "HDC package manifest",
+  "description": "packages/{infrastructure,services}/<id>/manifest.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["verbs"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "env_required": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "env_includes": {
+      "type": "array",
+      "description": "Other package ids whose .env layers load before this package on hdc run.",
+      "items": { "type": "string" }
+    },
+    "inventory_docs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "services": {
+      "type": "array",
+      "description": "Capabilities exposed by this package (especially infrastructure).",
+      "items": { "$ref": "#/$defs/service" }
+    },
+    "verbs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["script"],
+        "properties": {
+          "script": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "verb"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Stable slug for this capability."
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "verb": {
+          "type": "string",
+          "enum": ["deploy", "maintain", "query", "teardown"]
+        },
+        "invoke": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Subcommand after `hdc run <tier> <package> <verb> --` (omit when the verb script has no subcommands)."
+        },
+        "summary": {
+          "type": "string",
+          "description": "One-line description for hdc list / help."
+        }
+      }
+    }
+  }
+}

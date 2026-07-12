@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/smtp2go.config.schema.json",
+  "title": "HDC smtp2go infrastructure package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "smtp2go", "sender_domains"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "smtp2go": {
+      "type": "object",
+      "properties": {
+        "api_base_url": { "type": "string", "format": "uri" },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "api_key_vault_key": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "tracking_subdomain": { "type": ["string", "null"] },
+        "returnpath_subdomain": { "type": ["string", "null"] },
+        "auto_verify": { "type": "boolean" }
+      }
+    },
+    "sender_domains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "domain"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "domain": { "type": "string", "minLength": 1 },
+          "managed": { "type": "boolean" },
+          "tracking_subdomain": { "type": ["string", "null"] },
+          "returnpath_subdomain": { "type": ["string", "null"] },
+          "notes": { "type": ["string", "null"] },
+          "dmarc": { "type": ["string", "null"] },
+          "spf": { "type": ["string", "null"] },
+          "spf_variant": { "type": ["string", "enum": ["default", "mailcow"] }
+        }
+      }
+    },
+    "ip_allow_list": {
+      "type": "object",
+      "properties": {
+        "managed": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ip_address"],
+            "properties": {
+              "ip_address": { "type": "string", "minLength": 1 },
+              "description": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "allowed_senders": {
+      "type": "object",
+      "properties": {
+        "managed": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["whitelist", "blacklist", "disabled"] },
+        "senders": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

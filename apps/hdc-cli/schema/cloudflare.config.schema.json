@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/cloudflare.config.schema.json",
+  "title": "HDC cloudflare infrastructure package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "zones"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "cloudflare": {
+      "type": "object",
+      "properties": {
+        "api_base_url": { "type": "string", "format": "uri" },
+        "account_id": { "type": ["string", "null"] },
+        "zone_filter": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["all", "include", "exclude"] },
+            "names": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "ttl": { "type": "integer", "minimum": 1 },
+        "proxied": { "type": "boolean" }
+      }
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "records"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "name", "data"],
+              "properties": {
+                "type": {
+                  "enum": ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "CAA", "SRV"]
+                },
+                "name": { "type": "string" },
+                "data": { "type": "string" },
+                "ttl": { "type": "integer", "minimum": 1 },
+                "priority": { "type": "integer", "minimum": 0 },
+                "proxied": { "type": "boolean" }
+              }
+            }
+          },
+          "page_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "priority", "status", "target", "actions"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "cf_id": { "type": "string" },
+                "priority": { "type": "integer" },
+                "status": { "enum": ["active", "disabled"] },
+                "target": {
+                  "type": "object",
+                  "required": ["operator", "value"],
+                  "properties": {
+                    "operator": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "value": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "email_routing": {
+            "type": "object",
+            "properties": {
+              "catch_all": {
+                "type": "object",
+                "required": ["enabled", "actions"],
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["type"],
+                      "properties": {
+                        "type": { "enum": ["drop", "forward", "worker"] },
+                        "value": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "email_routing_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "enabled", "matchers", "actions"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "cf_id": { "type": "string" },
+                "name": { "type": "string" },
+                "enabled": { "type": "boolean" },
+                "priority": { "type": "integer" },
+                "matchers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": { "enum": ["all", "literal"] },
+                      "field": { "enum": ["to"] },
+                      "value": { "type": "string" }
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": { "enum": ["drop", "forward", "worker"] },
+                      "value": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

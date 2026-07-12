@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC Runner</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div id="login-view" class="panel hidden">
+    <h1>HDC Runner</h1>
+    <p class="muted">Sign in to manage scheduled jobs and inventory.</p>
+    <form id="login-form">
+      <label>Username<input type="text" id="login-user" autocomplete="username" required></label>
+      <label>Password<input type="password" id="login-pass" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+      <p id="login-error" class="error hidden"></p>
+    </form>
+  </div>
+
+  <div id="app-view" class="hidden">
+    <header>
+      <h1>HDC Runner</h1>
+      <nav id="nav">
+        <button type="button" data-view="dashboard" class="active">Dashboard</button>
+        <button type="button" data-view="tasks">Tasks</button>
+        <button type="button" data-view="schedules">Schedules</button>
+        <button type="button" data-view="run">Run package</button>
+        <button type="button" data-view="jobs">Jobs</button>
+        <button type="button" data-view="inventory">Inventory</button>
+      </nav>
+      <div class="header-actions">
+        <span id="user-label" class="muted"></span>
+        <button type="button" id="logout-btn">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="view-dashboard" class="view">
+        <h2>Dashboard</h2>
+        <div id="dashboard-stats" class="cards"></div>
+        <div id="active-job-banner" class="banner hidden"></div>
+      </section>
+
+      <section id="view-tasks" class="view hidden">
+        <h2>Agent tasks</h2>
+        <p class="muted">Guest-authoritative task queue. Approve tasks here, then run assigned agents.</p>
+        <div class="table-wrap">
+          <table id="tasks-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Role</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Title</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <pre id="task-report" class="log"></pre>
+      </section>
+
+      <section id="view-schedules" class="view hidden">
+        <h2>Schedules</h2>
+        <div class="table-wrap">
+          <table id="schedules-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cron</th>
+                <th>Command</th>
+                <th>Last run</th>
+                <th>Exit</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="schedule-detail" class="panel hidden">
+          <h3 id="schedule-detail-title"></h3>
+          <div id="schedule-runs"></div>
+          <pre id="schedule-log" class="log"></pre>
+        </div>
+      </section>
+
+      <section id="view-run" class="view hidden">
+        <h2>Run package</h2>
+        <form id="run-form" class="panel">
+          <label>Tier
+            <select id="run-tier" required></select>
+          </label>
+          <label>Package
+            <select id="run-package" required></select>
+          </label>
+          <label>Verb
+            <select id="run-verb" required></select>
+          </label>
+          <label>Arguments (after --)
+            <input type="text" id="run-args" placeholder="--dry-run --instance a">
+          </label>
+          <button type="submit">Start job</button>
+          <p id="run-error" class="error hidden"></p>
+        </form>
+      </section>
+
+      <section id="view-jobs" class="view hidden">
+        <h2>Jobs</h2>
+        <div id="jobs-list"></div>
+        <pre id="job-log" class="log hidden"></pre>
+      </section>
+
+      <section id="view-inventory" class="view hidden">
+        <h2>Inventory</h2>
+        <div class="inv-tabs">
+          <button type="button" data-cat="systems" class="active">Systems</button>
+          <button type="button" data-cat="services">Services</button>
+          <button type="button" data-cat="networks">Networks</button>
+          <button type="button" data-cat="targets">Targets</button>
+        </div>
+        <input type="search" id="inv-search" placeholder="Filter by id or name…">
+        <div class="table-wrap">
+          <table id="inv-table">
+            <thead><tr><th>ID</th><th>Kind</th><th>Details</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <pre id="inv-detail" class="log hidden"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

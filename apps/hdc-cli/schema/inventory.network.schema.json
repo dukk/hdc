@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/inventory.network.schema.json",
+  "title": "HDC inventory sidecar — network",
+  "description": "Manually documented LAN/VLAN/Wi‑Fi segment or similar network construct.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "id", "kind"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "const": "network" },
+    "access": { "type": "object" },
+    "auth": { "type": "object" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "automation_targets": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" },
+    "last_verified": { "type": ["string", "null"] },
+    "query_last": {},
+    "sources": {
+      "type": "object",
+      "description": "Per-package snapshots: sources[<package_id>] = { collected_at, query_last }.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "collected_at": { "type": "string" },
+          "query_last": {}
+        }
+      }
+    }
+  }
+}

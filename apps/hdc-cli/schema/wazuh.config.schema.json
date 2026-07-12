@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/wazuh.config.schema.json",
+  "title": "HDC wazuh service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "mail": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "to": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              ]
+            },
+            "from": { "type": "string" },
+            "smtp_host": { "type": "string" },
+            "alert_level": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "max_per_hour": { "type": "integer", "minimum": 1 },
+            "notifications": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "smtp_sender_id": { "type": "string" },
+                "email_channel_id": { "type": "string" },
+                "channel_name": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^wazuh-[a-z]+$" },
+          "mode": { "enum": ["proxmox-lxc", "proxmox-qemu"] },
+          "proxmox": { "type": "object" },
+          "wazuh": {
+            "type": "object",
+            "properties": {
+              "release": { "type": "string" },
+              "dashboard_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "api_password_vault_key": { "type": "string" },
+              "agent_password_vault_key": { "type": "string" }
+            }
+          },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "compose_dir": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

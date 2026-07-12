@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/gcp-oauth.config.schema.json",
+  "title": "HDC gcp-oauth infrastructure package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "applications"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "gcp": {
+      "type": "object",
+      "properties": {
+        "project_id": { "type": "string", "minLength": 1 },
+        "console_url": { "type": "string", "format": "uri" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "client_type": { "enum": ["web", "installed", "ios", "android"] },
+        "vault_id_suffix_from_app_id": { "type": "boolean" }
+      }
+    },
+    "applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "display_name"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "client_type": { "enum": ["web", "installed", "ios", "android"] },
+          "redirect_uris": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "javascript_origins": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "scopes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "derive_from": {
+            "type": "object",
+            "required": ["nginx_waf_config_path", "site_id", "callback_path"],
+            "properties": {
+              "nginx_waf_config_path": { "type": "string", "minLength": 1 },
+              "site_id": { "type": "string", "minLength": 1 },
+              "callback_path": { "type": "string", "minLength": 1 }
+            }
+          },
+          "vault": {
+            "type": "object",
+            "properties": {
+              "client_id_key": { "type": "string", "pattern": "^HDC_[A-Z0-9_]+$" },
+              "client_secret_key": { "type": "string", "pattern": "^HDC_[A-Z0-9_]+$" }
+            }
+          },
+          "existing_client_id": { "type": ["string", "null"] },
+          "import_match": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

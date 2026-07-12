@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "homeassistant package config",
+  "type": "object",
+  "required": ["deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "homeassistant": {
+      "type": "object",
+      "properties": {
+        "release": { "type": "string", "minLength": 1 },
+        "public_url": { "type": "string" },
+        "trusted_proxies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Optional override for nginx-waf LAN IPs; default resolves vm-nginx-waf-a/b from inventory"
+        }
+      }
+    },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id", "proxmox"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-homeassistant-[a-z]+$" },
+          "hostname": { "type": "string" },
+          "mode": { "type": "string", "enum": ["proxmox-qemu-haos"] },
+          "homeassistant": {
+            "type": "object",
+            "properties": {
+              "release": { "type": "string" },
+              "public_url": { "type": "string" },
+              "trusted_proxies": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "proxmox": {
+            "type": "object",
+            "required": ["host_id", "qemu"],
+            "properties": {
+              "host_id": { "type": "string" },
+              "qemu": {
+                "type": "object",
+                "required": ["vmid", "ip"],
+                "properties": {
+                  "vmid": { "type": "integer", "minimum": 100 },
+                  "name": { "type": "string" },
+                  "ip": { "type": "string" },
+                  "cores": { "type": "integer", "minimum": 1 },
+                  "memory_mb": { "type": "integer", "minimum": 2048 },
+                  "rootfs_gb": { "type": "integer", "minimum": 16 },
+                  "storage": { "type": "string" },
+                  "image_storage": { "type": "string" },
+                  "bridge": { "type": "string" },
+                  "usb": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["id"],
+                      "properties": {
+                        "id": { "type": "string", "pattern": "^[0-9a-f]{4}:[0-9a-f]{4}$" },
+                        "usb3": { "type": "boolean" }
+                      }
+                    }
+                  }
+                }
+              },
+              "network": {
+                "type": "object",
+                "properties": {
+                  "gateway": { "type": "string" },
+                  "dns": { "type": "array", "items": { "type": "string" } },
+                  "bridge": { "type": "string" }
+                }
+              }
+            }
+          },
+          "network": {
+            "type": "object",
+            "properties": {
+              "gateway": { "type": "string" },
+              "dns": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

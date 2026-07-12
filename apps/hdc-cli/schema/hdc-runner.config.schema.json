@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/hdc-runner.config.schema.json",
+  "title": "HDC hdc-runner service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": {
+            "type": "string",
+            "pattern": "^(hdc-runner-[a-z]+|vm-hdc-runner-[a-z]+)$"
+          },
+          "mode": { "enum": ["proxmox-lxc", "proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" },
+          "install": { "type": "object" },
+          "hdc_runner": {
+            "type": "object",
+            "properties": {
+              "web": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "host": { "type": "string" },
+                  "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                  "username": { "type": "string" },
+                  "password_vault_key": { "type": "string" },
+                  "session_secret_vault_key": { "type": "string" },
+                  "api_token_vault_key": { "type": "string" },
+                  "allowed_verbs": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "max_concurrent_jobs": { "type": "integer", "minimum": 1 },
+                  "allowed_schedule_ids": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "allowed_packages": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        { "type": "string" },
+                        {
+                          "type": "object",
+                          "required": ["tier", "package"],
+                          "properties": {
+                            "tier": { "type": "string" },
+                            "package": { "type": "string" }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "paperclip_bridge": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "host": { "type": "string" },
+                  "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                  "secret_vault_key": { "type": "string" },
+                  "hdc_runner_url": { "type": "string" }
+                }
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "cursor_api_key_vault_key": { "type": "string" },
+                  "workspace": { "type": "string" },
+                  "private_root": { "type": "string" },
+                  "max_concurrent_agent_runs": { "type": "integer", "minimum": 1 },
+                  "manager_schedule_id": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

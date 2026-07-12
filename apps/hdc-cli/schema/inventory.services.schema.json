@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/inventory.services.schema.json",
+  "title": "HDC inventory sidecar — services",
+  "description": "Logical service (NRPE, central monitoring UI, etc.). Referenced by id from system sidecars; do not embed service payloads on the system record.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "id", "kind"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "const": "services" },
+    "service_role": { "type": "string" },
+    "access": { "type": "object" },
+    "auth": { "type": "object" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "automation_targets": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" },
+    "last_verified": { "type": ["string", "null"] },
+    "query_last": {}
+  }
+}

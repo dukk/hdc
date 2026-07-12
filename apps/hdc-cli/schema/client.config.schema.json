@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/client.config.schema.json",
+  "title": "HDC client package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "hosts"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "wol": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "broadcast": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1 },
+        "packets": { "type": "integer", "minimum": 1 },
+        "wait_seconds": { "type": "integer", "minimum": 1 },
+        "poll_interval_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "bootstrap_hosts": { "type": "array" },
+    "winrm_bootstrap": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "psexec_path": { "type": "string" },
+        "wait_seconds": { "type": "integer", "minimum": 1 },
+        "poll_interval_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "os"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "system_id": { "type": "string" },
+          "os": { "enum": ["windows", "ubuntu", "raspberrypi"] },
+          "enabled": { "type": "boolean" },
+          "updates": {
+            "type": "object",
+            "properties": { "enabled": { "type": "boolean" } }
+          },
+          "wol": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "mac": { "type": "string" }
+            }
+          },
+          "auth": { "type": "object" },
+          "access": { "type": "object" }
+        }
+      }
+    }
+  }
+}

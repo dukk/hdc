@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/safeline.config.schema.json",
+  "title": "HDC safeline service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^safeline-[a-z]+$" },
+          "mode": { "enum": ["proxmox-lxc"] },
+          "proxmox": { "type": "object" },
+          "safeline": {
+            "type": "object",
+            "properties": {
+              "image_tag": { "type": "string" },
+              "image_prefix": { "type": "string" },
+              "region": { "type": "string" },
+              "arch_suffix": { "type": "string" },
+              "release": { "type": "string" },
+              "mgt_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "subnet_prefix": { "type": "string" },
+              "postgres_password_vault_key": { "type": "string" },
+              "admin_password_vault_key": { "type": "string" },
+              "api_token_vault_key": { "type": "string" },
+              "admin_reset_on_deploy": { "type": "boolean" }
+            }
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "server_names", "ports", "upstreams"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+                "server_names": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "ports": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "upstreams": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "ssl": { "type": "boolean" },
+                "comment": { "type": "string" },
+                "load_balance": { "type": "object" }
+              }
+            }
+          },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "compose_dir": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

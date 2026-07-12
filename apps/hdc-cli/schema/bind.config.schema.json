@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/bind.config.schema.json",
+  "title": "HDC bind service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "zones", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "zones": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "bind": {
+      "type": "object",
+      "properties": {
+        "primary_ip": { "type": "string" },
+        "secondary_ip": { "type": "string" },
+        "hostmaster": { "type": "string" },
+        "allow_query_cidrs": { "type": "array", "items": { "type": "string" } },
+        "recursion": { "type": "boolean" },
+        "dnssec_validation": { "type": "boolean" },
+        "forwarders": {
+          "type": "array",
+          "items": { "type": "string", "format": "ipv4" },
+          "description": "Plain DNS upstream resolvers when forward_upstream.mode is plain or absent (default 1.1.1.1 and 1.0.0.1)."
+        },
+        "forward_upstream": {
+          "type": "object",
+          "description": "Recursive upstream mode: plain IPv4 forwarders or ODoH via local dnscrypt-proxy.",
+          "properties": {
+            "mode": { "enum": ["plain", "odoh"] },
+            "server": {
+              "type": "string",
+              "description": "ODoH target name in dnscrypt-proxy static config (default odoh-cloudflare)."
+            },
+            "relay": {
+              "type": "string",
+              "description": "ODoH relay name in dnscrypt-proxy static config (default odohrelay-crypto-sx)."
+            },
+            "listen": {
+              "type": "string",
+              "description": "Local dnscrypt-proxy listen address for BIND forwarders (default 127.0.0.1:5300)."
+            }
+          }
+        },
+        "tsig_vault_key": { "type": "string" },
+        "tsig_secret": {
+          "type": "string",
+          "description": "HMAC-SHA256 TSIG secret (base64). Auto-generated on deploy when missing; gitignored via clumps/**/config.json."
+        },
+        "log_purge": {
+          "type": "object",
+          "description": "Daily cron on BIND guests to purge old logs when root free space drops below threshold.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Install hdc-bind-log-purge cron (default true)."
+            },
+            "threshold_free_percent": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 99,
+              "description": "Purge when root free percent is below this value (default 15)."
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Merged into each deployments[] entry. For proxmox-qemu, defaults.proxmox.qemu.rootfs_gb sets the target root disk size in GiB (deploy resize after clone; maintain grows live guests)."
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id", "role"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-bind-[a-z]+$" },
+          "role": { "enum": ["primary", "secondary"] },
+          "hostname": { "type": "string" },
+          "mode": { "enum": ["proxmox-qemu", "configure-only"] },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dnsRecord": {
+      "type": "object",
+      "required": ["type", "name"],
+      "properties": {
+        "type": { "enum": ["A", "AAAA", "CNAME", "PTR", "TXT", "NS", "MX"] },
+        "name": { "type": "string" },
+        "data": { "type": "string" },
+        "ttl": { "type": "integer", "minimum": 60 },
+        "priority": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "zone": {
+      "type": "object",
+      "required": ["id", "zone_type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "zone_type": { "enum": ["forward", "reverse"] },
+        "subnet": {
+          "type": "string",
+          "description": "CIDR for reverse zones; used for PTR auto-generation from forward A records."
+        },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dnsRecord" }
+        },
+        "cloudflare_fallback": {
+          "type": "object",
+          "description": "Merge records from Cloudflare package config at zone-render time; local records[] win on conflict.",
+          "properties": {
+            "zone": {
+              "type": "string",
+              "description": "Cloudflare zones[].name to pull from (defaults to zone id)."
+            },
+            "config_path": {
+              "type": "string",
+              "description": "Repo-relative Cloudflare config path (default clumps/infrastructure/cloudflare/config.json)."
+            },
+            "exclude_types": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Record types to skip from Cloudflare (default [\"NS\"])."
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}
