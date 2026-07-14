@@ -52,8 +52,9 @@ function isGitWorkTree(cwd) {
 function resolvePrivateRoot() {
   const fromEnv = process.env.HDC_PRIVATE_ROOT?.trim();
   if (fromEnv) {
+    // Explicit override: do not fall back to sibling when missing.
     const resolved = path.resolve(fromEnv);
-    if (fs.existsSync(resolved)) return resolved;
+    return fs.existsSync(resolved) ? resolved : null;
   }
   const sibling = path.resolve(HDC_ROOT, "..", "hdc-private");
   if (fs.existsSync(sibling)) return sibling;
