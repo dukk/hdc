@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   renderMainCfSnippet,
   renderSaslPasswd,
+  renderTransportMap,
   relayhostForSaslMap,
 } from "./postfix-relay-render.mjs";
 import { pctExec, qemuGuestExec, sshRemote } from "./remote.mjs";
@@ -115,6 +116,18 @@ export function configurePostfixRelay(opts) {
       ? smtp.tls_security_level.trim()
       : "encrypt";
 
+  /** @type {{ domain: string, nexthop: string }[]} */
+  const transportEntries = [];
+  const rawTransport = postfix.transport;
+  if (Array.isArray(rawTransport)) {
+    for (const row of rawTransport) {
+      if (!row || typeof row !== "object") continue;
+      const domain = typeof row.domain === "string" ? row.domain.trim() : "";
+      const nexthop = typeof row.nexthop === "string" ? row.nexthop.trim() : "";
+      if (domain && nexthop) transportEntries.push({ domain, nexthop });
+    }
+  }
+
   const mainSnippet = renderMainCfSnippet({
     relayhost,
     tlsSecurityLevel: tlsLevel,
@@ -122,8 +135,10 @@ export function configurePostfixRelay(opts) {
     myorigin,
     mynetworks,
     inetInterfaces,
+    transport: transportEntries,
   });
   const saslBody = renderSaslPasswd(relayhostForSaslMap(relayhost), smtpUser, smtpPass);
+  const transportBody = renderTransportMap(transportEntries);
 
   const tmp = mkdtempSync(join(tmpdir(), "hdc-postfix-relay-"));
   const localMain = join(tmp, "hdc-relay.cf");
@@ -163,29 +178,39 @@ export function configurePostfixRelay(opts) {
     );
     runChecked(exec, "postmap /etc/postfix/sasl_passwd", log);
     log.info("postmap wrote /etc/postfix/sasl_passwd.db");
+    if (transportEntries.length) {
+      const transportB64 = Buffer.from(transportBody, "utf8").toString("base64");
+      runChecked(
+        exec,
+        `echo ${shellQuote(transportB64)} | base64 -d > /etc/postfix/transport && chmod 644 /etc/postfix/transport`,
+        log,
+      );
+      runChecked(exec, "postmap /etc/postfix/transport", log);
+      log.info(`postmap wrote /etc/postfix/transport.db (${transportEntries.length} domain route(s))`);
+    }
     runChecked(
       exec,
       "sed -i '/^include \\/etc\\/postfix\\/main.cf.d/d' /etc/postfix/main.cf 2>/dev/null || true",
       log,
     );
-    runChecked(
-      exec,
-      [
-        `postconf -e ${shellQuote(`myhostname=${myhostname}`)}`,
-        `postconf -e ${shellQuote(`myorigin=${myorigin}`)}`,
-        `postconf -e ${shellQuote(`mynetworks=${mynetworks}`)}`,
-        `postconf -e ${shellQuote(`inet_interfaces=${inetInterfaces}`)}`,
-        `postconf -e ${shellQuote(`relayhost=${relayhost}`)}`,
-        "postconf -e 'smtp_sasl_auth_enable=yes'",
-        "postconf -e 'smtp_sasl_password_maps=hash:/etc/postfix/sasl_passwd'",
-        "postconf -e 'smtp_sasl_security_options=noanonymous'",
-        "postconf -e 'smtp_sasl_tls_security_options=noanonymous'",
-        "postconf -e 'smtp_use_tls=yes'",
-        `postconf -e ${shellQuote(`smtp_tls_security_level=${tlsLevel}`)}`,
-        "postconf -e 'smtp_tls_CAfile=/etc/ssl/certs/ca-certificates.crt'",
-      ].join(" && "),
-      log,
-    );
+    const postconfCmds = [
+      `postconf -e ${shellQuote(`myhostname=${myhostname}`)}`,
+      `postconf -e ${shellQuote(`myorigin=${myorigin}`)}`,
+      `postconf -e ${shellQuote(`mynetworks=${mynetworks}`)}`,
+      `postconf -e ${shellQuote(`inet_interfaces=${inetInterfaces}`)}`,
+      `postconf -e ${shellQuote(`relayhost=${relayhost}`)}`,
+      "postconf -e 'smtp_sasl_auth_enable=yes'",
+      "postconf -e 'smtp_sasl_password_maps=hash:/etc/postfix/sasl_passwd'",
+      "postconf -e 'smtp_sasl_security_options=noanonymous'",
+      "postconf -e 'smtp_sasl_tls_security_options=noanonymous'",
+      "postconf -e 'smtp_use_tls=yes'",
+      `postconf -e ${shellQuote(`smtp_tls_security_level=${tlsLevel}`)}`,
+      "postconf -e 'smtp_tls_CAfile=/etc/ssl/certs/ca-certificates.crt'",
+    ];
+    if (transportEntries.length) {
+      postconfCmds.push("postconf -e 'transport_maps=hash:/etc/postfix/transport'");
+    }
+    runChecked(exec, postconfCmds.join(" && "), log);
     runChecked(
       exec,
       "postfix check && systemctl enable postfix && systemctl restart postfix",

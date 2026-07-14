@@ -32,50 +32,8 @@
       "skip_clamd": false,
       "skip_solr": true,
       "domains": [
-        {
-          "name": "example.invalid",
-          "description": "Primary mail domain",
-          "dkim_selector": "dkim",
-          "dkim_key_size": 2048,
-          "outbound": {
-            "mode": "direct"
-          },
-          "dns": {
-            "mx_priority": 10,
-            "spf": "v=spf1 mx a ~all",
-            "dmarc": "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.invalid",
-            "notes": "Publish these records in BIND or Cloudflare. DKIM TXT is filled after maintain generates the key."
-          },
-          "mailboxes": [
-            {
-              "local_part": "admin",
-              "name": "Example Admin",
-              "quota_mb": 3072,
-              "password_vault_key": "HDC_MAILCOW_MAILBOX_ADMIN_EXAMPLE_INVALID_PASSWORD"
-            }
-          ],
-          "aliases": [
-            {
-              "address": "info@example.invalid",
-              "goto": ["admin@example.invalid"]
-            }
-          ]
-        },
-        {
-          "name": "relay-only.example.invalid",
-          "description": "Outbound via internal postfix-relay (SMTP2GO upstream)",
-          "dkim_selector": "dkim",
-          "dkim_key_size": 2048,
-          "outbound": {
-            "mode": "postfix-relay"
-          },
-          "dns": {
-            "mx_priority": 10,
-            "spf": "v=spf1 include:spf.smtp2go.com ~all",
-            "dmarc": "v=DMARC1; p=none; rua=mailto:dmarc-reports@example.invalid",
-            "notes": "Inbound MX still points at mailcow. Outbound uses hdc postfix-relay; add provider DKIM CNAMEs per SMTP2GO docs when using SMTP2GO."
-          }
-        }
+        { "$hdc.include": "domains/example.invalid.json" },
+        { "$hdc.include": "domains/relay-only.example.invalid.json" }
       ]
     },
     "install": {

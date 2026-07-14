@@ -53,6 +53,22 @@ export function renderLocalCfSnippet(opts) {
 }
 
 /**
+ * Domain nexthop overrides (avoid hairpin through SMTP2GO for local mail domains).
+ * @param {{ domain: string, nexthop: string }[]} entries
+ * @returns {string} Written to /etc/postfix/transport
+ */
+export function renderTransportMap(entries) {
+  const lines = ["# hdc postfix-relay — domain transport overrides"];
+  for (const e of entries ?? []) {
+    const domain = typeof e?.domain === "string" ? e.domain.trim() : "";
+    const nexthop = typeof e?.nexthop === "string" ? e.nexthop.trim() : "";
+    if (!domain || !nexthop) continue;
+    lines.push(`${domain}\t${nexthop}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.relayhost
  * @param {string} [opts.tlsSecurityLevel]
@@ -60,10 +76,17 @@ export function renderLocalCfSnippet(opts) {
  * @param {string} opts.myorigin
  * @param {string} opts.mynetworks
  * @param {string} [opts.inetInterfaces]
+ * @param {{ domain: string, nexthop: string }[]} [opts.transport]
  * @returns {string} Written to /etc/postfix/main.cf.d/hdc-relay.cf
  */
 export function renderMainCfSnippet(opts) {
-  return renderLocalCfSnippet(opts) + "\n" + renderRelayCfSnippet(opts);
+  let out = renderLocalCfSnippet(opts) + "\n" + renderRelayCfSnippet(opts);
+  const transport = Array.isArray(opts.transport) ? opts.transport : [];
+  if (transport.length) {
+    out += "\n# hdc domain transport overrides\n";
+    out += "transport_maps = hash:/etc/postfix/transport\n";
+  }
+  return out;
 }
 
 /**
