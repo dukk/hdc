@@ -67,9 +67,23 @@ When `required_resource_access` changes, hdc updates the app registration object
 
 ## What hdc does not manage
 
-- Client secrets or certificates on managed applications
+- Client secrets or certificates on managed applications (create in Entra portal; store consumer secrets in the hdc vault)
 - Conditional Access policies
 - B2C / external identity tenants
+
+## Keycloak Microsoft IdP
+
+For Keycloak to broker Microsoft sign-in, declare a managed app (see hdc-private `clumps/infrastructure/azure/config.json` `keycloak-microsoft-idp`):
+
+1. `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --app keycloak-microsoft-idp`
+2. Pin `match.client_id` to the Application (client) ID from deploy/query output.
+3. In Entra → app → **Certificates & secrets**, create a client secret; `node apps/hdc-cli/cli.mjs secrets set HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET`.
+4. Copy the same Application ID into the Keycloak realm `identity_providers[].client_id` (e.g. `dukk-sso`), then `hdc run service keycloak maintain`.
+5. Grant admin consent for Microsoft Graph delegated scopes when prompted.
+
+Redirect URI shape: `https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint` (alias `microsoft` by default).
+
+See [Keycloak README](../../clumps/services/keycloak/README.md).
 
 ## Troubleshooting
 

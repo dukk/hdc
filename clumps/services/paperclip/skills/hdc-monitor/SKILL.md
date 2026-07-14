@@ -6,9 +6,9 @@ slug: hdc-monitor
 
 # HDC monitor skill
 
-Use **hdc-runner** skill for API auth. Prefer schedule triggers over ad-hoc when a matching schedule exists.
+Prefer **hdc-agents** fleet schedules / hdc-web-server API auth. Prefer schedule triggers over ad-hoc when a matching schedule exists.
 
-## Monitor schedules (via hdc-runner)
+## Monitor schedules (via hdc-web-server)
 
 ```http
 POST /api/schedules/monitor-uptime-kuma/run

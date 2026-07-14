@@ -4,9 +4,12 @@ import {
   reconcileKeycloakRealms,
   realmNeedsUpdate,
   userNeedsUpdate,
+  clientNeedsUpdate,
   realmRepresentationFromConfig,
   userRepresentationFromConfig,
+  clientRepresentationFromConfig,
   smtpServerNeedsUpdate,
+  KEYCLOAK_BUILTIN_CLIENT_IDS,
 } from "../../../clumps/services/keycloak/lib/keycloak-api.mjs";
 import {
   filterRealmsByFlag,
@@ -293,6 +296,7 @@ describe("representation helpers", () => {
  * @param {{
  *   realms?: Record<string, unknown>[];
  *   usersByRealm?: Record<string, Record<string, unknown>[]>;
+ *   clientsByRealm?: Record<string, Record<string, unknown>[]>;
  * }} [seed]
  */
 function mockClient(seed = {}) {
@@ -300,12 +304,16 @@ function mockClient(seed = {}) {
   let realms = [...(seed.realms ?? [])];
   /** @type {Record<string, Record<string, unknown>[]>} */
   const usersByRealm = { ...(seed.usersByRealm ?? {}) };
+  /** @type {Record<string, Record<string, unknown>[]>} */
+  const clientsByRealm = { ...(seed.clientsByRealm ?? {}) };
   /** @type {unknown[]} */
   const passwordResets = [];
   /** @type {string[]} */
   const deletedRealms = [];
   /** @type {string[]} */
   const deletedUsers = [];
+  /** @type {string[]} */
+  const deletedClients = [];
 
   const client = {
     baseUrl: "http://keycloak.test",
@@ -322,6 +330,7 @@ function mockClient(seed = {}) {
         realms = [...realms, { ...body, enabled: body.enabled !== false }];
         const name = String(body.realm ?? "");
         if (name && !usersByRealm[name]) usersByRealm[name] = [];
+        if (name && !clientsByRealm[name]) clientsByRealm[name] = [];
         return null;
       }
       const realmGet = path.match(/^\/admin\/realms\/([^/]+)$/);
@@ -342,6 +351,7 @@ function mockClient(seed = {}) {
         deletedRealms.push(name);
         realms = realms.filter((r) => r.realm !== name);
         delete usersByRealm[name];
+        delete clientsByRealm[name];
         return null;
       }
       const usersList = path.match(/^\/admin\/realms\/([^/]+)\/users$/);
@@ -387,6 +397,55 @@ function mockClient(seed = {}) {
         passwordResets.push(opts.body);
         return null;
       }
+      const clientsList = path.match(/^\/admin\/realms\/([^/]+)\/clients$/);
+      if (clientsList && method === "GET") {
+        const name = decodeURIComponent(clientsList[1]);
+        let clients = clientsByRealm[name] ?? [];
+        const q = opts.query ?? {};
+        if (typeof q.clientId === "string" && q.clientId) {
+          clients = clients.filter((c) => c.clientId === q.clientId);
+        }
+        return clients;
+      }
+      if (clientsList && method === "POST") {
+        const name = decodeURIComponent(clientsList[1]);
+        const body = /** @type {Record<string, unknown>} */ (opts.body ?? {});
+        const id = `cid-${(clientsByRealm[name] ?? []).length + 1}`;
+        const row = { id, ...body };
+        clientsByRealm[name] = [...(clientsByRealm[name] ?? []), row];
+        return null;
+      }
+      const clientOne = path.match(/^\/admin\/realms\/([^/]+)\/clients\/([^/]+)$/);
+      if (clientOne && method === "GET") {
+        const name = decodeURIComponent(clientOne[1]);
+        const id = decodeURIComponent(clientOne[2]);
+        const found = (clientsByRealm[name] ?? []).find((c) => c.id === id);
+        if (!found) throw new Error(`client ${id} not found`);
+        return found;
+      }
+      if (clientOne && method === "PUT") {
+        const name = decodeURIComponent(clientOne[1]);
+        const id = decodeURIComponent(clientOne[2]);
+        const body = /** @type {Record<string, unknown>} */ (opts.body ?? {});
+        clientsByRealm[name] = (clientsByRealm[name] ?? []).map((c) =>
+          c.id === id ? { ...c, ...body } : c,
+        );
+        return null;
+      }
+      if (clientOne && method === "DELETE") {
+        const name = decodeURIComponent(clientOne[1]);
+        const id = decodeURIComponent(clientOne[2]);
+        deletedClients.push(`${name}/${id}`);
+        clientsByRealm[name] = (clientsByRealm[name] ?? []).filter((c) => c.id !== id);
+        return null;
+      }
+      const clientSecret = path.match(/^\/admin\/realms\/([^/]+)\/clients\/([^/]+)\/client-secret$/);
+      if (clientSecret && method === "GET") {
+        const name = decodeURIComponent(clientSecret[1]);
+        const id = decodeURIComponent(clientSecret[2]);
+        const found = (clientsByRealm[name] ?? []).find((c) => c.id === id);
+        return { type: "secret", value: String(found?.secret ?? "") };
+      }
       throw new Error(`unexpected ${method} ${path}`);
     },
   };
@@ -399,7 +458,9 @@ function mockClient(seed = {}) {
     passwordResets,
     deletedRealms,
     deletedUsers,
+    deletedClients,
     usersByRealm,
+    clientsByRealm,
   };
 }
 
@@ -530,5 +591,133 @@ describe("reconcileKeycloakRealms", () => {
     expect(result.summary.pruned_realm_count).toBe(1);
     expect(mock.deletedRealms).toEqual(["orphan"]);
     expect(mock.deletedRealms).not.toContain("master");
+  });
+
+  it("creates confidential OIDC client with vault secret", async () => {
+    const mock = mockClient({
+      realms: [{ realm: "dukk-sso", enabled: true }],
+      usersByRealm: { "dukk-sso": [] },
+      clientsByRealm: { "dukk-sso": [] },
+    });
+    const realms = normalizeRealmList({
+      realms: [
+        {
+          id: "dukk-sso",
+          realm: "dukk-sso",
+          users: [],
+          clients: [
+            {
+              client_id: "hdc-web",
+              name: "HDC Web",
+              public_client: false,
+              standard_flow_enabled: true,
+              redirect_uris: ["https://hdc.example.invalid/api/auth/oidc/callback"],
+              web_origins: ["https://hdc.example.invalid"],
+              secret_vault_key: "HDC_WEB_OIDC_CLIENT_SECRET",
+            },
+          ],
+        },
+      ],
+    });
+    const result = await reconcileKeycloakRealms(realms, mock.client, {
+      resolveUserPassword: async () => "x",
+      resolveClientSecret: async () => "client-secret-value",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.summary.clients_added).toBe(1);
+    expect(result.summary.client_secrets_set).toBe(1);
+    expect(mock.clientsByRealm["dukk-sso"][0].clientId).toBe("hdc-web");
+    expect(mock.clientsByRealm["dukk-sso"][0].secret).toBe("client-secret-value");
+    expect(mock.clientsByRealm["dukk-sso"][0].publicClient).toBe(false);
+  });
+
+  it("prunes unmanaged clients but skips builtins", async () => {
+    const mock = mockClient({
+      realms: [{ realm: "hdc", enabled: true }],
+      usersByRealm: { hdc: [] },
+      clientsByRealm: {
+        hdc: [
+          { id: "cid-1", clientId: "account" },
+          { id: "cid-2", clientId: "orphan-app" },
+          { id: "cid-3", clientId: "hdc-web" },
+        ],
+      },
+    });
+    const realms = normalizeRealmList({
+      realms: [
+        {
+          id: "hdc",
+          realm: "hdc",
+          users: [],
+          clients: [
+            {
+              client_id: "hdc-web",
+              public_client: false,
+              secret_vault_key: "K",
+            },
+          ],
+        },
+      ],
+    });
+    const result = await reconcileKeycloakRealms(realms, mock.client, {
+      prune: true,
+      resolveUserPassword: async () => "x",
+      resolveClientSecret: async () => "s",
+    });
+    expect(result.summary.clients_pruned).toBe(1);
+    expect(mock.deletedClients).toEqual(["hdc/cid-2"]);
+  });
+});
+
+describe("OIDC client helpers", () => {
+  it("requires secret_vault_key for confidential clients", () => {
+    expect(() =>
+      normalizeRealmList({
+        realms: [
+          {
+            realm: "hdc",
+            users: [],
+            clients: [{ client_id: "app", public_client: false }],
+          },
+        ],
+      }),
+    ).toThrow(/secret_vault_key/);
+  });
+
+  it("clientNeedsUpdate detects redirect URI drift", () => {
+    expect(
+      clientNeedsUpdate(
+        {
+          clientId: "hdc-web",
+          enabled: true,
+          publicClient: false,
+          redirectUris: ["https://old.example/callback"],
+        },
+        {
+          client_id: "hdc-web",
+          public_client: false,
+          redirect_uris: ["https://new.example/callback"],
+          secret_vault_key: "K",
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it("clientRepresentationFromConfig sets client-secret authenticator", () => {
+    const rep = clientRepresentationFromConfig(
+      {
+        client_id: "hdc-web",
+        public_client: false,
+        redirect_uris: ["https://hdc.example/callback"],
+        secret_vault_key: "K",
+      },
+      null,
+      { secret: "sekrit" },
+    );
+    expect(rep.clientId).toBe("hdc-web");
+    expect(rep.publicClient).toBe(false);
+    expect(rep.clientAuthenticatorType).toBe("client-secret");
+    expect(rep.secret).toBe("sekrit");
+    expect(KEYCLOAK_BUILTIN_CLIENT_IDS.has("account")).toBe(true);
   });
 });

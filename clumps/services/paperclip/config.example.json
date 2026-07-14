@@ -46,7 +46,7 @@
         "name": "Home Data Center",
         "api_url": "https://paperclip.home.example.invalid",
         "api_key_vault_key": "HDC_PAPERCLIP_API_KEY",
-        "hdc_runner_url": "http://192.0.2.125:9120",
+        "hdc_web_url": "http://192.0.2.117:9120",
         "skills_github_base": "https://github.com/dukk/hdc/tree/main/clumps/services/paperclip/skills",
         "agents": [
           {
@@ -54,40 +54,28 @@
             "name": "HDC Manager",
             "role": "manager",
             "adapter_type": "cursor",
-            "desired_skills": ["paperclip", "hdc-agent-team", "hdc-runner"]
+            "desired_skills": ["paperclip", "hdc-agent-team"]
           },
           {
             "id": "hdc-monitor",
             "name": "HDC Monitor",
             "role": "operator",
             "adapter_type": "cursor",
-            "desired_skills": ["paperclip", "hdc-monitor", "hdc-runner"]
+            "desired_skills": ["paperclip", "hdc-monitor"]
           },
           {
             "id": "hdc-sre",
             "name": "HDC SRE",
             "role": "engineer",
             "adapter_type": "cursor",
-            "desired_skills": ["paperclip", "hdc-sre", "hdc-agent-team", "hdc-runner"]
+            "desired_skills": ["paperclip", "hdc-sre", "hdc-agent-team"]
           },
           {
             "id": "hdc-security",
             "name": "HDC Security",
             "role": "operator",
             "adapter_type": "cursor",
-            "desired_skills": ["paperclip", "hdc-security", "hdc-runner"]
-          },
-          {
-            "id": "hdc-monitor-http",
-            "name": "HDC Monitor (HTTP)",
-            "role": "operator",
-            "adapter_type": "http",
-            "adapter_config": {
-              "url": "http://192.0.2.125:9121/paperclip/heartbeat",
-              "method": "POST",
-              "headers": { "X-HDC-Bridge-Secret": "${HDC_PAPERCLIP_BRIDGE_SECRET}" }
-            },
-            "desired_skills": ["hdc-monitor", "hdc-runner"]
+            "desired_skills": ["paperclip", "hdc-security"]
           }
         ]
       }

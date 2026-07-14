@@ -40,6 +40,25 @@ describe("discord-config", () => {
     expect(cfg.apiBase).toBe("https://discord.com/api/v10");
   });
 
+  it("normalizeDiscordConfig reads hdc-ops public_key and ops_decisions", () => {
+    const cfg = normalizeDiscordConfig({
+      schema_version: 1,
+      discord: {},
+      applications: [
+        {
+          id: "hdc-ops",
+          bot_token_vault_key: "HDC_OPS_DISCORD_BOT_TOKEN",
+          public_key: "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+          ops_decisions: { channel_id: "123456789012345678" },
+          match: { application_id: "987654321098765432" },
+        },
+      ],
+    });
+    expect(cfg.applications[0].public_key).toMatch(/^aabb/);
+    expect(cfg.applications[0].ops_decisions?.channel_id).toBe("123456789012345678");
+    expect(cfg.applications[0].match.application_id).toBe("987654321098765432");
+  });
+
   it("liveAppToNormalized maps Discord API fields", () => {
     const norm = liveAppToNormalized({
       id: "123456789012345678",

@@ -16,17 +16,26 @@ vi.mock("node:child_process", () => ({
 }));
 
 import {
+  buildDecisionMessageComponents,
   buildOperationReportDiscordSummary,
   buildProxmoxMaintainDiscordSummary,
+  DISCORD_BUTTON_STYLE_DANGER,
+  DISCORD_BUTTON_STYLE_SUCCESS,
   DISCORD_SUPPRESS_NOTIFICATIONS_FLAG,
   formatDiscordContent,
   maybeNotifyOpsDiscordFromOperationReport,
   maybeNotifyOpsDiscordFromProxmoxMaintain,
+  OPS_DISCORD_APPLICATION_ID_ENV,
+  OPS_DISCORD_BOT_TOKEN_ENV,
+  OPS_DISCORD_CHANNEL_ID_ENV,
   OPS_DISCORD_HOST_ENV,
   OPS_DISCORD_NOTIFY_ENV,
+  OPS_DISCORD_PUBLIC_KEY_ENV,
   postDiscordWebhook,
   redactIpsFromText,
   resolveOpsDiscordHost,
+  resolveOpsDiscordInteractiveConfig,
+  sendOpsDiscordMessage,
   sendOpsDiscordNotifyBestEffort,
 } from "./ops-discord-notify.mjs";
 
@@ -62,6 +71,86 @@ describe("ops-discord-notify", () => {
         const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(body.flags).toBe(DISCORD_SUPPRESS_NOTIFICATIONS_FLAG);
         expect(body.content).toBe("hello");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  describe("decision buttons", () => {
+    it("buildDecisionMessageComponents uses approve/deny custom_ids", () => {
+      const rows = buildDecisionMessageComponents("2026-07-14-sre-foo");
+      const buttons = /** @type {{ custom_id: string; style: number }[]} */ (
+        /** @type {any} */ (rows[0]).components
+      );
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].custom_id).toBe("hdc:approve:2026-07-14-sre-foo");
+      expect(buttons[0].style).toBe(DISCORD_BUTTON_STYLE_SUCCESS);
+      expect(buttons[1].custom_id).toBe("hdc:deny:2026-07-14-sre-foo");
+      expect(buttons[1].style).toBe(DISCORD_BUTTON_STYLE_DANGER);
+    });
+
+    it("resolveOpsDiscordInteractiveConfig requires all four fields", async () => {
+      const env = {
+        [OPS_DISCORD_APPLICATION_ID_ENV]: "app1",
+        [OPS_DISCORD_PUBLIC_KEY_ENV]: "pk1",
+        [OPS_DISCORD_BOT_TOKEN_ENV]: "token1",
+        [OPS_DISCORD_CHANNEL_ID_ENV]: "chan1",
+      };
+      const full = await resolveOpsDiscordInteractiveConfig({ env });
+      expect(full.enabled).toBe(true);
+      expect(full.channelId).toBe("chan1");
+
+      const partial = await resolveOpsDiscordInteractiveConfig({
+        env: { ...env, [OPS_DISCORD_CHANNEL_ID_ENV]: "" },
+      });
+      expect(partial.enabled).toBe(false);
+    });
+
+    it("sendOpsDiscordMessage uses Bot API with components when interactive", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        text: async () => "",
+        json: async () => ({ id: "m1" }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const result = await sendOpsDiscordMessage({
+          content: "**HDC decision needed**\n\nTask x",
+          decision: true,
+          taskId: "task-a",
+          env: {
+            [OPS_DISCORD_APPLICATION_ID_ENV]: "app1",
+            [OPS_DISCORD_PUBLIC_KEY_ENV]: "pk1",
+            [OPS_DISCORD_BOT_TOKEN_ENV]: "token1",
+            [OPS_DISCORD_CHANNEL_ID_ENV]: "chan1",
+          },
+        });
+        expect(result.mode).toBe("bot");
+        const [url, init] = fetchMock.mock.calls[0] ?? [];
+        expect(String(url)).toContain("/channels/chan1/messages");
+        expect(String(/** @type {any} */ (init).headers.Authorization)).toContain("Bot ");
+        const body = JSON.parse(String(/** @type {any} */ (init).body));
+        expect(body.components[0].components).toHaveLength(2);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("sendOpsDiscordMessage falls back to webhook without interactive config", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const result = await sendOpsDiscordMessage({
+          content: "plain",
+          decision: true,
+          taskId: "task-a",
+          env: { HDC_OPS_DISCORD_WEBHOOK_URL: "https://discord.example.invalid/webhook" },
+        });
+        expect(result.mode).toBe("webhook");
+        expect(String(fetchMock.mock.calls[0]?.[0])).toContain("webhook");
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(body.components).toBeUndefined();
       } finally {
         vi.unstubAllGlobals();
       }

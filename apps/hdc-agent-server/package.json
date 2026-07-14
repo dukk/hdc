@@ -3,14 +3,16 @@
   "private": true,
   "type": "module",
   "version": "1.0.0",
-  "description": "A2A 0.3 HTTP server for one HDC agent role (LiteLLM + hdc-mcp tools)",
+  "description": "A2A 0.3 HTTP server for one HDC agent role (LiteLLM + hdc-mcp-server tools)",
   "bin": {
     "hdc-agent-server": "./server.mjs"
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test lib/*.test.mjs"
+    "run-daily": "node bin/run-daily.mjs",
+    "scheduler": "node bin/scheduler.mjs"
   },
+
   "engines": {
     "node": ">=18"
   }

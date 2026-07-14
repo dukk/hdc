@@ -36,10 +36,9 @@ whenever the matching files are actually in play.
 
 ## Skills
 
-Canonical skill definitions live in `.cursor/skills/`. Claude Code requires its own
-`SKILL.md` under `.claude/skills/<name>/`, so each of those is a thin pointer —
-frontmatter only, plus one line telling Claude to read and follow the matching
-`.cursor/skills/<name>/SKILL.md`. The checklists and templates are never duplicated.
+Fleet agent skills are canonical under [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
+IDE helpers (`hdc-service-deploy`, `proxmox-resource-planning`) remain under `.cursor/skills/`.
+Claude Code thin pointers under `.claude/skills/` either target the fleet skill or the Cursor IDE skill.
 
 | Skill | Use when |
 |-------|----------|
@@ -53,12 +52,9 @@ frontmatter only, plus one line telling Claude to read and follow the matching
 
 ## Subagents
 
-Canonical agent definitions live in `.cursor/agents/`. Claude Code loads subagents
-from `.claude/agents/`, so each file there is a thin pointer with matching
-frontmatter that instructs the agent to read and follow the corresponding
-`.cursor/agents/<name>.md`. See the "Agent team" section of
-[AGENTS.md](AGENTS.md) and [docs/multi-agent-ops.md](docs/multi-agent-ops.md) for
-the roster and orchestration model.
+Canonical fleet agent definitions live in [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/).
+`.cursor/agents/` and `.claude/agents/` are thin pointers for IDE sessions. Production
+runtime is hdc-agent-server + LiteLLM — see [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
 
 ## Quality gate
 

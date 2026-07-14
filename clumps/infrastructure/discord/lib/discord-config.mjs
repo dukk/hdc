@@ -7,6 +7,8 @@ import { deriveRedirectUrisFromNginxWaf } from "./derive-redirect-uris.mjs";
  *   match: { application_id: string | null };
  *   display_name: string;
  *   bot_token_vault_key: string;
+ *   public_key: string | null;
+ *   ops_decisions: { channel_id: string | null } | null;
  *   description: string | null;
  *   redirect_uris: string[];
  *   interactions_endpoint_url: string | null;
@@ -185,6 +187,18 @@ export function normalizeDiscordConfig(cfg) {
         ? portalRaw.notes.trim()
         : null;
 
+    const publicKey =
+      typeof raw.public_key === "string" && raw.public_key.trim() ? raw.public_key.trim() : null;
+
+    /** @type {{ channel_id: string | null } | null} */
+    let opsDecisions = null;
+    if (isObject(raw.ops_decisions)) {
+      const od = raw.ops_decisions;
+      const channelId =
+        typeof od.channel_id === "string" && od.channel_id.trim() ? od.channel_id.trim() : null;
+      opsDecisions = { channel_id: channelId };
+    }
+
     /** @type {ConfigApplication} */
     const app = {
       id,
@@ -192,6 +206,8 @@ export function normalizeDiscordConfig(cfg) {
       match: { application_id: applicationId },
       display_name: displayName,
       bot_token_vault_key: botTokenKey,
+      public_key: publicKey,
+      ops_decisions: opsDecisions,
       description:
         typeof raw.description === "string" ? raw.description : raw.description === null ? null : "",
       redirect_uris: normalizeUriList(raw.redirect_uris),
@@ -308,6 +324,13 @@ export function liveAppToConfigEntry(live, existing) {
       typeof existingObj.bot_token_vault_key === "string" && existingObj.bot_token_vault_key.trim()
         ? existingObj.bot_token_vault_key
         : defaultBotTokenVaultKey(id),
+    public_key:
+      typeof existingObj.public_key === "string" && existingObj.public_key.trim()
+        ? existingObj.public_key.trim()
+        : existingObj.public_key === null
+          ? null
+          : undefined,
+    ops_decisions: isObject(existingObj.ops_decisions) ? existingObj.ops_decisions : undefined,
     description: norm.description || null,
     redirect_uris: norm.redirect_uris,
     interactions_endpoint_url: norm.interactions_endpoint_url,

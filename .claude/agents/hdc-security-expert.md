@@ -1,15 +1,10 @@
----
+﻿---
 name: hdc-security-expert
 description: >-
-  HDC security operations: watches Wazuh, CrowdSec, nginx-waf, Splunk; alerts on
-  threats and blocks via existing bouncers/WAF. Use for active security
-  incidents and response.
+  Thin pointer to hdc-agent-server agent definition.
 ---
 
-Canonical definition: [`.cursor/agents/hdc-security-expert.md`](../../.cursor/agents/hdc-security-expert.md).
+Canonical definition: [pps/hdc-agent-server/agents/hdc-security-expert.md](../../apps/hdc-agent-server/agents/hdc-security-expert.md).
 
-Read that file now and follow it exactly, including the skills it references
-(`.cursor/skills/hdc-security/SKILL.md`, `.cursor/skills/hdc-agent-team/SKILL.md`).
-This pointer exists only because Claude Code loads subagents from `.claude/agents/` —
-the actual instructions are not duplicated here, so `.cursor/agents/` is the single
-source of truth.
+Read that file and follow it. Skills live under pps/hdc-agent-server/skills/.
+This pointer exists because Claude Code loads subagents from .claude/agents/.

@@ -14,17 +14,14 @@ import {
 export { resolvePveSshForHost };
 
 /**
- * Sync public hdc tree into compose context as ./hdc for Docker build.
- * Operator must have already rsynced hdc to guest /opt/hdc-src (or we copy from a tarball).
- * Maintain uses guest /opt/hdc-src when present; else expects build context filled by deploy script.
- *
  * @param {string} composeDirPath
  * @param {string} dockerfile
  * @param {string} composeYaml
- * @param {{ build?: boolean }} [opts]
+ * @param {{ build?: boolean, composeEnv?: string, schedulesJson?: string, metaRoot?: string }} [opts]
  */
 export function buildStackScript(composeDirPath, dockerfile, composeYaml, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
+  const meta = (opts.metaRoot || "/opt/hdc-agents-meta").replace(/'/g, `'\\''`);
   const lines = [
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
@@ -39,7 +36,7 @@ export function buildStackScript(composeDirPath, dockerfile, composeYaml, opts =
     "  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin",
     "fi",
     "systemctl enable --now docker",
-    `mkdir -p '${dir}/hdc' /opt/hdc-private/operations/tasks /opt/hdc-src`,
+    `mkdir -p '${dir}/hdc' /opt/hdc-private/operations/tasks /opt/hdc-src '${meta}/logs'`,
     "if test -d /opt/hdc-src/apps; then",
     `  rsync -a --delete --exclude node_modules --exclude .git /opt/hdc-src/ '${dir}/hdc/'`,
     "elif test -d /opt/hdc/apps; then",
@@ -51,8 +48,19 @@ export function buildStackScript(composeDirPath, dockerfile, composeYaml, opts =
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
     composeYaml.trimEnd(),
     "HDCOMPOSE",
-    `cd '${dir}'`,
   ];
+  if (opts.composeEnv) {
+    const b64 = Buffer.from(opts.composeEnv, "utf8").toString("base64");
+    lines.push(`echo '${b64}' | base64 -d > '${dir}/.env'`);
+    lines.push(`chmod 600 '${dir}/.env'`);
+    lines.push(`echo '${b64}' | base64 -d > '${meta}/.env'`);
+    lines.push(`chmod 600 '${meta}/.env'`);
+  }
+  if (opts.schedulesJson) {
+    const b64 = Buffer.from(opts.schedulesJson, "utf8").toString("base64");
+    lines.push(`echo '${b64}' | base64 -d > '${meta}/schedules.json'`);
+  }
+  lines.push(`cd '${dir}'`);
   if (opts.build !== false) {
     lines.push("docker compose build");
   }
@@ -64,11 +72,14 @@ export function buildStackScript(composeDirPath, dockerfile, composeYaml, opts =
  * @param {string} composeDirPath
  * @param {string} dockerfile
  * @param {string} composeYaml
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean, composeEnv?: string, schedulesJson?: string, metaRoot?: string }} [opts]
  */
 export function buildMaintainScript(composeDirPath, dockerfile, composeYaml, opts = {}) {
   return buildStackScript(composeDirPath, dockerfile, composeYaml, {
     build: !opts.skipUpgrade,
+    composeEnv: opts.composeEnv,
+    schedulesJson: opts.schedulesJson,
+    metaRoot: opts.metaRoot,
   });
 }
 
@@ -103,8 +114,9 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  * @param {number} vmid
  * @param {Record<string, unknown>} hdcAgents
  * @param {Record<string, unknown>} install
+ * @param {{ composeEnv?: string, schedulesJson?: string, metaRoot?: string }} [opts]
  */
-export async function installHdcAgentsInCt(user, pveHost, vmid, hdcAgents, install) {
+export async function installHdcAgentsInCt(user, pveHost, vmid, hdcAgents, install, opts = {}) {
   errout.write(`[hdc] hdc-agents install: Docker Compose build in CT ${vmid} …\n`);
 
   const ready = await waitForCt(user, pveHost, vmid, 2000, "hdc-agents install");
@@ -116,7 +128,12 @@ export async function installHdcAgentsInCt(user, pveHost, vmid, hdcAgents, insta
   const dir = composeDir(install);
   const dockerfile = renderDockerfile(hdcAgents);
   const composeYaml = renderComposeYaml(hdcAgents, install, { guestIp: ip });
-  const script = buildStackScript(dir, dockerfile, composeYaml, { build: true });
+  const script = buildStackScript(dir, dockerfile, composeYaml, {
+    build: true,
+    composeEnv: opts.composeEnv,
+    schedulesJson: opts.schedulesJson,
+    metaRoot: opts.metaRoot,
+  });
   const r = pctExec(user, pveHost, vmid, script, { capture: true });
   if (r.status !== 0) {
     return {
@@ -142,7 +159,7 @@ export async function installHdcAgentsInCt(user, pveHost, vmid, hdcAgents, insta
  * @param {number} vmid
  * @param {Record<string, unknown>} hdcAgents
  * @param {Record<string, unknown>} install
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean, composeEnv?: string, schedulesJson?: string, metaRoot?: string }} [opts]
  */
 export async function maintainHdcAgentsInCt(user, pveHost, vmid, hdcAgents, install, opts = {}) {
   errout.write(`[hdc] hdc-agents maintain: re-push compose in CT ${vmid} …\n`);

@@ -175,20 +175,20 @@ describe("litellm-config-render", () => {
       ],
       a2a_agents: [
         {
-          name: "hdc-runner",
-          url: "http://192.0.2.125:9120",
-          description: "HDC runner task/approval A2A endpoint",
-          card_name: "hdc-agent-team",
+          name: "hdc-manager",
+          url: "http://192.0.2.117:9200",
+          description: "HDC manager agent (hdc-agents fleet)",
+          card_name: "hdc-manager",
           protocol_version: "0.3",
         },
       ],
     });
 
     expect(yaml).toContain("agents:");
-    expect(yaml).toContain("agent_name: hdc-runner");
-    expect(yaml).toContain("name: hdc-agent-team");
-    expect(yaml).toContain("url: http://192.0.2.125:9120");
+    expect(yaml).toContain("agent_name: hdc-manager");
+    expect(yaml).toContain("name: hdc-manager");
+    expect(yaml).toContain("url: http://192.0.2.117:9200");
     expect(yaml).toContain("protocolVersion: \"0.3\"");
-    expect(yaml).toContain('description: "HDC runner task/approval A2A endpoint"');
+    expect(yaml).toContain('description: "HDC manager agent (hdc-agents fleet)"');
   });
 });

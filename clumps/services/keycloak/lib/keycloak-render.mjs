@@ -57,11 +57,18 @@ export function imageTag(keycloak) {
 }
 
 /**
+ * Master-realm admin username for Admin API + compose bootstrap env.
+ * Precedence: `keycloak.admin_user` → env `HDC_KEYCLOAK_ADMIN_USER` → `"admin"`.
+ *
  * @param {Record<string, unknown>} keycloak
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function adminUser(keycloak) {
-  const user = typeof keycloak.admin_user === "string" ? keycloak.admin_user.trim() : "";
-  return user || "admin";
+export function adminUser(keycloak, env = process.env) {
+  const fromCfg = typeof keycloak.admin_user === "string" ? keycloak.admin_user.trim() : "";
+  if (fromCfg) return fromCfg;
+  const fromEnv = String(env.HDC_KEYCLOAK_ADMIN_USER ?? "").trim();
+  if (fromEnv) return fromEnv;
+  return "admin";
 }
 
 /**

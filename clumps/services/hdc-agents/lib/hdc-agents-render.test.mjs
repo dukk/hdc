@@ -16,6 +16,16 @@ describe("hdc-agents-render", () => {
     expect(yaml).toContain("HDC_AGENT_ROLE: hdc-manager");
     expect(yaml).toContain('"9200:9200/tcp"');
     expect(yaml).toContain("hdc-engineer");
+    expect(yaml).toContain("hdc-scheduler");
+    expect(yaml).toContain("hdc-web");
+    expect(yaml).toContain("HDC_MCP_REQUIRE_API_KEY");
+    expect(yaml).toContain('"9120:9120/tcp"');
+    expect(yaml).toContain("env_file:");
+    expect(yaml).toContain("/opt/hdc-agents/.env");
+    expect(yaml).toContain("HDC_WEB_META_ROOT: /opt/hdc-agents-meta");
+    expect(yaml).toContain("HDC_WEB_OIDC_ISSUER");
+    expect(yaml).toContain("HDC_WEB_OIDC_CLIENT_SECRET");
+    expect(yaml).not.toContain("HDC_WEB_UI_PASSWORD");
   });
 
   it("builds litellm a2a entries from guest ip", () => {

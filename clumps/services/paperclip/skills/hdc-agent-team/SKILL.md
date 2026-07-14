@@ -1,12 +1,12 @@
 ---
 name: hdc-agent-team
-description: Use when coordinating HDC homelab work across agents — task files, delegation policy, escalation, and role boundaries. Do not use for executing hdc CLI directly without hdc-runner skill.
+description: Use when coordinating HDC homelab work across agents — task files, delegation policy, escalation, and role boundaries. Do not use for executing hdc CLI directly without hdc-web-server / agent fleet access.
 slug: hdc-agent-team
 ---
 
 # HDC agent team conventions
 
-## Paths (hdc-private on hdc-runner guest)
+## Paths (hdc-private on hdc-agents guest)
 
 | Path | Purpose |
 |------|---------|
@@ -16,11 +16,11 @@ slug: hdc-agent-team
 | `operations/ip-allocations.md` | IP groups and next-free addresses |
 | `operations/reports/` | Monitor, security, research digests |
 
-Task state is **guest-authoritative** on hdc-runner. Use hdc-runner web UI or A2A for approvals.
+Task state is **guest-authoritative** on hdc-agents. Use hdc-web-server Tasks UI (`:9120`) or A2A for approvals.
 
 ## Task file schema
 
-See `.cursor/skills/hdc-agent-team/SKILL.md` in the hdc repo for frontmatter fields.
+See `apps/hdc-agent-server/skills/hdc-agent-team/SKILL.md` in the hdc repo for frontmatter fields.
 
 Status: `pending` | `approved` | `in_progress` | `blocked` | `done`
 
@@ -31,13 +31,13 @@ Priority: `critical` | `high` | `medium` | `low`
 | Agent | May execute | Must not |
 |-------|-------------|----------|
 | HDC Manager | Prioritize, assign, notify | deploy/prune without approval |
-| HDC Monitor | Health queries via hdc-runner, digests | Change service configs |
+| HDC Monitor | Health queries via hdc-web / fleet, digests | Change service configs |
 | HDC SRE | Approved maintains/deploys | Skip approval for destructive verbs |
 | HDC Security | Security queries, crowdsec bouncer sync | Ad-hoc firewall edits |
 
 ## Rules
 
-- Never invent hostnames, IPs, or credentials — use inventory via hdc-runner API
+- Never invent hostnames, IPs, or credentials — use inventory via hdc-web-server API
 - Secrets: env var names only; values in vault
 - Destructive work requires Paperclip issue explicitly approved by operator
 

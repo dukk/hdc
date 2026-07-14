@@ -66,7 +66,7 @@ Applications and workloads on Proxmox guests, Synology, or configure-only SSH ta
 | [draw-io](services/draw-io/README.md) | `draw-io` | draw.io (diagrams.net) | [config.example.json](services/draw-io/config.example.json) | `http://<guest-ip>:8080` or HTTPS via nginx-waf |
 | [gatus](services/gatus/README.md) | `gatus` | Gatus health dashboard | [config.example.json](services/gatus/config.example.json) | `http://<guest-ip>:8080` |
 | [gitlab](services/gitlab/README.md) | `gitlab` | GitLab CE | [config.example.json](services/gitlab/config.example.json) | `http://<guest-ip>:80` or HTTPS; Git SSH `:2222` |
-| [hdc-runner](services/hdc-runner/README.md) | `hdc-runner` | HDC scheduled automation runner | [config.example.json](services/hdc-runner/config.example.json) | SSH to `<guest-ip>`; cron runs hdc CLI |
+| [hdc-agents](services/hdc-agents/README.md) | `hdc-agents` | HDC agent fleet + scheduler (replaces hdc-runner); Tasks UI via hdc-web-server `:9120` | [config.example.json](services/hdc-agents/config.example.json) | Agent A2A `:9200–9207`; web UI `:9120` |
 | [homeassistant](services/homeassistant/README.md) | `homeassistant` | Home Assistant | [config.example.json](services/homeassistant/config.example.json) | `http://<guest-ip>:8123` or HTTPS via nginx-waf |
 | [homepage](services/homepage/README.md) | `homepage` | Homepage (gethomepage.dev) | [config.example.json](services/homepage/config.example.json) | `http://<guest-ip>:3000` or HTTPS (often internal-only) |
 | [immich](services/immich/README.md) | `immich` | Immich photo library | [config.example.json](services/immich/config.example.json) | `http://<guest-ip>:2283` or HTTPS via nginx-waf |

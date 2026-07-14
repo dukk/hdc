@@ -13,7 +13,7 @@ import {
   resolveAgentRole,
 } from "./policy.mjs";
 
-describe("hdc-mcp policy", () => {
+describe("hdc-mcp-server policy", () => {
   it("normalizes infra to infrastructure", () => {
     expect(normalizeTier("infra")).toBe("infrastructure");
     expect(normalizeTier("service")).toBe("service");

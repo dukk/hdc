@@ -21,7 +21,7 @@
       "host_port": 8080,
       "public_url": "https://keycloak.example.invalid",
       "external_url": "https://keycloak.example.invalid",
-      "admin_user": "admin",
+      "admin_user": "hdc",
       "admin_password_vault_key": "HDC_KEYCLOAK_ADMIN_PASSWORD",
       "database": {
         "mode": "bundled",

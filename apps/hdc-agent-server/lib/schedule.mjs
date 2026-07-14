@@ -1,19 +1,22 @@
 /**
  * Optional container-native schedule: set HDC_AGENT_SCHEDULE_MINUTES (>0) to
- * periodically enqueue a sweep message on the local A2A task queue.
+ * periodically run the scripted dispatcher (LLM only when work is detected).
  *
  * Defaults by role when env unset:
- * - hdc-monitor: 240 (4h)
- * - hdc-security-expert: 360 (6h)
+ * - hdc-manager: 15
+ * - hdc-monitor: 60
+ * - hdc-security-expert: 120
  * - hdc-research: 10080 (7d)
- * - others: disabled (0)
+ * - others: disabled (0) — A2A on-demand only
  */
 export function defaultScheduleMinutes(role) {
   switch (role) {
+    case "hdc-manager":
+      return 15;
     case "hdc-monitor":
-      return 240;
+      return 60;
     case "hdc-security-expert":
-      return 360;
+      return 120;
     case "hdc-research":
       return 10080;
     default:
@@ -38,7 +41,7 @@ export function resolveScheduleMinutes(role, env = process.env) {
 /**
  * @param {object} opts
  * @param {string} opts.role
- * @param {() => Promise<string>} opts.runSweep
+ * @param {() => Promise<void>} opts.runSweep
  * @param {(line: string) => void} [opts.log]
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @returns {(() => void) | null} cancel function
@@ -48,7 +51,7 @@ export function startScheduleLoop(opts) {
   if (!minutes) return null;
   const ms = minutes * 60 * 1000;
   const log = opts.log ?? ((line) => process.stderr.write(`${line}\n`));
-  log(`[hdc-agent-server] schedule: every ${minutes}m for ${opts.role}`);
+  log(`[hdc-agent-server] schedule: every ${minutes}m for ${opts.role} (scripted dispatcher)`);
 
   let running = false;
   const tick = async () => {
@@ -73,14 +76,4 @@ export function startScheduleLoop(opts) {
   if (typeof handle.unref === "function") handle.unref();
 
   return () => clearInterval(handle);
-}
-
-/**
- * @param {string} role
- */
-export function defaultSweepPrompt(role) {
-  return (
-    `Scheduled ${role} sweep. Follow your agent definition and hdc-agent-team skill. ` +
-    `Use query-only tools unless policy allows maintain. Write digests/tasks under operations/ as appropriate.`
-  );
 }

@@ -6,8 +6,17 @@ import { fileURLToPath } from "node:url";
 export const OPS_DISCORD_WEBHOOK_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
 export const OPS_DISCORD_NOTIFY_ENV = "HDC_OPS_DISCORD_NOTIFY";
 export const OPS_DISCORD_HOST_ENV = "HDC_OPS_DISCORD_HOST";
+export const OPS_DISCORD_APPLICATION_ID_ENV = "HDC_OPS_DISCORD_APPLICATION_ID";
+export const OPS_DISCORD_PUBLIC_KEY_ENV = "HDC_OPS_DISCORD_PUBLIC_KEY";
+export const OPS_DISCORD_BOT_TOKEN_ENV = "HDC_OPS_DISCORD_BOT_TOKEN";
+export const OPS_DISCORD_CHANNEL_ID_ENV = "HDC_OPS_DISCORD_CHANNEL_ID";
 export const DISCORD_SUPPRESS_NOTIFICATIONS_FLAG = 4096;
+export const DISCORD_BUTTON_STYLE_SUCCESS = 3;
+export const DISCORD_BUTTON_STYLE_DANGER = 4;
+export const DISCORD_COMPONENT_ACTION_ROW = 1;
+export const DISCORD_COMPONENT_BUTTON = 2;
 const MAX_CONTENT = 1900;
+const DEFAULT_DISCORD_API_BASE = "https://discord.com/api/v10";
 
 const IPV4_CIDR_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
 const IPV6_RE =
@@ -75,6 +84,172 @@ export async function postDiscordWebhook(url, content, opts = {}) {
     const snippet = (await res.text()).slice(0, 200);
     throw new Error(`Discord webhook HTTP ${res.status}: ${snippet}`);
   }
+}
+
+/**
+ * Resolve Bot API credentials for interactive decision messages.
+ * All four of application_id, public_key, bot_token, channel_id must be present.
+ *
+ * @param {object} [opts]
+ * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {(key: string, opts?: { optional?: boolean }) => Promise<string | null>} [opts.getSecret]
+ * @returns {Promise<{
+ *   enabled: boolean;
+ *   applicationId?: string;
+ *   publicKey?: string;
+ *   botToken?: string;
+ *   channelId?: string;
+ *   apiBase?: string;
+ * }>}
+ */
+export async function resolveOpsDiscordInteractiveConfig(opts = {}) {
+  const env = opts.env ?? process.env;
+  const applicationId = String(env[OPS_DISCORD_APPLICATION_ID_ENV] ?? "").trim();
+  const publicKey = String(env[OPS_DISCORD_PUBLIC_KEY_ENV] ?? "").trim();
+  const channelId = String(env[OPS_DISCORD_CHANNEL_ID_ENV] ?? "").trim();
+  let botToken = String(env[OPS_DISCORD_BOT_TOKEN_ENV] ?? "").trim();
+  if (!botToken && opts.getSecret) {
+    botToken = String(
+      (await opts.getSecret(OPS_DISCORD_BOT_TOKEN_ENV, { optional: true })) ?? "",
+    ).trim();
+  }
+  if (!applicationId || !publicKey || !botToken || !channelId) {
+    return { enabled: false };
+  }
+  const apiBase = String(env.HDC_OPS_DISCORD_API_BASE ?? DEFAULT_DISCORD_API_BASE)
+    .trim()
+    .replace(/\/$/, "");
+  return {
+    enabled: true,
+    applicationId,
+    publicKey,
+    botToken,
+    channelId,
+    apiBase: apiBase || DEFAULT_DISCORD_API_BASE,
+  };
+}
+
+/**
+ * @param {string} taskId
+ * @returns {unknown[]}
+ */
+export function buildDecisionMessageComponents(taskId) {
+  const id = String(taskId ?? "").trim();
+  if (!id) throw new Error("taskId is required for decision buttons");
+  return [
+    {
+      type: DISCORD_COMPONENT_ACTION_ROW,
+      components: [
+        {
+          type: DISCORD_COMPONENT_BUTTON,
+          style: DISCORD_BUTTON_STYLE_SUCCESS,
+          label: "Approve",
+          custom_id: `hdc:approve:${id}`,
+        },
+        {
+          type: DISCORD_COMPONENT_BUTTON,
+          style: DISCORD_BUTTON_STYLE_DANGER,
+          label: "Deny",
+          custom_id: `hdc:deny:${id}`,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * Post a channel message via Bot API (supports message components).
+ *
+ * @param {object} opts
+ * @param {string} opts.botToken
+ * @param {string} opts.channelId
+ * @param {string} opts.content
+ * @param {unknown[]} [opts.components]
+ * @param {boolean} [opts.suppressNotifications]
+ * @param {string} [opts.apiBase]
+ */
+export async function postDiscordBotChannelMessage(opts) {
+  const apiBase = (opts.apiBase || DEFAULT_DISCORD_API_BASE).replace(/\/$/, "");
+  const channelId = String(opts.channelId ?? "").trim();
+  if (!channelId) throw new Error("channelId is required");
+  const botToken = String(opts.botToken ?? "").trim();
+  if (!botToken) throw new Error("botToken is required");
+
+  /** @type {{ content: string; components?: unknown[]; flags?: number }} */
+  const payload = { content: opts.content };
+  if (Array.isArray(opts.components) && opts.components.length) {
+    payload.components = opts.components;
+  }
+  if (opts.suppressNotifications) {
+    payload.flags = DISCORD_SUPPRESS_NOTIFICATIONS_FLAG;
+  }
+
+  const res = await fetch(`${apiBase}/channels/${encodeURIComponent(channelId)}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bot ${botToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`Discord Bot API HTTP ${res.status}: ${snippet}`);
+  }
+  return res.json().catch(() => ({}));
+}
+
+/**
+ * Send a decision-oriented Discord message: Bot + buttons when interactive config
+ * is complete, otherwise plain webhook.
+ *
+ * @param {object} opts
+ * @param {string} opts.content
+ * @param {string} [opts.taskId]
+ * @param {boolean} [opts.decision]
+ * @param {boolean} [opts.suppressNotifications]
+ * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {(key: string, opts?: { optional?: boolean }) => Promise<string | null>} [opts.getSecret]
+ * @returns {Promise<{ ok: true; mode: "bot" | "webhook" }>}
+ */
+export async function sendOpsDiscordMessage(opts) {
+  const decision = opts.decision === true;
+  const taskId = String(opts.taskId ?? "").trim();
+  if (decision && !taskId) {
+    throw new Error("taskId is required when decision is true");
+  }
+
+  if (decision) {
+    const interactive = await resolveOpsDiscordInteractiveConfig({
+      env: opts.env,
+      getSecret: opts.getSecret,
+    });
+    if (interactive.enabled && interactive.botToken && interactive.channelId) {
+      await postDiscordBotChannelMessage({
+        botToken: interactive.botToken,
+        channelId: interactive.channelId,
+        content: opts.content,
+        components: buildDecisionMessageComponents(taskId),
+        suppressNotifications: opts.suppressNotifications,
+        apiBase: interactive.apiBase,
+      });
+      return { ok: true, mode: "bot" };
+    }
+  }
+
+  const url = await resolveOpsDiscordWebhookUrl({
+    env: opts.env,
+    getSecret: opts.getSecret,
+  });
+  if (!url) {
+    throw new Error(
+      `set ${OPS_DISCORD_WEBHOOK_KEY} in vault (or interactive Discord bot env for --decision)`,
+    );
+  }
+  await postDiscordWebhook(url, opts.content, {
+    suppressNotifications: opts.suppressNotifications,
+  });
+  return { ok: true, mode: "webhook" };
 }
 
 /**

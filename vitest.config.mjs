@@ -6,7 +6,9 @@ export default defineConfig({
     setupFiles: ["apps/hdc-cli/test/vitest-setup.mjs"],
     include: [
       "apps/hdc-cli/**/*.test.mjs",
-      "apps/hdc-mcp/**/*.test.mjs",
+      "apps/hdc-mcp-server/**/*.test.mjs",
+      "apps/hdc-agent-server/**/*.test.mjs",
+      "apps/hdc-web-server/**/*.test.mjs",
       "clumps/lib/**/*.test.mjs",
       "clumps/clients/**/*.test.mjs",
       "clumps/infrastructure/**/*.test.mjs",

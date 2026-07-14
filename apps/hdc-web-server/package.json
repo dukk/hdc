@@ -1,0 +1,27 @@
+{
+  "name": "hdc-web-server",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "HDC LAN web UI and JSON API (ported from hdc-runner web)",
+  "bin": {
+    "hdc-web-server": "./server.mjs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node server.mjs",
+    "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0"
+  }
+}

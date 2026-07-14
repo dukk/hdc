@@ -1,12 +1,13 @@
 import { loadRolePrompt, stripFrontmatter } from "./role-prompt.mjs";
+import { loadAutomationRules, loadSkillsForRole } from "./skill-load.mjs";
 import {
   handleHdcHelp,
   handleHdcList,
   handleHdcMaintainDaily,
   handleHdcNotifyDiscord,
   handleHdcRun,
-} from "../hdc-mcp/lib/tools.mjs";
-import { getRolePolicy, resolveAgentRole } from "../hdc-mcp/lib/policy.mjs";
+} from "../../hdc-mcp-server/lib/tools.mjs";
+import { getRolePolicy, resolveAgentRole } from "../../hdc-mcp-server/lib/policy.mjs";
 
 const TOOL_HANDLERS = {
   hdc_list: handleHdcList,
@@ -126,12 +127,19 @@ export async function runAgentTurn(opts) {
   const model = process.env.HDC_AGENT_MODEL || "lan-best-available";
   const maxRounds = Number(process.env.HDC_AGENT_MAX_ROUNDS || 8);
 
+  const skillText = loadSkillsForRole(opts.hdcRoot, role);
+  const rulesText = loadAutomationRules(opts.hdcRoot);
   const system = [
     stripFrontmatter(loadRolePrompt(opts.hdcRoot, role)),
     "",
+    skillText ? `---\n${skillText}` : "",
+    rulesText ? `---\n## Fleet rules\n${rulesText}` : "",
+    "",
     "You act only through the provided hdc tools. Prefer query over maintain. Never invent IPs or secrets.",
     "When finished, reply with a concise summary of actions and findings.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   /** @type {object[]} */
   const messages = [

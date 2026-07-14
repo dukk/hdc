@@ -84,12 +84,15 @@ RUN apt-get update -qq \\
   && apt-get install -y -qq ca-certificates git \\
   && rm -rf /var/lib/apt/lists/*
 COPY hdc/ /opt/hdc/
-WORKDIR /opt/hdc/apps/hdc-mcp
+WORKDIR /opt/hdc/apps/hdc-mcp-server
 RUN npm install --omit=dev --no-fund --no-audit || true
+WORKDIR /opt/hdc/apps/hdc-web-server
+RUN npm install --omit=dev --no-fund --no-audit || true
+RUN npm run build || true
 ENV HDC_ROOT=/opt/hdc
 ENV NODE_ENV=production
 WORKDIR /opt/hdc
-EXPOSE 9200
+EXPOSE 9120 9200
 CMD ["node", "apps/hdc-agent-server/server.mjs"]
 `;
 }
@@ -122,6 +125,8 @@ export function renderComposeYaml(hdcAgents, install, opts = {}) {
     lines.push(`      context: ${dir}`);
     lines.push(`      dockerfile: Dockerfile`);
     lines.push(`    restart: unless-stopped`);
+    lines.push(`    env_file:`);
+    lines.push(`      - ${dir}/.env`);
     lines.push(`    ports:`);
     lines.push(`      - "${port}:${port}/tcp"`);
     lines.push(`    environment:`);
@@ -132,13 +137,70 @@ export function renderComposeYaml(hdcAgents, install, opts = {}) {
     lines.push(`      HDC_LITELLM_BASE_URL: '${litellm}'`);
     lines.push(`      HDC_AGENT_MODEL: '${model.replace(/'/g, "''")}'`);
     lines.push(`      HDC_AGENT_LITELLM_KEY: \${${keyEnv}:-}`);
+    const mcpKeyEnv = `HDC_MCP_API_KEY_${role.replace(/-/g, "_").toUpperCase()}`;
+    lines.push(`      HDC_MCP_API_KEY: \${${mcpKeyEnv}:-}`);
+    lines.push(`      HDC_MCP_REQUIRE_API_KEY: "1"`);
     lines.push(`    volumes:`);
     lines.push(`      - /opt/hdc-private:/opt/hdc-private:${opsMode}`);
     if (role === "hdc-engineer") {
       lines.push(`      - /opt/hdc-src:/opt/hdc:rw`);
     }
   }
-  void opts;
+
+  // CLI job scheduler (no LiteLLM)
+  lines.push(`  hdc-scheduler:`);
+  lines.push(`    container_name: hdc-scheduler`);
+  lines.push(`    image: ${image}`);
+  lines.push(`    build:`);
+  lines.push(`      context: ${dir}`);
+  lines.push(`      dockerfile: Dockerfile`);
+  lines.push(`    restart: unless-stopped`);
+  lines.push(`    env_file:`);
+  lines.push(`      - ${dir}/.env`);
+  lines.push(`    command: ["node", "apps/hdc-agent-server/bin/scheduler.mjs"]`);
+  lines.push(`    environment:`);
+  lines.push(`      HDC_AGENT_ROLE: hdc-scheduler`);
+  lines.push(`      HDC_ROOT: /opt/hdc`);
+  lines.push(`      HDC_PRIVATE_ROOT: /opt/hdc-private`);
+  lines.push(`      HDC_AGENTS_META_ROOT: /opt/hdc-agents-meta`);
+  lines.push(`      HDC_MCP_API_KEY: \${HDC_MCP_API_KEY_HDC_SCHEDULER:-}`);
+  lines.push(`      HDC_MCP_REQUIRE_API_KEY: "1"`);
+  lines.push(`    volumes:`);
+  lines.push(`      - /opt/hdc-private:/opt/hdc-private:rw`);
+  lines.push(`      - /opt/hdc-agents-meta:/opt/hdc-agents-meta:rw`);
+  if (opts.mountHdcSrc !== false) {
+    lines.push(`      - /opt/hdc-src:/opt/hdc:ro`);
+  }
+
+  // Ops web UI (React)
+  lines.push(`  hdc-web:`);
+  lines.push(`    container_name: hdc-web`);
+  lines.push(`    image: ${image}`);
+  lines.push(`    build:`);
+  lines.push(`      context: ${dir}`);
+  lines.push(`      dockerfile: Dockerfile`);
+  lines.push(`    restart: unless-stopped`);
+  lines.push(`    env_file:`);
+  lines.push(`      - ${dir}/.env`);
+  lines.push(`    command: ["node", "apps/hdc-web-server/server.mjs"]`);
+  lines.push(`    ports:`);
+  lines.push(`      - "9120:9120/tcp"`);
+  lines.push(`    environment:`);
+  lines.push(`      HDC_WEB_PORT: "9120"`);
+  lines.push(`      HDC_ROOT: /opt/hdc`);
+  lines.push(`      HDC_PRIVATE_ROOT: /opt/hdc-private`);
+  lines.push(`      HDC_AGENTS_META_ROOT: /opt/hdc-agents-meta`);
+  lines.push(`      HDC_WEB_META_ROOT: /opt/hdc-agents-meta`);
+  lines.push(`      HDC_WEB_UI_SESSION_SECRET: \${HDC_WEB_UI_SESSION_SECRET:-}`);
+  lines.push(`      HDC_WEB_API_TOKEN: \${HDC_WEB_API_TOKEN:-}`);
+  lines.push(`      HDC_WEB_OIDC_ISSUER: \${HDC_WEB_OIDC_ISSUER:-}`);
+  lines.push(`      HDC_WEB_OIDC_CLIENT_ID: \${HDC_WEB_OIDC_CLIENT_ID:-}`);
+  lines.push(`      HDC_WEB_OIDC_CLIENT_SECRET: \${HDC_WEB_OIDC_CLIENT_SECRET:-}`);
+  lines.push(`      HDC_WEB_PUBLIC_URL: \${HDC_WEB_PUBLIC_URL:-}`);
+  lines.push(`    volumes:`);
+  lines.push(`      - /opt/hdc-private:/opt/hdc-private:rw`);
+  lines.push(`      - /opt/hdc-agents-meta:/opt/hdc-agents-meta:rw`);
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -193,11 +255,16 @@ export function resolveWebUrl(ctIp, hdcAgents) {
   } catch {
     /* ignore */
   }
+  if (ctIp) return `http://${ctIp}:9120`;
   return resolveUpstreamUrl(ctIp, hdcAgents);
 }
 
-/** Manager listen port (health check). */
+/** Manager listen port (health check for agents). Web UI is 9120. */
 export function hostPort(hdcAgents) {
   const agents = enabledAgents(hdcAgents);
   return agents.find((a) => a.role === "hdc-manager")?.port ?? 9200;
+}
+
+export function webHostPort() {
+  return 9120;
 }

@@ -17,8 +17,15 @@ import { provisionLogFromConsole } from "../../../lib/host-provisioner.mjs";
 import { parseArgvFlags, flagGet } from "../../../lib/parse-argv-flags.mjs";
 import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-configure.mjs";
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
+import { hdcPrivateRoot } from "../../../../apps/hdc-cli/lib/private-repo.mjs";
 import { resolveHdcAgentsDeployments } from "../lib/deployments.mjs";
-import { maintainHdcAgentsInCt, resolvePveSshForHost } from "../lib/hdc-agents-install.mjs";
+import {
+  maintainHdcAgentsInCt,
+  readCtPrimaryIp,
+  resolvePveSshForHost,
+} from "../lib/hdc-agents-install.mjs";
+import { prepareAgentsGuestSecrets } from "../lib/hdc-agents-guest-secrets.mjs";
+import { syncHdcTreesToGuest, syncHdcTreesViaPct } from "../lib/hdc-agents-sync.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
 
@@ -56,6 +63,8 @@ function readCfg() {
 async function maintainOne(deployment, flags, vaultAccess) {
   const { systemId, proxmox: px, hdc_agents, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
+  const skipSync = flagGet(flags, "skip-sync", "skip_sync") !== undefined;
+  const rotateMcpKeys = flagGet(flags, "rotate-mcp-keys", "rotate_mcp_keys") !== undefined;
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -75,13 +84,85 @@ async function maintainOne(deployment, flags, vaultAccess) {
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const hdcAgentsCfg = isObject(hdc_agents) ? hdc_agents : {};
   const installCfg = isObject(install) ? install : {};
+  const metaRoot =
+    typeof installCfg.meta_root === "string" && installCfg.meta_root.trim()
+      ? installCfg.meta_root.trim()
+      : "/opt/hdc-agents-meta";
+
+  const privateRoot = hdcPrivateRoot(root);
+  if (!privateRoot) {
+    return { ok: false, system_id: systemId, message: "hdc-private not resolved" };
+  }
+
+  const guestSecrets = await prepareAgentsGuestSecrets({
+    vault: vaultAccess,
+    privateRoot,
+    hdcAgents: hdcAgentsCfg,
+    rotateMcpKeys,
+  });
+
+  const guestIp = readCtPrimaryIp(pveSsh.user, pveSsh.host, vmid);
+  if (!skipSync && guestIp) {
+    const syncExcludes = Array.isArray(
+      /** @type {Record<string, unknown>} */ (hdcAgentsCfg.sync || {}).exclude,
+    )
+      ? /** @type {string[]} */ (
+          /** @type {Record<string, unknown>} */ (hdcAgentsCfg.sync).exclude
+        )
+      : [".git", "node_modules", "**/reports"];
+    syncExcludes.push(
+      "operations/tasks/**",
+      "operations/task-report.md",
+      "operations/.dispatcher-state.json",
+    );
+    errout.write(`[hdc] ${target} ${verb}: syncing hdc trees → ${guestIp} …\n`);
+    let syncResult = syncHdcTreesToGuest({
+      publicRoot: root,
+      remoteUser: "hdc",
+      remoteHost: guestIp,
+      installRoot: "/opt/hdc-src",
+      privateRoot: "/opt/hdc-private",
+      exclude: syncExcludes,
+      log: {
+        info: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
+      },
+    });
+    if (!syncResult.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: guest SSH sync failed (${syncResult.message}); falling back to pct …\n`,
+      );
+      syncResult = syncHdcTreesViaPct({
+        publicRoot: root,
+        pveUser: pveSsh.user,
+        pveHost: pveSsh.host,
+        vmid,
+        installRoot: "/opt/hdc-src",
+        privateRoot: "/opt/hdc-private",
+        exclude: syncExcludes,
+        log: {
+          info: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
+        },
+      });
+    }
+    if (!syncResult.ok) {
+      errout.write(
+        `[hdc] ${target} ${verb}: sync warning: ${syncResult.message} (continuing with guest tree)\n`,
+      );
+    }
+  }
+
   const result = await maintainHdcAgentsInCt(
     pveSsh.user,
     pveSsh.host,
     vmid,
     hdcAgentsCfg,
     installCfg,
-    { skipUpgrade },
+    {
+      skipUpgrade,
+      composeEnv: guestSecrets.composeEnv,
+      schedulesJson: guestSecrets.schedulesJson,
+      metaRoot,
+    },
   );
 
   const log = provisionLogFromConsole(console);

@@ -1,5 +1,5 @@
 {
-  "name": "hdc-mcp",
+  "name": "hdc-mcp-server",
   "private": true,
   "type": "module",
   "version": "1.0.0",

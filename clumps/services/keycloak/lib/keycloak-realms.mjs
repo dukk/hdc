@@ -11,6 +11,8 @@ import {
 import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import {
   createKeycloakApiClientFromPassword,
+  listClients,
+  listIdentityProviders,
   listRealms,
   listUsers,
   reconcileKeycloakRealms,
@@ -49,6 +51,40 @@ function isObject(v) {
  */
 
 /**
+ * @typedef {object} KeycloakRealmClientConfig
+ * @property {string} client_id
+ * @property {string} [name]
+ * @property {boolean} [enabled]
+ * @property {string} [protocol]
+ * @property {boolean} [public_client]
+ * @property {boolean} [standard_flow_enabled]
+ * @property {boolean} [direct_access_grants_enabled]
+ * @property {boolean} [service_accounts_enabled]
+ * @property {boolean} [full_scope_allowed]
+ * @property {string} [root_url]
+ * @property {string} [base_url]
+ * @property {string[]} [redirect_uris]
+ * @property {string[]} [web_origins]
+ * @property {string} [secret_vault_key]
+ */
+
+/**
+ * @typedef {object} KeycloakRealmIdentityProviderConfig
+ * @property {string} alias
+ * @property {string} provider_id
+ * @property {boolean} [enabled]
+ * @property {string} [display_name]
+ * @property {boolean} [trust_email]
+ * @property {boolean} [store_token]
+ * @property {boolean} [link_only]
+ * @property {string} [first_broker_login_flow_alias]
+ * @property {string} [sync_mode]
+ * @property {string} [default_scope]
+ * @property {string} client_id
+ * @property {string} client_secret_vault_key
+ */
+
+/**
  * @typedef {object} KeycloakRealmConfig
  * @property {string} id
  * @property {string} realm
@@ -63,6 +99,8 @@ function isObject(v) {
  * @property {KeycloakRealmMailConfig} [mail]
  * @property {KeycloakSmtpServer} [smtp_server]
  * @property {KeycloakRealmUserConfig[]} users
+ * @property {KeycloakRealmClientConfig[]} clients
+ * @property {KeycloakRealmIdentityProviderConfig[]} [identity_providers]
  */
 
 /**
@@ -145,6 +183,107 @@ export function normalizeRealmUser(raw) {
 
 /**
  * @param {unknown} raw
+ * @returns {KeycloakRealmClientConfig}
+ */
+export function normalizeRealmClient(raw) {
+  if (!isObject(raw)) throw new Error("realm client must be an object");
+  const clientId = typeof raw.client_id === "string" ? raw.client_id.trim() : "";
+  if (!clientId) throw new Error("realm client needs client_id");
+  const publicClient = raw.public_client === true;
+  const secretVaultKey =
+    typeof raw.secret_vault_key === "string" && raw.secret_vault_key.trim()
+      ? raw.secret_vault_key.trim()
+      : "";
+  if (!publicClient && !secretVaultKey) {
+    throw new Error(`realm client ${clientId}: secret_vault_key is required for confidential clients`);
+  }
+  /** @type {KeycloakRealmClientConfig} */
+  const client = {
+    client_id: clientId,
+    public_client: publicClient,
+  };
+  if (secretVaultKey) client.secret_vault_key = secretVaultKey;
+  if (typeof raw.name === "string" && raw.name.trim()) client.name = raw.name.trim();
+  if (typeof raw.enabled === "boolean") client.enabled = raw.enabled;
+  if (typeof raw.protocol === "string" && raw.protocol.trim()) {
+    client.protocol = raw.protocol.trim();
+  }
+  if (typeof raw.standard_flow_enabled === "boolean") {
+    client.standard_flow_enabled = raw.standard_flow_enabled;
+  }
+  if (typeof raw.direct_access_grants_enabled === "boolean") {
+    client.direct_access_grants_enabled = raw.direct_access_grants_enabled;
+  }
+  if (typeof raw.service_accounts_enabled === "boolean") {
+    client.service_accounts_enabled = raw.service_accounts_enabled;
+  }
+  if (typeof raw.full_scope_allowed === "boolean") {
+    client.full_scope_allowed = raw.full_scope_allowed;
+  }
+  if (typeof raw.root_url === "string" && raw.root_url.trim()) {
+    client.root_url = raw.root_url.trim();
+  }
+  if (typeof raw.base_url === "string" && raw.base_url.trim()) {
+    client.base_url = raw.base_url.trim();
+  }
+  if (Array.isArray(raw.redirect_uris)) {
+    client.redirect_uris = raw.redirect_uris
+      .map((u) => (typeof u === "string" ? u.trim() : ""))
+      .filter(Boolean);
+  }
+  if (Array.isArray(raw.web_origins)) {
+    client.web_origins = raw.web_origins
+      .map((u) => (typeof u === "string" ? u.trim() : ""))
+      .filter((u) => u.length > 0);
+  }
+  return client;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {KeycloakRealmIdentityProviderConfig}
+ */
+export function normalizeRealmIdentityProvider(raw) {
+  if (!isObject(raw)) throw new Error("realm identity_provider must be an object");
+  const alias = typeof raw.alias === "string" ? raw.alias.trim() : "";
+  if (!alias) throw new Error("realm identity_provider needs alias");
+  const providerId = typeof raw.provider_id === "string" ? raw.provider_id.trim() : "";
+  if (!providerId) throw new Error(`identity_provider ${alias}: provider_id is required`);
+  const clientId = typeof raw.client_id === "string" ? raw.client_id.trim() : "";
+  if (!clientId) throw new Error(`identity_provider ${alias}: client_id is required`);
+  const secretVaultKey =
+    typeof raw.client_secret_vault_key === "string" ? raw.client_secret_vault_key.trim() : "";
+  if (!secretVaultKey) {
+    throw new Error(`identity_provider ${alias}: client_secret_vault_key is required`);
+  }
+  /** @type {KeycloakRealmIdentityProviderConfig} */
+  const idp = {
+    alias,
+    provider_id: providerId,
+    client_id: clientId,
+    client_secret_vault_key: secretVaultKey,
+  };
+  if (typeof raw.enabled === "boolean") idp.enabled = raw.enabled;
+  if (typeof raw.display_name === "string" && raw.display_name.trim()) {
+    idp.display_name = raw.display_name.trim();
+  }
+  if (typeof raw.trust_email === "boolean") idp.trust_email = raw.trust_email;
+  if (typeof raw.store_token === "boolean") idp.store_token = raw.store_token;
+  if (typeof raw.link_only === "boolean") idp.link_only = raw.link_only;
+  if (typeof raw.first_broker_login_flow_alias === "string" && raw.first_broker_login_flow_alias.trim()) {
+    idp.first_broker_login_flow_alias = raw.first_broker_login_flow_alias.trim();
+  }
+  if (typeof raw.sync_mode === "string" && raw.sync_mode.trim()) {
+    idp.sync_mode = raw.sync_mode.trim().toUpperCase();
+  }
+  if (typeof raw.default_scope === "string" && raw.default_scope.trim()) {
+    idp.default_scope = raw.default_scope.trim();
+  }
+  return idp;
+}
+
+/**
+ * @param {unknown} raw
  * @returns {KeycloakRealmConfig}
  */
 export function normalizeRealm(raw) {
@@ -177,12 +316,44 @@ export function normalizeRealm(raw) {
     }
     usernames.add(key);
   }
+  const clientsRaw = Array.isArray(raw.clients) ? raw.clients : [];
+  const clients = clientsRaw.map((c, i) => {
+    try {
+      return normalizeRealmClient(c);
+    } catch (e) {
+      throw new Error(`realm ${id} clients[${i}]: ${/** @type {Error} */ (e).message}`);
+    }
+  });
+  const clientIds = new Set();
+  for (const c of clients) {
+    if (clientIds.has(c.client_id)) {
+      throw new Error(`realm ${id}: duplicate client_id ${JSON.stringify(c.client_id)}`);
+    }
+    clientIds.add(c.client_id);
+  }
+  const idpsRaw = Array.isArray(raw.identity_providers) ? raw.identity_providers : [];
+  const identityProviders = idpsRaw.map((idp, i) => {
+    try {
+      return normalizeRealmIdentityProvider(idp);
+    } catch (e) {
+      throw new Error(`realm ${id} identity_providers[${i}]: ${/** @type {Error} */ (e).message}`);
+    }
+  });
+  const idpAliases = new Set();
+  for (const idp of identityProviders) {
+    if (idpAliases.has(idp.alias)) {
+      throw new Error(`realm ${id}: duplicate identity_provider alias ${JSON.stringify(idp.alias)}`);
+    }
+    idpAliases.add(idp.alias);
+  }
   /** @type {KeycloakRealmConfig} */
   const realm = {
     id,
     realm: realmName,
     enabled: raw.enabled !== false,
     users,
+    clients,
+    identity_providers: identityProviders,
   };
   if (typeof raw.display_name === "string") realm.display_name = raw.display_name.trim();
   if (typeof raw.login_with_email_allowed === "boolean") {
@@ -291,6 +462,50 @@ export async function resolveUserPassword(vault, user, opts = {}) {
 }
 
 /**
+ * @param {unknown} vault
+ * @param {KeycloakRealmClientConfig} clientCfg
+ * @param {{ autoGenerate?: boolean; log?: (line: string) => void }} [opts]
+ */
+export async function resolveClientSecret(vault, clientCfg, opts = {}) {
+  const log = opts.log ?? (() => {});
+  const key = clientCfg.secret_vault_key;
+  if (!key) return null;
+  await vault.unlock({});
+  const data = await vault.readSecrets({});
+  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  if (existing) {
+    log(`client secret loaded from vault ${key}`);
+    return existing;
+  }
+  if (opts.autoGenerate !== false) {
+    const generated = randomBytes(32).toString("base64url");
+    await vault.setSecret(key, generated);
+    log(`generated client secret and saved to vault ${key}`);
+    return generated;
+  }
+  return null;
+}
+
+/**
+ * Load IdP client secret from vault (never auto-mint — Entra owns the secret).
+ * @param {unknown} vault
+ * @param {KeycloakRealmIdentityProviderConfig} idp
+ * @param {{ log?: (line: string) => void }} [opts]
+ */
+export async function resolveIdentityProviderSecret(vault, idp, opts = {}) {
+  const log = opts.log ?? (() => {});
+  const key = idp.client_secret_vault_key;
+  await vault.unlock({});
+  const data = await vault.readSecrets({});
+  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  if (existing) {
+    log(`identity provider secret loaded from vault ${key}`);
+    return existing;
+  }
+  return null;
+}
+
+/**
  * Wait until Keycloak reports ready inside the CT (pct exec curl).
  * @param {string} user
  * @param {string} pveHost
@@ -341,12 +556,20 @@ export function filterRealmsByFlag(realms, filter) {
 }
 
 /**
- * Build realm/user drift fields for query --live.
+ * Build realm/user/client/IdP drift fields for query --live.
  * @param {KeycloakRealmConfig[]} configured
  * @param {Record<string, unknown>[]} liveRealms
  * @param {Map<string, string[]>} liveUsersByRealm
+ * @param {Map<string, string[]>} [liveClientsByRealm]
+ * @param {Map<string, string[]>} [liveIdpsByRealm]
  */
-export function buildRealmDriftFields(configured, liveRealms, liveUsersByRealm) {
+export function buildRealmDriftFields(
+  configured,
+  liveRealms,
+  liveUsersByRealm,
+  liveClientsByRealm = new Map(),
+  liveIdpsByRealm = new Map(),
+) {
   const configuredNames = configured.map((r) => r.realm);
   const liveNames = liveRealms
     .map((r) => (typeof r.realm === "string" ? r.realm : ""))
@@ -361,6 +584,14 @@ export function buildRealmDriftFields(configured, liveRealms, liveUsersByRealm) 
     const liveLower = liveUsers.map((u) => u.toLowerCase());
     const cfgSet = new Set(configuredUsers);
     const liveUserSet = new Set(liveLower);
+    const liveClients = liveClientsByRealm.get(r.realm) ?? [];
+    const configuredClients = (r.clients ?? []).map((c) => c.client_id);
+    const cfgClientSet = new Set(configuredClients);
+    const liveClientSet = new Set(liveClients);
+    const liveIdps = liveIdpsByRealm.get(r.realm) ?? [];
+    const configuredIdps = (r.identity_providers ?? []).map((idp) => idp.alias);
+    const cfgIdpSet = new Set(configuredIdps);
+    const liveIdpSet = new Set(liveIdps);
     perRealm.push({
       id: r.id,
       realm: r.realm,
@@ -369,6 +600,14 @@ export function buildRealmDriftFields(configured, liveRealms, liveUsersByRealm) 
       live_usernames: liveUsers,
       missing_users: configuredUsers.filter((u) => !liveUserSet.has(u)),
       extra_users: liveLower.filter((u) => !cfgSet.has(u)),
+      configured_client_ids: configuredClients,
+      live_client_ids: liveClients,
+      missing_clients: configuredClients.filter((c) => !liveClientSet.has(c)),
+      extra_clients: liveClients.filter((c) => !cfgClientSet.has(c)),
+      configured_identity_provider_aliases: configuredIdps,
+      live_identity_provider_aliases: liveIdps,
+      missing_identity_providers: configuredIdps.filter((a) => !liveIdpSet.has(a)),
+      extra_identity_providers: liveIdps.filter((a) => !cfgIdpSet.has(a)),
     });
   }
   return {
@@ -385,9 +624,12 @@ export function buildRealmDriftFields(configured, liveRealms, liveUsersByRealm) 
  * @param {unknown} vault
  * @param {{
  *   skipRealms?: boolean;
+ *   skipIdentityProviders?: boolean;
  *   prune?: boolean;
  *   dryRun?: boolean;
  *   rotateUserPasswords?: boolean;
+ *   rotateClientSecrets?: boolean;
+ *   rotateIdpSecrets?: boolean;
  *   realmFilter?: string;
  *   adminPassword?: string;
  *   ctIp?: string | null;
@@ -460,9 +702,21 @@ export async function reconcileKeycloakRealmsForConfig(keycloak, vault, opts = {
     prune: opts.prune === true,
     dryRun: opts.dryRun === true,
     rotateUserPasswords: opts.rotateUserPasswords === true,
+    rotateClientSecrets: opts.rotateClientSecrets === true,
+    rotateIdpSecrets: opts.rotateIdpSecrets === true,
+    skipIdentityProviders: opts.skipIdentityProviders === true,
     resolveUserPassword: (user) =>
       resolveUserPassword(vault, user, {
         autoGenerate: true,
+        log: (line) => log(line),
+      }),
+    resolveClientSecret: (cfg) =>
+      resolveClientSecret(vault, cfg, {
+        autoGenerate: true,
+        log: (line) => log(line),
+      }),
+    resolveIdentityProviderSecret: (idp) =>
+      resolveIdentityProviderSecret(vault, idp, {
         log: (line) => log(line),
       }),
     log,
@@ -511,9 +765,15 @@ export async function queryKeycloakRealmDrift(keycloak, vault, opts = {}) {
   const liveRealms = await listRealms(client);
   /** @type {Map<string, string[]>} */
   const liveUsersByRealm = new Map();
+  /** @type {Map<string, string[]>} */
+  const liveClientsByRealm = new Map();
+  /** @type {Map<string, string[]>} */
+  const liveIdpsByRealm = new Map();
   for (const r of realms) {
     if (!liveRealms.some((lr) => lr.realm === r.realm)) {
       liveUsersByRealm.set(r.realm, []);
+      liveClientsByRealm.set(r.realm, []);
+      liveIdpsByRealm.set(r.realm, []);
       continue;
     }
     try {
@@ -528,11 +788,35 @@ export async function queryKeycloakRealmDrift(keycloak, vault, opts = {}) {
       log(`list users for ${r.realm}: ${/** @type {Error} */ (e).message}`);
       liveUsersByRealm.set(r.realm, []);
     }
+    try {
+      const clients = await listClients(client, r.realm, { max: 500 });
+      liveClientsByRealm.set(
+        r.realm,
+        clients
+          .map((c) => (typeof c.clientId === "string" ? c.clientId : ""))
+          .filter(Boolean),
+      );
+    } catch (e) {
+      log(`list clients for ${r.realm}: ${/** @type {Error} */ (e).message}`);
+      liveClientsByRealm.set(r.realm, []);
+    }
+    try {
+      const idps = await listIdentityProviders(client, r.realm);
+      liveIdpsByRealm.set(
+        r.realm,
+        idps
+          .map((idp) => (typeof idp.alias === "string" ? idp.alias : ""))
+          .filter(Boolean),
+      );
+    } catch (e) {
+      log(`list identity providers for ${r.realm}: ${/** @type {Error} */ (e).message}`);
+      liveIdpsByRealm.set(r.realm, []);
+    }
   }
 
   return {
     ok: true,
     api_url: baseUrl,
-    ...buildRealmDriftFields(realms, liveRealms, liveUsersByRealm),
+    ...buildRealmDriftFields(realms, liveRealms, liveUsersByRealm, liveClientsByRealm, liveIdpsByRealm),
   };
 }

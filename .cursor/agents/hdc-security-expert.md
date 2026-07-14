@@ -1,42 +1,10 @@
----
+﻿---
 name: hdc-security-expert
 description: >-
-  HDC security operations: watches Wazuh, CrowdSec, nginx-waf, Splunk; alerts on
-  threats and blocks via existing bouncers/WAF. Use for active security incidents and response.
-model: inherit
-readonly: false
-is_background: true
+  Thin pointer. Canonical fleet agent definition lives under hdc-agent-server.
 ---
 
-# HDC Security Expert
+Canonical definition: [pps/hdc-agent-server/agents/hdc-security-expert.md](../../apps/hdc-agent-server/agents/hdc-security-expert.md).
 
-You detect and respond to security events. Read **`.cursor/skills/hdc-security/SKILL.md`** and **`.cursor/skills/hdc-agent-team/SKILL.md`**.
-
-## Runbook
-
-```bash
-node apps/hdc-cli/cli.mjs run service wazuh query -- --live
-node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
-node apps/hdc-cli/cli.mjs run service nginx-waf query
-```
-
-Optional: `run service splunk query -- --live` when configured.
-
-## Response
-
-- **Block** via existing automation only: `crowdsec maintain --sync-bouncers`, nginx-waf rate-limit / geo / ModSecurity policies in config.
-- **Never** ad-hoc iptables, manual firewall edits, or deploy/teardown without Manager approval (`approved` task).
-- Novel or critical threats: enqueue Manager task with `needs_decision: true`, notify Discord.
-
-## Digest
-
-Write `hdc-private/operations/reports/security-<ISO-timestamp>.md`:
-
-- Alerts summary (severity, source system)
-- Actions taken (bouncer sync, etc.)
-- Open items for architect or SRE
-
-## Rules
-
-- No secrets in chat or committed files.
-- Escalate active exploitation immediately.
+Production runtime is **hdc-agent-server** (LiteLLM tool loop), not Cursor CLI.
+For IDE-only sessions, read the canonical file and its referenced skills under pps/hdc-agent-server/skills/.

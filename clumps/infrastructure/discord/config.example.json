@@ -9,6 +9,31 @@
   },
   "applications": [
     {
+      "id": "hdc-ops",
+      "managed": false,
+      "match": {
+        "application_id": null
+      },
+      "display_name": "HDC Ops",
+      "bot_token_vault_key": "HDC_OPS_DISCORD_BOT_TOKEN",
+      "public_key": null,
+      "ops_decisions": {
+        "channel_id": null
+      },
+      "description": "Ops decision buttons (Approve/Deny) for hdc-agents task escalations",
+      "redirect_uris": [],
+      "interactions_endpoint_url": null,
+      "tags": [],
+      "bot_public": false,
+      "bot_require_code_grant": false,
+      "portal_checklist": {
+        "privileged_intents": [],
+        "notes": "Invite the bot to the ops guild with Send Messages. Set Interactions Endpoint URL to https://<hdc-web>/api/discord/interactions. Copy Public Key into public_key and channel snowflake into ops_decisions.channel_id. Mirror the same fields under hdc-agents.defaults.hdc_agents.discord."
+      },
+      "consumer": "hdc-agents-a",
+      "notes": "Bot token vault key HDC_OPS_DISCORD_BOT_TOKEN; guest also needs webhook HDC_OPS_DISCORD_WEBHOOK_URL for non-decision alerts."
+    },
+    {
       "id": "hermes",
       "managed": false,
       "match": {

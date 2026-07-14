@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Maintain Keycloak: refresh compose env, optional image updates, reconcile realms/users.
+ * Maintain Keycloak: refresh compose env, optional image updates, reconcile realms/users/clients.
  *
  * Usage: hdc run service keycloak maintain -- [--instance a | --system-id keycloak-a] [--skip-upgrade]
- *        [--skip-realms] [--prune] [--realm <id>] [--dry-run] [--rotate-user-passwords]
+ *        [--skip-realms] [--skip-identity-providers] [--prune] [--realm <id>] [--dry-run]
+ *        [--rotate-user-passwords] [--rotate-client-secrets] [--rotate-idp-secrets]
  *        [--reapply-lxc-features]  Re-apply nesting/keyctl + Docker AppArmor workaround (default: always for privileged CTs)
  */
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
@@ -163,10 +164,16 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
   );
 
   const skipRealms = flagGet(flags, "skip-realms", "skip_realms") !== undefined;
+  const skipIdentityProviders =
+    flagGet(flags, "skip-identity-providers", "skip_identity_providers") !== undefined;
   const prune = flagGet(flags, "prune") !== undefined;
   const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
   const rotateUserPasswords =
     flagGet(flags, "rotate-user-passwords", "rotate_user_passwords") !== undefined;
+  const rotateClientSecrets =
+    flagGet(flags, "rotate-client-secrets", "rotate_client_secrets") !== undefined;
+  const rotateIdpSecrets =
+    flagGet(flags, "rotate-idp-secrets", "rotate_idp_secrets") !== undefined;
   const realmFilterRaw = flagGet(flags, "realm");
   const realmFilter =
     typeof realmFilterRaw === "string" && realmFilterRaw.trim() ? realmFilterRaw.trim() : undefined;
@@ -174,12 +181,17 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
   /** @type {Record<string, unknown> | null} */
   let realmsResult = null;
   if (result.ok && !skipRealms) {
-    errout.write(`[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users …\n`);
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users/clients/identity providers …\n`,
+    );
     realmsResult = await reconcileKeycloakRealmsForConfig(keycloakCfg, vault, {
       skipRealms: false,
+      skipIdentityProviders,
       prune,
       dryRun,
       rotateUserPasswords,
+      rotateClientSecrets,
+      rotateIdpSecrets,
       realmFilter,
       adminPassword: secrets.adminPassword,
       ctIp: typeof result.ct_ip === "string" ? result.ct_ip : null,

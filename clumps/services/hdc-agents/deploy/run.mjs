@@ -29,7 +29,11 @@ import {
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/hdc-agents-install.mjs";
+import { prepareAgentsGuestSecrets } from "../lib/hdc-agents-guest-secrets.mjs";
 import { hostPort, resolveUpstreamUrl, resolveWebUrl } from "../lib/hdc-agents-render.mjs";
+import { syncHdcTreesViaPct } from "../lib/hdc-agents-sync.mjs";
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { hdcPrivateRoot } from "../../../../apps/hdc-cli/lib/private-repo.mjs";
 import {
   ensureLxcDockerApparmorWorkaround,
   pctRestart,
@@ -86,7 +90,7 @@ function existingGuestPolicy(flags) {
  * @param {ReturnType<typeof resolveHdcAgentsDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
- * @param {{ ctPasswordCache?: { value: string | null } }} runOpts
+ * @param {{ ctPasswordCache?: { value: string | null }; vault?: ReturnType<typeof createPackageVaultAccess> }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, hdc_agents, install } = deployment;
@@ -175,6 +179,19 @@ async function deployOne(deployment, flags, log, runOpts) {
     const cache = runOpts.ctPasswordCache ?? { value: null };
     let rootPassword;
     try {
+      if (
+        !flagGet(flags, "password") &&
+        !(typeof lxc.password === "string" && lxc.password.length > 0) &&
+        !String(process.env.HDC_PROXMOX_LXC_ROOT_PASSWORD ?? "").trim() &&
+        runOpts.vault
+      ) {
+        const fromVault = String(
+          await runOpts.vault.getSecret("HDC_PROXMOX_LXC_ROOT_PASSWORD", {
+            promptLabel: "vault secret HDC_PROXMOX_LXC_ROOT_PASSWORD",
+          }),
+        ).trim();
+        if (fromVault) process.env.HDC_PROXMOX_LXC_ROOT_PASSWORD = fromVault;
+      }
       rootPassword = await resolveLxcRootPassword(systemId, vmid, lxc, flags, {
         cached: cache.value,
         setCached: (v) => {
@@ -316,14 +333,83 @@ async function deployOne(deployment, flags, log, runOpts) {
 
   const hdcAgentsCfg = isObject(hdc_agents) ? hdc_agents : {};
   const installCfg = isObject(install) ? install : {};
+  const metaRoot =
+    typeof installCfg.meta_root === "string" && installCfg.meta_root.trim()
+      ? installCfg.meta_root.trim()
+      : "/opt/hdc-agents-meta";
 
+  /** @type {{ composeEnv?: string, schedulesJson?: string, metaRoot?: string }} */
+  let secretOpts = { metaRoot };
   if (shouldInstall(install)) {
+    const vaultAccess = runOpts.vault ?? createPackageVaultAccess();
+    if (!runOpts.vault) await vaultAccess.unlock({});
+    const privateRoot = hdcPrivateRoot(root);
+    if (!privateRoot) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        message: "hdc-private not resolved (needed for MCP API key registry)",
+      };
+    }
+
+    const syncExcludes = Array.isArray(
+      /** @type {Record<string, unknown>} */ (hdcAgentsCfg.sync || {}).exclude,
+    )
+      ? [
+          .../** @type {string[]} */ (
+            /** @type {Record<string, unknown>} */ (hdcAgentsCfg.sync).exclude
+          ),
+        ]
+      : [".git", "node_modules", "**/reports"];
+    syncExcludes.push(
+      "operations/tasks/**",
+      "operations/task-report.md",
+      "operations/.dispatcher-state.json",
+    );
+    errout.write(
+      `[hdc] ${target} ${verb}: syncing hdc trees via pct → CT ${guestVmid} …\n`,
+    );
+    const syncResult = syncHdcTreesViaPct({
+      publicRoot: root,
+      pveUser: pveSsh.user,
+      pveHost: pveSsh.host,
+      vmid: guestVmid,
+      installRoot: "/opt/hdc-src",
+      privateRoot: "/opt/hdc-private",
+      exclude: syncExcludes,
+      log: {
+        info: (m) => errout.write(`[hdc] ${target} ${verb}: ${m}\n`),
+      },
+    });
+    if (!syncResult.ok) {
+      return {
+        ok: false,
+        system_id: systemId,
+        host_id: hostId,
+        mode,
+        message: `hdc tree sync failed: ${syncResult.message}`,
+      };
+    }
+
+    const guestSecrets = await prepareAgentsGuestSecrets({
+      vault: vaultAccess,
+      privateRoot,
+      hdcAgents: hdcAgentsCfg,
+    });
+    secretOpts = {
+      composeEnv: guestSecrets.composeEnv,
+      schedulesJson: guestSecrets.schedulesJson,
+      metaRoot,
+    };
     installResult = await installHdcAgentsInCt(
       pveSsh.user,
       pveSsh.host,
       guestVmid,
       hdcAgentsCfg,
       installCfg,
+      secretOpts,
     );
   } else {
     installResult = { ok: true, method: "skipped", message: "skipped" };
@@ -374,6 +460,9 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const vault = createPackageVaultAccess();
+  await vault.unlock({});
+
   /** @type {ReturnType<typeof resolveHdcAgentsDeployments>} */
   let deployments;
   try {
@@ -394,7 +483,7 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache }));
+      results.push(await deployOne(deployment, flags, log, { ctPasswordCache, vault }));
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

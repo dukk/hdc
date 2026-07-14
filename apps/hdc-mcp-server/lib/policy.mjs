@@ -5,7 +5,7 @@ import path from "node:path";
 
 /** @typedef {'hdc_list' | 'hdc_help' | 'hdc_maintain_daily' | 'hdc_run' | 'hdc_notify_discord'} McpToolName */
 
-/** Default profile when HDC_AGENT_ROLE is unset (IDE / hdc-ops-agent). */
+/** Default profile when HDC_AGENT_ROLE is unset (IDE / run-daily). */
 export const DEFAULT_AGENT_ROLE = "default";
 
 /** @type {ReadonlySet<string>} */
@@ -77,6 +77,16 @@ export const ROLE_POLICIES = Object.freeze({
   "hdc-engineer": {
     tools: new Set(["hdc_list", "hdc_help", "hdc_run"]),
     runVerbs: new Set(["query", "health"]),
+  },
+  "hdc-scheduler": {
+    tools: new Set([
+      "hdc_list",
+      "hdc_help",
+      "hdc_maintain_daily",
+      "hdc_run",
+      "hdc_notify_discord",
+    ]),
+    runVerbs: new Set(["query", "health", "maintain"]),
   },
 });
 

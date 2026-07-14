@@ -36,6 +36,20 @@
           },
           "display_name": { "type": "string", "minLength": 1 },
           "bot_token_vault_key": { "type": "string", "minLength": 1 },
+          "public_key": {
+            "type": ["string", "null"],
+            "description": "Discord Interactions public key (hex). Not secret; from Developer Portal → General Information."
+          },
+          "ops_decisions": {
+            "type": "object",
+            "description": "When set on hdc-ops, enables Approve/Deny buttons on agent decision messages.",
+            "properties": {
+              "channel_id": {
+                "type": ["string", "null"],
+                "description": "Discord channel snowflake for Bot API decision messages."
+              }
+            }
+          },
           "description": { "type": ["string", "null"] },
           "redirect_uris": {
             "type": "array",

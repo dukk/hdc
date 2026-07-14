@@ -1,19 +1,22 @@
 # Multi-Agent Operations — Architecture Proposal
 
-**Status:** Adopted (2026-07-14). Formalizes and extends the agent team under `.cursor/agents/`
-so a coordinated set of agents can **build, secure, monitor, deploy, and maintain** every system
-in the home data center, with the operator approving anything risky. Implementation tracks
-Phases 2–5 in this document (`hdc-engineer`, per-role hdc-mcp, LiteLLM A2A, `hdc-agents` fleet,
-close-the-loop skills). **LXC deploy** of `hdc-agents-a` awaits operator approval of
+**Status:** Adopted (2026-07-14; revised 2026-07-14 for server-owned harness).
+Coordinates agents that **build, secure, monitor, deploy, and maintain** the lab with
+operator approval for risky work. **Canonical defs** live under
+[`apps/hdc-agent-server/`](../apps/hdc-agent-server/) (`agents/`, `skills/`, `rules/`,
+`automations/`). Runtime is the LiteLLM OpenAI tool-loop in `hdc-agent-server`
+(not Cursor). **LXC deploy** of `hdc-agents-a` awaits approval of
 `hdc-private/clumps/services/hdc-agents/plan.md`.
 
-Key architectural decisions in this revision:
+Key architectural decisions:
 
-- **LiteLLM is the A2A registry and gateway.** Agents publish their A2A cards to the
-  existing `litellm` deployment and discover each other through it. The standalone
-  `a2a-registry` clump is deprecated.
-- **Each agent runs as its own Docker container on PVE**, deployed and maintained by
-  a new `hdc-agents` clump following the standard LXC + Docker Compose pattern.
+- **LiteLLM is the A2A registry and gateway.** Agents publish cards to `litellm`;
+  the standalone `a2a-registry` clump is deprecated.
+- **Each agent runs as its own Docker container** via `clumps/services/hdc-agents`.
+- **Scripted dispatcher first:** schedule ticks refresh task reports, Discord-notify
+  decisions, probe hdc queries, and A2A-delegate approved work — the model runs
+  only when probes/digests change or triage is required.
+- **Tasks / jobs UI:** hdc-web-server on hdc-agents-a `:9120` (no separate hdc-runner guest).
 
 ## Problems to solve
 
@@ -31,13 +34,13 @@ Key architectural decisions in this revision:
 
 ## Design principles
 
-- **Single source of truth.** Rules, skills, and agent definitions live in `.cursor/`.
-  `CLAUDE.md` imports the rules; `.claude/skills/` and `.claude/agents/` are thin
-  pointers. Containerized agents load the *same* canonical `.cursor/agents/{name}.md`
-  at startup — one edit updates every runtime.
+- **Single source of truth.** Fleet agent defs, skills, rules, and automation specs
+  live under `apps/hdc-agent-server/`. IDE sessions may use thin pointers under
+  `.cursor/agents/` and `.claude/agents/`. Containerized agents load
+  `apps/hdc-agent-server/agents/{role}.md` (skills injected into the system prompt).
 - **Hub-and-spoke orchestration.** The Manager is the only agent that assigns work and
   talks to the operator; specialists never trigger each other directly. A2A calls
-  between agents go through LiteLLM, so every delegation is authenticated and logged.
+  between agents go through LiteLLM (or compose DNS peer URLs from the dispatcher), so every delegation is authenticated and logged.
 - **Files as durable state, A2A as transport.** Tasks (`operations/tasks/*.md`),
   digests (`operations/reports/`), and proposals (`operations/proposals/`) in
   hdc-private remain the auditable system of record. A2A messages trigger work and
@@ -52,6 +55,8 @@ Key architectural decisions in this revision:
 - **Everything through the hdc CLI.** Agents act via `node apps/hdc-cli/cli.mjs …`
   (tracked, logged, reported) — inside containers via the allowlisted `hdc-mcp`
   surface — never ad-hoc SSH or one-off scripts.
+- **Spend control.** Scripted dispatcher skips the model on idle ticks; LiteLLM
+  virtual keys attribute cost per role.
 
 ## Architecture overview
 
@@ -104,7 +109,7 @@ roster as follows:
   - Constraint: writes code and tests in the repo; **never** touches production —
     handing a tested package to `hdc-sre` is the boundary.
 
-  Definition to add at `.cursor/agents/hdc-engineer.md` (+ `.claude/agents/` pointer),
+  Definition at `apps/hdc-agent-server/agents/hdc-engineer.md` (+ IDE pointers),
   task role `hdc-engineer` in the task schema, and its own container in `hdc-agents`.
 
 ### Lifecycle coverage matrix
@@ -137,25 +142,16 @@ pattern — a new **`clumps/services/hdc-agents`** package:
   - Node.js 20 + the hdc repo (baked at build; `maintain` refreshes) and a read-only
     bind-mount of hdc-private for inventory/config; `operations/` mounted read-write
     only for roles that write digests/tasks.
-  - A thin A2A server (new `apps/hdc-agent-server/`) that serves the agent card at
-    `/.well-known/agent-card.json` and the A2A JSON-RPC endpoint, queues one task at
-    a time, and executes each task by invoking the agent runtime headlessly
-    (Claude Code `claude -p` with the matching `.claude/agents/{role}.md` subagent,
-    or an ADK `LlmAgent` — both route model calls through LiteLLM `/v1`).
-  - `hdc-mcp` (stdio, in-container) as the **only** tool surface. Per-role policy:
-    read-only roles get `query` verbs; `hdc-sre` additionally gets `maintain`/`deploy`
-    gated on task `status: approved` (the existing hdc-mcp policy layer extends from
-    global allowlist to per-role allowlist via `HDC_AGENT_ROLE`).
+  - A thin A2A server (`apps/hdc-agent-server/`) that serves the agent card,
+    queues one task at a time, runs a **scripted dispatcher** on a timer, and
+    executes LLM turns via LiteLLM `/v1/chat/completions` + hdc-mcp tool handlers
+    (skills from `apps/hdc-agent-server/skills/` injected into the system prompt).
+  - `hdc-mcp` policy via `HDC_AGENT_ROLE` (deploy gated on approved tasks).
 - **Per-container env (names only; values from vault at render time):**
   `HDC_AGENT_ROLE`, `HDC_AGENT_CARD_URL`, `HDC_LITELLM_BASE_URL`,
   `HDC_AGENT_LITELLM_KEY_{ROLE}` (one virtual key per agent), `HDC_PRIVATE_ROOT`.
-- **Identity and audit:** because every model call and every inter-agent A2A call
-  carries the agent's own LiteLLM virtual key, LiteLLM's spend/logging answers "which
-  agent did what, when, at what cost" — and revoking one key disables one agent.
-
-The scheduled Cursor CLI automations on hdc-runner become the **fallback plane**: the
-container fleet is primary, and `.cursor/automations/` definitions are retained so the
-same roles can still run via `agent -p` if the fleet is down.
+- **Identity and audit:** every model call and inter-agent A2A call carries the
+  agent's LiteLLM virtual key.
 
 ## A2A publishing and discovery via LiteLLM
 
@@ -197,15 +193,15 @@ behavior at build time).
    logs, and proxies to the target container.
 
 The same flow works for external callers (operator tooling, other labs' agents):
-one gateway URL, one auth model, full audit. The hdc-runner web UI keeps its Tasks
-tab; its A2A endpoint remains for task approval but no longer serves as a registry.
+one gateway URL, one auth model, full audit. **hdc-web-server** on hdc-agents-a
+`:9120` provides the Tasks tab and job API; A2A registry/discovery is LiteLLM only.
 
 **Deprecation.** `clumps/services/a2a-registry` is retired after migration
 (teardown; keep the clump archived like nagios, or delete once the fleet is stable).
 
 ## Coordination protocol
 
-Unchanged from `.cursor/skills/hdc-agent-team/SKILL.md`, restated as the contract all
+Unchanged from `apps/hdc-agent-server/skills/hdc-agent-team/SKILL.md`, restated as the contract all
 runtimes must honor:
 
 - **Task files** `operations/tasks/{id}.md` with YAML frontmatter: `id`, `role`,
@@ -218,8 +214,12 @@ runtimes must honor:
 - **Digests** to `operations/reports/{role}-{timestamp}.md`; **proposals** to
   `operations/proposals/{security,network}/`.
 - **Escalation**: `needs_decision: true` → Manager notifies Discord
-  (`notify-discord.mjs`); failures email via postfix-relay; approvals via web UI
-  Tasks tab, `PATCH /api/tasks/:id`, or A2A.
+  (`notify-discord.mjs --decision --task-id …`). When the hdc-ops Discord app is
+  configured (`application_id`, `public_key`, bot token, `channel_id`), the
+  message includes **Approve** / **Deny** buttons handled by hdc-web-server
+  `POST /api/discord/interactions` (same task file status as the UI). Otherwise
+  plain webhook text. Failures email via postfix-relay; approvals also via web
+  UI Tasks tab, `PATCH /api/tasks/:id`, or A2A.
 - **Safety rails** (all agents, all runtimes):
   - Destructive verbs only with task `status: approved`.
   - Per-role hdc-mcp allowlists inside containers; read-only roles cannot invoke
@@ -252,12 +252,12 @@ Verify a Claude Code session picks up rules and can invoke `hdc-ops` /
 `hdc-service-deploy`.
 
 **Phase 2 — engineer role + per-role tooling.** Author
-`.cursor/agents/hdc-engineer.md` + pointer; add the role to the task schema and
+`apps/hdc-agent-server/agents/hdc-engineer.md` + IDE pointer; add the role to the task schema and
 delegation policy; extend hdc-mcp with `HDC_AGENT_ROLE` allowlists (gap 6).
 
 **Phase 3 — LiteLLM as A2A registry.** Add `a2a_agents[]` to the litellm config
-schema and renderer; register the existing hdc-runner A2A endpoint as the first
-entry; validate card discovery and proxied A2A calls through LiteLLM with a virtual
+schema and renderer; register hdc-agents fleet endpoints (manager `:9200` …);
+validate card discovery and proxied A2A calls through LiteLLM with a virtual
 key; deprecate `a2a-registry`.
 
 **Phase 4 — containerize the fleet.** Build `apps/hdc-agent-server` and the
@@ -269,8 +269,8 @@ proven. Each container publishes to LiteLLM on deploy.
 **Phase 5 — close the loop.** Manager delegates via LiteLLM discovery instead of
 static roster; enable monitor + security sweeps as container-native schedules;
 backup-verification runbook; implement `docs lint`; review delegation policy to widen
-the autonomous-maintain envelope as trust builds. Cursor CLI automations on
-hdc-runner remain as fallback.
+the autonomous-maintain envelope as trust builds. Tasks UI remains hdc-web-server
+on the hdc-agents guest.
 
 ## Non-goals
 

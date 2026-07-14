@@ -3,14 +3,15 @@ import { runCli } from "../../hdc-cli/lib/cli-app.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../hdc-cli/lib/vault-access.mjs";
 import {
   formatDiscordContent,
-  postDiscordWebhook,
   redactIpsFromText,
-  resolveOpsDiscordWebhookUrl,
+  resolveOpsDiscordInteractiveConfig,
+  sendOpsDiscordMessage,
 } from "../../hdc-cli/lib/ops-discord-notify.mjs";
 import { runDailyMaintainWithResult } from "../../hdc-cli/lib/daily-maintain.mjs";
 
 import { hdcPrivateRoot } from "../../hdc-cli/lib/private-repo.mjs";
 import { createHdcMcpContext, toolErrorResult, toolTextResult } from "./hdc-context.mjs";
+import { resolveMcpAuth } from "./api-keys.mjs";
 import {
   assertAllowedRunVerb,
   assertApprovedTaskForDeploy,
@@ -21,11 +22,33 @@ import {
 } from "./policy.mjs";
 
 /**
+ * Resolve auth (API key preferred) and pin HDC_AGENT_ROLE for this call.
+ * @param {Record<string, unknown>} [args]
+ * @returns {string} role
+ */
+function applyMcpAuth(args = {}) {
+  const { deps, root } = createHdcMcpContext();
+  const privateRoot =
+    (args.private_root != null ? String(args.private_root) : "") ||
+    hdcPrivateRoot(root, deps.env) ||
+    "";
+  const auth = resolveMcpAuth({
+    env: deps.env,
+    privateRoot,
+    apiKey: args.api_key != null ? String(args.api_key) : undefined,
+    resolveRole: resolveAgentRole,
+  });
+  process.env.HDC_AGENT_ROLE = auth.role;
+  return auth.role;
+}
+
+/**
  * @param {Record<string, unknown>} [args]
  */
 export async function handleHdcList(args = {}) {
   void args;
   try {
+    applyMcpAuth(args);
     assertToolAllowedForRole("hdc_list");
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
@@ -53,6 +76,7 @@ export async function handleHdcList(args = {}) {
  */
 export async function handleHdcHelp(args = {}) {
   try {
+    applyMcpAuth(args);
     assertToolAllowedForRole("hdc_help");
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
@@ -74,6 +98,7 @@ export async function handleHdcHelp(args = {}) {
  */
 export async function handleHdcMaintainDaily(args = {}) {
   try {
+    applyMcpAuth(args);
     assertToolAllowedForRole("hdc_maintain_daily");
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
@@ -114,6 +139,7 @@ export async function handleHdcMaintainDaily(args = {}) {
  */
 export async function handleHdcRun(args = {}) {
   try {
+    applyMcpAuth(args);
     assertToolAllowedForRole("hdc_run");
     const role = resolveAgentRole();
     const tier = normalizeTier(String(args.tier ?? ""));
@@ -182,36 +208,46 @@ export async function handleHdcRun(args = {}) {
  */
 export async function handleHdcNotifyDiscord(args = {}) {
   try {
+    applyMcpAuth(args);
     assertToolAllowedForRole("hdc_notify_discord");
     const message = String(args.message ?? "").trim();
     if (!message) throw new Error("message is required");
     const title = String(args.title ?? "HDC Ops").trim() || "HDC Ops";
     const silent = args.silent === true;
     const dryRun = args.dry_run === true;
+    const decision = args.decision === true;
+    const taskId = String(args.task_id ?? args.taskId ?? "").trim();
+    if (decision && !taskId) throw new Error("task_id is required when decision is true");
 
     const content = formatDiscordContent(title, redactIpsFromText(message));
 
     if (dryRun) {
+      const interactive = decision
+        ? await resolveOpsDiscordInteractiveConfig({ env: process.env })
+        : { enabled: false };
       return toolTextResult({
         ok: true,
         dry_run: true,
         content_length: content.length,
         content,
+        decision: decision || undefined,
+        task_id: taskId || undefined,
+        interactive: interactive.enabled === true,
+        mode: decision && interactive.enabled ? "bot" : "webhook",
       });
     }
 
     const { deps } = createHdcMcpContext();
     const vault = createVaultAccess(vaultDepsFromCli(deps));
-    const url = await resolveOpsDiscordWebhookUrl({
+    const result = await sendOpsDiscordMessage({
+      content,
+      decision,
+      taskId,
+      suppressNotifications: silent,
       env: deps.env,
       getSecret: (key, opts) => vault.getSecret(key, opts),
     });
-    if (!url) {
-      throw new Error("HDC_OPS_DISCORD_WEBHOOK_URL not set in vault or env");
-    }
-
-    await postDiscordWebhook(url, content, { suppressNotifications: silent });
-    return toolTextResult({ ok: true, sent: true, silent });
+    return toolTextResult({ ok: true, sent: true, silent, mode: result.mode });
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
   }

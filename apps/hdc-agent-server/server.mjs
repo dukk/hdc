@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * hdc-agent-server — one container = one HDC_AGENT_ROLE.
- * Serves A2A 0.3 agent card + JSON-RPC; runs turns via LiteLLM + hdc-mcp handlers.
+ * Serves A2A 0.3 agent card + JSON-RPC; runs turns via LiteLLM + hdc-mcp-server handlers.
+ * Scheduled ticks use the scripted dispatcher (LLM only when work is detected).
  */
 import http from "node:http";
 import { dirname, join } from "node:path";
@@ -11,8 +12,9 @@ import { handleA2aHttp } from "./lib/a2a-http.mjs";
 import { createTaskQueue } from "./lib/task-queue.mjs";
 import { runAgentTurn } from "./lib/agent-runner.mjs";
 import { loadRolePrompt } from "./lib/role-prompt.mjs";
-import { defaultSweepPrompt, startScheduleLoop } from "./lib/schedule.mjs";
-import { resolveAgentRole } from "../hdc-mcp/lib/policy.mjs";
+import { startScheduleLoop } from "./lib/schedule.mjs";
+import { runDispatcher } from "./lib/dispatcher.mjs";
+import { resolveAgentRole } from "../hdc-mcp-server/lib/policy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const role = resolveAgentRole();
@@ -67,9 +69,54 @@ server.listen(port, "0.0.0.0", () => {
   startScheduleLoop({
     role,
     runSweep: async () => {
-      const id = `sched-${Date.now()}`;
-      process.stderr.write(`[hdc-agent-server] schedule tick ${id}\n`);
-      queue.enqueue(id, defaultSweepPrompt(role), (msg) => runTurn(msg));
+      const result = runDispatcher({
+        role,
+        hdcRoot,
+        privateRoot,
+      });
+      if (!result.work.length) {
+        process.stderr.write(
+          `[hdc-agent-server] dispatcher idle: ${result.idle_reason || "no work"}\n`,
+        );
+        return;
+      }
+      for (const item of result.work) {
+        if (item.peer_url) {
+          process.stderr.write(`[hdc-agent-server] A2A delegate ${item.id} → ${item.peer_url}\n`);
+          await postA2aMessage(item.peer_url, item.prompt);
+          continue;
+        }
+        process.stderr.write(`[hdc-agent-server] enqueue LLM ${item.id}\n`);
+        queue.enqueue(item.id, item.prompt, (msg) => runTurn(msg));
+      }
     },
   });
 });
+
+/**
+ * @param {string} baseUrl e.g. http://hdc-sre:9202
+ * @param {string} text
+ */
+async function postA2aMessage(baseUrl, text) {
+  const url = `${baseUrl.replace(/\/$/, "")}/a2a`;
+  const body = {
+    jsonrpc: "2.0",
+    id: `dispatch-${Date.now()}`,
+    method: "message/send",
+    params: {
+      message: {
+        role: "user",
+        parts: [{ kind: "text", text }],
+      },
+    },
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`A2A peer ${url} → ${res.status}: ${t.slice(0, 300)}`);
+  }
+}

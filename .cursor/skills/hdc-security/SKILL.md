@@ -1,70 +1,10 @@
----
+﻿---
 name: hdc-security
 description: >-
-  HDC security queries and response: Wazuh, CrowdSec, nginx-waf, Splunk; bouncer sync;
-  proposal format for security architect. Use with security expert or architect agents.
+  Thin pointer. Canonical skill for the agent fleet lives under hdc-agent-server.
 disable-model-invocation: true
 ---
 
-# HDC security skill
+Canonical definition: [pps/hdc-agent-server/skills/hdc-security/SKILL.md](../../../apps/hdc-agent-server/skills/hdc-security/SKILL.md).
 
-## Query runbook
-
-```bash
-node apps/hdc-cli/cli.mjs run service wazuh query -- --live
-node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
-node apps/hdc-cli/cli.mjs run service nginx-waf query
-node apps/hdc-cli/cli.mjs run service splunk query
-```
-
-## Active response (expert only)
-
-```bash
-node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-bouncers
-```
-
-WAF blocks are config-driven in `clumps/services/nginx-waf/config.json` — changes need approval and SRE execution.
-
-**Do not:** ad-hoc iptables, SSH firewall edits, or deploy without approved task.
-
-## Config locations (hdc-private)
-
-- `clumps/services/crowdsec/config.json`
-- `clumps/services/wazuh/config.json`
-- `clumps/services/nginx-waf/config.json`
-- `clumps/infrastructure/proxmox/config.json` → `provision.guest_agents`
-
-## Security architect proposal template
-
-Path: `operations/proposals/security/<date>-<slug>.md`
-
-```markdown
-# <title>
-
-**Severity:** critical | high | medium | low
-**Date:** YYYY-MM-DD
-
-## Risk
-…
-
-## Affected systems
-- inventory-id — role
-
-## Recommendation
-…
-
-## HDC commands
-```bash
-…
-```
-
-## Rollback
-…
-
-## Effort
-S | M | L
-```
-
-## Escalation
-
-Critical/active incident → task with `needs_decision: true`, Discord notify, Manager aware immediately.
+IDE greenfield helpers (hdc-service-deploy, proxmox-resource-planning) remain under .cursor/skills/.

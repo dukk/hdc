@@ -4,7 +4,8 @@
  *
  * Usage: hdc run service keycloak deploy -- [--instance a | --system-id keycloak-a] [--skip-install]
  *        hdc run service keycloak deploy -- [--skip-existing | --redeploy-existing]
- *        [--skip-realms] [--prune] [--realm <id>] [--dry-run] [--rotate-user-passwords]
+ *        [--skip-realms] [--skip-identity-providers] [--prune] [--realm <id>] [--dry-run]
+ *        [--rotate-user-passwords] [--rotate-client-secrets] [--rotate-idp-secrets]
  */
 import { lxcHostnameFromSystemId } from "../../../../apps/hdc-cli/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
@@ -353,10 +354,16 @@ async function deployOne(deployment, flags, log, runOpts) {
 
   const ip = readCtPrimaryIp(pveSsh.user, pveSsh.host, guestVmid);
   const skipRealms = flagGet(flags, "skip-realms", "skip_realms") !== undefined;
+  const skipIdentityProviders =
+    flagGet(flags, "skip-identity-providers", "skip_identity_providers") !== undefined;
   const prune = flagGet(flags, "prune") !== undefined;
   const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
   const rotateUserPasswords =
     flagGet(flags, "rotate-user-passwords", "rotate_user_passwords") !== undefined;
+  const rotateClientSecrets =
+    flagGet(flags, "rotate-client-secrets", "rotate_client_secrets") !== undefined;
+  const rotateIdpSecrets =
+    flagGet(flags, "rotate-idp-secrets", "rotate_idp_secrets") !== undefined;
   const realmFilterRaw = flagGet(flags, "realm");
   const realmFilter =
     typeof realmFilterRaw === "string" && realmFilterRaw.trim() ? realmFilterRaw.trim() : undefined;
@@ -364,12 +371,17 @@ async function deployOne(deployment, flags, log, runOpts) {
   /** @type {Record<string, unknown> | null} */
   let realmsResult = null;
   if (shouldInstall(install) && secrets && !skipRealms) {
-    errout.write(`[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users …\n`);
+    errout.write(
+      `[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users/clients/identity providers …\n`,
+    );
     realmsResult = await reconcileKeycloakRealmsForConfig(keycloakCfg, runOpts.vault, {
       skipRealms: false,
+      skipIdentityProviders,
       prune,
       dryRun,
       rotateUserPasswords,
+      rotateClientSecrets,
+      rotateIdpSecrets,
       realmFilter,
       adminPassword: secrets.adminPassword,
       ctIp: ip,

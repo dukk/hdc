@@ -51,7 +51,7 @@ node apps/hdc-cli/cli.mjs run service paperclip maintain -- --reset-db --yes
 
 ## HDC agent company
 
-After claim, bootstrap the **Home Data Center** company (skills + agents for hdc-runner):
+After claim, bootstrap the **Home Data Center** company (skills + agents for hdc-web-server / agent fleet):
 
 ```bash
 node apps/hdc-cli/cli.mjs run service paperclip query -- --bootstrap-company --dry-run

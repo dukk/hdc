@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 
-import { stripFrontmatter } from "./role-prompt.mjs";
+import { rolePromptPath, stripFrontmatter } from "./role-prompt.mjs";
+import { listFleetSkillIds } from "./skill-load.mjs";
 
 const A2A_VERSION = "0.3.0";
 
@@ -13,7 +13,7 @@ export function buildAgentCard(opts) {
   const host = hostHeader.split(":")[0] || "localhost";
   const port = hostHeader.includes(":") ? hostHeader.split(":")[1] : "9200";
   const baseUrl = `http://${host}:${port}`;
-  const agentPath = join(hdcRoot, ".cursor", "agents", `${role}.md`);
+  const agentPath = rolePromptPath(hdcRoot, role);
   let description = `HDC agent ${role}`;
   if (existsSync(agentPath)) {
     const md = readFileSync(agentPath, "utf8");
@@ -30,7 +30,7 @@ export function buildAgentCard(opts) {
     }
   }
 
-  const skills = listSkillIds(hdcRoot).map((id) => ({
+  const skills = listFleetSkillIds(hdcRoot).map((id) => ({
     id,
     name: id,
     description: `Skill ${id}`,
@@ -57,19 +57,4 @@ export function buildAgentCard(opts) {
       },
     ],
   };
-}
-
-/**
- * @param {string} hdcRoot
- */
-function listSkillIds(hdcRoot) {
-  const dir = join(hdcRoot, ".cursor", "skills");
-  if (!existsSync(dir)) return [];
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name.startsWith("hdc-"))
-      .map((d) => d.name);
-  } catch {
-    return [];
-  }
 }

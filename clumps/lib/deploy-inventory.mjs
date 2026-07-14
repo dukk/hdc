@@ -24,7 +24,7 @@ export const DEPLOY_TARGET_WORKLOAD = {
   vaultwarden: { workloadClass: "lxc", role: "vaultwarden", instance: "a" },
   plex: { workloadClass: "lxc", role: "plex", instance: "a" },
   scanopy: { workloadClass: "lxc", role: "scanopy", instance: "a" },
-  "hdc-runner": { workloadClass: "lxc", role: "hdc-runner", instance: "a" },
+  "hdc-agents": { workloadClass: "lxc", role: "hdc-agents", instance: "a" },
   postiz: { workloadClass: "lxc", role: "postiz", instance: "a" },
   "nginx-waf": { workloadClass: "vm", role: "nginx-waf", instance: "a" },
   nginx: { workloadClass: "vm", role: "nginx", instance: "a" },

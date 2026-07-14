@@ -72,6 +72,52 @@
         "temporary_password": { "type": "boolean" }
       }
     },
+    "realmClient": {
+      "type": "object",
+      "required": ["client_id"],
+      "additionalProperties": true,
+      "properties": {
+        "client_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "protocol": { "type": "string" },
+        "public_client": { "type": "boolean" },
+        "standard_flow_enabled": { "type": "boolean" },
+        "direct_access_grants_enabled": { "type": "boolean" },
+        "service_accounts_enabled": { "type": "boolean" },
+        "full_scope_allowed": { "type": "boolean" },
+        "root_url": { "type": "string" },
+        "base_url": { "type": "string" },
+        "redirect_uris": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "web_origins": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "secret_vault_key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "realmIdentityProvider": {
+      "type": "object",
+      "required": ["alias", "provider_id", "client_id", "client_secret_vault_key"],
+      "additionalProperties": true,
+      "properties": {
+        "alias": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "display_name": { "type": "string" },
+        "trust_email": { "type": "boolean" },
+        "store_token": { "type": "boolean" },
+        "link_only": { "type": "boolean" },
+        "first_broker_login_flow_alias": { "type": "string" },
+        "sync_mode": { "type": "string", "enum": ["IMPORT", "FORCE", "LEGACY"] },
+        "default_scope": { "type": "string" },
+        "client_id": { "type": "string", "minLength": 1 },
+        "client_secret_vault_key": { "type": "string", "minLength": 1 }
+      }
+    },
     "realm": {
       "type": "object",
       "required": ["realm"],
@@ -91,6 +137,14 @@
         "users": {
           "type": "array",
           "items": { "$ref": "#/$defs/realmUser" }
+        },
+        "clients": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/realmClient" }
+        },
+        "identity_providers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/realmIdentityProvider" }
         }
       }
     },

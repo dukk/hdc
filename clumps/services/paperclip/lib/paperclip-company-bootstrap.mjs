@@ -17,7 +17,6 @@ export function resolvePaperclipCompanyConfig(cfg) {
   const agents = agentsRaw.filter(isObject);
 
   const skillSlugs = [
-    "hdc-runner",
     "hdc-agent-team",
     "hdc-monitor",
     "hdc-sre",
@@ -32,8 +31,12 @@ export function resolvePaperclipCompanyConfig(cfg) {
         ? company.api_key_vault_key.trim()
         : "HDC_PAPERCLIP_API_KEY",
     company_id: typeof company.company_id === "string" ? company.company_id.trim() : "",
-    hdc_runner_url:
-      typeof company.hdc_runner_url === "string" ? company.hdc_runner_url.trim().replace(/\/$/, "") : "",
+    hdc_web_url:
+      typeof company.hdc_web_url === "string"
+        ? company.hdc_web_url.trim().replace(/\/$/, "")
+        : typeof company.hdc_runner_url === "string"
+          ? company.hdc_runner_url.trim().replace(/\/$/, "")
+          : "",
     skills_github_base:
       typeof company.skills_github_base === "string" ? company.skills_github_base.trim().replace(/\/$/, "") : "",
     skill_slugs: skillSlugs,
@@ -343,13 +346,13 @@ export async function bootstrapPaperclipCompany(opts) {
     company_name: companyCfg.name,
     company_created: created === true,
     api_url: companyCfg.api_url,
-    hdc_runner_url: companyCfg.hdc_runner_url,
+    hdc_web_url: companyCfg.hdc_web_url,
     skills,
     agents,
     next_steps: [
-      "Bind Paperclip company secrets HDC_RUNNER_API_URL and HDC_RUNNER_API_TOKEN",
-      "Assign test issue: Run uptime-kuma live query via hdc-runner",
-      "Verify job at hdc-runner /api/jobs",
+      "Bind Paperclip company secrets HDC_WEB_API_URL and HDC_WEB_API_TOKEN (hdc-web-server on hdc-agents-a :9120)",
+      "Assign test issue: Run uptime-kuma live query via hdc-web-server / agent fleet",
+      "Verify job at hdc-web-server /api/jobs",
     ],
   };
 }

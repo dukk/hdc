@@ -58,6 +58,28 @@ node apps/hdc-cli/cli.mjs run infrastructure discord maintain -- --app hermes --
 
 Flags: `--app <id>`, `--import`, `--yes`, `--require-vault`, `--no-derive`, `--dry-run`, `--no-report`.
 
+## HDC Ops decision buttons
+
+The **hdc-ops** application (see `config.example.json`) drives Approve/Deny
+buttons on Manager `needs_decision` Discord messages.
+
+1. Create a Discord application + bot in the Developer Portal (separate from Hermes).
+2. Invite the bot to the ops guild with **Send Messages** (no privileged intents required).
+3. Copy **Application ID**, **Public Key**, bot token, and the target **channel ID**.
+4. Vault: `node apps/hdc-cli/cli.mjs secrets set HDC_OPS_DISCORD_BOT_TOKEN`
+5. In **discord** config (`hdc-ops` entry): set `match.application_id`, `public_key`,
+   `ops_decisions.channel_id`, and `interactions_endpoint_url` to the public HTTPS
+   URL for hdc-web, e.g. `https://hdc-web.example/api/discord/interactions`
+   (nginx-waf → `hdc-agents-a:9120`).
+6. Mirror the same non-secret fields under
+   `hdc-agents.defaults.hdc_agents.discord` (`application_id`, `public_key`,
+   `channel_id`, `bot_token_vault_key`).
+7. `discord maintain` (when `managed: true`) PATCHes `interactions_endpoint_url`.
+8. `hdc-agents maintain` writes the keys into guest meta `.env` for notify + web verify.
+
+When any of those four values is missing, decision notifies fall back to the plain
+`HDC_OPS_DISCORD_WEBHOOK_URL` text path (no buttons).
+
 ## Limitations
 
 | Capability | hdc v1 |
@@ -67,8 +89,10 @@ Flags: `--app <id>`, `--import`, `--yes`, `--require-vault`, `--no-derive`, `--d
 | Privileged Gateway Intents | Portal checklist only |
 | Bot token rotation | Manual vault update |
 | Global slash commands | Not in scope |
+| Ops decision buttons | hdc-ops app + hdc-web interactions endpoint |
 
 ## Related
 
 - [Hermes service](../../clumps/services/hermes/README.md)
+- [Multi-agent ops](../multi-agent-ops.md)
 - [AGENTS.md](../../AGENTS.md)

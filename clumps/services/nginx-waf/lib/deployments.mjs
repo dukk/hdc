@@ -512,6 +512,7 @@ export function acmeParsedToRaw(parsed) {
 export function resolveSiteAcmeSettings(site, groupAcme) {
   const tls = isObject(site.tls) ? site.tls : {};
   const cert = isObject(tls.certificate) ? tls.certificate : {};
+  const certDns = isObject(cert.dns) ? cert.dns : null;
   const merged = {
     ...acmeParsedToRaw(groupAcme),
     ...(typeof cert.provider === "string" ? { provider: cert.provider } : {}),
@@ -520,6 +521,19 @@ export function resolveSiteAcmeSettings(site, groupAcme) {
     ...(cert.staging === true || cert.staging === false ? { staging: cert.staging } : {}),
     ...(typeof cert.root_ca_path === "string" ? { root_ca_path: cert.root_ca_path } : {}),
   };
+  if (certDns) {
+    const groupRaw = acmeParsedToRaw(groupAcme);
+    const groupDns = isObject(groupRaw.dns) ? groupRaw.dns : {};
+    merged.dns = {
+      ...groupDns,
+      ...(typeof certDns.zone === "string" ? { zone: certDns.zone } : {}),
+      ...(Array.isArray(certDns.nameservers) ? { nameservers: certDns.nameservers } : {}),
+      ...(typeof certDns.tsig_vault_key === "string"
+        ? { tsig_vault_key: certDns.tsig_vault_key }
+        : {}),
+      ...(typeof certDns.key_name === "string" ? { key_name: certDns.key_name } : {}),
+    };
+  }
   return parseAcmeSettings(merged);
 }
 

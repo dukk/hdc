@@ -2,7 +2,7 @@
 
 ## Always autonomous
 
-- `query` and `query --live` via hdc-runner
+- `query` and `query --live` via hdc-web-server / hdc-agents fleet
 - Read inventory, configs, operation reports
 - Write digests to `operations/reports/`
 - Enqueue tasks with status `pending`

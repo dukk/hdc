@@ -13,7 +13,8 @@
       "Set access.nodes[0].ip on inventory/manual/systems/keycloak-a.json from query output.",
       "Configure nginx-waf to proxy keycloak.external_url to the CT upstream URL.",
       "Declare realms under keycloak.realms[] (optional $hdc.include files under realms/) and run maintain.",
-      "Configure clients and identity providers in the Keycloak admin console (not managed by hdc v1)."
+      "Declare OIDC clients under realms[].clients[] (secret_vault_key for confidential clients).",
+      "Declare identity providers under realms[].identity_providers[] (client_id + client_secret_vault_key; Entra secret is not auto-minted)."
     ]
   },
   "verbs": {

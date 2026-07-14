@@ -664,12 +664,12 @@ Example: `node apps/hdc-cli/cli.mjs run service wireguard deploy --`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC + Docker Compose Keycloak (+ bundled Postgres when `database.mode` is `bundled`); Admin API reconcile of `realms[]` / users |
-| `maintain` | Re-push compose env; `docker compose pull` + `up -d`; guest baseline; reconcile realms/users (`--skip-realms`, `--prune`, `--realm`, `--rotate-user-passwords`, `--dry-run`) |
-| `query` | Config summary; `--live` for HTTP health + realm/user drift |
+| `deploy` | LXC + Docker Compose Keycloak (+ bundled Postgres when `database.mode` is `bundled`); Admin API reconcile of `realms[]` / users / clients / identity providers |
+| `maintain` | Re-push compose env; `docker compose pull` + `up -d`; guest baseline; reconcile realms/users/clients/IdPs (`--skip-realms`, `--skip-identity-providers`, `--prune`, `--realm`, `--rotate-user-passwords`, `--rotate-client-secrets`, `--rotate-idp-secrets`, `--dry-run`) |
+| `query` | Config summary; `--live` for HTTP health + realm/user/client/IdP drift |
 | `teardown` | Optional compose down then destroy LXC |
 
-Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external); per-user `password_vault_key` (e.g. `HDC_KEYCLOAK_USER_HDC_ALICE_PASSWORD`). Realm `mail.enabled` maps SMTP to postfix-relay `client_defaults` (no auth). Set `keycloak.external_url` before nginx-waf forward-auth wiring. Clients/IdPs stay in the admin console.
+Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external); per-user `password_vault_key` (e.g. `HDC_KEYCLOAK_USER_HDC_ALICE_PASSWORD`); confidential clients use `secret_vault_key` (e.g. `HDC_WEB_OIDC_CLIENT_SECRET`); Microsoft (and other) IdPs use `client_id` + `client_secret_vault_key` (e.g. `HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET` — create the Entra secret manually; see the **azure** package). Realm `mail.enabled` maps SMTP to postfix-relay `client_defaults` (no auth). Declare OIDC clients under `realms[].clients[]` and brokers under `realms[].identity_providers[]` (reconciled on maintain). Set `keycloak.external_url` for the public HTTPS hostname.
 
 Example: `node apps/hdc-cli/cli.mjs run service keycloak deploy --`
 
@@ -729,18 +729,21 @@ Example: `node apps/hdc-cli/cli.mjs run service hermes deploy -- --instance a`
 
 - **Config:** [`clumps/services/hdc-agents/config.json`](clumps/services/hdc-agents/config.json) (copy from [`config.example.json`](clumps/services/hdc-agents/config.example.json); keep local config in hdc-private).
 - **Inventory:** [`inventory/manual/systems/hdc-agents-a.json`](inventory/manual/systems/hdc-agents-a.json); service sidecar [`inventory/manual/services/hdc-agents.json`](inventory/manual/services/hdc-agents.json).
-- **Runtime:** [`apps/hdc-agent-server/`](apps/hdc-agent-server/) — A2A 0.3 + LiteLLM tool loop + hdc-mcp role policy.
+- **Runtime:** [`apps/hdc-agent-server/`](apps/hdc-agent-server/) — A2A 0.3 + LiteLLM tool loop + scripted dispatcher + hdc-mcp-server role policy. Canonical agents/skills under `apps/hdc-agent-server/{agents,skills}/`.
+- **Web UI / jobs API:** [`apps/hdc-web-server/`](apps/hdc-web-server/) on port **9120** (Tasks approval, schedules, inventory) — shipped with the hdc-agents guest (`meta_root` `/opt/hdc-agents-meta`).
 - **Architecture:** [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md).
 - **Schema:** [`apps/hdc-cli/schema/hdc-agents.config.schema.json`](apps/hdc-cli/schema/hdc-agents.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC (4 vCPU / 8 GiB / 32 GiB) + Docker Compose one container per roster agent (ports 9200–9207) |
-| `maintain` | Rebuild `hdc/agent-runtime`, `up -d`, guest baseline |
-| `query` | Config summary; `--live` for Docker + manager `/health` |
+| `deploy` | LXC (4 vCPU / 8 GiB / 32 GiB) + Docker Compose one container per roster agent (ports 9200–9207) + hdc-web-server |
+| `maintain` | Rebuild `hdc/agent-runtime`, push schedules/mail/discord, `up -d`, guest baseline |
+| `query` | Config summary; `--live` for Docker + manager `/health` + web `:9120` |
 | `teardown` | Compose down then destroy LXC |
 
-Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
+Set `hdc_agents.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. The scripted dispatcher owns agent intervals; cron/schedules run deterministic hdc CLI (and `run-daily`). **Tasks UI:** hdc-web-server on `hdc-agents-a:9120` for approving guest-authoritative task files under hdc-private `operations/tasks/`.
+
+Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Web UI: Keycloak SSO (`hdc_agents.oidc` + vault `HDC_WEB_OIDC_CLIENT_SECRET` from keycloak maintain) plus `HDC_WEB_UI_SESSION_SECRET` / `HDC_WEB_API_TOKEN`. Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
 
 Example: `node apps/hdc-cli/cli.mjs run service hdc-agents deploy -- --instance a`
 
@@ -1051,7 +1054,7 @@ Example: `node apps/hdc-cli/cli.mjs run service paperless-ngx deploy -- --instan
 | `query` | Config summary; `--live` for Docker + `/api/health` on port 3100; `--bootstrap-company --yes` imports HDC skills and agents (see [`docs/manually-deployed/paperclip-hdc-company.md`](docs/manually-deployed/paperclip-hdc-company.md)) |
 | `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
 
-Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing); `HDC_PAPERCLIP_API_KEY` for company bootstrap. **HDC skills** under [`clumps/services/paperclip/skills/`](clumps/services/paperclip/skills/) integrate with **hdc-runner** (`HDC_HDC_RUNNER_API_TOKEN`). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
+Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing); `HDC_PAPERCLIP_API_KEY` for company bootstrap. **HDC skills** under [`clumps/services/paperclip/skills/`](clumps/services/paperclip/skills/) target **hdc-web-server** / the **hdc-agents** fleet (`HDC_WEB_API_TOKEN`). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
 
 Example: `node apps/hdc-cli/cli.mjs run service paperclip deploy -- --instance a`
 
@@ -1187,25 +1190,6 @@ Example: `node apps/hdc-cli/cli.mjs run service lms deploy -- --instance a`
 Set `server.model` or `server.hf_model` in config to enable and start the unit at deploy; otherwise install leaves the service disabled until a model is configured.
 
 Example: `node apps/hdc-cli/cli.mjs run service llama-cpp deploy -- --instance a --destroy-existing`
-
-## HDC Runner in this repo
-
-- **Config:** [`clumps/services/hdc-runner/config.json`](clumps/services/hdc-runner/config.json) (copy from [`config.example.json`](clumps/services/hdc-runner/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/hdc-runner-a.json`](inventory/manual/systems/hdc-runner-a.json); service sidecar [`inventory/manual/services/hdc-runner.json`](inventory/manual/services/hdc-runner.json).
-- **Schema:** [`apps/hdc-cli/schema/hdc-runner.config.schema.json`](apps/hdc-cli/schema/hdc-runner.config.schema.json).
-
-| Verb | Summary |
-| --- | --- |
-| `deploy` | Proxmox LXC or QEMU: Node.js + Bitwarden CLI + Cursor CLI, rsync hdc + hdc-private from operator, sync `.cursor` agent bundle, cron schedules, guest baseline (mail relay; skips ClamAV), web UI systemd unit |
-| `maintain` | Rsync operator trees to guest (excludes guest task state); refresh `.env` (Vaultwarden, web UI, `CURSOR_API_KEY`), cron, job wrapper, agent manager scripts, web UI; `--skip-sync`, `--skip-ui`, `--prune`, `--dry-run` |
-| `query` | Deployment summary; `--live` for cron files, bw version, disk use, recent job logs, web UI health |
-| `teardown` | Destroy LXC or QEMU guest (`--dry-run`, `--yes`, `--instance`) |
-
-Set `hdc_runner.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. Schedules with `"type": "agent"` and `agent_role` run Cursor CLI subagents (e.g. `agent-manager-hourly` hourly triage). **`hdc_runner.agents`:** syncs `.cursor/agents`, skills, automations; vault `HDC_CURSOR_API_KEY` (or `HDC_PAPERCLIP_CURSOR_API_KEY`) pushed as `CURSOR_API_KEY` on guest. **`hdc_runner.web`:** LAN web UI on port 9120 (default); session auth via vault `HDC_HDC_RUNNER_UI_PASSWORD` and auto-generated `HDC_HDC_RUNNER_UI_SESSION_SECRET`; **Bearer token** via vault `HDC_HDC_RUNNER_API_TOKEN` for Paperclip agents and A2A; Tasks tab for approving guest-authoritative task files under `/opt/hdc-private/operations/tasks/`. Ad-hoc runs limited to `query` and `maintain`. API reference: [`clumps/services/hdc-runner/API.md`](clumps/services/hdc-runner/API.md) (includes `/api/tasks` and A2A at `/.well-known/agent.json`). **`hdc_runner.paperclip_bridge`:** HTTP adapter bridge on port 9121 for Paperclip heartbeat → schedule runs. Browse `http://<guest-ip>:9120` after maintain.
-
-Operator workstation is source of truth (rsync on maintain). Secrets: `HDC_SECRET_BACKEND=vaultwarden`, `bw` on guest, `HDC_VAULTWARDEN_MASTER_PASSWORD` in guest `.env` (pushed from operator vault). Reports email as HTML via postfix-relay; Discord ops alerts use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (#hdc-ops webhook in Vaultwarden collection). Discord messages include the host running hdc (`HDC_OPS_DISCORD_HOST` optional); scheduled job success posts are silent (no channel ping), failures ping.
-
-Example: `node apps/hdc-cli/cli.mjs run service hdc-runner maintain --`
 
 ## Home clients in this repo
 
@@ -1612,51 +1596,45 @@ npm run test
 
 Before merging substantive CLI changes, run `npm run test:coverage` and keep thresholds green ([`vitest.config.mjs`](vitest.config.mjs)).
 
-## Agent team (Cursor and Claude Code subagents)
+## Agent team (hdc-agent-server fleet)
 
-Eight role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`:
+Eight role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
 
 | Agent | Role |
 | --- | --- |
-| [`hdc-manager`](.cursor/agents/hdc-manager.md) | Task triage, agent assignment, Discord/email escalation |
-| [`hdc-monitor`](.cursor/agents/hdc-monitor.md) | Uptime Kuma, Nagios, Proxmox health digests |
-| [`hdc-sre`](.cursor/agents/hdc-sre.md) | Approved deploy/maintain on live systems |
-| [`hdc-engineer`](.cursor/agents/hdc-engineer.md) | Automation codebase: clumps, CLI, schemas, tests (no production deploy) |
-| [`hdc-security-expert`](.cursor/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
-| [`hdc-security-architect`](.cursor/agents/hdc-security-architect.md) | Read-only security proposals |
-| [`hdc-network-architect`](.cursor/agents/hdc-network-architect.md) | Read-only network/DNS proposals |
-| [`hdc-research`](.cursor/agents/hdc-research.md) | Tool research briefs |
+| [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation |
+| [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests |
+| [`hdc-sre`](apps/hdc-agent-server/agents/hdc-sre.md) | Approved deploy/maintain on live systems |
+| [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | Automation codebase: clumps, CLI, schemas, tests (no production deploy) |
+| [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
+| [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals |
+| [`hdc-network-architect`](apps/hdc-agent-server/agents/hdc-network-architect.md) | Read-only network/DNS proposals |
+| [`hdc-research`](apps/hdc-agent-server/agents/hdc-research.md) | Tool research briefs |
 
-Shared skills: [`.cursor/skills/hdc-agent-team/`](.cursor/skills/hdc-agent-team/SKILL.md), [`hdc-manager`](.cursor/skills/hdc-manager/SKILL.md), [`hdc-monitor`](.cursor/skills/hdc-monitor/SKILL.md), [`hdc-security`](.cursor/skills/hdc-security/SKILL.md).
+Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/). IDE pointers under `.cursor/` / `.claude/` remain for human local sessions. Architecture: [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
 
-**Claude Code:** `.cursor/` is the single canonical source for rules, skills, and agents. [CLAUDE.md](CLAUDE.md) imports `.cursor/rules/*.mdc` directly, and `.claude/skills/<name>/SKILL.md` plus `.claude/agents/<name>.md` are thin pointers into the matching `.cursor/` files (required by Claude Code's loaders; content is never duplicated). Edit `.cursor/` and both tools pick up the change. Multi-agent architecture: [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
+**Operations state:** `operations/tasks/*.md`, `task-report.md`, `delegation-policy.md`, `ip-allocations.md`, `reports/`, `proposals/`. Approvals via hdc-web-server Tasks UI / A2A on hdc-agents-a `:9120`.
 
-**Operations state (hdc-runner guest):** `operations/tasks/*.md`, `operations/task-report.md`, `operations/delegation-policy.md`, `operations/ip-allocations.md`, `operations/reports/`, `operations/proposals/`. Agent definitions sync to `/opt/hdc/.cursor/` on each `hdc-runner maintain`.
-
-**Task approvals:** Use the hdc-runner web UI Tasks tab or `PATCH /api/tasks/:id` (session auth). External agents use A2A at `http://<runner-ip>:9120/a2a` and `/.well-known/agent.json`.
-
-**Scheduled agent runs:** `agent-manager-hourly` cron on hdc-runner invokes Cursor CLI (`agent -p`) for manager triage and approved worker tasks. See [`clumps/services/hdc-runner/API.md`](clumps/services/hdc-runner/API.md).
+**Scheduled runs:** container dispatcher intervals (manager ~15m, monitor ~60m, …); LLM only when work detected. Deterministic cron schedules live in `hdc_agents.schedules[]` on the hdc-agents guest.
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
 **Discord alerts:** `node apps/hdc-cli/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`; messages include OS hostname or `HDC_OPS_DISCORD_HOST`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
 
-Legacy alias: [`hdc-ops`](.cursor/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
+Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
 
-## hdc-mcp and hdc-ops-agent in this repo
+## hdc-mcp-server and run-daily in this repo
 
-- **MCP server:** [`apps/hdc-mcp/server.mjs`](apps/hdc-mcp/server.mjs) — stdio MCP exposing `hdc_list`, `hdc_help`, `hdc_maintain_daily`, `hdc_run` (query/maintain only), `hdc_notify_discord`. Policy blocks secrets, deploy, teardown, and destructive flags.
-- **ADK agent:** [`apps/hdc-ops-agent/agent.ts`](apps/hdc-ops-agent/agent.ts) — `LlmAgent` with `MCPToolset` (stdio to hdc-mcp). Model: `HDC_OPS_AGENT_MODEL` or `gemini-2.5-flash`; requires `GOOGLE_API_KEY` for interactive runs.
-- **Scheduled daily:** [`apps/hdc-ops-agent/bin/run-daily.mjs`](apps/hdc-ops-agent/bin/run-daily.mjs) — deterministic `maintain daily` + Discord (no LLM). hdc-runner schedule `hdc-ops-daily` uses `cli: ["run-daily"]`.
-- **Docs:** [`docs/manually-deployed/hdc-mcp.md`](docs/manually-deployed/hdc-mcp.md), [`docs/manually-deployed/hdc-ops-agent.md`](docs/manually-deployed/hdc-ops-agent.md).
+- **MCP server:** [`apps/hdc-mcp-server/server.mjs`](apps/hdc-mcp-server/server.mjs) — stdio MCP exposing `hdc_list`, `hdc_help`, `hdc_maintain_daily`, `hdc_run` (query/maintain only), `hdc_notify_discord`. Policy blocks secrets, deploy, teardown, and destructive flags.
+- **Scheduled daily:** [`apps/hdc-agent-server/bin/run-daily.mjs`](apps/hdc-agent-server/bin/run-daily.mjs) — deterministic `maintain daily` + Discord (no LLM). hdc-agents schedule `hdc-ops-daily` uses `cli: ["run-daily"]`.
+- **Docs:** [`docs/manually-deployed/hdc-mcp-server.md`](docs/manually-deployed/hdc-mcp-server.md).
 
 Examples:
 
 ```bash
-node apps/hdc-mcp/server.mjs
-node apps/hdc-ops-agent/bin/run-daily.mjs --dry-run
-cd apps/hdc-ops-agent && npx adk run agent.ts
-node apps/hdc-cli/cli.mjs run service hdc-runner maintain -- --test-schedule hdc-ops-daily
+node apps/hdc-mcp-server/server.mjs
+node apps/hdc-agent-server/bin/run-daily.mjs --dry-run
+node apps/hdc-cli/cli.mjs run service hdc-agents maintain --
 ```
 
 ## Deeper context (pointers)
@@ -1666,8 +1644,8 @@ node apps/hdc-cli/cli.mjs run service hdc-runner maintain -- --test-schedule hdc
 | Automation conventions | [`.cursor/rules/hdc-automation.mdc`](.cursor/rules/hdc-automation.mdc) |
 | Inventory naming | [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc) |
 | Nagios + manual docs | [`.cursor/rules/hdc-nagios-monitoring.mdc`](.cursor/rules/hdc-nagios-monitoring.mdc) |
-| Agent team | [`.cursor/skills/hdc-agent-team/SKILL.md`](.cursor/skills/hdc-agent-team/SKILL.md), [`.cursor/agents/`](.cursor/agents/) |
+| Agent team | [`apps/hdc-agent-server/skills/hdc-agent-team/`](apps/hdc-agent-server/skills/hdc-agent-team/SKILL.md), [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) |
 | Multi-agent architecture | [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md) |
 | Claude Code entry point | [`CLAUDE.md`](CLAUDE.md); thin pointers under `.claude/skills/` and `.claude/agents/` |
-| Operator workflow | [`.cursor/skills/hdc-ops/SKILL.md`](.cursor/skills/hdc-ops/SKILL.md), [`.cursor/agents/hdc-sre.md`](.cursor/agents/hdc-sre.md) |
+| Operator workflow | [`apps/hdc-agent-server/skills/hdc-ops/SKILL.md`](apps/hdc-agent-server/skills/hdc-ops/SKILL.md), [`apps/hdc-agent-server/agents/hdc-sre.md`](apps/hdc-agent-server/agents/hdc-sre.md) |
 | Human README | [README.md](README.md) |

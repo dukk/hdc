@@ -156,9 +156,9 @@ Operator tips for faster runs:
 - Put frequently used secrets in **clump `.env`** (hdc-private) when acceptable — hdc reads env vars before calling `bw`.
 - Use **`HDC_SECRET_BACKEND=local`** on dev machines that do not need Vaultwarden.
 
-## hdc-runner scheduled host
+## hdc-agents scheduled host
 
-The [`hdc-runner`](../clumps/services/hdc-runner/) service installs `bw` on the automation guest and receives `HDC_VAULTWARDEN_MASTER_PASSWORD` in `/opt/hdc-runner/.env` during `maintain` (sourced from the operator local vault). When API key login is configured, `HDC_VAULTWARDEN_KEY_CLIENT_ID` and `HDC_VAULTWARDEN_KEY_CLIENT_SECRET` are pushed the same way. Org/collection IDs come from `hdc_runner.env`. Cron jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`clumps/services/hdc-runner/README.md`](../clumps/services/hdc-runner/README.md).
+The [`hdc-agents`](../../clumps/services/hdc-agents/) service guest installs `bw` as needed and receives Vaultwarden secrets under `/opt/hdc-agents-meta/.env` during `maintain` (sourced from the operator local vault). Cron / schedule jobs run as the `hdc` user with `HDC_SECRET_BACKEND=vaultwarden`. See [`clumps/services/hdc-agents/`](../../clumps/services/hdc-agents/) and [`apps/hdc-web-server/`](../../apps/hdc-web-server/).
 
 ## Troubleshooting
 
