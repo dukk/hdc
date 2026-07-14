@@ -446,8 +446,13 @@ export async function resolveUserPassword(vault, user, opts = {}) {
   const log = opts.log ?? (() => {});
   const key = user.password_vault_key;
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  let existing = "";
+  if (typeof vault.getSecret === "function") {
+    existing = String(await vault.getSecret(key, { promptLabel: `vault secret ${key}` })).trim();
+  } else {
+    const data = await vault.readSecrets({});
+    existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  }
   if (existing) {
     log(`user password loaded from vault ${key}`);
     return existing;
@@ -471,8 +476,13 @@ export async function resolveClientSecret(vault, clientCfg, opts = {}) {
   const key = clientCfg.secret_vault_key;
   if (!key) return null;
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  let existing = "";
+  if (typeof vault.getSecret === "function") {
+    existing = String(await vault.getSecret(key, { promptLabel: `vault secret ${key}` })).trim();
+  } else {
+    const data = await vault.readSecrets({});
+    existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  }
   if (existing) {
     log(`client secret loaded from vault ${key}`);
     return existing;
@@ -496,8 +506,13 @@ export async function resolveIdentityProviderSecret(vault, idp, opts = {}) {
   const log = opts.log ?? (() => {});
   const key = idp.client_secret_vault_key;
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  let existing = "";
+  if (typeof vault.getSecret === "function") {
+    existing = String(await vault.getSecret(key, { promptLabel: `vault secret ${key}` })).trim();
+  } else {
+    const data = await vault.readSecrets({});
+    existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  }
   if (existing) {
     log(`identity provider secret loaded from vault ${key}`);
     return existing;
