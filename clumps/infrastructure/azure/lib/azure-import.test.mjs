@@ -39,6 +39,84 @@ describe("azure-import", () => {
     expect(apps[0].id).toBe("portal-app");
   });
 
+  it("preserves id and managed when display name matches", () => {
+    const apps = liveAppsToConfigEntries(
+      [
+        {
+          id: "obj-1",
+          appId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+          displayName: "Keycloak Microsoft IdP (dukk-sso)",
+          signInAudience: "AzureADandPersonalMicrosoftAccount",
+          web: { redirectUris: ["https://example/cb"] },
+          spa: { redirectUris: [] },
+          publicClient: { redirectUris: [] },
+          requiredResourceAccess: [],
+        },
+      ],
+      filter,
+      "",
+      [
+        {
+          id: "keycloak-microsoft-idp",
+          managed: true,
+          match: { display_name: "Keycloak Microsoft IdP (dukk-sso)" },
+          display_name: "Keycloak Microsoft IdP (dukk-sso)",
+          sign_in_audience: "AzureADandPersonalMicrosoftAccount",
+          web: { redirect_uris: [] },
+          spa: { redirect_uris: [] },
+          public_client: { redirect_uris: [] },
+          required_resource_access: [],
+          identifier_uris: [],
+        },
+      ]
+    );
+
+    expect(apps).toHaveLength(1);
+    expect(apps[0].id).toBe("keycloak-microsoft-idp");
+    expect(apps[0].managed).toBe(true);
+    expect(apps[0].match.client_id).toBe("cccccccc-cccc-cccc-cccc-cccccccccccc");
+  });
+
+  it("prefers client_id match over display name", () => {
+    const apps = liveAppsToConfigEntries(
+      [
+        {
+          id: "obj-1",
+          appId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+          displayName: "Renamed Live",
+          signInAudience: "AzureADMyOrg",
+          web: { redirectUris: [] },
+          spa: { redirectUris: [] },
+          publicClient: { redirectUris: [] },
+          requiredResourceAccess: [],
+        },
+      ],
+      filter,
+      "",
+      [
+        {
+          id: "stable-id",
+          managed: true,
+          match: {
+            client_id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+            display_name: "Old Name",
+          },
+          display_name: "Old Name",
+          sign_in_audience: "AzureADMyOrg",
+          web: { redirect_uris: [] },
+          spa: { redirect_uris: [] },
+          public_client: { redirect_uris: [] },
+          required_resource_access: [],
+          identifier_uris: [],
+        },
+      ]
+    );
+
+    expect(apps[0].id).toBe("stable-id");
+    expect(apps[0].managed).toBe(true);
+    expect(apps[0].display_name).toBe("Renamed Live");
+  });
+
   it("dedupes config ids with client_id suffix", () => {
     const apps = liveAppsToConfigEntries(
       [

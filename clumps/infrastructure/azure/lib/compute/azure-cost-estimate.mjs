@@ -1,7 +1,7 @@
 import {
   DEFAULT_COST_DISCLAIMER,
   sumLineItems,
-} from "../../../lib/cloud-cost-format.mjs";
+} from "../../../../lib/cloud-cost-format.mjs";
 import {
   hourlyVmPrice,
   monthlyAciPrice,
@@ -9,7 +9,7 @@ import {
 } from "./azure-retail-prices.mjs";
 
 /**
- * @typedef {import("../../../lib/cloud-cost-format.mjs").CostEstimate} CostEstimate
+ * @typedef {import("../../../../lib/cloud-cost-format.mjs").CostEstimate} CostEstimate
  */
 
 /**

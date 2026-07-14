@@ -54,7 +54,7 @@ async function sendDiscord(opts) {
   );
   const deps = createNodeCliDeps();
   const vault = createVaultAccess(vaultDepsFromCli(deps));
-  const webhookKey = opts.webhookVaultKey || "HDC_OPS_DISCORD_WEBHOOK_URL";
+  const webhookKey = opts.webhookVaultKey || "HDC_AGENTS_DISCORD_WEBHOOK_URL";
   let url = String(deps.env[webhookKey] ?? "").trim();
   if (!url) {
     url = String((await vault.getSecret(webhookKey, { optional: true })) ?? "").trim();
@@ -108,7 +108,7 @@ export async function runScheduledCliJob(opts) {
   const discordWebhookKey =
     typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
       ? discord.webhook_vault_key.trim()
-      : "HDC_OPS_DISCORD_WEBHOOK_URL";
+      : "HDC_AGENTS_DISCORD_WEBHOOK_URL";
 
   if (discord.enabled === true && !isOpsDaily) {
     await sendDiscord({

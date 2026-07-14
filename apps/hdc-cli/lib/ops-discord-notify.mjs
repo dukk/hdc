@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const OPS_DISCORD_WEBHOOK_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
+export const AGENTS_DISCORD_WEBHOOK_KEY = "HDC_AGENTS_DISCORD_WEBHOOK_URL";
 export const OPS_DISCORD_NOTIFY_ENV = "HDC_OPS_DISCORD_NOTIFY";
 export const OPS_DISCORD_HOST_ENV = "HDC_OPS_DISCORD_HOST";
 export const OPS_DISCORD_APPLICATION_ID_ENV = "HDC_OPS_DISCORD_APPLICATION_ID";
@@ -208,6 +209,8 @@ export async function postDiscordBotChannelMessage(opts) {
  * @param {string} [opts.taskId]
  * @param {boolean} [opts.decision]
  * @param {boolean} [opts.suppressNotifications]
+ * @param {string} [opts.webhookVaultKey]
+ * @param {string} [opts.fallbackWebhookVaultKey]
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @param {(key: string, opts?: { optional?: boolean }) => Promise<string | null>} [opts.getSecret]
  * @returns {Promise<{ ok: true; mode: "bot" | "webhook" }>}
@@ -237,13 +240,19 @@ export async function sendOpsDiscordMessage(opts) {
     }
   }
 
+  const webhookVaultKey =
+    typeof opts.webhookVaultKey === "string" && opts.webhookVaultKey.trim()
+      ? opts.webhookVaultKey.trim()
+      : OPS_DISCORD_WEBHOOK_KEY;
   const url = await resolveOpsDiscordWebhookUrl({
     env: opts.env,
     getSecret: opts.getSecret,
+    webhookVaultKey,
+    fallbackWebhookVaultKey: opts.fallbackWebhookVaultKey,
   });
   if (!url) {
     throw new Error(
-      `set ${OPS_DISCORD_WEBHOOK_KEY} in vault (or interactive Discord bot env for --decision)`,
+      `set ${webhookVaultKey} in vault (or interactive Discord bot env for --decision)`,
     );
   }
   await postDiscordWebhook(url, opts.content, {
@@ -256,16 +265,33 @@ export async function sendOpsDiscordMessage(opts) {
  * @param {object} opts
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @param {(key: string, opts?: { optional?: boolean }) => Promise<string | null>} [opts.getSecret]
+ * @param {string} [opts.webhookVaultKey]
+ * @param {string} [opts.fallbackWebhookVaultKey]
  * @returns {Promise<string | null>}
  */
 export async function resolveOpsDiscordWebhookUrl(opts = {}) {
   const env = opts.env ?? process.env;
-  const fromEnv = String(env[OPS_DISCORD_WEBHOOK_KEY] ?? "").trim();
+  const key =
+    typeof opts.webhookVaultKey === "string" && opts.webhookVaultKey.trim()
+      ? opts.webhookVaultKey.trim()
+      : OPS_DISCORD_WEBHOOK_KEY;
+  const fromEnv = String(env[key] ?? "").trim();
   if (fromEnv) return fromEnv;
   if (opts.getSecret) {
-    const fromVault = await opts.getSecret(OPS_DISCORD_WEBHOOK_KEY, { optional: true });
+    const fromVault = await opts.getSecret(key, { optional: true });
     const trimmed = String(fromVault ?? "").trim();
     if (trimmed) return trimmed;
+  }
+  const fallback =
+    typeof opts.fallbackWebhookVaultKey === "string" && opts.fallbackWebhookVaultKey.trim()
+      ? opts.fallbackWebhookVaultKey.trim()
+      : "";
+  if (fallback && fallback !== key) {
+    return resolveOpsDiscordWebhookUrl({
+      env,
+      getSecret: opts.getSecret,
+      webhookVaultKey: fallback,
+    });
   }
   return null;
 }

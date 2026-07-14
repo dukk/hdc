@@ -52,7 +52,7 @@ When `mode` is `azure-vm`, `azure-aci`, `gcp-vm`, or `gcp-cloud-run`:
 |-------|-------|
 | Pricing source | {{azure_retail_or_gcp_fallback}} |
 | Estimated monthly (USD) | {{cost_monthly_usd}} |
-| Confirmed in plan? | Run `hdc run infrastructure <azure-compute\|gcp-compute> deploy -- --dry-run` and paste summary |
+| Confirmed in plan? | Run `hdc run infrastructure <azure\|gcp-compute> deploy -- --section compute --dry-run` (azure) or `gcp-compute deploy -- --dry-run` and paste summary |
 
 Operator must approve cost line in **Section 10** before non–dry-run cloud deploy.
 

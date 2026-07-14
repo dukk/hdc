@@ -2,7 +2,9 @@ import { discoverManifests, manifestByTierAndId, manifestId, manifestRunTier, ma
 import { runCli } from "../../hdc-cli/lib/cli-app.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../hdc-cli/lib/vault-access.mjs";
 import {
+  AGENTS_DISCORD_WEBHOOK_KEY,
   formatDiscordContent,
+  OPS_DISCORD_WEBHOOK_KEY,
   redactIpsFromText,
   resolveOpsDiscordInteractiveConfig,
   sendOpsDiscordMessage,
@@ -244,6 +246,8 @@ export async function handleHdcNotifyDiscord(args = {}) {
       decision,
       taskId,
       suppressNotifications: silent,
+      webhookVaultKey: AGENTS_DISCORD_WEBHOOK_KEY,
+      fallbackWebhookVaultKey: OPS_DISCORD_WEBHOOK_KEY,
       env: deps.env,
       getSecret: (key, opts) => vault.getSecret(key, opts),
     });

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * Azure deploy: create managed app registrations missing from the tenant.
+ * Azure deploy: Entra managed apps (default) or compute (--section compute).
  *
  * Usage: hdc run infrastructure azure deploy --
- *   [--app <config-id>] [--dry-run] [--no-report] [--report <path>]
+ *   [--section entra|compute]
+ *   Entra: [--app <config-id>] [--dry-run]
+ *   Compute: [--instance a] [--yes] [--accept-unknown-cost] …
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,15 +23,21 @@ import {
 } from "../../../lib/operation-report.mjs";
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { applicationPassesFilter } from "../lib/azure-config.mjs";
-import { createAzureRunContext, findLiveGraphAppForConfig, CLUMP_CONFIG_EXAMPLE } from "../lib/azure-run-context.mjs";
+import {
+  createAzureRunContext,
+  findLiveGraphAppForConfig,
+  CLUMP_CONFIG_EXAMPLE,
+} from "../lib/azure-run-context.mjs";
 import { applyAppSync, planAppSync } from "../lib/azure-sync.mjs";
+import { resolveAzureSection } from "../lib/section.mjs";
+import { runAzureComputeDeploy } from "../lib/compute/run-compute-deploy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verb = basename(here);
 const clumpRoot = join(here, "..");
 
 const MANIFEST_NEXT_STEPS = [
-  "Run `hdc run infrastructure azure query --` to verify client IDs and drift.",
+  "Run `hdc run infrastructure azure query -- --section entra` to verify client IDs and drift.",
   "Grant admin consent in Entra portal when required_resource_access changes.",
 ];
 
@@ -40,20 +48,18 @@ function log(line) {
   errout.write(`[azure] ${line}\n`);
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
-  const flags = parseArgvFlags(argv);
+async function deployEntra(argv, flags) {
   const appFilter = flagGet(flags, "app");
 
   const reportCtx = createOperationReportContext({
     clumpId: "azure",
-    clumpTitle: "Azure app registrations",
+    clumpTitle: "Azure (Entra)",
     verb,
     argv,
     manifestNextSteps: MANIFEST_NEXT_STEPS,
   });
 
-  log(`${verb}: starting${reportCtx.dryRun ? " (dry-run)" : ""}`);
+  log(`${verb}: starting entra${reportCtx.dryRun ? " (dry-run)" : ""}`);
 
   const { data: cfgRaw, source } = loadClumpConfigFromClumpRoot(clumpRoot, {
     exampleRel: CLUMP_CONFIG_EXAMPLE,
@@ -62,7 +68,7 @@ async function main() {
   log(`config loaded (${source})`);
 
   const { config, api } = await createAzureRunContext(cfgRaw);
-  log("vault: HDC_AZURE_CLIENT_SECRET loaded");
+  log(`vault: ${config.automation.secret_value_vault_key} loaded`);
 
   const allLive = await api.listApplications();
   const filteredLive = allLive.filter((a) =>
@@ -129,7 +135,7 @@ async function main() {
   }
 
   setOutcome(reportCtx, { ok: overallOk, dryRun: reportCtx.dryRun, exitCode: overallOk ? 0 : 1 });
-  setStdoutPayload(reportCtx, { deploy_results: results });
+  setStdoutPayload(reportCtx, { section: "entra", deploy_results: results });
 
   await runOperationReportTail({
     ctx: reportCtx,
@@ -139,6 +145,17 @@ async function main() {
 
   log(overallOk ? `${verb}: completed successfully` : `${verb}: completed with errors`);
   process.exitCode = overallOk ? 0 : 1;
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  const flags = parseArgvFlags(argv);
+  const section = resolveAzureSection(flags, { allowAll: false, defaultSection: "entra" });
+  if (section === "compute") {
+    await runAzureComputeDeploy({ clumpRoot, argv, flags, verb });
+    return;
+  }
+  await deployEntra(argv, flags);
 }
 
 main().catch(async (e) => {

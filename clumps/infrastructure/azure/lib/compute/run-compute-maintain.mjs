@@ -1,49 +1,49 @@
-#!/usr/bin/env node
-/**
- * Azure compute maintain: reconcile tags / ACI definitions; VM resize prompts for cost.
- */
-import { basename, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
-import { confirmDeployCost } from "../../../lib/deploy-cost-confirm.mjs";
-import { toAwsCostEstimate } from "../../../lib/cloud-cost-format.mjs";
-import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
-import { parseArgvFlags } from "../../../lib/parse-argv-flags.mjs";
+import { confirmDeployCost } from "../../../../lib/deploy-cost-confirm.mjs";
+import { toAwsCostEstimate } from "../../../../lib/cloud-cost-format.mjs";
+import { loadClumpConfigFromClumpRoot } from "../../../../lib/clump-run-config.mjs";
 import {
   createOperationReportContext,
   recordStep,
   runOperationReportTail,
   setOutcome,
   setStdoutPayload,
-} from "../../../lib/operation-report.mjs";
-import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
-import { estimateAzureDeploymentCost } from "../lib/azure-cost-estimate.mjs";
-import { resolveAzureComputeDeployments } from "../lib/azure-compute-config.mjs";
+} from "../../../../lib/operation-report.mjs";
+import { repoRoot } from "../../../../../apps/hdc-cli/paths.mjs";
+import { estimateAzureDeploymentCost } from "./azure-cost-estimate.mjs";
+import { resolveAzureComputeDeployments } from "./azure-compute-config.mjs";
 import {
   createAzureComputeRunContext,
   CLUMP_CONFIG_EXAMPLE,
-} from "../lib/azure-compute-run-context.mjs";
-import { azureComputeReportExtraSections } from "../lib/azure-compute-report.mjs";
+} from "./azure-compute-run-context.mjs";
+import { azureComputeReportExtraSections } from "./azure-compute-report.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const verb = basename(here);
-const clumpRoot = join(here, "..");
-
+/**
+ * @param {string} line
+ */
 function log(line) {
-  errout.write(`[azure-compute] ${line}\n`);
+  errout.write(`[azure] compute: ${line}\n`);
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
-  const flags = parseArgvFlags(argv);
+/**
+ * @param {object} opts
+ * @param {string} opts.clumpRoot
+ * @param {string[]} opts.argv
+ * @param {Record<string, string>} opts.flags
+ * @param {string} opts.verb
+ */
+export async function runAzureComputeMaintain(opts) {
+  const { clumpRoot, argv, flags, verb } = opts;
 
   const reportCtx = createOperationReportContext({
-    clumpId: "azure-compute",
-    clumpTitle: "Azure compute",
+    clumpId: "azure",
+    clumpTitle: "Azure (compute)",
     verb,
     argv,
-    manifestNextSteps: ["Run `hdc run infrastructure azure-compute query -- --live`."],
+    manifestNextSteps: [
+      "Run `hdc run infrastructure azure query -- --section compute --live`.",
+    ],
   });
 
   const { data: cfgRaw, source } = loadClumpConfigFromClumpRoot(clumpRoot, {
@@ -104,7 +104,12 @@ async function main() {
         ran: true,
         ok: true,
       });
-      results.push({ ok: true, system_id: deployment.systemId, cost_estimate: costEstimate, ...out });
+      results.push({
+        ok: true,
+        system_id: deployment.systemId,
+        cost_estimate: costEstimate,
+        ...out,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       overallOk = false;
@@ -113,7 +118,7 @@ async function main() {
   }
 
   setOutcome(reportCtx, { ok: overallOk, dryRun: reportCtx.dryRun, exitCode: overallOk ? 0 : 1 });
-  setStdoutPayload(reportCtx, { results });
+  setStdoutPayload(reportCtx, { section: "compute", results });
   await runOperationReportTail({
     ctx: reportCtx,
     clumpRoot,
@@ -121,11 +126,6 @@ async function main() {
     extraSections: azureComputeReportExtraSections,
   });
 
-  console.log(JSON.stringify({ ok: overallOk, results }, null, 2));
+  console.log(JSON.stringify({ ok: overallOk, section: "compute", results }, null, 2));
   process.exitCode = overallOk ? 0 : 1;
 }
-
-main().catch((e) => {
-  log(`failed: ${e instanceof Error ? e.message : String(e)}`);
-  process.exitCode = 1;
-});

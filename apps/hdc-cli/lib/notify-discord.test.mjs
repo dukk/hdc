@@ -56,4 +56,25 @@ describe("notify-discord.mjs", () => {
     });
     expect(r.status).toBe(2);
   });
+
+  it("dry-run reports --webhook-vault-key", () => {
+    const r = spawnSync(
+      process.execPath,
+      [
+        script,
+        "--dry-run",
+        "--message",
+        "test",
+        "--webhook-vault-key",
+        "HDC_AGENTS_DISCORD_WEBHOOK_URL",
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, HDC_SECRET_BACKEND: "local" },
+      },
+    );
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim());
+    expect(parsed.webhook_vault_key).toBe("HDC_AGENTS_DISCORD_WEBHOOK_URL");
+  });
 });

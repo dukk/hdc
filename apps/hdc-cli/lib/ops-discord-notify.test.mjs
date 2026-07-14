@@ -155,6 +155,40 @@ describe("ops-discord-notify", () => {
         vi.unstubAllGlobals();
       }
     });
+
+    it("sendOpsDiscordMessage uses webhookVaultKey when set", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await sendOpsDiscordMessage({
+          content: "agents",
+          env: {
+            HDC_OPS_DISCORD_WEBHOOK_URL: "https://discord.example.invalid/ops",
+            HDC_AGENTS_DISCORD_WEBHOOK_URL: "https://discord.example.invalid/agents",
+          },
+          webhookVaultKey: "HDC_AGENTS_DISCORD_WEBHOOK_URL",
+        });
+        expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://discord.example.invalid/agents");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("sendOpsDiscordMessage falls back when agents webhook missing", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await sendOpsDiscordMessage({
+          content: "fallback",
+          env: { HDC_OPS_DISCORD_WEBHOOK_URL: "https://discord.example.invalid/ops" },
+          webhookVaultKey: "HDC_AGENTS_DISCORD_WEBHOOK_URL",
+          fallbackWebhookVaultKey: "HDC_OPS_DISCORD_WEBHOOK_URL",
+        });
+        expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://discord.example.invalid/ops");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   describe("redactIpsFromText", () => {

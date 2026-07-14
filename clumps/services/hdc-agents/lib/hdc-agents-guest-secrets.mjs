@@ -86,23 +86,33 @@ export async function prepareAgentsGuestSecrets(opts) {
     envLines.push(`HDC_WEB_OIDC_CLIENT_SECRET=${oidcSecret}`);
   }
 
-  // Optional Discord + LiteLLM pass-through when present in vault
-  for (const key of [
-    "HDC_OPS_DISCORD_WEBHOOK_URL",
-    "HDC_LITELLM_MASTER_KEY",
-    ...mcpApiKeyRoles(hdcAgents)
-      .filter((r) => r !== "hdc-scheduler")
-      .map((r) => `HDC_AGENT_LITELLM_KEY_${r.replace(/-/g, "_").toUpperCase()}`),
-  ]) {
-    const val = String((await vault.getSecret(key, { optional: true })) ?? "").trim();
-    if (val) envLines.push(`${key}=${val}`);
-  }
-
   const mail = hdcAgents.mail && typeof hdcAgents.mail === "object" ? hdcAgents.mail : {};
   const discord =
     hdcAgents.discord && typeof hdcAgents.discord === "object"
       ? /** @type {Record<string, unknown>} */ (hdcAgents.discord)
       : {};
+
+  const agentsWebhookVaultKey =
+    typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
+      ? discord.webhook_vault_key.trim()
+      : "HDC_AGENTS_DISCORD_WEBHOOK_URL";
+
+  // Optional Discord + LiteLLM pass-through when present in vault.
+  // Keep OPS webhook for CLI child processes; agents webhook for scheduler/MCP.
+  const passThroughKeys = [
+    ...new Set([
+      "HDC_OPS_DISCORD_WEBHOOK_URL",
+      agentsWebhookVaultKey,
+      "HDC_LITELLM_MASTER_KEY",
+      ...mcpApiKeyRoles(hdcAgents)
+        .filter((r) => r !== "hdc-scheduler")
+        .map((r) => `HDC_AGENT_LITELLM_KEY_${r.replace(/-/g, "_").toUpperCase()}`),
+    ]),
+  ];
+  for (const key of passThroughKeys) {
+    const val = String((await vault.getSecret(key, { optional: true })) ?? "").trim();
+    if (val) envLines.push(`${key}=${val}`);
+  }
 
   const applicationId =
     typeof discord.application_id === "string" && discord.application_id.trim()
@@ -132,7 +142,7 @@ export async function prepareAgentsGuestSecrets(opts) {
     enabled: discord.enabled,
     title_prefix: discord.title_prefix,
     on_failure_only: discord.on_failure_only,
-    webhook_vault_key: discord.webhook_vault_key,
+    webhook_vault_key: agentsWebhookVaultKey,
   };
   const schedules = schedulesFromConfig(hdcAgents).map((s) => ({
     ...s,

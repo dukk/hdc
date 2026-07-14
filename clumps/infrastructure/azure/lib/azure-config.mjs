@@ -156,20 +156,97 @@ export function configAppToDesired(app) {
 }
 
 /**
+ * Flatten v1 (top-level applications) or v2 (entra.*) into a shape the Entra normalizer understands.
+ * @param {Record<string, unknown>} cfg
+ * @returns {Record<string, unknown>}
+ */
+export function extractEntraConfigRaw(cfg) {
+  if (isObject(cfg.entra)) {
+    const entra = /** @type {Record<string, unknown>} */ (cfg.entra);
+    return {
+      schema_version: typeof cfg.schema_version === "number" ? cfg.schema_version : 2,
+      azure: {
+        graph_base_url:
+          typeof entra.graph_base_url === "string" ? entra.graph_base_url : undefined,
+      },
+      application_filter: entra.application_filter,
+      applications: entra.applications,
+      automation: entra.automation,
+    };
+  }
+  return cfg;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {{
+ *   app_id: string;
+ *   application_id_env: string;
+ *   secret_value_vault_key: string;
+ *   secret_id_env: string;
+ * }}
+ */
+export function normalizeEntraAutomation(raw) {
+  const block = isObject(raw) ? raw : {};
+  const appId =
+    typeof block.app_id === "string" && block.app_id.trim()
+      ? block.app_id.trim()
+      : "hdc";
+  const slug = appId.toUpperCase().replace(/-/g, "_");
+  const prefix = `HDC_AZURE_ENTRA_${slug}`;
+  return {
+    app_id: appId,
+    application_id_env:
+      typeof block.application_id_env === "string" && block.application_id_env.trim()
+        ? block.application_id_env.trim()
+        : `${prefix}_APPLICATION_ID`,
+    secret_value_vault_key:
+      typeof block.secret_value_vault_key === "string" && block.secret_value_vault_key.trim()
+        ? block.secret_value_vault_key.trim()
+        : `${prefix}_SECRET_VALUE`,
+    secret_id_env:
+      typeof block.secret_id_env === "string" && block.secret_id_env.trim()
+        ? block.secret_id_env.trim()
+        : `${prefix}_SECRET_ID`,
+  };
+}
+
+/**
+ * Live-app → config entry, preserving local id/managed/notes/consumer when matched.
+ * @param {NormalizedLiveApp} live
+ * @param {ConfigApplication | Record<string, unknown> | null} [existing]
+ */
+export function liveAppToConfigEntry(live, existing = null) {
+  const base = suggestedConfigEntry(live);
+  if (!existing || typeof existing !== "object") return base;
+  const ex = /** @type {Record<string, unknown>} */ (existing);
+  if (typeof ex.id === "string" && ex.id.trim()) base.id = ex.id.trim();
+  if (typeof ex.managed === "boolean") base.managed = ex.managed;
+  if (typeof ex.notes === "string") {
+    /** @type {Record<string, unknown>} */ (base).notes = ex.notes;
+  }
+  if (typeof ex.consumer === "string") {
+    /** @type {Record<string, unknown>} */ (base).consumer = ex.consumer;
+  }
+  return base;
+}
+
+/**
  * @param {Record<string, unknown>} cfg
  */
 export function normalizeAzureConfig(cfg) {
-  const ae = isObject(cfg.azure)
-    ? cfg.azure
-    : isObject(cfg.azure_entra)
-      ? cfg.azure_entra
+  const flat = extractEntraConfigRaw(cfg);
+  const ae = isObject(flat.azure)
+    ? flat.azure
+    : isObject(flat.azure_entra)
+      ? flat.azure_entra
       : {};
   const graphBase =
     typeof ae.graph_base_url === "string" && ae.graph_base_url.trim()
       ? ae.graph_base_url.trim().replace(/\/$/, "")
       : "https://graph.microsoft.com/v1.0";
 
-  const filter = isObject(cfg.application_filter) ? cfg.application_filter : {};
+  const filter = isObject(flat.application_filter) ? flat.application_filter : {};
   const modeRaw = typeof filter.mode === "string" ? filter.mode.trim().toLowerCase() : "all";
   const mode = modeRaw === "include" || modeRaw === "exclude" ? modeRaw : "all";
   const prefixes = Array.isArray(filter.display_name_prefixes)
@@ -178,7 +255,7 @@ export function normalizeAzureConfig(cfg) {
 
   /** @type {ConfigApplication[]} */
   const applications = [];
-  const appList = Array.isArray(cfg.applications) ? cfg.applications : [];
+  const appList = Array.isArray(flat.applications) ? flat.applications : [];
   for (const raw of appList) {
     if (!isObject(raw)) continue;
     const id = typeof raw.id === "string" ? raw.id.trim() : "";
@@ -222,12 +299,23 @@ export function normalizeAzureConfig(cfg) {
     applications.push(app);
   }
 
+  const schemaVersion = typeof cfg.schema_version === "number" ? cfg.schema_version : 1;
+  const hasCompute =
+    isObject(cfg.compute) ||
+    (Array.isArray(cfg.deployments) && !isObject(cfg.entra) && !Array.isArray(cfg.applications));
+
+  const automation = normalizeEntraAutomation(flat.automation);
+
   return {
+    schema_version: schemaVersion,
     graphBase,
     applicationFilter: { mode, prefixes },
     applications,
     applicationsById: new Map(applications.map((a) => [a.id, a])),
     managedApplications: applications.filter((a) => a.managed),
+    automation,
+    hasComputeSection: Boolean(isObject(cfg.compute) || Array.isArray(cfg.deployments)),
+    hasCompute,
   };
 }
 
@@ -255,7 +343,10 @@ export function applicationPassesFilter(displayName, applicationFilter) {
  */
 export function findConfigForLiveApp(live, configApps) {
   if (live.client_id) {
-    const byClient = configApps.find((a) => a.match.client_id === live.client_id);
+    const cid = live.client_id.trim().toLowerCase();
+    const byClient = configApps.find(
+      (a) => a.match.client_id?.trim().toLowerCase() === cid
+    );
     if (byClient) return byClient;
   }
   const name = live.display_name.trim().toLowerCase();

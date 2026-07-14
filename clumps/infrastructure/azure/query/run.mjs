@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Azure query: discover app registrations and diff vs config (JSON on stdout).
+ * Azure query: Entra apps and/or compute deployments.
  *
  * Usage: hdc run infrastructure azure query --
- *   [--app <config-id>] [--import] [--yes]
+ *   [--section entra|compute|all] [--app <config-id>] [--import] [--yes]
+ *   [--live] (compute) [--instance a]
  */
 import { createInterface } from "node:readline/promises";
 import { basename, dirname, join } from "node:path";
@@ -16,6 +17,8 @@ import { applicationPassesFilter } from "../lib/azure-config.mjs";
 import { collectAzureState } from "../lib/azure-collect.mjs";
 import { importAzureToConfig } from "../lib/azure-import.mjs";
 import { createAzureRunContext, CLUMP_CONFIG_EXAMPLE } from "../lib/azure-run-context.mjs";
+import { resolveAzureSection } from "../lib/section.mjs";
+import { runAzureComputeQuery } from "../lib/compute/run-compute-query.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verb = basename(here);
@@ -41,15 +44,18 @@ async function confirm(question) {
   }
 }
 
-async function main() {
-  log(`${verb}: starting`);
-  const flags = parseArgvFlags(process.argv.slice(2));
+/**
+ * @param {Record<string, string>} flags
+ */
+async function queryEntra(flags) {
   const appId = flagGet(flags, "app");
   const doImport = flags.import === "1";
   const yes = flags.yes === "1";
 
   if (doImport) {
-    log("import: will replace applications[] in config.json from live tenant (managed: false).");
+    log(
+      "import: merge live Entra apps into entra.applications (preserve id/managed on match; write entra/applications/*.json)."
+    );
   }
 
   const { data: cfgRaw, source } = loadClumpConfigFromClumpRoot(clumpRoot, {
@@ -62,7 +68,7 @@ async function main() {
   const { config, api, tenantId, clientId } = await createAzureRunContext(cfgRaw);
   log(`tenant ${tenantId}, client_id ${clientId}: fetching applications from Microsoft Graph`);
 
-  /** @type {{ application_count: number; config_rel: string } | null} */
+  /** @type {{ application_count: number; config_rel: string; layout?: string } | null} */
   let importResult = null;
 
   if (doImport) {
@@ -72,12 +78,12 @@ async function main() {
         applicationPassesFilter(a.displayName, config.applicationFilter)
       ).length;
       const ok = await confirm(
-        `Replace applications[] with ${filteredCount} app registration(s) from tenant (excluding hdc automation app)? [y/N] `
+        `Merge ${filteredCount} app registration(s) into entra.applications (preserve id/managed; drop config-only unmatched)? [y/N] `
       );
       if (!ok) {
         errout.write("[azure] Aborted: import not confirmed (use --yes to skip prompt).\n");
         process.exitCode = 1;
-        return;
+        return null;
       }
     }
     const written = importAzureToConfig({
@@ -89,6 +95,7 @@ async function main() {
     importResult = {
       application_count: written.application_count,
       config_rel: written.configRel,
+      layout: written.layout,
     };
     log(`import complete: ${written.configRel}`);
   }
@@ -116,6 +123,7 @@ async function main() {
     ok,
     verb: "query",
     package: "azure",
+    section: "entra",
     config_source: source,
     tenant_id: tenantId,
     application_filter: configForCollect.applicationFilter,
@@ -124,7 +132,7 @@ async function main() {
     import: importResult,
     collected_at: new Date().toISOString(),
     summary:
-      "Entra app registration snapshot. Use --import --yes to bootstrap hdc-private applications[].",
+      "Entra app registration snapshot. Use --import --yes to refresh hdc-private entra/applications.",
   };
 
   if (state.configured_missing.length) {
@@ -139,7 +147,47 @@ async function main() {
     `done: ${state.filtered_application_count} apps in scan (${state.unmanaged_applications.length} unmanaged, ${state.configured_missing.length} missing)`
   );
 
-  console.log(JSON.stringify(payload, null, 2));
+  return payload;
+}
+
+async function main() {
+  log(`${verb}: starting`);
+  const flags = parseArgvFlags(process.argv.slice(2));
+  const section = resolveAzureSection(flags, { allowAll: true, defaultSection: "entra" });
+  log(`section=${section}`);
+
+  if (section === "compute") {
+    await runAzureComputeQuery({ clumpRoot, flags, printJson: true });
+    return;
+  }
+
+  if (section === "entra") {
+    const payload = await queryEntra(flags);
+    if (payload) console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  // all (import still applies to entra when --import is set)
+  const entra = await queryEntra(flags);
+  if (!entra && flags.import === "1") return;
+  const compute = await runAzureComputeQuery({ clumpRoot, flags, printJson: false });
+  const ok = Boolean(entra?.ok) && Boolean(compute?.ok);
+  console.log(
+    JSON.stringify(
+      {
+        ok,
+        verb: "query",
+        package: "azure",
+        section: "all",
+        entra,
+        compute,
+        collected_at: new Date().toISOString(),
+      },
+      null,
+      2
+    )
+  );
+  process.exitCode = ok ? 0 : 1;
 }
 
 main().catch((e) => {

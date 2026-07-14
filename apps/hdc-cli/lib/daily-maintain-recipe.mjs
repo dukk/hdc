@@ -189,8 +189,6 @@ export function dailyRecipeSteps() {
     "cloudflare",
     "cloudflare-workers",
     "unifi-network",
-    "azure",
-    "azure-compute",
     "aws",
     "gcp-oauth",
     "gcp-compute",
@@ -206,6 +204,15 @@ export function dailyRecipeSteps() {
       note: "Drift check (no apply)",
     });
   }
+
+  steps.push({
+    tier: "infrastructure",
+    id: "azure",
+    verb: "query",
+    args: ["--section", "all"],
+    requiresConfig: true,
+    note: "Entra + compute drift check (no apply)",
+  });
 
   steps.push({
     tier: "infrastructure",

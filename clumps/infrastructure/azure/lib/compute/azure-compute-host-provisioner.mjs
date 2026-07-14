@@ -1,4 +1,4 @@
-import { vmNotSupportedResult } from "../../../lib/host-provisioner.mjs";
+import { vmNotSupportedResult } from "../../../../lib/host-provisioner.mjs";
 import { createAzureArmClient, loadOperatorSshPublicKeys } from "./azure-arm-api.mjs";
 
 /**
@@ -18,8 +18,8 @@ export function createAzureComputeHostProvisioner(opts) {
     backendId: "azure-compute",
 
     /**
-     * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
-     * @param {import("../../../lib/host-provisioner.mjs").ContainerCreateSpec} spec
+     * @param {import("../../../../lib/host-provisioner.mjs").ProvisionLog} log
+     * @param {import("../../../../lib/host-provisioner.mjs").ContainerCreateSpec} spec
      */
     async createContainer(log, spec) {
       if (deployment.mode !== "azure-aci") {

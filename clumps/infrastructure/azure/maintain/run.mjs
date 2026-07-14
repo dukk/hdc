@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Azure maintain: reconcile managed app registrations with config.
+ * Azure maintain: Entra managed apps (default) or compute (--section compute).
  *
  * Usage: hdc run infrastructure azure maintain --
- *   [--app <config-id>] [--dry-run] [--no-report] [--report <path>]
+ *   [--section entra|compute] [--app <config-id>] [--dry-run]
  */
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,15 +22,21 @@ import {
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { applicationPassesFilter } from "../lib/azure-config.mjs";
 import { collectAzureState } from "../lib/azure-collect.mjs";
-import { createAzureRunContext, findLiveGraphAppForConfig, CLUMP_CONFIG_EXAMPLE } from "../lib/azure-run-context.mjs";
+import {
+  createAzureRunContext,
+  findLiveGraphAppForConfig,
+  CLUMP_CONFIG_EXAMPLE,
+} from "../lib/azure-run-context.mjs";
 import { applyAppSync, planAppSync } from "../lib/azure-sync.mjs";
+import { resolveAzureSection } from "../lib/section.mjs";
+import { runAzureComputeMaintain } from "../lib/compute/run-compute-maintain.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verb = basename(here);
 const clumpRoot = join(here, "..");
 
 const MANIFEST_NEXT_STEPS = [
-  "Run `hdc run infrastructure azure query --` to verify diffs after maintain.",
+  "Run `hdc run infrastructure azure query -- --section entra` to verify diffs after maintain.",
   "Grant admin consent in Entra portal when API permissions change.",
 ];
 
@@ -41,20 +47,18 @@ function log(line) {
   errout.write(`[azure] ${line}\n`);
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
-  const flags = parseArgvFlags(argv);
+async function maintainEntra(argv, flags) {
   const appFilter = flagGet(flags, "app");
 
   const reportCtx = createOperationReportContext({
     clumpId: "azure",
-    clumpTitle: "Azure app registrations",
+    clumpTitle: "Azure (Entra)",
     verb,
     argv,
     manifestNextSteps: MANIFEST_NEXT_STEPS,
   });
 
-  log(`${verb}: starting${reportCtx.dryRun ? " (dry-run)" : ""}`);
+  log(`${verb}: starting entra${reportCtx.dryRun ? " (dry-run)" : ""}`);
 
   const { data: cfgRaw, source } = loadClumpConfigFromClumpRoot(clumpRoot, {
     exampleRel: CLUMP_CONFIG_EXAMPLE,
@@ -63,7 +67,7 @@ async function main() {
   log(`config loaded (${source})`);
 
   const { config, api } = await createAzureRunContext(cfgRaw);
-  log("vault: HDC_AZURE_CLIENT_SECRET loaded");
+  log(`vault: ${config.automation.secret_value_vault_key} loaded`);
 
   const allLive = await api.listApplications();
   const filteredLive = allLive.filter((a) =>
@@ -157,6 +161,7 @@ async function main() {
 
   setOutcome(reportCtx, { ok: overallOk, dryRun: reportCtx.dryRun, exitCode: overallOk ? 0 : 1 });
   setStdoutPayload(reportCtx, {
+    section: "entra",
     config_source: source,
     managed_applications: snapshot.managed_applications,
     configured_missing: snapshot.configured_missing,
@@ -170,6 +175,17 @@ async function main() {
 
   log(overallOk ? `${verb}: completed successfully` : `${verb}: completed with errors`);
   process.exitCode = overallOk ? 0 : 1;
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  const flags = parseArgvFlags(argv);
+  const section = resolveAzureSection(flags, { allowAll: false, defaultSection: "entra" });
+  if (section === "compute") {
+    await runAzureComputeMaintain({ clumpRoot, argv, flags, verb });
+    return;
+  }
+  await maintainEntra(argv, flags);
 }
 
 main().catch(async (e) => {

@@ -1,4 +1,4 @@
-import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
+import { createPackageVaultAccess } from "../../../../lib/package-vault-access.mjs";
 
 export const VAULT_CLIENT_SECRET = "HDC_AZURE_COMPUTE_CLIENT_SECRET";
 

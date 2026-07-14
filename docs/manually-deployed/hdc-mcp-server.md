@@ -27,7 +27,7 @@ The server communicates over stdin/stdout (JSON-RPC). Do not log to stdout excep
 | `hdc_help` | CLI help topics |
 | `hdc_maintain_daily` | Non-destructive daily maintain recipe |
 | `hdc_run` | Single clump verb (role-dependent; see below) |
-| `hdc_notify_discord` | Post to ops Discord (`HDC_OPS_DISCORD_WEBHOOK_URL`) |
+| `hdc_notify_discord` | Post to agents Discord (`HDC_AGENTS_DISCORD_WEBHOOK_URL`, fallback `HDC_OPS_DISCORD_WEBHOOK_URL`) |
 
 **Blocked globally:** `secrets`, `teardown`, `users`, and destructive flags (`--prune`, `--reboot`, `--destroy-existing`, `--rolling-restart`).
 

@@ -25,7 +25,6 @@ const INFRA_API = new Set([
   "gcp-oauth",
   "azure",
   "unifi-network",
-  "azure-compute",
   "gcp-compute",
   "oci-compute",
   "aws",

@@ -1,8 +1,15 @@
-# Azure app registrations (hdc)
+# Azure (Entra + compute)
 
-Microsoft Entra application registrations (client IDs, redirect URIs, API permissions) are managed with the **azure** infrastructure package (`clumps/infrastructure/azure/`).
+The **azure** infrastructure package (`clumps/infrastructure/azure/`) manages:
 
-## Bootstrap automation app
+1. **Entra** — Microsoft Entra application registrations via Microsoft Graph
+2. **Compute** — Azure VMs and ACI via Azure Resource Manager
+
+Use `--section entra|compute|all` on verbs (default **entra** for deploy/maintain/query; teardown is compute-only).
+
+Keep **two service principals**: Graph automation (`Application.ReadWrite.All`) is separate from the ARM compute SP (**Contributor** on the resource group).
+
+## Entra bootstrap
 
 Create a dedicated app registration for hdc (for example **HDC Entra Automation**):
 
@@ -14,24 +21,46 @@ Create a dedicated app registration for hdc (for example **HDC Entra Automation*
    - **Application.ReadWrite.All** (required to create and update app registrations you did not create)
 6. **Grant admin consent** for the tenant.
 
-Record in `.env`:
+Record in clump `.env` (hdc-private preferred). Default `entra.automation.app_id` is `hdc`:
 
 ```bash
-HDC_AZURE_TENANT_ID=<directory-tenant-id>
-HDC_AZURE_CLIENT_ID=<automation-app-client-id>
+HDC_AZURE_ENTRA_TENANT_ID=<directory-tenant-id>
+HDC_AZURE_ENTRA_HDC_APPLICATION_ID=<automation-app-application-client-id>
+# Optional — portal Secret ID for operator tracking only (never used in token requests):
+# HDC_AZURE_ENTRA_HDC_SECRET_ID=<secret-id>
 ```
 
-Store the secret:
+Use the **Application (client) ID** from Overview — not the **Secret ID** under Certificates & secrets.
+
+Legacy names `HDC_AZURE_ENTRA_CLIENT_ID` / `HDC_AZURE_TENANT_ID` / `HDC_AZURE_CLIENT_ID` still work with a deprecation warning.
+
+Store the secret **value** (shown only once when created):
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET
+node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_ENTRA_HDC_SECRET_VALUE
+```
+
+Legacy vault key `HDC_AZURE_ENTRA_CLIENT_SECRET` (and older `HDC_AZURE_CLIENT_SECRET`) is still read if the per-app key is missing.
+
+## Compute credentials
+
+Separate ARM service principal (Contributor on the target resource group):
+
+```bash
+HDC_AZURE_COMPUTE_SUBSCRIPTION_ID=
+HDC_AZURE_COMPUTE_TENANT_ID=
+HDC_AZURE_COMPUTE_CLIENT_ID=
+node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_COMPUTE_CLIENT_SECRET
 ```
 
 ## Config (hdc-private)
 
-Copy `clumps/infrastructure/azure/config.example.json` to **hdc-private** as `config.json` (same path).
+Copy `clumps/infrastructure/azure/config.example.json` to hdc-private as `config.json`. Schema v2 nests sections:
 
-Optional inventory target sidecar in hdc-private:
+- `entra.applications[]` — optional `$hdc.include` files under `entra/applications/<id>.json`
+- `compute.defaults` / `compute.deployments[]` — optional includes under `compute/deployments/<id>.json`
+
+Optional inventory target:
 
 ```json
 {
@@ -39,65 +68,72 @@ Optional inventory target sidecar in hdc-private:
   "id": "azure",
   "kind": "target",
   "automation_target": "azure",
-  "notes": "Entra app registration automation via Microsoft Graph.",
+  "notes": "Entra app registrations + Azure compute via one azure package.",
   "auth": {
-    "tenant_id_env": "HDC_AZURE_TENANT_ID",
-    "client_id_env": "HDC_AZURE_CLIENT_ID",
-    "client_secret_vault": "HDC_AZURE_CLIENT_SECRET"
+    "tenant_id_env": "HDC_AZURE_ENTRA_TENANT_ID",
+    "client_id_env": "HDC_AZURE_ENTRA_HDC_APPLICATION_ID",
+    "client_secret_vault": "HDC_AZURE_ENTRA_HDC_SECRET_VALUE"
   }
 }
 ```
 
 Path: `inventory/manual/targets/azure.json`
 
-## Workflow
+## Entra workflow
 
-1. **Discover:** `node apps/hdc-cli/cli.mjs run infrastructure azure query --`
-2. **Bootstrap import:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --import --yes` (replaces `applications[]` from live tenant; `managed: false`; skips hdc automation app)
-3. Or copy `suggested_config_entry` objects from JSON stdout into `applications[]`; set `"managed": true` after review.
-4. Prefer `match.client_id` from discovery over display name alone.
-5. **Deploy** missing apps: `node apps/hdc-cli/cli.mjs run infrastructure azure deploy --`
-6. **Maintain** drift: `node apps/hdc-cli/cli.mjs run infrastructure azure maintain --`
+1. **Discover:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra`
+2. **Import:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra --import --yes` — merges live apps into `entra.applications` (preserves `id` / `managed`; writes `entra/applications/*.json`; skips hdc automation app)
+3. Set `"managed": true` on apps you want deploy/maintain to own; prefer `match.client_id`.
+4. **Deploy** missing managed apps: `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra`
+5. **Maintain** drift: `node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section entra`
 
-Use `--dry-run` on deploy and maintain to preview Graph changes.
+## Compute workflow
 
-## Admin consent
+Before billable deploy, hdc estimates cost (Azure Retail Prices API), prints on stderr / operation report, and prompts unless `--yes` / `--dry-run`.
 
-When `required_resource_access` changes, hdc updates the app registration object. **Delegated/application consent** for those permissions may still require **Grant admin consent** in the Entra portal for each API.
+```bash
+node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section compute --live
+node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a
+node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section compute
+node apps/hdc-cli/cli.mjs run infrastructure azure teardown -- --section compute --instance a --yes
+```
 
-## What hdc does not manage
+Flags: `--dry-run`, `--yes`, `--accept-unknown-cost`. Estimates exclude egress, snapshots, reserved discounts, and tax.
 
-- Client secrets or certificates on managed applications (create in Entra portal; store consumer secrets in the hdc vault)
+## Both sections
+
+```bash
+node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section all
+```
+
+## Admin consent (Entra)
+
+When `required_resource_access` changes, hdc updates the app registration object. Consent may still require **Grant admin consent** in the Entra portal.
+
+## What hdc does not manage (Entra)
+
+- Client secrets or certificates on managed applications
 - Conditional Access policies
 - B2C / external identity tenants
 
 ## Keycloak Microsoft IdP
 
-For Keycloak to broker Microsoft sign-in, declare a managed app (see hdc-private `clumps/infrastructure/azure/config.json` `keycloak-microsoft-idp`):
+Declare a managed app under `entra/applications/keycloak-microsoft-idp.json` (see hdc-private):
 
-1. `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --app keycloak-microsoft-idp`
-2. Pin `match.client_id` to the Application (client) ID from deploy/query output.
-3. In Entra → app → **Certificates & secrets**, create a client secret; `node apps/hdc-cli/cli.mjs secrets set HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET`.
-4. Copy the same Application ID into the Keycloak realm `identity_providers[].client_id` (e.g. `dukk-sso`), then `hdc run service keycloak maintain`.
-5. Grant admin consent for Microsoft Graph delegated scopes when prompted.
+1. `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra --app keycloak-microsoft-idp`
+2. Pin `match.client_id` from deploy/query output.
+3. Create a client secret in Entra; `secrets set HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET`.
+4. Copy the Application ID into Keycloak realm `identity_providers[].client_id`, then `hdc run service keycloak maintain`.
 
-Redirect URI shape: `https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint` (alias `microsoft` by default).
-
-See [Keycloak README](../../clumps/services/keycloak/README.md).
+Redirect URI: `https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint`.
 
 ## Troubleshooting
 
 ### `AADSTS700016` — application not found in directory
 
-Azure rejected `HDC_AZURE_CLIENT_ID` for tenant `HDC_AZURE_TENANT_ID`. Common causes:
-
-1. **Wrong Application (client) ID** — In [Entra admin center](https://entra.microsoft.com/) → **App registrations** → your automation app → **Overview**, copy **Application (client) ID** (not Object ID, not a secret value, not an Enterprise application ID).
-2. **Wrong tenant** — On **Microsoft Entra ID** → **Overview**, copy **Tenant ID** for the same directory where the app is registered. Personal/work tenants differ; switch directory in the portal header if needed.
-3. **App not created yet** — Create **HDC Entra Automation** per the bootstrap section above, then update `.env` and `secrets set HDC_AZURE_CLIENT_SECRET`.
-4. **Unsaved `.env`** — hdc reads the file on disk. Save `.env` in the editor before re-running; a stale value on disk overrides what you see in an unsaved buffer.
-
-`hdc run infrastructure azure query` logs `tenant …, client_id …` on stderr so you can confirm which IDs were used.
+Check `HDC_AZURE_ENTRA_<APP>_APPLICATION_ID` (default `HDC_AZURE_ENTRA_HDC_APPLICATION_ID`) and `HDC_AZURE_ENTRA_TENANT_ID`. Use the **Application (client) ID** from Entra Overview — not the **Secret ID**. Legacy `HDC_AZURE_ENTRA_CLIENT_ID` still works. Save `.env` on disk before re-running.
 
 ### Vaultwarden / `bw` unavailable
 
-If stderr shows `Vaultwarden backend unavailable … using local vault for HDC_AZURE_CLIENT_SECRET`, hdc fell back to `~/.hdc/vault.enc`. Ensure the secret exists: `node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_CLIENT_SECRET`. Fix `bw` TLS separately if `HDC_VAULTWARDEN_URL` presents the wrong certificate.
+Ensure `HDC_AZURE_ENTRA_<APP>_SECRET_VALUE` (default `HDC_AZURE_ENTRA_HDC_SECRET_VALUE`) exists in the vault hdc falls back to (or temporarily in clump `.env`). Legacy `HDC_AZURE_ENTRA_CLIENT_SECRET` / `HDC_AZURE_CLIENT_SECRET` still work.

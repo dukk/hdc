@@ -74,6 +74,39 @@ describe("azure-config", () => {
     expect(cfg.graphBase).toBe("https://graph.microsoft.com/v1.0");
   });
 
+  it("normalizes schema v2 entra section", () => {
+    const cfg = normalizeAzureConfig({
+      schema_version: 2,
+      entra: {
+        graph_base_url: "https://graph.microsoft.com/v1.0/",
+        automation: { app_id: "hdc" },
+        application_filter: { mode: "all", display_name_prefixes: [] },
+        applications: [
+          {
+            id: "app-a",
+            managed: true,
+            display_name: "App A",
+            match: { display_name: "App A" },
+          },
+        ],
+      },
+      compute: { defaults: {}, deployments: [] },
+    });
+    expect(cfg.schema_version).toBe(2);
+    expect(cfg.graphBase).toBe("https://graph.microsoft.com/v1.0");
+    expect(cfg.managedApplications).toHaveLength(1);
+    expect(cfg.applications[0].id).toBe("app-a");
+    expect(cfg.automation.app_id).toBe("hdc");
+    expect(cfg.automation.application_id_env).toBe("HDC_AZURE_ENTRA_HDC_APPLICATION_ID");
+    expect(cfg.automation.secret_value_vault_key).toBe("HDC_AZURE_ENTRA_HDC_SECRET_VALUE");
+    expect(cfg.automation.secret_id_env).toBe("HDC_AZURE_ENTRA_HDC_SECRET_ID");
+  });
+
+  it("defaults entra.automation.app_id to hdc", () => {
+    const cfg = normalizeAzureConfig({ schema_version: 2, entra: { applications: [] } });
+    expect(cfg.automation.app_id).toBe("hdc");
+  });
+
   it("detects drift on redirect URIs", () => {
     const live = liveAppToNormalized({
       id: "obj-1",

@@ -5,6 +5,7 @@ import {
   createAzureVaultAccess,
   resolveAzureClientId,
   resolveAzureClientSecret,
+  resolveAzureSecretId,
   resolveAzureTenantId,
 } from "./vault-deps.mjs";
 
@@ -17,14 +18,15 @@ export async function createAzureRunContext(cfgRaw) {
   const config = normalizeAzureConfig(cfgRaw);
   const vault = createAzureVaultAccess();
   const tenantId = resolveAzureTenantId();
-  const clientId = resolveAzureClientId();
-  const clientSecret = await resolveAzureClientSecret(vault);
+  const clientId = resolveAzureClientId(config);
+  const clientSecret = await resolveAzureClientSecret(vault, config);
+  const secretId = resolveAzureSecretId(config);
   const tokenProvider = createAzureGraphTokenProvider({ tenantId, clientId, clientSecret });
   const api = createAzureGraphClient({
     baseUrl: config.graphBase,
     getAccessToken: () => tokenProvider.getAccessToken(),
   });
-  return { config, api, tenantId, clientId };
+  return { config, api, tenantId, clientId, secretId };
 }
 
 /** @deprecated Use createAzureRunContext */

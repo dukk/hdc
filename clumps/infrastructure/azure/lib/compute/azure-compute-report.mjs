@@ -1,5 +1,5 @@
-import { formatCostEstimateMarkdown } from "../../../lib/cloud-cost-format.mjs";
-import { deployCostConfirmed } from "../../../lib/deploy-cost-confirm.mjs";
+import { formatCostEstimateMarkdown } from "../../../../lib/cloud-cost-format.mjs";
+import { deployCostConfirmed } from "../../../../lib/deploy-cost-confirm.mjs";
 
 /**
  * @param {import("../../../lib/operation-report.mjs").OperationReportContext} ctx

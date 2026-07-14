@@ -133,7 +133,7 @@ Multi-instance suffixes use **letters** (`-a`, `-b`), not numbers (`-1`, `-2`). 
 ## Packages
 
 - Each package: [`clumps/<folder>/manifest.json`](clumps/) with `id`, optional `inventory_docs`, and `verbs` mapping to `deploy/run.mjs`, `maintain/run.mjs`, or `query/run.mjs`.
-- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `azure-compute`, `gcp-oauth`, `gcp-compute`, `oci-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
+- **Infrastructure** (shared capabilities): `proxmox`, `unifi-network`, `ubuntu`, `synology-nas`, `cloudflare`, `cloudflare-workers`, `azure`, `gcp-oauth`, `gcp-compute`, `oci-compute`, `discord`, `twilio`, `smtp2go`, `openrouter`, `uptimerobot`.
 - **Services** (apps on guests): e.g. `pi-hole`, `uptime-kuma`, `scanopy`, `yacy`, `searxng`, `gatus`, `open-webui`, `openspeedtest`, `a2a-registry`, `vaultwarden`, `n8n`, `nextcloud`, `postiz`, `immich`, `plex`, `solidtime`, `stirling-pdf`, `it-tools`, `omni-tools`, `nagios`, `homeassistant`, `bind`, `nginx`, `nginx-waf`, `kafka`, `cassandra`, `postgresql`, `splunk`, `step-ca`, `asterisk`, `jenkins`, `minecraft`, `ollama`, `lms`, `llama-cpp`, `postfix-relay`, `mailcow`, `audiobookshelf`, `listmonk`, `shlink`, `crowdsec`, `wazuh`, `trivy`, `wireguard`, `keycloak`, `greenbone`, `vikunja`, `paperless-ngx`, `paperclip`.
 - **Clients** (home PCs/workstations): `windows`, `client-ubuntu`, `raspberrypi` under `clumps/clients/` — per-clump `config.json` (e.g. [`clumps/clients/windows/config.json`](clumps/clients/windows/config.json)). (`client-ubuntu` id avoids clash with infrastructure `ubuntu`.)
 
@@ -1252,22 +1252,31 @@ node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- --expand-guest-
 
 **Resource planning** (CPU, RAM, storage, bridges): follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](.cursor/skills/proxmox-resource-planning/SKILL.md) and [`.cursor/rules/proxmox-resource-planning.mdc`](.cursor/rules/proxmox-resource-planning.mdc).
 
-## Azure compute in this repo
+## Azure (Entra + compute) in this repo
 
-- **Config:** [`clumps/infrastructure/azure-compute/config.json`](clumps/infrastructure/azure-compute/config.json) (copy from [`config.example.json`](clumps/infrastructure/azure-compute/config.example.json); keep local config in hdc-private).
-- **Schema:** [`apps/hdc-cli/schema/azure-compute.config.schema.json`](apps/hdc-cli/schema/azure-compute.config.schema.json).
-- **Docs:** [`docs/manually-deployed/azure-compute.md`](docs/manually-deployed/azure-compute.md).
+- **Config:** [`clumps/infrastructure/azure/config.json`](clumps/infrastructure/azure/config.json) (copy from [`config.example.json`](clumps/infrastructure/azure/config.example.json); keep local config in hdc-private). Schema v2: `entra` (Graph apps; `entra.automation.app_id` default `hdc`) + `compute` (VM/ACI); optional `$hdc.include` under `entra/applications/` and `compute/deployments/`.
+- **Schema:** [`apps/hdc-cli/schema/azure.config.schema.json`](apps/hdc-cli/schema/azure.config.schema.json).
+- **Docs:** [`docs/manually-deployed/azure.md`](docs/manually-deployed/azure.md).
+- **Routing:** `--section entra|compute|all` (default `entra` for deploy/maintain/query; teardown is compute-only).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | Azure VM or ACI from `deployments[]`; cost estimate (Retail Prices API) + confirmation before provision (`--dry-run`, `--yes`, `--accept-unknown-cost`) |
-| `maintain` | Reconcile tags / ACI; cost confirm on container reconcile |
-| `query` | Config summary; `--live` for ARM state + cost snapshot |
-| `teardown` | Destroy VM or ACI (`--dry-run`, `--yes`) |
+| `query` | Entra: discover/diff apps; `--import --yes` merges into `entra.applications` (preserve `id`/`managed`). Compute: config + optional `--live`. `--section all` for both. |
+| `deploy` | Entra: create managed apps missing from tenant. Compute: VM/ACI with Retail Prices estimate + cost confirm (`--dry-run`, `--yes`, `--accept-unknown-cost`). |
+| `maintain` | Entra: patch redirect URIs / API permissions / audience. Compute: reconcile tags / ACI. |
+| `teardown` | Compute only: destroy VM or ACI (`--section compute`, `--dry-run`, `--yes`). |
 
-Env: `HDC_AZURE_COMPUTE_SUBSCRIPTION_ID`, `HDC_AZURE_COMPUTE_TENANT_ID`, `HDC_AZURE_COMPUTE_CLIENT_ID`. Vault: `HDC_AZURE_COMPUTE_CLIENT_SECRET`. Modes: `azure-vm`, `azure-aci`. HostProvisioner: [`azure-compute-host-provisioner.mjs`](clumps/infrastructure/azure-compute/lib/azure-compute-host-provisioner.mjs).
+Env (Entra): `HDC_AZURE_ENTRA_TENANT_ID`, `HDC_AZURE_ENTRA_<APP>_APPLICATION_ID` (Application/client ID — not Secret ID; default app `hdc` → `HDC_AZURE_ENTRA_HDC_APPLICATION_ID`). Optional `HDC_AZURE_ENTRA_<APP>_SECRET_ID` (metadata only). Vault: `HDC_AZURE_ENTRA_<APP>_SECRET_VALUE`. Legacy `HDC_AZURE_ENTRA_CLIENT_ID` / `HDC_AZURE_ENTRA_CLIENT_SECRET` still work. Env (compute): `HDC_AZURE_COMPUTE_SUBSCRIPTION_ID`, `HDC_AZURE_COMPUTE_TENANT_ID`, `HDC_AZURE_COMPUTE_CLIENT_ID`. Vault: `HDC_AZURE_COMPUTE_CLIENT_SECRET`. HostProvisioner: [`azure-compute-host-provisioner.mjs`](clumps/infrastructure/azure/lib/compute/azure-compute-host-provisioner.mjs). Does not create or rotate secrets on managed Entra applications.
 
-Example: `node apps/hdc-cli/cli.mjs run infrastructure azure-compute deploy -- --instance a --dry-run`
+Examples:
+
+```bash
+node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section all
+node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra --import --yes
+node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a --dry-run
+node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section entra
+```
 
 ## GCP compute in this repo
 
@@ -1327,29 +1336,6 @@ node apps/hdc-cli/cli.mjs run infrastructure aws query --
 node apps/hdc-cli/cli.mjs run infrastructure aws deploy -- --dry-run
 node apps/hdc-cli/cli.mjs run infrastructure aws deploy -- --yes
 node apps/hdc-cli/cli.mjs run infrastructure aws maintain --
-```
-
-## Azure app registrations in this repo
-
-- **Config:** [`clumps/infrastructure/azure/config.json`](clumps/infrastructure/azure/config.json) (copy from [`config.example.json`](clumps/infrastructure/azure/config.example.json); keep local config in hdc-private).
-- **Schema:** [`apps/hdc-cli/schema/azure.config.schema.json`](apps/hdc-cli/schema/azure.config.schema.json).
-- **Docs:** [`docs/manually-deployed/azure.md`](docs/manually-deployed/azure.md).
-
-| Verb | Summary |
-| --- | --- |
-| `query` | Discover tenant app registrations, diff vs config, `suggested_config_entry` for import (JSON on stdout) |
-| `deploy` | Create managed apps missing from the tenant; ensure enterprise service principal |
-| `maintain` | Patch managed apps when redirect URIs, API permissions, or audience drift from config |
-
-Env: `HDC_AZURE_TENANT_ID`, `HDC_AZURE_CLIENT_ID`. Vault: `HDC_AZURE_CLIENT_SECRET` (automation app only). Does not create or rotate secrets on managed applications.
-
-Examples:
-
-```bash
-node apps/hdc-cli/cli.mjs run infrastructure azure query --
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure azure maintain --
 ```
 
 ## GCP OAuth (Google Auth Platform) in this repo
@@ -1619,7 +1605,7 @@ Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
-**Discord alerts:** `node apps/hdc-cli/lib/notify-discord.mjs --title "…" --message "…"` (vault `HDC_OPS_DISCORD_WEBHOOK_URL`; messages include OS hostname or `HDC_OPS_DISCORD_HOST`). `hdc run … deploy|maintain` posts a one-line IP-redacted summary to the same webhook automatically (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`).
+**Discord alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). Messages include OS hostname or `HDC_OPS_DISCORD_HOST`.
 
 Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
 

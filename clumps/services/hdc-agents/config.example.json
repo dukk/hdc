@@ -38,6 +38,7 @@
         "enabled": true,
         "title_prefix": "[HDC]",
         "on_failure_only": false,
+        "webhook_vault_key": "HDC_AGENTS_DISCORD_WEBHOOK_URL",
         "application_id": null,
         "public_key": null,
         "bot_token_vault_key": "HDC_OPS_DISCORD_BOT_TOKEN",

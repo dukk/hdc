@@ -1,25 +1,97 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hdc.local/schema/azure.config.schema.json",
-  "title": "HDC azure infrastructure package config",
+  "title": "HDC azure infrastructure package config (Entra + compute)",
   "type": "object",
   "additionalProperties": true,
-  "required": ["schema_version", "applications"],
+  "required": ["schema_version"],
   "properties": {
     "schema_version": { "type": "integer", "minimum": 1 },
+    "entra": {
+      "type": "object",
+      "properties": {
+        "graph_base_url": { "type": "string", "format": "uri" },
+        "automation": { "$ref": "#/$defs/entraAutomation" },
+        "application_filter": { "$ref": "#/$defs/applicationFilter" },
+        "applications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/application" }
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "azure": { "$ref": "#/$defs/azureComputeDefaults" }
+          }
+        },
+        "deployments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/computeDeployment" }
+        }
+      }
+    },
     "azure": {
       "type": "object",
+      "description": "Legacy v1 Graph settings; prefer entra.graph_base_url",
       "properties": {
         "graph_base_url": { "type": "string", "format": "uri" }
       }
     },
     "azure_entra": {
       "type": "object",
+      "description": "Legacy alias for azure Graph settings",
       "properties": {
         "graph_base_url": { "type": "string", "format": "uri" }
       }
     },
-    "application_filter": {
+    "application_filter": { "$ref": "#/$defs/applicationFilter" },
+    "applications": {
+      "type": "array",
+      "description": "Legacy v1 flat applications[]; prefer entra.applications",
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Legacy azure-compute root defaults; prefer compute.defaults"
+    },
+    "deployments": {
+      "type": "array",
+      "description": "Legacy azure-compute root deployments; prefer compute.deployments",
+      "items": { "$ref": "#/$defs/computeDeployment" }
+    }
+  },
+  "$defs": {
+    "entraAutomation": {
+      "type": "object",
+      "description": "Graph automation SP credentials. Keys default from app_id: HDC_AZURE_ENTRA_<APP>_APPLICATION_ID / _SECRET_VALUE / optional _SECRET_ID (Secret ID is metadata only).",
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable slug (default hdc) used to derive env/vault key names"
+        },
+        "application_id_env": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Env var holding Application (client) ID; default HDC_AZURE_ENTRA_<APP>_APPLICATION_ID"
+        },
+        "secret_value_vault_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Vault (or env bootstrap) key for client secret value; default HDC_AZURE_ENTRA_<APP>_SECRET_VALUE"
+        },
+        "secret_id_env": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional env var for portal Secret ID (never used in token requests)"
+        }
+      }
+    },
+    "applicationFilter": {
       "type": "object",
       "properties": {
         "mode": { "enum": ["all", "include", "exclude"] },
@@ -29,72 +101,109 @@
         }
       }
     },
-    "applications": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "display_name", "match"],
-        "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "managed": { "type": "boolean" },
-          "match": {
+    "application": {
+      "type": "object",
+      "required": ["id", "display_name", "match"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "managed": { "type": "boolean" },
+        "match": {
+          "type": "object",
+          "properties": {
+            "client_id": { "type": "string" },
+            "display_name": { "type": "string" }
+          }
+        },
+        "display_name": { "type": "string", "minLength": 1 },
+        "sign_in_audience": {
+          "enum": [
+            "AzureADMyOrg",
+            "AzureADMultipleOrgs",
+            "AzureADandPersonalMicrosoftAccount",
+            "PersonalMicrosoftAccount"
+          ]
+        },
+        "web": {
+          "type": "object",
+          "properties": {
+            "redirect_uris": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "spa": {
+          "type": "object",
+          "properties": {
+            "redirect_uris": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "public_client": {
+          "type": "object",
+          "properties": {
+            "redirect_uris": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "required_resource_access": {
+          "type": "array",
+          "items": {
             "type": "object",
+            "required": ["resource_app_id", "resource_access"],
             "properties": {
-              "client_id": { "type": "string" },
-              "display_name": { "type": "string" }
-            }
-          },
-          "display_name": { "type": "string", "minLength": 1 },
-          "sign_in_audience": {
-            "enum": [
-              "AzureADMyOrg",
-              "AzureADMultipleOrgs",
-              "AzureADandPersonalMicrosoftAccount",
-              "PersonalMicrosoftAccount"
-            ]
-          },
-          "web": {
-            "type": "object",
-            "properties": {
-              "redirect_uris": { "type": "array", "items": { "type": "string" } }
-            }
-          },
-          "spa": {
-            "type": "object",
-            "properties": {
-              "redirect_uris": { "type": "array", "items": { "type": "string" } }
-            }
-          },
-          "public_client": {
-            "type": "object",
-            "properties": {
-              "redirect_uris": { "type": "array", "items": { "type": "string" } }
-            }
-          },
-          "required_resource_access": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["resource_app_id", "resource_access"],
-              "properties": {
-                "resource_app_id": { "type": "string" },
-                "resource_access": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": ["id", "type"],
-                    "properties": {
-                      "id": { "type": "string" },
-                      "type": { "enum": ["Scope", "Role"] }
-                    }
+              "resource_app_id": { "type": "string" },
+              "resource_access": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "type"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "type": { "enum": ["Scope", "Role"] }
                   }
                 }
               }
             }
-          },
-          "identifier_uris": {
-            "type": "array",
-            "items": { "type": "string" }
+          }
+        },
+        "identifier_uris": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" },
+        "consumer": { "type": "string" }
+      }
+    },
+    "azureComputeDefaults": {
+      "type": "object",
+      "properties": {
+        "subscription_id": { "type": "string" },
+        "resource_group": { "type": "string" },
+        "location": { "type": "string" },
+        "tags": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "computeDeployment": {
+      "type": "object",
+      "required": ["id", "system_id", "mode"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "system_id": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["azure-vm", "azure-aci"] },
+        "azure": {
+          "type": "object",
+          "properties": {
+            "subscription_id": { "type": "string" },
+            "resource_group": { "type": "string" },
+            "location": { "type": "string" },
+            "resource_name": { "type": "string" },
+            "vm_size": { "type": "string" },
+            "os_disk_gb": { "type": "number", "minimum": 32 },
+            "admin_username": { "type": "string" },
+            "public_ip": { "type": "boolean" },
+            "cpu": { "type": "number", "minimum": 0.5 },
+            "memory_gb": { "type": "number", "minimum": 0.5 },
+            "containers": { "type": "array" },
+            "image": { "type": "object" },
+            "vnet_name": { "type": "string" },
+            "subnet_name": { "type": "string" },
+            "tags": { "type": "object", "additionalProperties": { "type": "string" } }
           }
         }
       }

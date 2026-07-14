@@ -116,7 +116,17 @@ export function notifyDiscordDecision(hdcRoot, privateRoot, title, message, task
     return { ok: false, error: "notify-discord.mjs missing" };
   }
   /** @type {string[]} */
-  const args = [script, "--title", title, "--message", message];
+  const args = [
+    script,
+    "--title",
+    title,
+    "--message",
+    message,
+    "--webhook-vault-key",
+    "HDC_AGENTS_DISCORD_WEBHOOK_URL",
+    "--fallback-webhook-vault-key",
+    "HDC_OPS_DISCORD_WEBHOOK_URL",
+  ];
   const tid = String(taskId ?? "").trim();
   if (tid) {
     args.push("--decision", "--task-id", tid);

@@ -102,7 +102,6 @@ export const PACKAGE_FAMILIES = {
   uptimerobot: "infra-api",
   "gcp-oauth": "infra-api",
   azure: "infra-api",
-  "azure-compute": "infra-api",
   "gcp-compute": "infra-api",
   "oci-compute": "infra-api",
   aws: "infra-api",

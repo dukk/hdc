@@ -1,12 +1,13 @@
 import { stderr as errout } from "node:process";
 
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
-import { writeResolvedRepoJson } from "../../../../apps/hdc-cli/lib/private-repo.mjs";
 import {
   applicationPassesFilter,
+  findConfigForLiveApp,
+  liveAppToConfigEntry,
   liveAppToNormalized,
-  suggestedConfigEntry,
 } from "./azure-config.mjs";
+import { writeAzureConfig } from "./azure-config-write.mjs";
 import { CLUMP_CONFIG_EXAMPLE } from "./azure-run-context.mjs";
 import { resolveAzureClientId } from "./vault-deps.mjs";
 
@@ -16,13 +17,26 @@ export const AZURE_COMPACT_ARRAY_KEYS = ["applications"];
  * @param {import('./azure-graph-api.mjs').GraphApplication[]} liveApps
  * @param {{ mode: string; prefixes: string[] }} applicationFilter
  * @param {string} [automationClientId]
+ * @param {import('./azure-config.mjs').ConfigApplication[] | Record<string, unknown>[]} [existingApplications]
  */
-export function liveAppsToConfigEntries(liveApps, applicationFilter, automationClientId) {
+export function liveAppsToConfigEntries(
+  liveApps,
+  applicationFilter,
+  automationClientId,
+  existingApplications = []
+) {
   const automationId = automationClientId?.trim().toLowerCase() ?? "";
   const filtered = liveApps.filter((a) => applicationPassesFilter(a.displayName, applicationFilter));
   const skipAutomation = filtered.filter(
     (a) => !automationId || String(a.appId ?? "").trim().toLowerCase() !== automationId
   );
+
+  /** @type {import('./azure-config.mjs').ConfigApplication[]} */
+  const existing = Array.isArray(existingApplications)
+    ? /** @type {import('./azure-config.mjs').ConfigApplication[]} */ (existingApplications)
+    : [];
+  /** @type {Set<import('./azure-config.mjs').ConfigApplication>} */
+  const usedExisting = new Set();
 
   /** @type {Set<string>} */
   const usedIds = new Set();
@@ -31,8 +45,11 @@ export function liveAppsToConfigEntries(liveApps, applicationFilter, automationC
 
   for (const live of skipAutomation) {
     const norm = liveAppToNormalized(live);
-    const entry = suggestedConfigEntry(norm);
-    entry.managed = false;
+    const remaining = existing.filter((e) => !usedExisting.has(e));
+    const matched = findConfigForLiveApp(norm, remaining);
+    if (matched) usedExisting.add(matched);
+
+    const entry = liveAppToConfigEntry(norm, matched);
 
     let id = entry.id;
     if (usedIds.has(id)) {
@@ -64,41 +81,82 @@ export function importAzureToConfig(opts) {
 
   let automationClientId = "";
   try {
-    automationClientId = resolveAzureClientId();
+    const automation =
+      cfgRaw.entra && typeof cfgRaw.entra === "object"
+        ? /** @type {Record<string, unknown>} */ (cfgRaw.entra).automation
+        : undefined;
+    automationClientId = resolveAzureClientId({
+      automation:
+        automation && typeof automation === "object"
+          ? /** @type {import('./vault-deps.mjs').EntraAutomationCreds} */ (automation)
+          : undefined,
+    });
   } catch {
     automationClientId = "";
   }
 
+  const existingEntra = cfgRaw.entra && typeof cfgRaw.entra === "object" ? cfgRaw.entra : null;
+  const existingApps = Array.isArray(existingEntra?.applications)
+    ? existingEntra.applications
+    : Array.isArray(cfgRaw.applications)
+      ? cfgRaw.applications
+      : [];
+
   const applications = liveAppsToConfigEntries(
     opts.liveApps,
     opts.applicationFilter,
-    automationClientId
+    automationClientId,
+    existingApps
   );
 
-  const azureRaw =
-    cfgRaw.azure && typeof cfgRaw.azure === "object"
-      ? { ...cfgRaw.azure }
-      : cfgRaw.azure_entra && typeof cfgRaw.azure_entra === "object"
-        ? { ...cfgRaw.azure_entra }
-        : { graph_base_url: "https://graph.microsoft.com/v1.0" };
+  const graphBase =
+    (existingEntra &&
+      typeof existingEntra.graph_base_url === "string" &&
+      existingEntra.graph_base_url.trim()) ||
+    (cfgRaw.azure &&
+      typeof cfgRaw.azure === "object" &&
+      typeof cfgRaw.azure.graph_base_url === "string" &&
+      cfgRaw.azure.graph_base_url.trim()) ||
+    (cfgRaw.azure_entra &&
+      typeof cfgRaw.azure_entra === "object" &&
+      typeof cfgRaw.azure_entra.graph_base_url === "string" &&
+      cfgRaw.azure_entra.graph_base_url.trim()) ||
+    "https://graph.microsoft.com/v1.0";
 
   const filterRaw =
-    cfgRaw.application_filter && typeof cfgRaw.application_filter === "object"
+    (existingEntra && existingEntra.application_filter) ||
+    (cfgRaw.application_filter && typeof cfgRaw.application_filter === "object"
       ? cfgRaw.application_filter
-      : { mode: "all", display_name_prefixes: [] };
+      : { mode: "all", display_name_prefixes: [] });
+
+  const compute =
+    cfgRaw.compute && typeof cfgRaw.compute === "object"
+      ? cfgRaw.compute
+      : undefined;
 
   const next = {
     ...cfgRaw,
-    schema_version: typeof cfgRaw.schema_version === "number" ? cfgRaw.schema_version : 1,
-    azure: azureRaw,
-    application_filter: filterRaw,
-    applications,
+    schema_version: 2,
+    entra: {
+      graph_base_url: String(graphBase).replace(/\/$/, ""),
+      application_filter: filterRaw,
+      applications,
+    },
   };
+  if (compute) next.compute = compute;
+  delete next.applications;
+  delete next.application_filter;
+  delete next.azure;
   delete next.azure_entra;
+  delete next.defaults;
+  delete next.deployments;
 
-  writeResolvedRepoJson(resolved, next, { compactArrayKeys: AZURE_COMPACT_ARRAY_KEYS });
+  const written = writeAzureConfig(resolved, next, {
+    compactArrayKeys: AZURE_COMPACT_ARRAY_KEYS,
+    split: true,
+  });
   log(
-    `Wrote ${applications.length} application(s) to config (${source}: ${resolved.rel}).`
+    `Wrote ${applications.length} application(s) to config (${source}: ${resolved.rel}, layout=${written.layout}).`
   );
 
   return {
@@ -106,5 +164,6 @@ export function importAzureToConfig(opts) {
     configPath: resolved.path,
     configRel: resolved.rel,
     source,
+    layout: written.layout,
   };
 }

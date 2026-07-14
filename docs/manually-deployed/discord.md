@@ -78,7 +78,7 @@ buttons on Manager `needs_decision` Discord messages.
 8. `hdc-agents maintain` writes the keys into guest meta `.env` for notify + web verify.
 
 When any of those four values is missing, decision notifies fall back to the plain
-`HDC_OPS_DISCORD_WEBHOOK_URL` text path (no buttons).
+`HDC_AGENTS_DISCORD_WEBHOOK_URL` text path when set on the hdc-agents guest (falls back to `HDC_OPS_DISCORD_WEBHOOK_URL`; no buttons).
 
 ## Limitations
 

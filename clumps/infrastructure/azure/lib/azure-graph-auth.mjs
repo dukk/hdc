@@ -56,7 +56,7 @@ export function createAzureGraphTokenProvider(opts) {
         const detail = json.error_description || json.error || `HTTP ${res.status}`;
         const hint =
           String(detail).includes("AADSTS700016")
-            ? " Check HDC_AZURE_CLIENT_ID in repo .env (Application/client ID from Entra app registration Overview) and HDC_AZURE_TENANT_ID (Directory tenant ID). Save .env if you edited it in the IDE; hdc does not reload unsaved buffers."
+            ? " Check HDC_AZURE_ENTRA_<APP>_APPLICATION_ID in clump .env (Application/client ID from Entra Overview — not Secret ID) and HDC_AZURE_ENTRA_TENANT_ID (Directory tenant ID). Default app is hdc → HDC_AZURE_ENTRA_HDC_APPLICATION_ID. Legacy HDC_AZURE_ENTRA_CLIENT_ID still works. Save .env if you edited it in the IDE; hdc does not reload unsaved buffers."
             : "";
         throw new Error(`Azure token request failed: ${detail}${hint}`);
       }

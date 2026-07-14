@@ -1,4 +1,4 @@
-import { discoverLocalSshMaterial } from "../../../../apps/hdc-cli/lib/ssh-host-access.mjs";
+import { discoverLocalSshMaterial } from "../../../../../apps/hdc-cli/lib/ssh-host-access.mjs";
 
 const ARM_API = "https://management.azure.com";
 const ARM_VERSION = "2024-03-01";
