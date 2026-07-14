@@ -62,15 +62,57 @@
                   "required": ["model_name", "provider", "model"],
                   "properties": {
                     "model_name": { "type": "string" },
-                    "provider": { "enum": ["ollama", "openai", "openrouter"] },
+                    "provider": { "enum": ["ollama", "openai", "openrouter", "auto_router"] },
                     "model": { "type": "string" },
                     "ollama_backend_id": { "type": "string" },
-                    "openai_backend_id": { "type": "string" }
+                    "openai_backend_id": { "type": "string" },
+                    "order": { "type": "integer", "minimum": 1 },
+                    "weight": { "type": "number", "exclusiveMinimum": 0 },
+                    "complexity_router_config": { "type": "object" },
+                    "complexity_router_default_model": { "type": "string" }
                   }
                 }
               },
               "router_settings": { "type": "object" },
-              "litellm_settings": { "type": "object" }
+              "litellm_settings": { "type": "object" },
+              "mail": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "from": { "type": "string" }
+                }
+              },
+              "a2a_agents": {
+                "type": "array",
+                "description": "A2A agents registered on the LiteLLM gateway (rendered as config.yaml agents:)",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "url"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "LiteLLM agent_name / path segment under /a2a/<name>"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri",
+                      "description": "Upstream A2A invocation URL (agent card host)"
+                    },
+                    "description": { "type": "string" },
+                    "protocol_version": {
+                      "type": "string",
+                      "enum": ["0.3", "1.0"],
+                      "default": "0.3"
+                    },
+                    "card_name": {
+                      "type": "string",
+                      "description": "Display name on agent_card_params (defaults to name)"
+                    }
+                  }
+                }
+              }
             }
           },
           "install": {

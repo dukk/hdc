@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   formatProxmoxTags,
   mergePackageTag,
+  mergeBackupFrequencyTag,
+  backupFrequencyTagForProfile,
   normalizePackageTag,
   parseProxmoxTags,
   proxmoxGuestTypeFromMode,
@@ -52,6 +54,24 @@ describe("proxmox-guest-tags", () => {
         tags: ["pi-hole", "ops"],
         changed: false,
       });
+    });
+  });
+
+  describe("mergeBackupFrequencyTag", () => {
+    it("maps profiles to tags", () => {
+      expect(backupFrequencyTagForProfile("twice-weekly")).toBe("backup-twice-weekly");
+    });
+
+    it("replaces other frequency tags", () => {
+      expect(mergeBackupFrequencyTag("bind;backup-weekly", "daily")).toEqual({
+        tags: ["bind", "backup-daily"],
+        changed: true,
+        desiredTag: "backup-daily",
+      });
+    });
+
+    it("is a no-op when frequency tag already correct", () => {
+      expect(mergeBackupFrequencyTag("bind;backup-daily", "daily").changed).toBe(false);
     });
   });
 

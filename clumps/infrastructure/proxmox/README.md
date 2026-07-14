@@ -45,31 +45,42 @@ Maintain `verify-templates` writes a report under `clumps/infrastructure/proxmox
 
 ## Scheduled backups
 
-`proxmox maintain` ensures Proxmox **Datacenter → Backup** jobs for guests listed in service `deployments[]` when `provision.backups.enabled` is true (default).
+`proxmox maintain` ensures Proxmox **Datacenter → Backup** jobs for managed guests when `provision.backups.enabled` is true (default). Targets come from service `deployments[]` / `deployment_groups[].deployments[]` (plus legacy `deploy`+`proxmox` layouts). Non-template cluster guests not covered by packages get a **weekly** job when `include_cluster_orphans` is true (default).
+
+### Profiles and retention
+
+| Profile | Tag | Schedule | Prune |
+|---------|-----|----------|-------|
+| `hourly` | `backup-hourly` | every hour | `keep-last=3,keep-daily=7` |
+| `daily` | `backup-daily` | staggered `HH:MM` in **00:00–06:00** | `keep-last=3` |
+| `weekly` (default) | `backup-weekly` | staggered `{dow} HH:MM` across Mon–Sun, 00:00–06:00 | `keep-last=3` |
+| `twice-weekly` | `backup-twice-weekly` | two weekdays ≥3 days apart + staggered night time | `keep-last=3` |
+
+All jobs use `default_storage` (site: `nas-1`). Maintain **staggers** daily / weekly / twice-weekly start times so backups do not pile onto the same minute.
 
 ### Config
 
-Global profiles live in `provision.backups` in [`config.json`](config.json) (see [`config.example.json`](config.example.json)):
+Global profiles live in `provision.backups` in [`config.json`](config.json) (see [`config.example.json`](config.example.json)).
 
-- **`weekly`** (default): `sun 03:00`, `keep-last=3`
-- **`daily`**: once per day, `keep-last=7`
-- **`hourly`**: every hour, `keep-daily=7,keep-last=3` (one backup per day for 7 days plus the last 3 hourly)
-
-Set `default_storage` to a NAS datastore with **Backup** content (e.g. `nas-1`). Per-service overrides use `defaults.backup` or `deployments[].backup` in each service clump config:
+Per-service overrides use `defaults.backup` or `deployments[].backup` (or root `backup` on legacy layouts):
 
 ```json
 "backup": { "profile": "hourly" }
 ```
 
-Opt out with `"backup": { "enabled": false }`. Jobs are named `hdc-backup-<system_id>` and only hdc-prefixed jobs are updated or removed (`maintain --prune`).
+Opt out with `"backup": { "enabled": false }`. Jobs are named `hdc-backup-<system_id>`; only hdc-prefixed jobs are updated or removed (`maintain` prune / `--no-prune` to skip deletes).
+
+### Frequency tags
+
+Maintain stamps exactly one mutually exclusive guest tag matching the profile (`backup-hourly`, `backup-daily`, `backup-weekly`, `backup-twice-weekly`) and validates it against the live job schedule. Package tags (`bind`, `vaultwarden`, …) are unchanged and additive.
 
 ### Rollout
 
 1. Confirm `nas-1` (or your `default_storage`) includes **Backup** in Proxmox Datacenter → Storage → Content.
 2. Copy `provision.backups` into hdc-private `clumps/infrastructure/proxmox/config.json`.
-3. Set service profiles (e.g. vaultwarden `hourly`, bind/nginx-waf `daily`).
+3. Set service `defaults.backup.profile` values (e.g. vaultwarden `hourly`, DNS/edge `daily`).
 4. Run `node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- --dry-run`, then without `--dry-run`.
-5. Verify jobs in Proxmox UI under Datacenter → Backup.
+5. Verify jobs and guest tags in Proxmox UI (Datacenter → Backup; guest **Tags**).
 
 Flags: `--skip-backups`, `--skip-notifications`, `--dry-run`, `--no-prune` (skip deleting stale `hdc-backup-*` jobs).
 
@@ -201,7 +212,15 @@ Flags: `--skip-startup`, `--dry-run`.
 
 ## Guest package tags
 
-`proxmox maintain` ensures each hdc-managed Proxmox guest has a **tag** matching the service clump id (`pi-hole`, `bind`, `nginx-waf`, …) when `provision.guest_tags.enabled` is true (default). Existing tags are preserved (additive only).
+`proxmox maintain` ensures each hdc-managed Proxmox guest has a **package tag** matching the service clump id (`pi-hole`, `bind`, `nginx-waf`, …) when `provision.guest_tags.enabled` is true (default). Existing unrelated tags are preserved (additive). Nested `deployment_groups[].deployments[]` are included.
+
+### Backup frequency tags
+
+Backup maintain (same `proxmox maintain` run) also ensures exactly one of:
+
+`backup-hourly` | `backup-daily` | `backup-weekly` | `backup-twice-weekly`
+
+from the guest’s backup profile, and fails the backup step if the live tag or job schedule drifts from the desired spec.
 
 ### Config
 
@@ -212,13 +231,13 @@ Flags: `--skip-startup`, `--dry-run`.
 }
 ```
 
-- **Deploy:** service `deploy` passes `clumpId` into `createProxmoxHostProvisioner`; post-create helpers apply the tag after LXC/QEMU provision.
-- **Maintain:** scans resolved `clumps/services/*/config.json` deployments (hdc-private) and PUTs missing tags.
-- **Per-service maintain:** guest Linux baseline calls the same tag sync when `clumpId` is set.
+- **Deploy:** service `deploy` passes `clumpId` into `createProxmoxHostProvisioner`; post-create helpers apply the package tag after LXC/QEMU provision.
+- **Maintain:** scans resolved `clumps/services/*/config.json` deployments (hdc-private) and PUTs missing package tags; backup maintain applies frequency tags.
+- **Per-service maintain:** guest Linux baseline calls the same package-tag sync when `clumpId` is set.
 
 Infrastructure `proxmox deploy` accepts optional `--package <service-id>` for manual creates.
 
-Flags: `--skip-guest-tags`, `--dry-run`.
+Flags: `--skip-guest-tags`, `--skip-backups`, `--dry-run`.
 
 ## Service accounts (`provision.service_accounts[]`)
 

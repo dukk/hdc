@@ -4,6 +4,11 @@ import { crowdsecBouncers, crowdsecLapiPort } from "./deployments.mjs";
 import { createBouncerKeyInCt } from "./crowdsec-install.mjs";
 
 /**
+ * Sync CrowdSec **firewall** bouncers onto configured systems (typically nginx-waf).
+ *
+ * Do not install crowdsec-nginx-bouncer (lua): it co-loads with ModSecurity and has
+ * coredumped stock nginx on this fleet. Prefer crowdsec-firewall-bouncer-iptables.
+ *
  * @param {object} opts
  * @param {string} opts.repoRoot
  * @param {string} opts.lapiUser
@@ -35,7 +40,7 @@ export async function syncCrowdsecBouncers(opts) {
       results.push({ ok: false, system_id: systemId, message: "missing access.nodes[0].ip in system sidecar" });
       continue;
     }
-    const keyName = `nginx-${systemId}`;
+    const keyName = `fw-${systemId}`;
     const keyRes = createBouncerKeyInCt(opts.lapiUser, opts.lapiHost, opts.lapiVmid, keyName);
     if (!keyRes.ok) {
       results.push({ ok: false, system_id: systemId, message: keyRes.message });
@@ -43,25 +48,51 @@ export async function syncCrowdsecBouncers(opts) {
     }
     const apiKey = keyRes.apiKey;
     const exec = createGuestSshExec({ host: ip, log });
+    // Shell script: install firewall bouncer only; strip any leftover lua nginx bouncer.
     const installScript = [
       "set -euo pipefail",
       "export DEBIAN_FRONTEND=noninteractive",
+      "# Never leave the lua nginx bouncer in place — it crashes ModSecurity nginx.",
+      "if dpkg -s crowdsec-nginx-bouncer >/dev/null 2>&1 || dpkg -s crowdsec-firewall-bouncer-nginx >/dev/null 2>&1; then",
+      "  apt-get remove -y -qq crowdsec-nginx-bouncer crowdsec-firewall-bouncer-nginx 2>/dev/null || true",
+      "  apt-get purge -y -qq crowdsec-nginx-bouncer crowdsec-firewall-bouncer-nginx 2>/dev/null || true",
+      "fi",
+      "rm -f /etc/nginx/conf.d/crowdsec_nginx.conf /etc/nginx/conf.d/crowdsec_nginx.conf.disabled",
+      "rm -f /etc/nginx/modules-enabled/50-mod-http-lua.conf",
       "apt-get update -qq",
-      "if ! dpkg -s crowdsec-nginx-bouncer >/dev/null 2>&1; then",
-      "  if ! command -v crowdsec >/dev/null 2>&1; then",
+      "if ! dpkg -s crowdsec-firewall-bouncer-iptables >/dev/null 2>&1 && ! dpkg -s crowdsec-firewall-bouncer-nftables >/dev/null 2>&1; then",
+      "  if ! command -v cscli >/dev/null 2>&1 && ! command -v crowdsec >/dev/null 2>&1; then",
       "    curl -s https://packagecloud.io/install/repositories/crowdsec/crowdsec/script.deb.sh | bash",
       "    apt-get update -qq",
       "  fi",
-      "  apt-get install -y -qq crowdsec-nginx-bouncer || apt-get install -y -qq crowdsec-firewall-bouncer-nginx",
+      "  apt-get install -y -qq crowdsec-firewall-bouncer-iptables || apt-get install -y -qq crowdsec-firewall-bouncer-nftables",
       "fi",
       "mkdir -p /etc/crowdsec/bouncers",
-      `cat > /etc/crowdsec/bouncers/crowdsec-nginx-bouncer.yaml <<'EOBC'`,
-      `api_url: http://${lapiIp}:${lapiPort}`,
+      "FW_CFG=/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml",
+      "MODE=iptables",
+      "dpkg -s crowdsec-firewall-bouncer-nftables >/dev/null 2>&1 && MODE=nftables || true",
+      `cat > "$FW_CFG" <<'EOBC'`,
+      "mode: MODE_PLACEHOLDER",
+      "update_frequency: 10s",
+      `api_url: http://${lapiIp}:${lapiPort}/`,
       `api_key: ${apiKey}`,
       "EOBC",
-      "systemctl enable crowdsec-nginx-bouncer 2>/dev/null || true",
-      "systemctl restart crowdsec-nginx-bouncer 2>/dev/null || true",
-      "systemctl is-active crowdsec-nginx-bouncer 2>/dev/null || systemctl is-active crowdsec-firewall-bouncer-nginx 2>/dev/null || true",
+      'sed -i "s/MODE_PLACEHOLDER/$MODE/" "$FW_CFG"',
+      "systemctl enable crowdsec-firewall-bouncer 2>/dev/null || true",
+      "systemctl restart crowdsec-firewall-bouncer",
+      "systemctl is-active crowdsec-firewall-bouncer",
+      "# If nginx is present, config must still pass and the service must stay up.",
+      "if command -v nginx >/dev/null 2>&1; then",
+      "  nginx -t",
+      "  if ! systemctl is-active --quiet nginx; then",
+      "    systemctl reset-failed nginx || true",
+      "    systemctl start nginx || true",
+      "  fi",
+      "  if ! systemctl is-active --quiet nginx; then",
+      "    echo 'nginx not active after firewall-bouncer sync' >&2",
+      "    exit 1",
+      "  fi",
+      "fi",
     ].join("\n");
     const r = exec.run(installScript, { capture: true });
     if (r.status !== 0) {
@@ -75,7 +106,8 @@ export async function syncCrowdsecBouncers(opts) {
       ip,
       ssh_user: exec.effectiveUser,
       fallback_used: exec.fallback_used,
-      message: "bouncer synced",
+      message: "firewall bouncer synced",
+      bouncer_type: "firewall",
     });
   }
   return {

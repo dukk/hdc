@@ -84,6 +84,7 @@
       "default_storage": "nas-a",
       "default_profile": "weekly",
       "manage_from_deployments": true,
+      "include_cluster_orphans": true,
       "job_id_prefix": "hdc-backup",
       "profiles": {
         "weekly": {
@@ -93,14 +94,20 @@
           "compress": "zstd"
         },
         "daily": {
-          "schedule": "daily",
-          "prune_backups": "keep-last=7",
+          "schedule": "03:00",
+          "prune_backups": "keep-last=3",
           "mode": "snapshot",
           "compress": "zstd"
         },
         "hourly": {
           "schedule": "hourly",
-          "prune_backups": "keep-daily=7,keep-last=3",
+          "prune_backups": "keep-last=3,keep-daily=7",
+          "mode": "snapshot",
+          "compress": "zstd"
+        },
+        "twice-weekly": {
+          "schedule": "mon,thu 03:00",
+          "prune_backups": "keep-last=3",
           "mode": "snapshot",
           "compress": "zstd"
         }

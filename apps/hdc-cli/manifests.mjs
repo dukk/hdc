@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { clumpsDir } from "./paths.mjs";
 
-export const VERBS = ["deploy", "maintain", "query", "teardown"];
+export const VERBS = ["deploy", "maintain", "query", "health", "teardown"];
 
 /** CLI tier tokens for `hdc run <tier> <clump> <verb>`. */
 export const RUN_TIERS = ["client", "infrastructure", "service"];

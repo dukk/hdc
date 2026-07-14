@@ -21,3 +21,4 @@ vault.enc
 **/client_secret*.json
 apps/hdc-cli/scripts/test-*.mjs
 /tmp-*
+/tools/scripts/tmp-*

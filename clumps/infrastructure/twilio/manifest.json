@@ -14,7 +14,12 @@
     }
   ],
   "verbs": {
-    "query": { "script": "run.mjs" }
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   },
   "operation_report": {
     "next_steps": [

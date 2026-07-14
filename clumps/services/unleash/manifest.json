@@ -1,7 +1,10 @@
 {
   "id": "unleash",
   "title": "Unleash feature flags",
-  "env_required": ["HDC_UNLEASH_ADMIN_PASSWORD", "HDC_UNLEASH_DB_PASSWORD"],
+  "env_required": [
+    "HDC_UNLEASH_ADMIN_PASSWORD",
+    "HDC_UNLEASH_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/unleash-a.json",
     "inventory/manual/services/unleash.json"
@@ -17,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

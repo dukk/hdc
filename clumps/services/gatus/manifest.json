@@ -2,7 +2,9 @@
   "id": "gatus",
   "title": "Gatus health dashboard",
   "env_required": [],
-  "inventory_docs": ["inventory/manual/systems/gatus-a.json"],
+  "inventory_docs": [
+    "inventory/manual/systems/gatus-a.json"
+  ],
   "operation_report": {
     "next_steps": [
       "Open http://<ct-ip>:8080 after deploy and verify endpoint checks.",
@@ -10,9 +12,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

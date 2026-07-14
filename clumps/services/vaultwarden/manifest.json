@@ -1,7 +1,9 @@
 {
   "id": "vaultwarden",
   "title": "Vaultwarden (Bitwarden-compatible password manager)",
-  "env_required": ["HDC_VAULTWARDEN_ADMIN_TOKEN"],
+  "env_required": [
+    "HDC_VAULTWARDEN_ADMIN_TOKEN"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/vaultwarden-a.json",
     "inventory/manual/services/vaultwarden.json"
@@ -16,9 +18,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

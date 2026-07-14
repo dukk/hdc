@@ -48,8 +48,13 @@ Create `operations/tasks/<id>.md` with YAML frontmatter (see hdc-agent-team skil
 
 1. Operator approves via web UI (`PATCH /api/tasks/:id`), A2A, or Cursor chat.
 2. Set task `status` to `approved` in frontmatter.
-3. On hdc-runner, manager orchestrator spawns `agent -p` for the task's `role`.
-4. On completion, set `done` and update `task-report.md`.
+3. Primary: delegate via LiteLLM A2A (`POST /a2a/<role>`) when hdc-agents fleet is healthy.
+4. Fallback: on hdc-runner, manager orchestrator spawns `agent -p` for the task's `role`.
+5. On completion, set `done` and update `task-report.md`.
+
+## Daily-maintain failures → hdc-engineer
+
+Failed steps in daily-maintain / deploy operation reports → create `role: hdc-engineer` tasks with report paths as `evidence`. Do not assign `hdc-sre` until the engineer handoff says the package is ready.
 
 ## Never without `approved`
 

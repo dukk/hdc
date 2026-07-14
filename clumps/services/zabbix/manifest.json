@@ -1,7 +1,9 @@
 {
   "id": "zabbix",
   "title": "Zabbix monitoring stack",
-  "env_required": ["HDC_ZABBIX_DB_PASSWORD"],
+  "env_required": [
+    "HDC_ZABBIX_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/zabbix-a.json",
     "inventory/manual/systems/vm-zabbix-a.json",
@@ -14,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

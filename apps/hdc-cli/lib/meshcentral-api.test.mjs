@@ -15,6 +15,9 @@ class FakeWebSocket extends EventEmitter {
     queueMicrotask(() => {
       this.readyState = FakeWebSocket.OPEN;
       this.emit("open");
+      queueMicrotask(() => {
+        this.emit("message", JSON.stringify({ action: "serverinfo", serverinfo: { domain: "" } }));
+      });
     });
   }
 
@@ -26,6 +29,8 @@ class FakeWebSocket extends EventEmitter {
     const msg = JSON.parse(data);
     queueMicrotask(() => {
       if (msg.action === "nodes") {
+        // Unsolicited empty push must not win the race over the real responseid reply.
+        this.emit("message", JSON.stringify({ action: "nodes", nodes: {} }));
         this.emit(
           "message",
           JSON.stringify({
@@ -36,19 +41,29 @@ class FakeWebSocket extends EventEmitter {
             },
           }),
         );
+      } else if (msg.action === "meshes") {
+        this.emit(
+          "message",
+          JSON.stringify({ action: "meshes", responseid: msg.responseid, meshes: [] }),
+        );
       } else if (msg.action === "wakedevices" || msg.action === "poweraction") {
         this.emit(
           "message",
           JSON.stringify({ action: msg.action, responseid: msg.responseid, result: "ok" }),
         );
       } else if (msg.action === "runcommands") {
+        // ACK then agent stdout reply (MeshCentral broadcasts as action:msg).
+        this.emit(
+          "message",
+          JSON.stringify({ action: "runcommands", responseid: msg.responseid, result: "ok" }),
+        );
         this.emit(
           "message",
           JSON.stringify({
-            action: "runcommands",
+            action: "msg",
+            type: "runcommands",
             responseid: msg.responseid,
-            result: "ok",
-            console: "df-output",
+            result: "df-output",
           }),
         );
       }

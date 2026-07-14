@@ -124,6 +124,56 @@ export function wazuhDashboardApiConfigSyncBash() {
 }
 
 /**
+ * Enable authd password auth and write /var/ossec/etc/authd.pass from WAZUH_AGENT_PASSWORD.
+ * Expects STACK and WAZUH_AGENT_PASSWORD in the environment.
+ */
+export function wazuhAuthdPasswordEnsureBash() {
+  return [
+    "python3 - <<'PY'",
+    "from pathlib import Path",
+    "import os",
+    "import subprocess",
+    "import time",
+    "stack = Path(os.environ['STACK'])",
+    "agent_pw = os.environ.get('WAZUH_AGENT_PASSWORD', '').strip()",
+    "if not agent_pw:",
+    "  raise SystemExit('WAZUH_AGENT_PASSWORD is empty')",
+    "conf = stack / 'config' / 'wazuh_cluster' / 'wazuh_manager.conf'",
+    "if conf.is_file():",
+    "  text = conf.read_text()",
+    "  text = text.replace('<use_password>no</use_password>', '<use_password>yes</use_password>')",
+    "  conf.write_text(text)",
+    "container = 'single-node-wazuh.manager-1'",
+    "def docker_exec(args, input_text=None):",
+    "  cmd = ['docker', 'exec', '-i' if input_text is not None else '', container]",
+    "  cmd = [c for c in cmd if c]",
+    "  return subprocess.run(cmd + args, input=input_text, text=True, check=False, capture_output=True)",
+    "# Wait briefly if manager is still starting",
+    "for _ in range(36):",
+    "  ps = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', container], text=True, capture_output=True)",
+    "  if ps.stdout.strip() == 'True':",
+    "    break",
+    "  time.sleep(5)",
+    "else:",
+    "  raise SystemExit('wazuh manager container not running')",
+    "docker_exec(['sed', '-i', 's|<use_password>no</use_password>|<use_password>yes</use_password>|', '/var/ossec/etc/ossec.conf'])",
+    "w = docker_exec(['sh', '-c', 'umask 027; cat > /var/ossec/etc/authd.pass; chown root:wazuh /var/ossec/etc/authd.pass; chmod 640 /var/ossec/etc/authd.pass'], input_text=agent_pw)",
+    "if w.returncode != 0:",
+    "  raise SystemExit(w.stderr or w.stdout or 'failed to write authd.pass')",
+    "subprocess.run(['docker', 'restart', container], check=True)",
+    "for _ in range(24):",
+    "  r = docker_exec(['sh', '-c', 'pgrep -f wazuh-authd >/dev/null && test -s /var/ossec/etc/authd.pass && grep -q \"<use_password>yes</use_password>\" /var/ossec/etc/ossec.conf'])",
+    "  if r.returncode == 0:",
+    "    print('authd password enrollment ensured')",
+    "    break",
+    "  time.sleep(5)",
+    "else:",
+    "  raise SystemExit('authd did not become ready after password ensure')",
+    "PY",
+  ].join("\n");
+}
+
+/**
  * @param {string} release
  * @param {string} apiPassword
  * @param {string} agentPassword

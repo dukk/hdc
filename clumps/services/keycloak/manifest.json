@@ -1,7 +1,9 @@
 {
   "id": "keycloak",
   "title": "Keycloak identity and access management",
-  "env_required": ["HDC_KEYCLOAK_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_KEYCLOAK_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/keycloak-a.json",
     "inventory/manual/services/keycloak.json"
@@ -10,13 +12,25 @@
     "next_steps": [
       "Set access.nodes[0].ip on inventory/manual/systems/keycloak-a.json from query output.",
       "Configure nginx-waf to proxy keycloak.external_url to the CT upstream URL.",
-      "Complete realm/client bootstrap in the Keycloak admin console."
+      "Declare realms under keycloak.realms[] (optional $hdc.include files under realms/) and run maintain.",
+      "Configure clients and identity providers in the Keycloak admin console (not managed by hdc v1)."
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

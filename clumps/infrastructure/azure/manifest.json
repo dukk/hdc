@@ -1,7 +1,10 @@
 {
   "id": "azure",
   "title": "Azure app registrations",
-  "env_required": ["HDC_AZURE_TENANT_ID", "HDC_AZURE_CLIENT_ID"],
+  "env_required": [
+    "HDC_AZURE_TENANT_ID",
+    "HDC_AZURE_CLIENT_ID"
+  ],
   "inventory_docs": [
     "inventory/manual/targets/azure.json",
     "clumps/infrastructure/azure/config.json"
@@ -27,9 +30,18 @@
     }
   ],
   "verbs": {
-    "query": { "script": "run.mjs" },
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   },
   "operation_report": {
     "next_steps": [

@@ -1,0 +1,17 @@
+{
+  "name": "hdc-agent-server",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "A2A 0.3 HTTP server for one HDC agent role (LiteLLM + hdc-mcp tools)",
+  "bin": {
+    "hdc-agent-server": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test lib/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

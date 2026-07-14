@@ -1,7 +1,9 @@
 {
   "id": "keepalived",
   "title": "Keepalived VRRP and LVS load balancing",
-  "env_required": ["HDC_KEEPALIVED_AUTH_PASS"],
+  "env_required": [
+    "HDC_KEEPALIVED_AUTH_PASS"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/vm-keepalived-a.json",
     "inventory/manual/systems/vm-keepalived-b.json",
@@ -17,9 +19,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

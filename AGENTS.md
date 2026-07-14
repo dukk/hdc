@@ -61,7 +61,7 @@ Commands from [`apps/hdc-cli/lib/cli-app.mjs`](apps/hdc-cli/lib/cli-app.mjs):
 | --- | --- |
 | `help [topic …]` | Hierarchical usage |
 | `list` | Packages and manifest metadata |
-| `run <tier> <clump> <verb> [-- <args>]` | Run a package script (`deploy`, `maintain`, `query`); tier: `client`, `infrastructure`, or `service` |
+| `run <tier> <clump> <verb> [-- <args>]` | Run a package script (`deploy`, `maintain`, `query`, `health`, `teardown`); tier: `client`, `infrastructure`, or `service` |
 | `run <tier> <clump> <platform> <verb> [-- <args>]` | When manifest lists `platforms` (legacy platform-routed layout) |
 | `secrets path \| init \| change-passphrase \| set \| list \| get \| dump \| delete` | Encrypted vault for `HDC_*` secrets; `get`/`dump` write plaintext to files (unlock required) |
 | `users bootstrap-hdc [--dry-run] [--sidecar <path> …]` | Ensure local `hdc` Linux user on bootstrap hosts |
@@ -73,11 +73,13 @@ Examples:
 ```bash
 node apps/hdc-cli/cli.mjs list
 node apps/hdc-cli/cli.mjs run infrastructure proxmox query
+node apps/hdc-cli/cli.mjs run service vaultwarden health
 node apps/hdc-cli/cli.mjs run service pi-hole deploy -- --help
 node apps/hdc-cli/cli.mjs help run infrastructure proxmox maintain
 node apps/hdc-cli/cli.mjs maintain daily --dry-run
 ```
 
+**Health:** `hdc run <tier> <clump> health` runs layered connectivity checks (DNS → public URL → nginx-waf LAN IP+Host → direct guest IP → in-guest docker/systemd). Exit `0` when healthy or degraded (origin up, edge down); `1` when down/unknown. JSON on stdout.
 ## Daily maintain
 
 `node apps/hdc-cli/cli.mjs maintain daily` runs a curated, **non-destructive** recipe across every package that has a resolved `config.json` (hdc-private or public). It skips prune operations, rolling restarts, and reboots; applies routine updates (Docker pull, guest apt, DSM packages) unless `--skip-upgrades` is set; runs **query only** on home clients (`windows`, `client-ubuntu`, `raspberrypi`).
@@ -655,19 +657,19 @@ Example: `node apps/hdc-cli/cli.mjs run service wireguard deploy --`
 
 ## Keycloak in this repo
 
-- **Config:** [`clumps/services/keycloak/config.json`](clumps/services/keycloak/config.json) (copy from [`config.example.json`](clumps/services/keycloak/config.example.json)).
+- **Config:** [`clumps/services/keycloak/config.json`](clumps/services/keycloak/config.json) (copy from [`config.example.json`](clumps/services/keycloak/config.example.json)). Optional split: `keycloak.realms[]` via `{ "$hdc.include": "realms/<id>.json" }` (see [`realms/example.json`](clumps/services/keycloak/realms/example.json)).
 - **Inventory:** [`inventory/manual/systems/keycloak-a.json`](inventory/manual/systems/keycloak-a.json); service sidecar [`inventory/manual/services/keycloak.json`](inventory/manual/services/keycloak.json).
 - **Database:** `keycloak.database.mode`: `bundled` (Postgres in Compose) or `external` (shared [`postgresql`](clumps/services/postgresql/) VM).
 - **Schema:** [`apps/hdc-cli/schema/keycloak.config.schema.json`](apps/hdc-cli/schema/keycloak.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC + Docker Compose Keycloak (+ bundled Postgres when `database.mode` is `bundled`) |
-| `maintain` | Re-push compose env; `docker compose pull` + `up -d`; guest baseline |
-| `query` | Config summary; `--live` for HTTP health on `host_port` |
+| `deploy` | LXC + Docker Compose Keycloak (+ bundled Postgres when `database.mode` is `bundled`); Admin API reconcile of `realms[]` / users |
+| `maintain` | Re-push compose env; `docker compose pull` + `up -d`; guest baseline; reconcile realms/users (`--skip-realms`, `--prune`, `--realm`, `--rotate-user-passwords`, `--dry-run`) |
+| `query` | Config summary; `--live` for HTTP health + realm/user drift |
 | `teardown` | Optional compose down then destroy LXC |
 
-Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external). Set `keycloak.external_url` before nginx-waf forward-auth wiring.
+Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external); per-user `password_vault_key` (e.g. `HDC_KEYCLOAK_USER_HDC_ALICE_PASSWORD`). Realm `mail.enabled` maps SMTP to postfix-relay `client_defaults` (no auth). Set `keycloak.external_url` before nginx-waf forward-auth wiring. Clients/IdPs stay in the admin console.
 
 Example: `node apps/hdc-cli/cli.mjs run service keycloak deploy --`
 
@@ -722,6 +724,25 @@ Set `hermes.ollama_backends[]` to local Ollama HTTP APIs and `hermes.model.defau
 Vault: prefer `HDC_HERMES_OPENROUTER_API_KEY`; falls back to `HDC_OPENROUTER_API_KEY`. `HDC_HERMES_DASHBOARD_PASSWORD` required; `HDC_HERMES_DISCORD_BOT_TOKEN` when Discord is enabled; `HDC_HERMES_DASHBOARD_AUTH_SECRET` auto-generated if missing.
 
 Example: `node apps/hdc-cli/cli.mjs run service hermes deploy -- --instance a`
+
+## HDC Agents fleet in this repo
+
+- **Config:** [`clumps/services/hdc-agents/config.json`](clumps/services/hdc-agents/config.json) (copy from [`config.example.json`](clumps/services/hdc-agents/config.example.json); keep local config in hdc-private).
+- **Inventory:** [`inventory/manual/systems/hdc-agents-a.json`](inventory/manual/systems/hdc-agents-a.json); service sidecar [`inventory/manual/services/hdc-agents.json`](inventory/manual/services/hdc-agents.json).
+- **Runtime:** [`apps/hdc-agent-server/`](apps/hdc-agent-server/) — A2A 0.3 + LiteLLM tool loop + hdc-mcp role policy.
+- **Architecture:** [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md).
+- **Schema:** [`apps/hdc-cli/schema/hdc-agents.config.schema.json`](apps/hdc-cli/schema/hdc-agents.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | LXC (4 vCPU / 8 GiB / 32 GiB) + Docker Compose one container per roster agent (ports 9200–9207) |
+| `maintain` | Rebuild `hdc/agent-runtime`, `up -d`, guest baseline |
+| `query` | Config summary; `--live` for Docker + manager `/health` |
+| `teardown` | Compose down then destroy LXC |
+
+Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
+
+Example: `node apps/hdc-cli/cli.mjs run service hdc-agents deploy -- --instance a`
 
 ## Open WebUI in this repo
 
@@ -874,20 +895,12 @@ Example: `node apps/hdc-cli/cli.mjs run service openspeedtest deploy -- --instan
 
 ## A2A Registry in this repo
 
-- **Config:** [`clumps/services/a2a-registry/config.json`](clumps/services/a2a-registry/config.json) (copy from [`config.example.json`](clumps/services/a2a-registry/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/a2a-registry-a.json`](inventory/manual/systems/a2a-registry-a.json); service sidecar [`inventory/manual/services/a2a-registry.json`](inventory/manual/services/a2a-registry.json).
+**Not deployed** — replaced by LiteLLM A2A gateway (`litellm.a2a_agents[]`). Package retained for reference like Nagios.
+
+- **Config:** [`clumps/services/a2a-registry/config.example.json`](clumps/services/a2a-registry/config.example.json) (no live hdc-private config).
 - **Schema:** [`apps/hdc-cli/schema/a2a-registry.config.schema.json`](apps/hdc-cli/schema/a2a-registry.config.schema.json).
 
-| Verb | Summary |
-| --- | --- |
-| `deploy` | Proxmox LXC (2 vCPU, 2 GiB RAM, 16 GiB rootfs) + Docker build of PyPI `a2a-registry` (`a2a_registry.pypi_version`; `deployments[]`; `--instance a`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Re-push Dockerfile + `docker-compose.yml`; `docker compose build` + `up -d`; guest Linux baseline (omit `--skip-clamav`); `--skip-upgrade` skips image rebuild |
-| `query` | Config summary; `--live` for Docker + HTTP probe on `/health` (`host_port` default 8000) |
-| `teardown` | Optional `docker compose down` then destroy LXC (`--dry-run`, `--yes`, `--skip-compose-down`) |
-
-No vault secrets for v1. No published Docker image — deploy builds `hdc/a2a-registry:<version>` on the guest. Storage is in-memory (registrations lost on container restart). LAN API: `http://<ct-ip>:8000`. Optional `a2a_registry.public_url` when adding nginx-waf later.
-
-Example: `node apps/hdc-cli/cli.mjs run service a2a-registry deploy -- --instance a`
+Use **litellm** `a2a_agents[]` and [docs/multi-agent-ops.md](docs/multi-agent-ops.md) instead of standing up this in-memory registry.
 
 ## IT-Tools in this repo
 
@@ -1204,14 +1217,14 @@ Example: `node apps/hdc-cli/cli.mjs run service hdc-runner maintain --`
 
 | Command | Summary |
 | --- | --- |
-| `run client windows maintain` | WinRM disk + Windows Update (PSWindowsUpdate on target); WoL if offline; auto WinRM bootstrap via PsExec when HTTPS port closed |
-| `run client windows query` | WinRM disk + pending update count; same PsExec WinRM bootstrap when needed |
+| `run client windows maintain` | WinRM disk + Windows Update (PSWindowsUpdate on target); WoL if offline; auto WinRM bootstrap via PsExec when HTTPS port closed; optional Ollama Windows service when `hosts[].ollama.enabled` |
+| `run client windows query` | WinRM disk + pending update count; Ollama service/API status when enabled; same PsExec WinRM bootstrap when needed |
 | `run client client-ubuntu maintain` | SSH `df`, apt dist-upgrade; reboot only with `--reboot` |
 | `run client client-ubuntu query` | SSH disk + upgradable package count |
 | `run client raspberrypi maintain` | Same as ubuntu (Debian/apt) |
 | `run client raspberrypi query` | Same as ubuntu |
 
-Flags (after `--`): `--host-id`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-winrm-bootstrap`, `--no-report`, `--report`.
+Flags (after `--`): `--host-id`, `--dry-run`, `--skip-updates`, `--reboot`, `--no-wol`, `--no-winrm-bootstrap`, `--skip-ollama`, `--ollama-only`, `--ollama-start`, `--ollama-models-only`, `--no-report`, `--report`.
 
 **WinRM bootstrap:** When port 5986 is not open, `maintain`/`query` can run Sysinternals **PsExec** on the operator Windows host (current logon must be remote admin) to enable WinRM + HTTPS listener. Config: `winrm_bootstrap` in [`clumps/clients/windows/config.json`](clumps/clients/windows/config.json); env `HDC_PSEXEC_PATH`. See [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md).
 
@@ -1601,13 +1614,14 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 
 ## Agent team (Cursor and Claude Code subagents)
 
-Seven role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`:
+Eight role-specific subagents under [`.cursor/agents/`](.cursor/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`:
 
 | Agent | Role |
 | --- | --- |
 | [`hdc-manager`](.cursor/agents/hdc-manager.md) | Task triage, agent assignment, Discord/email escalation |
 | [`hdc-monitor`](.cursor/agents/hdc-monitor.md) | Uptime Kuma, Nagios, Proxmox health digests |
-| [`hdc-sre`](.cursor/agents/hdc-sre.md) | Approved deploy/maintain, package and CLI changes |
+| [`hdc-sre`](.cursor/agents/hdc-sre.md) | Approved deploy/maintain on live systems |
+| [`hdc-engineer`](.cursor/agents/hdc-engineer.md) | Automation codebase: clumps, CLI, schemas, tests (no production deploy) |
 | [`hdc-security-expert`](.cursor/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
 | [`hdc-security-architect`](.cursor/agents/hdc-security-architect.md) | Read-only security proposals |
 | [`hdc-network-architect`](.cursor/agents/hdc-network-architect.md) | Read-only network/DNS proposals |

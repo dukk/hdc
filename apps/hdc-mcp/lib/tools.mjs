@@ -9,11 +9,15 @@ import {
 } from "../../hdc-cli/lib/ops-discord-notify.mjs";
 import { runDailyMaintainWithResult } from "../../hdc-cli/lib/daily-maintain.mjs";
 
+import { hdcPrivateRoot } from "../../hdc-cli/lib/private-repo.mjs";
 import { createHdcMcpContext, toolErrorResult, toolTextResult } from "./hdc-context.mjs";
 import {
   assertAllowedRunVerb,
+  assertApprovedTaskForDeploy,
   assertNoDestructiveRunFlags,
+  assertToolAllowedForRole,
   normalizeTier,
+  resolveAgentRole,
 } from "./policy.mjs";
 
 /**
@@ -21,6 +25,11 @@ import {
  */
 export async function handleHdcList(args = {}) {
   void args;
+  try {
+    assertToolAllowedForRole("hdc_list");
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
   const { deps, root, capture, resetCapture } = createHdcMcpContext();
   resetCapture();
   const code = await runCli(["list"], deps);
@@ -43,6 +52,11 @@ export async function handleHdcList(args = {}) {
  * @param {Record<string, unknown>} [args]
  */
 export async function handleHdcHelp(args = {}) {
+  try {
+    assertToolAllowedForRole("hdc_help");
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
   const topics = Array.isArray(args.topics) ? args.topics.map(String) : [];
   const { deps, capture, resetCapture } = createHdcMcpContext();
   resetCapture();
@@ -59,6 +73,11 @@ export async function handleHdcHelp(args = {}) {
  * @param {Record<string, unknown>} [args]
  */
 export async function handleHdcMaintainDaily(args = {}) {
+  try {
+    assertToolAllowedForRole("hdc_maintain_daily");
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
   /** @type {string[]} */
   const argv = [];
   if (args.dry_run === true) argv.push("--dry-run");
@@ -95,9 +114,11 @@ export async function handleHdcMaintainDaily(args = {}) {
  */
 export async function handleHdcRun(args = {}) {
   try {
+    assertToolAllowedForRole("hdc_run");
+    const role = resolveAgentRole();
     const tier = normalizeTier(String(args.tier ?? ""));
     const clump = String(args.clump ?? "").trim();
-    const verb = assertAllowedRunVerb(String(args.verb ?? ""));
+    const verb = assertAllowedRunVerb(String(args.verb ?? ""), role);
     if (!clump) throw new Error("clump is required");
 
     const extra = Array.isArray(args.extra_args) ? args.extra_args.map(String) : [];
@@ -105,6 +126,16 @@ export async function handleHdcRun(args = {}) {
 
     const { deps, root, capture, resetCapture } = createHdcMcpContext();
     resetCapture();
+
+    if (verb === "deploy") {
+      const privateRoot = hdcPrivateRoot(root, deps.env);
+      assertApprovedTaskForDeploy({
+        verb,
+        taskId: args.task_id != null ? String(args.task_id) : null,
+        role,
+        privateRoot,
+      });
+    }
 
     if (!args.dry_run) {
       const vault = createVaultAccess(vaultDepsFromCli(deps));
@@ -151,6 +182,7 @@ export async function handleHdcRun(args = {}) {
  */
 export async function handleHdcNotifyDiscord(args = {}) {
   try {
+    assertToolAllowedForRole("hdc_notify_discord");
     const message = String(args.message ?? "").trim();
     if (!message) throw new Error("message is required");
     const title = String(args.title ?? "HDC Ops").trim() || "HDC Ops";

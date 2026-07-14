@@ -1,7 +1,9 @@
 {
   "id": "aws",
   "title": "AWS infrastructure",
-  "env_required": ["HDC_AWS_ACCESS_KEY_ID"],
+  "env_required": [
+    "HDC_AWS_ACCESS_KEY_ID"
+  ],
   "inventory_docs": [
     "inventory/manual/targets/aws.json",
     "clumps/infrastructure/aws/config.json"
@@ -33,10 +35,21 @@
     }
   ],
   "verbs": {
-    "query": { "script": "run.mjs" },
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   },
   "operation_report": {
     "next_steps": [

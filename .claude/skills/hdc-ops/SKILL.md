@@ -2,8 +2,8 @@
 name: hdc-ops
 description: >-
   Runs Home Data Center (HDC) operations via the Node.js hdc CLI: list packages,
-  run deploy/maintain/query for a package, lint inventory JSON, or validate with
-  docs sync. Use when the user asks to deploy, maintain, query, discover state,
+  run deploy/maintain/query/health for a package, lint inventory JSON, or validate with
+  docs sync. Use when the user asks to deploy, maintain, query, health-check, discover state,
   lint inventory, or update manually-deployed docs.
 ---
 

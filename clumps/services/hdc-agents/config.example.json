@@ -1,0 +1,43 @@
+{
+  "schema_version": 2,
+  "defaults": {
+    "mode": "proxmox-lxc",
+    "proxmox": {
+      "lxc": {
+        "ostemplate": "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+        "storage": "local-lvm",
+        "rootfs_gb": 32,
+        "memory_mb": 8192,
+        "cores": 4,
+        "bridge": "vmbr0",
+        "ip_config": "dhcp",
+        "unprivileged": 0,
+        "features": "nesting=1,keyctl=1",
+        "onboot": 1
+      }
+    },
+    "hdc_agents": {
+      "image_tag": "latest",
+      "litellm_base_url": "http://REPLACE_LITELLM_IP:4000",
+      "default_model": "lan-best-available",
+      "public_url": null,
+      "agents": []
+    },
+    "install": {
+      "enabled": true,
+      "compose_dir": "/opt/hdc-agents"
+    }
+  },
+  "deployments": [
+    {
+      "system_id": "hdc-agents-a",
+      "proxmox": {
+        "host_id": "REPLACE_PVE_NODE",
+        "lxc": {
+          "vmid": 0,
+          "hostname": "hdc-agents-a"
+        }
+      }
+    }
+  ]
+}

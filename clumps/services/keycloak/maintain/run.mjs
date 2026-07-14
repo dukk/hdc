@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Maintain Keycloak: refresh compose env and optional image updates.
+ * Maintain Keycloak: refresh compose env, optional image updates, reconcile realms/users.
  *
  * Usage: hdc run service keycloak maintain -- [--instance a | --system-id keycloak-a] [--skip-upgrade]
+ *        [--skip-realms] [--prune] [--realm <id>] [--dry-run] [--rotate-user-passwords]
  *        [--reapply-lxc-features]  Re-apply nesting/keyctl + Docker AppArmor workaround (default: always for privileged CTs)
  */
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
@@ -19,6 +20,7 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { repoRoot } from "../../../../apps/hdc-cli/paths.mjs";
 import { databasePasswordVaultKey, resolveKeycloakDeployments } from "../lib/deployments.mjs";
 import { maintainKeycloakInCt, resolvePveSshForHost } from "../lib/keycloak-install.mjs";
+import { reconcileKeycloakRealmsForConfig } from "../lib/keycloak-realms.mjs";
 import {
   ensureLxcDockerApparmorWorkaround,
   pctRestart,
@@ -149,15 +151,47 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
   }
 
   const secrets = await loadSecrets(deployment, vault);
+  const keycloakCfg = isObject(keycloak) ? keycloak : {};
   const result = await maintainKeycloakInCt(
     pveSsh.user,
     pveSsh.host,
     vmid,
-    isObject(keycloak) ? keycloak : {},
+    keycloakCfg,
     isObject(install) ? install : {},
     secrets,
     { skipUpgrade },
   );
+
+  const skipRealms = flagGet(flags, "skip-realms", "skip_realms") !== undefined;
+  const prune = flagGet(flags, "prune") !== undefined;
+  const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
+  const rotateUserPasswords =
+    flagGet(flags, "rotate-user-passwords", "rotate_user_passwords") !== undefined;
+  const realmFilterRaw = flagGet(flags, "realm");
+  const realmFilter =
+    typeof realmFilterRaw === "string" && realmFilterRaw.trim() ? realmFilterRaw.trim() : undefined;
+
+  /** @type {Record<string, unknown> | null} */
+  let realmsResult = null;
+  if (result.ok && !skipRealms) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users …\n`);
+    realmsResult = await reconcileKeycloakRealmsForConfig(keycloakCfg, vault, {
+      skipRealms: false,
+      prune,
+      dryRun,
+      rotateUserPasswords,
+      realmFilter,
+      adminPassword: secrets.adminPassword,
+      ctIp: typeof result.ct_ip === "string" ? result.ct_ip : null,
+      pveUser: pveSsh.user,
+      pveHost: pveSsh.host,
+      vmid,
+      waitHealth: true,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+    });
+  } else if (skipRealms) {
+    realmsResult = { ok: true, skipped: true, message: "realms skipped" };
+  }
 
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
@@ -167,14 +201,16 @@ async function maintainOne(deployment, flags, vault, vaultAccess) {
     pveHost: pveSsh.host,
   });
   const baseline = await ensureGuestLinuxBaseline({ exec, log, flags, vaultAccess, deployment, proxmoxPackageRoot: proxmoxRoot });
+  const realmsOk = realmsResult == null || realmsResult.ok !== false;
   return {
-    ok: result.ok && baseline.ok,
+    ok: result.ok && baseline.ok && realmsOk,
     system_id: systemId,
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
     message: result.message,
     lxc_features: lxcFeaturesResult,
+    realms: realmsResult,
     ...guestBaselineResultFields(baseline),
   };
 }

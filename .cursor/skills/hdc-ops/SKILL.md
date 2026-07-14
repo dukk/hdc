@@ -2,7 +2,7 @@
 name: hdc-ops
 description: >-
   Runs Home Data Center (HDC) operations via the Node.js hdc CLI: list packages,
-  run deploy/maintain/query for a package, lint inventory JSON, or validate with docs sync. Use when the user asks to deploy, maintain, query, discover state,
+  run deploy/maintain/query/health for a package, lint inventory JSON, or validate with docs sync. Use when the user asks to deploy, maintain, query, health-check, discover state,
   lint inventory, or update manually-deployed docs.
 disable-model-invocation: true
 ---
@@ -27,9 +27,11 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
    `node apps/hdc-cli/cli.mjs list`
 
-2. **Run** a package verb (`deploy`, `maintain`, `query`). Tier is `client`, `infrastructure`, or `service` (maps to `clumps/clients`, `clumps/infrastructure`, `clumps/services`). Extra args after `--` go to the package script:
+2. **Run** a package verb (`deploy`, `maintain`, `query`, `health`, `teardown`). Tier is `client`, `infrastructure`, or `service` (maps to `clumps/clients`, `clumps/infrastructure`, `clumps/services`). Extra args after `--` go to the package script:
 
    `node apps/hdc-cli/cli.mjs run service pi-hole query`
+
+   `node apps/hdc-cli/cli.mjs run service vaultwarden health`
 
    `node apps/hdc-cli/cli.mjs run service pi-hole query -- --verbose`
 
@@ -73,3 +75,7 @@ When creating or renaming `kind: "system"` inventory ids, follow **`.cursor/rule
 - VMs: `vm-<role>-<letter>` (e.g. `vm-nginx-proxy-a`)
 - Containers: `<role>-<letter>` (e.g. `ollama-a`)
 - Use alphabet instance suffixes (`-a`, `-b`), not numbers (`-1`, `-2`)
+
+## Scratch scripts
+
+**Never** create `tmp-*` (or similar one-offs) at the hdc or hdc-private **repo root**. Use `hdc run …` / clump flags first. If a helper is unavoidable: `tools/scripts/tmp-<purpose>.mjs` only (ephemeral, gitignored). Durable utilities: `tools/scripts/<name>.mjs`. Prefer extending clumps. See `.cursor/rules/hdc-automation.mdc`.

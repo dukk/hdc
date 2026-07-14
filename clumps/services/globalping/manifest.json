@@ -1,7 +1,9 @@
 {
   "id": "globalping",
   "title": "Globalping network probe",
-  "env_required": ["HDC_GLOBALPING_ADOPTION_TOKEN"],
+  "env_required": [
+    "HDC_GLOBALPING_ADOPTION_TOKEN"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/globalping-a.json",
     "inventory/manual/services/globalping.json"
@@ -14,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

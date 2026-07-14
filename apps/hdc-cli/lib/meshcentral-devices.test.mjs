@@ -169,7 +169,11 @@ describe("meshcentral-ops commands", () => {
     expect(diskCommand("windows")).toContain("Win32_LogicalDisk");
     expect(diskCommand("linux")).toContain("df -hP");
     expect(hardwareCommand("windows")).toContain("Win32_ComputerSystem");
+    expect(hardwareCommand("windows")).toContain("nvidia-smi");
+    expect(hardwareCommand("windows")).toContain("Win32_VideoController");
     expect(hardwareCommand("linux")).toContain("python3");
+    expect(hardwareCommand("linux")).toContain("nvidia-smi");
+    expect(hardwareCommand("linux")).toContain("lspci");
     expect(updatesCommand("linux")).toContain("apt-get dist-upgrade");
     expect(installCommand("windows", "Git.Git")).toContain("winget install");
     expect(installCommand("linux", "curl")).toContain("apt-get install");
@@ -180,7 +184,7 @@ describe("meshcentral-ops commands", () => {
     expect(normalizeHardwareMac("84-5C-31-A6-B7-9C")).toBe("84:5c:31:a6:b7:9c");
     expect(normalizeHardwareMac("00:00:00:00:00:00")).toBeNull();
     const bannered =
-      'Noise\n{"manufacturer":"Dell","model":"XPS","serial":"ABC","cpu_model":"Intel","logical_cores":8,"memory_gb":16.5,"mac":"AA:BB:CC:DD:EE:FF","disks":[{"device":"C:","size_gb":512,"free_gb":100}]}\n';
+      'Noise\n{"manufacturer":"Dell","model":"XPS","serial":"ABC","cpu_model":"Intel","logical_cores":8,"memory_gb":16.5,"mac":"AA:BB:CC:DD:EE:FF","disks":[{"device":"C:","size_gb":512,"free_gb":100}],"gpus":[{"name":"NVIDIA RTX 4070","vram_mb":12282}]}\n';
     expect(extractJsonPayload(bannered)).toMatchObject({ manufacturer: "Dell" });
     const parsed = parseHardwareOutput(bannered);
     expect(parsed.ok).toBe(true);
@@ -195,6 +199,10 @@ describe("meshcentral-ops commands", () => {
       logical_cores: 8,
     });
     expect(parsed.hardware.find((h) => h.type === "memory")).toMatchObject({ total_gb: 16.5 });
+    expect(parsed.hardware.find((h) => h.type === "gpu")).toMatchObject({
+      model: "NVIDIA RTX 4070",
+      vram_mb: 12282,
+    });
     expect(parsed.hardware.find((h) => h.type === "disk")).toMatchObject({
       device: "C:",
       size_gb: 512,

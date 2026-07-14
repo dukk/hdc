@@ -1,7 +1,10 @@
 {
   "id": "wazuh",
   "title": "Wazuh single-node stack",
-  "env_required": ["HDC_WAZUH_API_PASSWORD", "HDC_WAZUH_AGENT_PASSWORD"],
+  "env_required": [
+    "HDC_WAZUH_API_PASSWORD",
+    "HDC_WAZUH_AGENT_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/wazuh-a.json",
     "inventory/manual/services/wazuh.json"
@@ -13,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

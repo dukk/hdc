@@ -14,7 +14,7 @@ function isObject(v) {
  */
 export function resolveWazuhManagerRelease(repoRoot) {
   if (!repoRoot) return "";
-  const wazuhRoot = join(repoRoot, "packages", "services", "wazuh");
+  const wazuhRoot = join(repoRoot, "clumps", "services", "wazuh");
   const loaded = tryLoadClumpConfigFromClumpRoot(wazuhRoot, {
     exampleRel: "clumps/services/wazuh/config.example.json",
   });

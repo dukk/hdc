@@ -465,12 +465,12 @@
         "schedule": {
           "type": "string",
           "minLength": 1,
-          "description": "Proxmox calendar schedule (e.g. sun 03:00, daily, hourly)."
+          "description": "Fallback Proxmox calendar schedule template (e.g. sun 03:00, 03:00, hourly, mon,thu 03:00). Maintain staggers daily/weekly/twice-weekly into midnight–06:00 unless a service sets schedule explicitly."
         },
         "prune_backups": {
           "type": "string",
           "minLength": 1,
-          "description": "Retention string for API prune-backups (e.g. keep-last=3)."
+          "description": "Retention string for API prune-backups (e.g. keep-last=3 or keep-last=3,keep-daily=7)."
         },
         "mode": {
           "type": "string",
@@ -672,6 +672,10 @@
           "type": ["boolean", "integer"],
           "description": "When true (default), scan service deployments for backup targets."
         },
+        "include_cluster_orphans": {
+          "type": ["boolean", "integer"],
+          "description": "When true (default), ensure weekly backup jobs for non-template cluster guests not listed in service deployments."
+        },
         "job_id_prefix": {
           "type": "string",
           "minLength": 1,
@@ -680,7 +684,7 @@
         "profiles": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/provision_backup_profile" },
-          "description": "Named backup schedules and retention policies."
+          "description": "Named backup profiles (hourly, daily, weekly, twice-weekly). Daily/weekly/twice-weekly schedules are staggered into 00:00–06:00 by maintain."
         }
       }
     },

@@ -1,7 +1,10 @@
 {
   "id": "postiz",
   "title": "Postiz (social media scheduling)",
-  "env_required": ["HDC_POSTIZ_DB_PASSWORD", "HDC_POSTIZ_JWT_SECRET"],
+  "env_required": [
+    "HDC_POSTIZ_DB_PASSWORD",
+    "HDC_POSTIZ_JWT_SECRET"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/postiz-a.json",
     "inventory/manual/services/postiz.json"
@@ -16,9 +19,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

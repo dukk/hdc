@@ -13,6 +13,7 @@ import { ensureRootDisabled } from "./root-login-disable.mjs";
 import { ensureUnattendedUpgrades } from "./unattended-upgrades-ensure.mjs";
 import { ensureWazuhAgent } from "./wazuh-agent-ensure.mjs";
 import { isNagiosGuestSystem } from "./guest-agents-config.mjs";
+import { repoRoot as resolveRepoRoot } from "../../apps/hdc-cli/paths.mjs";
 import {
   proxmoxGuestTypeFromMode,
   syncProxmoxGuestResourcesOnMaintain,
@@ -104,6 +105,7 @@ export function resolveQemuSshTargetFromDeployment(deployment, env) {
  * @param {string} [opts.repoRoot]
  */
 export async function ensureGuestLinuxBaseline(opts) {
+  const effectiveRepoRoot = opts.repoRoot || resolveRepoRoot();
   /** @type {Record<string, unknown> | { skipped: boolean; message?: string }} */
   let guest_resources = { skipped: true, message: "no deployment" };
   /** @type {Record<string, unknown> | { skipped: boolean; message?: string }} */
@@ -268,7 +270,7 @@ export async function ensureGuestLinuxBaseline(opts) {
     flags: effectiveFlags,
     vaultAccess: opts.vaultAccess,
     proxmoxPackageRoot,
-    repoRoot: opts.repoRoot,
+    repoRoot: effectiveRepoRoot,
   });
   const wazuh_agent = await ensureWazuhAgent({
     exec: opts.exec,
@@ -276,7 +278,7 @@ export async function ensureGuestLinuxBaseline(opts) {
     flags: effectiveFlags,
     vaultAccess: opts.vaultAccess,
     proxmoxPackageRoot,
-    repoRoot: opts.repoRoot,
+    repoRoot: effectiveRepoRoot,
   });
   const root_login_disabled = ensureRootDisabled({
     exec: opts.exec,

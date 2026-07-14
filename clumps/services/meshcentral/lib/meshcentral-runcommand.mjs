@@ -16,10 +16,11 @@ export async function runOnDevice(client, nodeId, command, opts = {}) {
     log(`dry-run: would run on ${nodeId}: ${command.slice(0, 120)}${command.length > 120 ? "…" : ""}`);
     return { ok: true, dry_run: true, output: "", powershell };
   }
-  log(`runcommands on ${nodeId} (${powershell ? "powershell" : "shell"}) …`);
+  log(`runcommands on ${nodeId} (${powershell ? "powershell" : "shell"}${opts.reply === false ? ", no-reply" : ""}) …`);
   const result = await client.runCommand(nodeId, command, {
     powershell,
     timeoutMs: opts.timeoutMs,
+    reply: opts.reply,
   });
   return { ...result, powershell };
 }

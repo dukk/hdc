@@ -16,6 +16,46 @@ import {
 export { resolvePveSshForHost };
 
 /**
+ * Parse OPENROUTER_API_KEY from a guest `.env` file body (value only; never log it).
+ * @param {string} envText
+ * @returns {string | null}
+ */
+export function parseOpenrouterApiKeyFromEnvText(envText) {
+  const text = typeof envText === "string" ? envText : "";
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const m = /^OPENROUTER_API_KEY\s*=\s*(.*)$/.exec(trimmed);
+    if (!m) continue;
+    let value = m[1].trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    return value || null;
+  }
+  return null;
+}
+
+/**
+ * @param {string} user
+ * @param {string} pveHost
+ * @param {number} vmid
+ * @param {string} composeDirPath
+ * @returns {string | null}
+ */
+function readGuestOpenrouterApiKey(user, pveHost, vmid, composeDirPath) {
+  const dir = composeDirPath.replace(/'/g, `'\\''`);
+  const r = pctExec(user, pveHost, vmid, `test -f '${dir}/.env' && cat '${dir}/.env' || true`, {
+    capture: true,
+  });
+  if (r.status !== 0) return null;
+  return parseOpenrouterApiKeyFromEnvText(r.stdout || "");
+}
+
+/**
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} envContent
@@ -60,7 +100,7 @@ export function buildInstallScript(composeDirPath, composeYaml, envContent, conf
  * @param {string} composeDirPath
  * @param {string} envContent
  * @param {string} configYaml
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; resetVolumes?: boolean }} [opts]
  */
 export function buildMaintainScript(composeDirPath, envContent, configYaml, opts = {}) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
@@ -77,11 +117,58 @@ export function buildMaintainScript(composeDirPath, envContent, configYaml, opts
     `chmod 600 '${dir}/.env' '${dir}/config.yaml'`,
     `cd '${dir}'`,
   ];
+  if (opts.resetVolumes) {
+    lines.push("docker compose down -v || true");
+  }
   if (!opts.skipUpgrade) {
     lines.push("docker compose pull");
   }
   lines.push("docker compose up -d", "docker compose ps");
   return lines.join("\n");
+}
+
+/**
+ * After .env matches vault, ALTER the Postgres role to the vault password and recreate litellm.
+ * Uses local socket auth inside litellm-db. Does not print the password.
+ * @param {string} composeDirPath
+ */
+export function buildAlignDbPasswordScript(composeDirPath) {
+  const dirJson = JSON.stringify(composeDirPath);
+  const envPathJson = JSON.stringify(`${composeDirPath}/.env`.replace(/\\/g, "/"));
+  const composePathJson = JSON.stringify(`${composeDirPath}/docker-compose.yml`.replace(/\\/g, "/"));
+  return [
+    "set -euo pipefail",
+    `test -f ${envPathJson}`,
+    `test -f ${composePathJson}`,
+    "python3 - <<'PY'",
+    "import subprocess, sys",
+    "from pathlib import Path",
+    `dir_path = Path(${dirJson})`,
+    "file_env = {}",
+    "for line in (dir_path / '.env').read_text().splitlines():",
+    "    if '=' in line and not line.startswith('#'):",
+    "        k, v = line.split('=', 1)",
+    "        file_env[k] = v",
+    "pw = file_env.get('LITELLM_DB_PASSWORD') or ''",
+    "if not pw:",
+    "    print('LITELLM_DB_PASSWORD missing from .env', file=sys.stderr)",
+    "    sys.exit(1)",
+    "sql = \"ALTER USER llmproxy WITH PASSWORD '\" + pw.replace(\"'\", \"''\") + \"';\"",
+    "r = subprocess.run(",
+    "    ['docker', 'exec', '-i', 'litellm-db', 'psql', '-U', 'llmproxy', '-d', 'litellm', '-v', 'ON_ERROR_STOP=1'],",
+    "    input=sql,",
+    "    text=True,",
+    "    capture_output=True,",
+    ")",
+    "if r.returncode != 0:",
+    "    print((r.stderr or r.stdout or 'alter failed')[:500], file=sys.stderr)",
+    "    sys.exit(r.returncode or 1)",
+    "print('altered llmproxy password to match LITELLM_DB_PASSWORD')",
+    "PY",
+    `cd ${dirJson}`,
+    "docker compose up -d --force-recreate litellm",
+    "docker compose ps",
+  ].join("\n");
 }
 
 /**
@@ -169,10 +256,22 @@ export async function installLitellmInCt(user, pveHost, vmid, litellm, install, 
  * @param {Record<string, unknown>} litellm
  * @param {Record<string, unknown>} install
  * @param {{ masterKey: string; saltKey: string; dbPassword: string; openrouterApiKey?: string | null }} secrets
- * @param {{ skipUpgrade?: boolean }} [opts]
+ * @param {{ skipUpgrade?: boolean; resetDb?: boolean; alignDbPassword?: boolean }} [opts]
  */
 export async function maintainLitellmInCt(user, pveHost, vmid, litellm, install, secrets, opts = {}) {
+  const resetVolumes = opts.resetDb === true;
+  const alignDb = opts.alignDbPassword === true && !resetVolumes;
   errout.write(`[hdc] litellm maintain: refreshing stack in CT ${vmid} …\n`);
+  if (resetVolumes) {
+    errout.write(
+      "[hdc] litellm maintain: WARNING — destroying Docker volumes (postgres_data); spend/keys DB will be wiped …\n",
+    );
+  }
+  if (alignDb) {
+    errout.write(
+      "[hdc] litellm maintain: aligning Postgres llmproxy password to vault LITELLM_DB_PASSWORD …\n",
+    );
+  }
 
   const ready = await waitForCt(user, pveHost, vmid, 2000, "litellm maintain");
   if (!ready) {
@@ -180,16 +279,52 @@ export async function maintainLitellmInCt(user, pveHost, vmid, litellm, install,
   }
 
   const ip = readCtPrimaryIp(user, pveHost, vmid);
-  const { envContent, configYaml } = renderStackFiles(litellm, secrets);
   const dir = composeDir(install);
-  const inner = buildMaintainScript(dir, envContent, configYaml, opts);
+  /** @type {{ masterKey: string; saltKey: string; dbPassword: string; openrouterApiKey?: string | null }} */
+  const effectiveSecrets = { ...secrets };
+  const vaultOpenrouter =
+    typeof secrets.openrouterApiKey === "string" ? secrets.openrouterApiKey.trim() : "";
+  if (!vaultOpenrouter) {
+    const guestKey = readGuestOpenrouterApiKey(user, pveHost, vmid, dir);
+    if (guestKey) {
+      effectiveSecrets.openrouterApiKey = guestKey;
+      errout.write(
+        `[hdc] litellm maintain: preserved OPENROUTER_API_KEY from guest ${dir}/.env (vault key empty)\n`,
+      );
+    }
+  }
+  const { envContent, configYaml } = renderStackFiles(litellm, effectiveSecrets);
+  const inner = buildMaintainScript(dir, envContent, configYaml, {
+    skipUpgrade: opts.skipUpgrade,
+    resetVolumes,
+  });
   const r = pctExec(user, pveHost, vmid, inner);
   if (r.status !== 0) {
     return { ok: false, message: `maintain failed (exit ${r.status})` };
   }
+
+  if (alignDb) {
+    const align = pctExec(user, pveHost, vmid, buildAlignDbPasswordScript(dir));
+    if (align.status !== 0) {
+      return {
+        ok: false,
+        message: `align-db-password failed (exit ${align.status})`,
+        db_password_aligned: false,
+        db_volume_reset: resetVolumes,
+      };
+    }
+  }
+
+  /** @type {string} */
+  let message = opts.skipUpgrade ? "restarted" : "images refreshed";
+  if (resetVolumes) message = "db volumes reset; stack recreated";
+  else if (alignDb) message = "db password aligned; litellm recreated";
+
   return {
     ok: true,
-    message: opts.skipUpgrade ? "restarted" : "images refreshed",
+    message,
+    db_volume_reset: resetVolumes,
+    db_password_aligned: alignDb,
     api_url: resolveApiUrl(litellm, ip),
     ui_url: resolveUiUrl(litellm, ip),
     upstream_url: resolveUpstreamUrl(ip, litellm),

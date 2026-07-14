@@ -1,7 +1,9 @@
 {
   "id": "open-webui",
   "title": "Open WebUI (Ollama chat UI)",
-  "env_required": ["HDC_OPEN_WEBUI_SECRET_KEY"],
+  "env_required": [
+    "HDC_OPEN_WEBUI_SECRET_KEY"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/open-webui-a.json",
     "inventory/manual/services/open-webui.json"
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

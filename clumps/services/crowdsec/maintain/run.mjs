@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Maintain CrowdSec and optionally sync nginx bouncers.
+ * Maintain CrowdSec and optionally sync firewall bouncers.
  *
  * Usage: hdc run service crowdsec maintain -- [--instance a | --system-id crowdsec-a]
  *        hdc run service crowdsec maintain -- [--skip-upgrade] [--sync-bouncers] [--skip-clamav]
@@ -19,6 +19,7 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mjs";
 import { resolveCrowdsecDeployments, crowdsecLapiPort } from "../lib/deployments.mjs";
 import { resolvePveSshForHost, maintainCrowdsecInCt, readCtPrimaryIp } from "../lib/crowdsec-install.mjs";
+import { resolveEnrollToken } from "../lib/vault-secrets.mjs";
 import { syncCrowdsecBouncers } from "../lib/crowdsec-bouncer-sync.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
 import { loadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
@@ -69,7 +70,10 @@ async function maintainOne(deployment, flags, vaultAccess) {
   errout.write(`[hdc] ${target} ${verb}: ${systemId} on ${hostId} vmid ${vmid} ...\n`);
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const crowdsecCfg = isObject(crowdsec) ? crowdsec : {};
-  const result = await maintainCrowdsecInCt(pveSsh.user, pveSsh.host, vmid, crowdsecCfg);
+  const enroll = await resolveEnrollToken(vaultAccess, crowdsecCfg);
+  const result = await maintainCrowdsecInCt(pveSsh.user, pveSsh.host, vmid, crowdsecCfg, {
+    enrollToken: enroll.token,
+  });
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {
     user: pveSsh.user,
@@ -98,7 +102,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
   const syncBouncers = flagGet(flags, "sync-bouncers", "sync_bouncers") !== undefined;
   const ctIp = readCtPrimaryIp(pveSsh.user, pveSsh.host, vmid);
   if (syncBouncers) {
-    errout.write(`[hdc] ${target} ${verb}: ${systemId}: syncing nginx bouncers ...\n`);
+    errout.write(`[hdc] ${target} ${verb}: ${systemId}: syncing firewall bouncers ...\n`);
     bouncerSync = await syncCrowdsecBouncers({
       repoRoot: root,
       lapiUser: pveSsh.user,

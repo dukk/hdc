@@ -11,6 +11,20 @@ import { maintainLinuxHost } from "./client-maintain-linux.mjs";
 import { queryWindowsDisk } from "./client-disk-windows.mjs";
 import { maintainWindowsHost, queryWindowsPendingUpdates } from "./client-maintain-windows.mjs";
 import {
+  ensureWindowsOllamaViaMeshcentral,
+  pullWindowsOllamaModelsViaMeshcentral,
+  queryWindowsOllamaViaMeshcentral,
+  startWindowsOllamaViaMeshcentral,
+} from "./client-ollama-meshcentral.mjs";
+import {
+  ensureWindowsOllama,
+  hostOllamaEnabled,
+  pullWindowsOllamaModels,
+  queryWindowsOllama,
+  resolveHostOllamaOpts,
+  startWindowsOllama,
+} from "./client-ollama-windows.mjs";
+import {
   hostUpdatesEnabled,
   hostWolEnabled,
   hostsForPlatform,
@@ -25,10 +39,42 @@ import {
   ensureWinRmViaPsExec,
   winrmBootstrapDefaultsFromConfig,
 } from "./client-winrm-bootstrap.mjs";
-import { isHostOnline, tcpReachability } from "./client-reachability.mjs";
+import { isHostOnline, isWindowsHostOnline, tcpReachability } from "./client-reachability.mjs";
 import { sendWakeOnLan, waitForReachable } from "./client-wol.mjs";
 
 const SERVICE_PORT = { windows: 5986, ubuntu: 22, raspberrypi: 22 };
+
+/**
+ * @param {object} opts
+ * @param {string} opts.platform
+ * @param {string} opts.verb
+ * @param {string} opts.id
+ * @param {Record<string, unknown>} opts.host
+ * @param {boolean} opts.dryRun
+ * @param {"ensure"|"start"|"models"} [opts.mode]
+ * @param {(msg: string) => void} opts.log
+ */
+async function runWindowsOllamaMeshcentralFallback(opts) {
+  const { platform, verb, id, host, dryRun, mode = "ensure", log } = opts;
+  try {
+    if (mode === "start") {
+      return await startWindowsOllamaViaMeshcentral({ hostId: id, host, log });
+    }
+    if (mode === "models") {
+      return await pullWindowsOllamaModelsViaMeshcentral({ hostId: id, host, dryRun, log });
+    }
+    if (verb === "query") {
+      return await queryWindowsOllamaViaMeshcentral({ hostId: id, host, log });
+    }
+    return await ensureWindowsOllamaViaMeshcentral({ hostId: id, host, dryRun, log });
+  } catch (e) {
+    return {
+      ok: false,
+      via: "meshcentral",
+      message: String(/** @type {Error} */ (e).message || e),
+    };
+  }
+}
 
 /**
  * @param {object} opts
@@ -46,6 +92,11 @@ export async function runClientVerb(opts) {
   const skipUpdates = flags["skip-updates"] !== undefined;
   const reboot = flags["reboot"] !== undefined;
   const skipMailRelay = flags["skip-mail-relay"] !== undefined;
+  const skipOllama = flags["skip-ollama"] !== undefined;
+  const ollamaOnly = flags["ollama-only"] !== undefined;
+  const ollamaStart = flags["ollama-start"] !== undefined;
+  const ollamaModelsOnly = flags["ollama-models-only"] !== undefined;
+  const ollamaScoped = ollamaOnly || ollamaStart || ollamaModelsOnly;
   const noWol = flags["no-wol"] !== undefined;
   const noWinrmBootstrap = flags["no-winrm-bootstrap"] !== undefined;
   const noReport = flags["no-report"] !== undefined;
@@ -87,7 +138,8 @@ export async function runClientVerb(opts) {
       /** @type {Record<string, unknown>} */
       const row = { id, ip: node.ip, platform };
 
-      const online = await isHostOnline(node.ip, port);
+      const online =
+        platform === "windows" ? await isWindowsHostOnline(node.ip) : await isHostOnline(node.ip, port);
       row.reachability = online ? "online" : "offline";
 
       if (!online && !noWol && hostWolEnabled(host, wolDefaults)) {
@@ -130,6 +182,30 @@ export async function runClientVerb(opts) {
           row.reachability = "online_after_wol";
         }
       } else if (!online) {
+        if (platform === "windows" && ollamaScoped && hostOllamaEnabled(host) && !skipOllama) {
+          errout.write(
+            `[hdc] ${platform} ${verb}: host ${id} unreachable via LAN; trying MeshCentral agent…\n`,
+          );
+          const mode = ollamaStart ? "start" : ollamaModelsOnly ? "models" : "ensure";
+          const ollama = await runWindowsOllamaMeshcentralFallback({
+            platform,
+            verb,
+            id,
+            host,
+            dryRun,
+            mode,
+            log: (m) => errout.write(`[hdc] ${platform} ${verb}: host ${id} ${m}\n`),
+          });
+          row.reachability = "meshcentral";
+          row.ollama = ollama;
+          row.ok = ollama.ok === true;
+          if (!row.ok) {
+            row.message = typeof ollama.message === "string" ? ollama.message : "ollama via MeshCentral failed";
+            ok = false;
+          }
+          hostResults.push(row);
+          continue;
+        }
         row.ok = false;
         row.message = noWol ? "host offline (--no-wol)" : "host offline";
         hostResults.push(row);
@@ -165,6 +241,31 @@ export async function runClientVerb(opts) {
           winrmReachable = boot.dry_run === true || (await tcpReachability(node.ip, winrmPort)) === "open";
         }
         if (!winrmReachable) {
+          if (ollamaScoped && hostOllamaEnabled(host) && !skipOllama) {
+            errout.write(
+              `[hdc] ${platform} ${verb}: host ${id} WinRM unreachable; trying MeshCentral agent…\n`,
+            );
+            const mode = ollamaStart ? "start" : ollamaModelsOnly ? "models" : "ensure";
+            const ollama = await runWindowsOllamaMeshcentralFallback({
+              platform,
+              verb,
+              id,
+              host,
+              dryRun,
+              mode,
+              log: (m) => errout.write(`[hdc] ${platform} ${verb}: host ${id} ${m}\n`),
+            });
+            row.reachability = row.reachability ?? "online";
+            row.ollama = ollama;
+            row.ok = ollama.ok === true;
+            if (!row.ok) {
+              row.message =
+                typeof ollama.message === "string" ? ollama.message : "ollama via MeshCentral failed";
+              ok = false;
+            }
+            hostResults.push(row);
+            continue;
+          }
           row.ok = false;
           row.message = noWinrmBootstrap
             ? `WinRM port ${winrmPort} not open (--no-winrm-bootstrap)`
@@ -215,21 +316,86 @@ export async function runClientVerb(opts) {
           ok = false;
           continue;
         }
+
+        const ollamaOpts = resolveHostOllamaOpts(host);
+        const runOllama = hostOllamaEnabled(host) && !skipOllama;
+
         if (verb === "query") {
-          const pending = queryWindowsPendingUpdates(conn);
-          row.updates = pending;
-          row.ok = pending.ok;
-          if (!pending.ok) ok = false;
+          if (!ollamaScoped) {
+            const pending = queryWindowsPendingUpdates(conn);
+            row.updates = pending;
+            row.ok = pending.ok;
+            if (!pending.ok) ok = false;
+          } else {
+            row.ok = true;
+          }
+          if (runOllama) {
+            errout.write(`[hdc] ${platform} ${verb}: host ${id} Ollama status…\n`);
+            const ollama = queryWindowsOllama(conn, ollamaOpts, (m) =>
+              errout.write(`[hdc] ${platform} ${verb}: host ${id} ${m}\n`),
+            );
+            row.ollama = ollama;
+            if (!ollama.ok) {
+              row.ok = false;
+              ok = false;
+            }
+          } else if (ollamaScoped) {
+            row.ok = false;
+            row.message = "ollama.enabled is not true for this host";
+            ok = false;
+          }
         } else {
-          const maintain = maintainWindowsHost({
-            conn,
-            skipUpdates: skipUpdates || !hostUpdatesEnabled(host),
-            reboot,
-            dryRun,
-          });
-          row.maintain = maintain;
-          row.ok = maintain.ok;
-          if (!maintain.ok) ok = false;
+          if (!ollamaScoped) {
+            const maintain = maintainWindowsHost({
+              conn,
+              skipUpdates: skipUpdates || !hostUpdatesEnabled(host),
+              reboot,
+              dryRun,
+            });
+            row.maintain = maintain;
+            row.ok = maintain.ok;
+            if (!maintain.ok) ok = false;
+          } else {
+            row.ok = true;
+            row.maintain = {
+              ok: true,
+              skipped: true,
+              reason: ollamaStart
+                ? "ollama-start"
+                : ollamaModelsOnly
+                  ? "ollama-models-only"
+                  : "ollama-only",
+            };
+          }
+          if (runOllama) {
+            const log = (m) => errout.write(`[hdc] ${platform} ${verb}: host ${id} ${m}\n`);
+            /** @type {{ ok: boolean; message?: string; [k: string]: unknown }} */
+            let ollama;
+            if (ollamaStart) {
+              errout.write(`[hdc] ${platform} ${verb}: host ${id} start Ollama service…\n`);
+              ollama = startWindowsOllama(conn, ollamaOpts, log);
+            } else if (ollamaModelsOnly) {
+              errout.write(`[hdc] ${platform} ${verb}: host ${id} pull Ollama models…\n`);
+              ollama = pullWindowsOllamaModels(conn, ollamaOpts, { dryRun, log });
+            } else {
+              errout.write(`[hdc] ${platform} ${verb}: host ${id} ensure Ollama service…\n`);
+              ollama = ensureWindowsOllama(conn, {
+                ollama: ollamaOpts,
+                dryRun,
+                skipModels: false,
+                log,
+              });
+            }
+            row.ollama = ollama;
+            if (!ollama.ok) {
+              row.ok = false;
+              ok = false;
+            }
+          } else if (ollamaScoped) {
+            row.ok = false;
+            row.message = "ollama.enabled is not true for this host";
+            ok = false;
+          }
         }
       } else {
         if (!node.sshUser) {
@@ -317,7 +483,11 @@ export async function runClientVerb(opts) {
           "",
           ...hostResults.map(
             (h) =>
-              `- **${h.id}** (${h.ip}): ${h.ok ? "ok" : "failed"}${h.message ? ` — ${h.message}` : ""}`,
+              `- **${h.id}** (${h.ip}): ${h.ok ? "ok" : "failed"}${h.message ? ` — ${h.message}` : ""}${
+                h.ollama && typeof h.ollama === "object"
+                  ? ` (ollama: ${/** @type {{ ok?: boolean }} */ (h.ollama).ok ? "ok" : "failed"})`
+                  : ""
+              }`,
           ),
         ];
       },

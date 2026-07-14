@@ -1,7 +1,9 @@
 {
   "id": "yacy",
   "title": "YaCy decentralized search",
-  "env_required": ["HDC_YACY_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_YACY_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/yacy-a.json",
     "inventory/manual/systems/yacy-b.json",
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

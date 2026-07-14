@@ -41,3 +41,18 @@ export async function isHostOnline(host, port, timeoutMs = 4000) {
   const r = await tcpReachability(host, port, timeoutMs);
   return r === "open" || r === "refused";
 }
+
+/** Common LAN probe ports when WinRM is not yet configured. */
+const WINDOWS_LAN_PROBE_PORTS = [445, 5986, 3389];
+
+/**
+ * Windows hosts may block/filter WinRM until bootstrap; treat SMB/RDP/WinRM probes as "powered on".
+ * @param {string} host
+ * @param {number} [timeoutMs]
+ */
+export async function isWindowsHostOnline(host, timeoutMs = 4000) {
+  const results = await Promise.all(
+    WINDOWS_LAN_PROBE_PORTS.map((port) => tcpReachability(host, port, timeoutMs)),
+  );
+  return results.some((r) => r === "open" || r === "refused");
+}

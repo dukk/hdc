@@ -1,7 +1,9 @@
 {
   "id": "homepage",
   "title": "Homepage (gethomepage.dev)",
-  "env_required": ["HDC_HOMEPAGE_PROXMOX_API_TOKEN"],
+  "env_required": [
+    "HDC_HOMEPAGE_PROXMOX_API_TOKEN"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/homepage-a.json",
     "inventory/manual/services/homepage.json"
@@ -17,9 +19,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

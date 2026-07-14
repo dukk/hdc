@@ -37,7 +37,10 @@
           "username": "keycloak",
           "password_vault_key": "HDC_KEYCLOAK_DB_PASSWORD"
         }
-      }
+      },
+      "realms": [
+        { "$hdc.include": "realms/example.json" }
+      ]
     },
     "install": {
       "enabled": true,

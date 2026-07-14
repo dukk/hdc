@@ -35,4 +35,5 @@ You implement and maintain HDC automation. Read **`.cursor/skills/hdc-ops/SKILL.
 
 - Node.js 18+. Never commit `.env` or secret values.
 - Prefer tracked `clumps/` scripts over one-off shell.
+- **Never create `tmp-*` (or similar scratch) at the hdc / hdc-private repo root.** Use `hdc run …` first; ephemeral helpers only under `tools/scripts/tmp-*`; durable helpers under `tools/scripts/<name>.mjs` (see `.cursor/rules/hdc-automation.mdc`).
 - stderr for progress; stdout clean for JSON query output.

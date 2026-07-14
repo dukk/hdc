@@ -23,8 +23,8 @@ function isObject(v) {
  */
 async function loadOrGenerate(vault, key, generate, label) {
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  const existingRaw = await vault.getSecret(key, { optional: true });
+  const existing = typeof existingRaw === "string" ? existingRaw.trim() : "";
   if (existing) {
     errout.write(`[hdc] litellm: ${label} loaded from vault ${key}\n`);
     return existing;
@@ -42,8 +42,8 @@ async function loadOrGenerate(vault, key, generate, label) {
 async function loadOptionalSecret(vault, key) {
   if (!key) return null;
   await vault.unlock({});
-  const data = await vault.readSecrets({});
-  const existing = data && typeof data[key] === "string" ? data[key].trim() : "";
+  const existingRaw = await vault.getSecret(key, { optional: true });
+  const existing = typeof existingRaw === "string" ? existingRaw.trim() : "";
   if (existing) {
     errout.write(`[hdc] litellm: optional secret loaded from vault ${key}\n`);
     return existing;

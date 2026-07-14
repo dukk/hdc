@@ -6,7 +6,7 @@
  * 3. Verify provision templates (LXC ostemplate on each node; QEMU template_vmid in cluster).
  * 4. Ensure NAS storage connections (nas-a, nas-b by default) on each cluster/standalone group.
  * 5. Ensure backup failure notification targets/matchers (provision.notifications).
- * 6. Ensure scheduled backup jobs for managed guests (provision.backups).
+ * 6. Ensure scheduled backup jobs + backup-* frequency tags for managed guests (provision.backups).
  * 7. Ensure storage replication jobs for managed guests (provision.replication).
  * 8. Ensure HA groups and resources for managed guests (provision.ha).
  * 9. Ensure guest startup order for priority services (provision.startup).
@@ -23,7 +23,7 @@
  *   --no-build-qemu        Do not build missing QEMU templates from cloud images
  *   --no-prune             Do not remove unsupported Ubuntu LXC/QEMU templates
  *   --skip-storage           Skip NAS storage ensure (nas-a, nas-b)
- *   --skip-backups           Skip scheduled backup job ensure (provision.backups)
+ *   --skip-backups           Skip scheduled backup jobs and backup frequency tags (provision.backups)
  *   --skip-notifications     Skip notification target/matcher ensure (provision.notifications)
  *   --skip-replication       Skip storage replication job ensure (provision.replication)
  *   --skip-ha                Skip HA group/resource ensure (provision.ha)
@@ -559,8 +559,12 @@ async function main() {
           const action = typeof row.action === "string" ? row.action : "?";
           const profile = typeof row.profile === "string" ? row.profile : "";
           const vmid = row.vmid !== undefined ? String(row.vmid) : "";
+          const tag = typeof row.liveTag === "string" ? row.liveTag : typeof row.desiredTag === "string" ? row.desiredTag : "";
+          const schedule = typeof row.schedule === "string" ? row.schedule : "";
+          const storage = typeof row.storage === "string" ? row.storage : "";
           const status = row.ok === false ? "failed" : action;
-          backupNotes.push(`${id ?? "?"} vmid=${vmid} profile=${profile} ${status}`);
+          const bits = [`${id ?? "?"} vmid=${vmid}`, profile && `profile=${profile}`, tag && `tag=${tag}`, schedule && `schedule=${schedule}`, storage && `storage=${storage}`, status];
+          backupNotes.push(bits.filter(Boolean).join(" "));
         }
         recordStep(reportCtx, {
           id: "backups",

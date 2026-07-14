@@ -50,7 +50,7 @@ Task description body (markdown).
 
 **Priority:** `critical` | `high` | `medium` | `low`
 
-**Role:** `hdc-manager` | `hdc-sre` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research`
+**Role:** `hdc-manager` | `hdc-sre` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer`
 
 ## Agent roster
 
@@ -63,6 +63,7 @@ Task description body (markdown).
 | Security architect | `.cursor/agents/hdc-security-architect.md` |
 | Network architect | `.cursor/agents/hdc-network-architect.md` |
 | Research | `.cursor/agents/hdc-research.md` |
+| Engineer | `.cursor/agents/hdc-engineer.md` |
 
 ## Rules
 
@@ -70,6 +71,7 @@ Task description body (markdown).
 - **Secrets:** env var names only; values in vault (`node apps/hdc-cli/cli.mjs secrets set …`).
 - **CLI:** `node apps/hdc-cli/cli.mjs` from hdc repo root (Windows: `hdc.cmd`).
 - **Destructive work** requires task status `approved` per `delegation-policy.md`.
+- **No root scratch:** never write `tmp-*` (or similar) at the hdc / hdc-private repo root. Prefer `hdc run` / clump flags; ephemeral only in `tools/scripts/tmp-*`; see `.cursor/rules/hdc-automation.mdc`.
 
 ## Digest filename pattern
 

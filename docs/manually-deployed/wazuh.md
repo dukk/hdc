@@ -65,6 +65,7 @@ Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`clumps/servi
 | `registration password missing (vault HDC_WAZUH_AGENT_PASSWORD)` | Unlock vault; ensure secret in Vaultwarden or local vault |
 | `notifications sync skipped: indexer returned 401` | Re-run `wazuh maintain`; verify `HDC_WAZUH_API_PASSWORD` matches live stack |
 | No ModSecurity events | Run full `nginx-waf maintain`; confirm agent active and `wazuh_log_collection: applied` |
+| `Invalid request for new agent` | Manager must pin agents to `defaults.wazuh.release` (not apt latest) and enable authd password (`use_password=yes` + `/var/ossec/etc/authd.pass`). Re-run `wazuh maintain` then guest `maintain`. |
 
 Dashboard (LAN): `https://192.0.2.202` or `https://wazuh-a.home.example.invalid`.
 

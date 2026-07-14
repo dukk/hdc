@@ -1,12 +1,12 @@
 # CrowdSec (`crowdsec`)
 
-CrowdSec Local API (LAPI) service on Proxmox LXC with optional nginx bouncer sync for `vm-nginx-waf-*` nodes.
+CrowdSec Local API (LAPI) service on Proxmox LXC with optional **firewall** bouncer sync for `vm-nginx-waf-*` nodes (`crowdsec-firewall-bouncer-iptables`; lua `crowdsec-nginx-bouncer` is not used — it crashes ModSecurity nginx).
 
 ## Prerequisites
 
 - **Config:** [`config.example.json`](config.example.json) -> `config.json`
 - **Inventory:** [`inventory/manual/systems/crowdsec-a.json`](../../../inventory/manual/systems/crowdsec-a.json); [`inventory/manual/services/crowdsec.json`](../../../inventory/manual/services/crowdsec.json)
-- **Vault:** optional enrollment key at `HDC_CROWDSEC_ENROLL_KEY` (used by guest baseline agent enrollment)
+- **Vault:** enroll / auto_registration token at `HDC_CROWDSEC_ENROLL_KEY` (auto-minted on deploy/maintain if missing; used by guest baseline agent enroll)
 
 ## Commands
 

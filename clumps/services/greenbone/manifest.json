@@ -1,7 +1,9 @@
 {
   "id": "greenbone",
   "title": "Greenbone Community Edition",
-  "env_required": ["HDC_GREENBONE_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_GREENBONE_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/greenbone-a.json",
     "inventory/manual/services/greenbone.json"
@@ -14,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

@@ -145,14 +145,22 @@ export function collectTagTargetsFromPackages(root) {
     if (!loaded || !isObject(loaded.data)) continue;
 
     const defaults = loaded.data.defaults ?? null;
-    const deployments = loaded.data.deployments;
     /** @type {Record<string, unknown>[]} */
     const rows = [];
-    if (Array.isArray(deployments)) {
-      for (const d of deployments) {
+    if (Array.isArray(loaded.data.deployments)) {
+      for (const d of loaded.data.deployments) {
         if (isObject(d)) rows.push(d);
       }
-    } else if (isObject(loaded.data.deploy) && isObject(loaded.data.proxmox)) {
+    }
+    if (Array.isArray(loaded.data.deployment_groups)) {
+      for (const g of loaded.data.deployment_groups) {
+        if (!isObject(g) || !Array.isArray(g.deployments)) continue;
+        for (const d of g.deployments) {
+          if (isObject(d)) rows.push(d);
+        }
+      }
+    }
+    if (!rows.length && isObject(loaded.data.deploy) && isObject(loaded.data.proxmox)) {
       rows.push({
         system_id: loaded.data.deploy.system_id,
         mode: loaded.data.deploy.mode,

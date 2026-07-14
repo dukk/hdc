@@ -60,3 +60,9 @@ Only run maintain with Manager approval unless reconciling monitors already in c
 ```
 
 Append matching entries as new files under `operations/tasks/` (one `.md` per task).
+
+## Monthly backup verification
+
+1. Include PBS / Synology backup health in the digest (**Backup verification** section).
+2. If backups are missing or restore untested > 30 days, enqueue SRE task for a restore drill (`status: pending`, Manager approves before destructive test).
+3. Prefer `proxmox query` / maintain guest-backup sections and `synology-nas query --live` — do not invent NAS paths.

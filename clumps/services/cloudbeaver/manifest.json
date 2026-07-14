@@ -1,7 +1,9 @@
 {
   "id": "cloudbeaver",
   "title": "CloudBeaver Community database manager",
-  "env_required": ["HDC_CLOUDBEAVER_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_CLOUDBEAVER_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/cloudbeaver-a.json",
     "inventory/manual/services/cloudbeaver.json"
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

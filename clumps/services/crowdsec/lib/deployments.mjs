@@ -127,6 +127,16 @@ export function crowdsecLapiPort(crowdsec) {
 }
 
 /**
+ * Vault key for LAPI auto_registration token (guest agent enroll).
+ * @param {Record<string, unknown>} crowdsec
+ */
+export function crowdsecEnrollKeyVaultKey(crowdsec) {
+  const key =
+    typeof crowdsec.enroll_key_vault_key === "string" ? crowdsec.enroll_key_vault_key.trim() : "";
+  return key || "HDC_CROWDSEC_ENROLL_KEY";
+}
+
+/**
  * @param {Record<string, unknown>} crowdsec
  */
 export function crowdsecBouncers(crowdsec) {

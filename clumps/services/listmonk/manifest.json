@@ -1,7 +1,10 @@
 {
   "id": "listmonk",
   "title": "Listmonk newsletter manager",
-  "env_required": ["HDC_LISTMONK_ADMIN_PASSWORD", "HDC_LISTMONK_DB_PASSWORD"],
+  "env_required": [
+    "HDC_LISTMONK_ADMIN_PASSWORD",
+    "HDC_LISTMONK_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/listmonk-a.json",
     "inventory/manual/services/listmonk.json"
@@ -17,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

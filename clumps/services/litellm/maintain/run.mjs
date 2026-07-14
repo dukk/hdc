@@ -5,6 +5,8 @@ import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mj
  *
  * Usage: hdc run service litellm maintain -- [--instance a | --system-id litellm-a]
  *        hdc run service litellm maintain -- [--skip-upgrade] [--skip-clamav]
+ *        hdc run service litellm maintain -- [--align-db-password]
+ *        hdc run service litellm maintain -- [--reset-db --yes]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -59,6 +61,10 @@ function readCfg() {
 async function maintainOne(deployment, flags, secrets, vaultAccess) {
   const { systemId, proxmox: px, litellm, install } = deployment;
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
+  const resetDb = flagGet(flags, "reset-db", "reset_db") !== undefined;
+  const resetDbYes = flagGet(flags, "yes") !== undefined;
+  const resetDbConfirmed = resetDb && resetDbYes;
+  const alignDbPassword = flagGet(flags, "align-db-password", "align_db_password") !== undefined;
 
   if (!isObject(px)) {
     return { ok: false, system_id: systemId, message: "bad proxmox config" };
@@ -85,7 +91,7 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     litellmCfg,
     installCfg,
     secrets,
-    { skipUpgrade },
+    { skipUpgrade, resetDb: resetDbConfirmed, alignDbPassword },
   );
 
   const log = provisionLogFromConsole(console);
@@ -110,6 +116,9 @@ async function maintainOne(deployment, flags, secrets, vaultAccess) {
     host_id: hostId,
     vmid,
     skip_upgrade: skipUpgrade,
+    reset_db: resetDbConfirmed,
+    db_volume_reset: result.db_volume_reset ?? false,
+    db_password_aligned: result.db_password_aligned ?? false,
     api_url: result.api_url ?? null,
     ui_url: result.ui_url ?? null,
     upstream_url: result.upstream_url ?? null,
@@ -131,6 +140,15 @@ async function main() {
 
   const cfg = readCfg();
   const flags = parseArgvFlags(process.argv.slice(2));
+  const resetDb = flagGet(flags, "reset-db", "reset_db") !== undefined;
+  const resetDbYes = flagGet(flags, "yes") !== undefined;
+  if (resetDb && !resetDbYes) {
+    const msg = "refusing --reset-db without --yes (destroys litellm postgres_data volume)";
+    errout.write(`[hdc] ${target} ${verb}: ${msg}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, target, verb, message: msg }, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
   const vaultAccess = createPackageVaultAccess();
   await vaultAccess.unlock({});
   let deployments;

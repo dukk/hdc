@@ -45,18 +45,67 @@
           "ollama_backend_id": "ollama-a"
         },
         {
+          "model_name": "lan-best-available",
+          "provider": "ollama",
+          "model": "qwen3.5:cloud",
+          "ollama_backend_id": "ollama-a",
+          "order": 1
+        },
+        {
+          "model_name": "lan-best-available",
+          "provider": "ollama",
+          "model": "llama3.2:latest",
+          "ollama_backend_id": "ollama-b",
+          "order": 2
+        },
+        {
           "model_name": "claude-sonnet",
           "provider": "openrouter",
           "model": "anthropic/claude-sonnet-4"
+        },
+        {
+          "model_name": "auto",
+          "provider": "auto_router",
+          "model": "complexity_router",
+          "complexity_router_default_model": "local-qwen",
+          "complexity_router_config": {
+            "tiers": {
+              "SIMPLE": "local-qwen",
+              "MEDIUM": "lan-best-available",
+              "COMPLEX": "lan-best-available",
+              "REASONING": "claude-sonnet"
+            }
+          }
         }
       ],
       "router_settings": {
+        "routing_strategy": "simple-shuffle",
+        "routing_groups": [
+          {
+            "group_name": "lan-best-available",
+            "models": ["lan-best-available"],
+            "routing_strategy": "simple-shuffle"
+          }
+        ],
         "fallbacks": [{ "local-qwen": ["claude-sonnet"] }]
       },
       "litellm_settings": {
         "drop_params": true,
         "num_retries": 2
-      }
+      },
+      "mail": {
+        "enabled": true,
+        "from": "litellm@hdc.dukk.org"
+      },
+      "a2a_agents": [
+        {
+          "name": "hdc-runner",
+          "url": "http://REPLACE_HDC_RUNNER:9120",
+          "card_name": "hdc-agent-team",
+          "description": "HDC runner task/approval A2A (first LiteLLM registry entry)",
+          "protocol_version": "0.3"
+        }
+      ]
     },
     "install": {
       "enabled": true,

@@ -9,6 +9,7 @@ import {
   composeDir,
   renderWazuhEnv,
   resolveDashboardUrl,
+  wazuhAuthdPasswordEnsureBash,
   wazuhDockerRelease,
   wazuhDashboardApiConfigSyncBash,
   wazuhStackApiCredentialsPatchBash,
@@ -46,6 +47,8 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword, m
   const release = wazuhDockerRelease(wazuh);
   const dashboardPort = wazuhDashboardPort(wazuh);
   const root = composeDir(install).replace(/'/g, `'\\''`);
+  const stack = wazuhStackDir(install).replace(/'/g, `'\\''`);
+  const agentPw = String(agentPassword ?? "").replace(/'/g, `'\\''`);
   let script = buildOfficialStackInstallScript(release, apiPassword, agentPassword, dashboardPort).replace(
     `export WAZUH_ROOT='${composeDir({}).replace(/'/g, `'\\''`)}'`,
     `export WAZUH_ROOT='${root}'`,
@@ -57,12 +60,20 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword, m
     }
   }
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
-  return [
+  const lines = [
     script,
     `cat > '${root}/.env' <<'HDCENV'`,
     envContent.trimEnd(),
     "HDCENV",
-  ].join("\n");
+  ];
+  if (agentPw) {
+    lines.push(
+      `export STACK='${stack}'`,
+      `export WAZUH_AGENT_PASSWORD='${agentPw}'`,
+      wazuhAuthdPasswordEnsureBash(),
+    );
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -78,6 +89,7 @@ export function buildMaintainScript(install, envContent, apiPassword, mailSettin
   const stack = wazuhStackDir(install).replace(/'/g, `'\\''`);
   const root = composeDir(install).replace(/'/g, `'\\''`);
   const apiPw = apiPassword.replace(/'/g, `'\\''`);
+  const agentPw = String(opts.agentPassword ?? "").replace(/'/g, `'\\''`);
   const release = (opts.release ?? "").replace(/'/g, `'\\''`);
   const lines = [
     "set -euo pipefail",
@@ -89,6 +101,7 @@ export function buildMaintainScript(install, envContent, apiPassword, mailSettin
     `cd '${stack}'`,
     `export STACK='${stack}'`,
     `export WAZUH_API_PASSWORD='${apiPw}'`,
+    `export WAZUH_AGENT_PASSWORD='${agentPw}'`,
   ];
   if (release) lines.push(`export WAZUH_RELEASE='${release}'`);
   lines.push(wazuhStackApiCredentialsPatchBash());
@@ -100,6 +113,9 @@ export function buildMaintainScript(install, envContent, apiPassword, mailSettin
   lines.push(
     'for i in $(seq 1 30); do curl -sk -u "admin:$WAZUH_API_PASSWORD" https://127.0.0.1:9200/ >/dev/null 2>&1 && break; sleep 5; done',
   );
+  if (agentPw) {
+    lines.push(wazuhAuthdPasswordEnsureBash());
+  }
   if (mailSettings && !opts.skipMail) {
     lines.push(buildWazuhManagerAlertsPatchBash(mailSettings));
     if (mailSettings.notifications.enabled) {
@@ -188,6 +204,7 @@ export async function maintainWazuhInCt(
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
   const inner = buildMaintainScript(install, envContent, apiPassword, opts.mailSettings ?? null, {
     ...opts,
+    agentPassword,
     release: wazuhDockerRelease(wazuh),
   });
   const r = pctExec(user, pveHost, vmid, inner);
@@ -257,6 +274,7 @@ export async function maintainWazuhOnHost(
   const envContent = renderWazuhEnv(wazuh, apiPassword, agentPassword);
   const inner = buildMaintainScript(install, envContent, apiPassword, opts.mailSettings ?? null, {
     ...opts,
+    agentPassword,
     release: wazuhDockerRelease(wazuh),
   });
   const r = exec.run(inner);

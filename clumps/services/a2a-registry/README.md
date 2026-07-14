@@ -1,10 +1,9 @@
 # A2A Registry (`a2a-registry`)
 
-[allenday/a2a-registry](https://github.com/allenday/a2a-registry) (PyPI `a2a-registry`) — A2A Protocol agent discovery and registration on Proxmox LXC (Docker Compose, local image build). Default LAN API: `http://<ct-ip>:8000`.
+> **Status:** Deprecated — agent discovery moved to **LiteLLM** (`litellm.a2a_agents[]`).
+> Do not deploy this clump for new work. See [docs/multi-agent-ops.md](../../../docs/multi-agent-ops.md).
 
-There is no published Docker Hub image; deploy builds `hdc/a2a-registry:<pypi_version>` on the guest from a rendered Dockerfile (`pip install a2a-registry==…`).
-
-**Storage:** in-memory only (upstream default). Agent registrations are lost when the container restarts.
+[allenday/a2a-registry](https://github.com/allenday/a2a-registry) (PyPI `a2a-registry`) — legacy in-memory A2A Protocol registry. Package scripts retained for optional restore.
 
 ## Prerequisites
 

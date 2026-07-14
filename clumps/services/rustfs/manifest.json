@@ -1,7 +1,10 @@
 {
   "id": "rustfs",
   "title": "RustFS S3 object storage cluster",
-  "env_required": ["HDC_RUSTFS_ACCESS_KEY", "HDC_RUSTFS_SECRET_KEY"],
+  "env_required": [
+    "HDC_RUSTFS_ACCESS_KEY",
+    "HDC_RUSTFS_SECRET_KEY"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/rustfs-a.json",
     "inventory/manual/systems/rustfs-b.json",
@@ -22,9 +25,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

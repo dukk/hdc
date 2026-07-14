@@ -22,9 +22,11 @@ import { ensureLxcStarted } from "../../../infrastructure/proxmox/lib/proxmox-lx
 import { createProxmoxHostProvisioner } from "../../../infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 
+import { createPackageVaultAccess } from "../../../lib/package-vault-access.mjs";
 import { resolveCrowdsecDeployments, crowdsecLapiPort } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { installCrowdsecInCt, readCtPrimaryIp, resolvePveSshForHost } from "../lib/crowdsec-install.mjs";
+import { resolveEnrollToken } from "../lib/vault-secrets.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
 import { runOperationReportTail } from "../../../lib/operation-report.mjs";
@@ -76,7 +78,7 @@ function existingGuestPolicy(flags) {
  * @param {ReturnType<typeof resolveCrowdsecDeployments>[number]} deployment
  * @param {Record<string, string>} flags
  * @param {import("../../../lib/host-provisioner.mjs").ProvisionLog} log
- * @param {{ ctPasswordCache?: { value: string | null } }} runOpts
+ * @param {{ ctPasswordCache?: { value: string | null }; enrollToken?: string; vault?: ReturnType<typeof createPackageVaultAccess> }} runOpts
  */
 async function deployOne(deployment, flags, log, runOpts) {
   const { mode, systemId, proxmox: px, crowdsec, install } = deployment;
@@ -146,7 +148,8 @@ async function deployOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||
@@ -160,6 +163,19 @@ async function deployOne(deployment, flags, log, runOpts) {
     const cache = runOpts.ctPasswordCache ?? { value: null };
     let rootPassword;
     try {
+      if (
+        runOpts.vault &&
+        !flagGet(flags, "password") &&
+        !(typeof lxc.password === "string" && lxc.password.length > 0) &&
+        !String(process.env.HDC_PROXMOX_LXC_ROOT_PASSWORD ?? "").trim()
+      ) {
+        const fromVault = String(
+          await runOpts.vault.getSecret("HDC_PROXMOX_LXC_ROOT_PASSWORD", {
+            promptLabel: "vault secret HDC_PROXMOX_LXC_ROOT_PASSWORD",
+          }),
+        ).trim();
+        if (fromVault) process.env.HDC_PROXMOX_LXC_ROOT_PASSWORD = fromVault;
+      }
       rootPassword = await resolveLxcRootPassword(systemId, vmid, lxc, flags, {
         cached: cache.value,
         setCached: (v) => {
@@ -226,7 +242,9 @@ async function deployOne(deployment, flags, log, runOpts) {
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const crowdsecCfg = isObject(crowdsec) ? crowdsec : {};
   if (shouldInstall(install)) {
-    installResult = await installCrowdsecInCt(pveSsh.user, pveSsh.host, guestVmid, crowdsecCfg);
+    installResult = await installCrowdsecInCt(pveSsh.user, pveSsh.host, guestVmid, crowdsecCfg, {
+      enrollToken: runOpts.enrollToken,
+    });
   } else {
     installResult = { ok: true, method: "skipped", message: "skipped" };
     errout.write(`[hdc] ${target} ${verb}: install skipped for ${systemId}.\n`);
@@ -283,6 +301,19 @@ async function main() {
     return;
   }
 
+  const vaultAccess = createPackageVaultAccess();
+  const firstCrowdsec = isObject(deployments[0]?.crowdsec) ? deployments[0].crowdsec : {};
+  let enroll;
+  try {
+    enroll = await resolveEnrollToken(vaultAccess, firstCrowdsec);
+  } catch (e) {
+    const message = String(/** @type {Error} */ (e).message || e);
+    errout.write(`[hdc] ${target} ${verb}: enroll token failed: ${message}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, target, verb, message }, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const log = provisionLogFromConsole(console);
   /** @type {{ value: string | null }} */
   const ctPasswordCache = { value: null };
@@ -290,7 +321,13 @@ async function main() {
   const results = [];
   for (const deployment of deployments) {
     try {
-      results.push(await deployOne(deployment, flags, log, { ctPasswordCache }));
+      results.push(
+        await deployOne(deployment, flags, log, {
+          ctPasswordCache,
+          enrollToken: enroll.token,
+          vault: vaultAccess,
+        }),
+      );
     } catch (e) {
       const msg = String(/** @type {Error} */ (e).message || e);
       errout.write(`[hdc] ${target} ${verb}: ${deployment.systemId} failed: ${msg}\n`);

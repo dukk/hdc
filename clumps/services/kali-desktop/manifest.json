@@ -1,7 +1,9 @@
 {
   "id": "kali-desktop",
   "title": "Kali Linux desktop (Proxmox QEMU)",
-  "env_required": ["HDC_KALI_DESKTOP_PASSWORD"],
+  "env_required": [
+    "HDC_KALI_DESKTOP_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/vm-kali-a.json",
     "inventory/manual/services/kali-desktop.json"
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

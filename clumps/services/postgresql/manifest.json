@@ -1,7 +1,9 @@
 {
   "id": "postgresql",
   "title": "PostgreSQL database server",
-  "env_required": ["HDC_POSTGRESQL_SUPERUSER_PASSWORD"],
+  "env_required": [
+    "HDC_POSTGRESQL_SUPERUSER_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/vm-postgres-a.json",
     "inventory/manual/systems/vm-postgres-b.json",
@@ -9,8 +11,17 @@
     "clumps/services/postgresql/config.json (copy config.example.json)"
   ],
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   }
 }

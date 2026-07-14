@@ -1,7 +1,10 @@
 {
   "id": "shlink",
   "title": "Shlink URL shortener",
-  "env_required": ["HDC_SHLINK_DB_PASSWORD", "HDC_SHLINK_INITIAL_API_KEY"],
+  "env_required": [
+    "HDC_SHLINK_DB_PASSWORD",
+    "HDC_SHLINK_INITIAL_API_KEY"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/shlink-a.json",
     "inventory/manual/services/shlink.json"
@@ -17,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

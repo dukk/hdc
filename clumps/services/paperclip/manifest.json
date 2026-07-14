@@ -1,7 +1,10 @@
 {
   "id": "paperclip",
   "title": "Paperclip (AI agent orchestration)",
-  "env_required": ["HDC_PAPERCLIP_BETTER_AUTH_SECRET", "HDC_PAPERCLIP_DB_PASSWORD"],
+  "env_required": [
+    "HDC_PAPERCLIP_BETTER_AUTH_SECRET",
+    "HDC_PAPERCLIP_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/paperclip-a.json",
     "inventory/manual/services/paperclip.json"
@@ -17,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

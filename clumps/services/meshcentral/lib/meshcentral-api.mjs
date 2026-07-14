@@ -122,6 +122,34 @@ export async function connectMeshcentralApi(opts) {
     rejectUnauthorized,
   });
 
+  // Register message dispatch before open so we do not miss the initial serverinfo push.
+  ws.on("message", (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    if (!isObject(msg)) return;
+    for (const waiter of [...waiters]) {
+      waiter(/** @type {Record<string, unknown>} */ (msg));
+    }
+  });
+
+  const serverInfoReady = new Promise((resolve) => {
+    /** @type {ReturnType<typeof setTimeout>} */
+    const timer = setTimeout(() => resolve(null), 3_000);
+    /** @param {Record<string, unknown>} msg */
+    const onServerInfo = (msg) => {
+      if (msg.action !== "serverinfo") return;
+      clearTimeout(timer);
+      const idx = waiters.indexOf(onServerInfo);
+      if (idx >= 0) waiters.splice(idx, 1);
+      resolve(isObject(msg.serverinfo) ? msg.serverinfo : null);
+    };
+    waiters.push(onServerInfo);
+  });
+
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error("MeshCentral WebSocket connect timeout"));
@@ -137,19 +165,12 @@ export async function connectMeshcentralApi(opts) {
   });
 
   log("MeshCentral WebSocket connected");
-
-  ws.on("message", (raw) => {
-    let msg;
-    try {
-      msg = JSON.parse(String(raw));
-    } catch {
-      return;
-    }
-    if (!isObject(msg)) return;
-    for (const waiter of [...waiters]) {
-      waiter(/** @type {Record<string, unknown>} */ (msg));
-    }
-  });
+  const serverinfo = await serverInfoReady;
+  if (serverinfo) {
+    const uid = typeof serverinfo.userid === "string" ? serverinfo.userid : "";
+    const uname = typeof serverinfo.username === "string" ? serverinfo.username : "";
+    if (uid || uname) log(`authenticated as ${uname || uid}`);
+  }
 
   /**
    * @param {string} action
@@ -190,14 +211,23 @@ export async function connectMeshcentralApi(opts) {
   }
 
   async function listNodes() {
+    // MeshCtrl lists meshes alongside nodes; fire-and-forget is enough for side effects.
+    void request("meshes", {}, {
+      timeoutMs: 15_000,
+      match: (m) => m.action === "meshes" && (m.responseid === responseId || m.meshes != null),
+    }).catch(() => {});
     const msg = await request(
       "nodes",
       {},
       {
         timeoutMs: 60_000,
-        match: (m) => m.action === "nodes" && (m.responseid === responseId || m.nodes != null),
+        // Require our responseid — unsolicited empty `{action:nodes,nodes:{}}` pushes otherwise win the race.
+        match: (m) => m.action === "nodes" && m.responseid === responseId,
       },
     );
+    if (typeof msg.result === "string" && msg.result && !/^ok$/i.test(msg.result)) {
+      throw new Error(`MeshCentral nodes error: ${msg.result}`);
+    }
     return flattenNodesPayload(msg.nodes);
   }
 
@@ -237,11 +267,27 @@ export async function connectMeshcentralApi(opts) {
   /**
    * @param {string} nodeId
    * @param {string} cmds
-   * @param {{ powershell?: boolean; timeoutMs?: number }} [runOpts]
+   * @param {{ powershell?: boolean; timeoutMs?: number; reply?: boolean }} [runOpts]
    */
   async function runCommand(nodeId, cmds, runOpts = {}) {
     const powershell = runOpts.powershell === true;
+    const reply = runOpts.reply !== false;
     const timeoutMs = runOpts.timeoutMs ?? 180_000;
+    if (!reply) {
+      // Fire-and-forget: do not wait for agent stdout (needed for long installs).
+      ws.send(
+        JSON.stringify({
+          action: "runcommands",
+          responseid: responseId,
+          nodeids: [nodeId],
+          type: powershell ? 2 : 0,
+          cmds,
+          runAsUser: 0,
+          reply: false,
+        }),
+      );
+      return { ok: true, output: "", raw: { reply: false } };
+    }
     const msg = await request(
       "runcommands",
       {
@@ -254,10 +300,13 @@ export async function connectMeshcentralApi(opts) {
       {
         timeoutMs,
         match: (m) => {
-          if (m.responseid != null && m.responseid !== responseId && m.action !== "event") {
-            return false;
+          // Agent reply is broadcast as `{ action: "msg", type: "runcommands", result: "<stdout>" }`.
+          // Do not accept the bare `{ action: "runcommands", result: "ok" }` ACK when reply:true —
+          // that arrives before (or without) stdout.
+          if (m.responseid != null && m.responseid !== responseId) return false;
+          if (m.action === "msg" && (m.type === "runcommands" || m.event === "runcommands")) {
+            return true;
           }
-          if (m.action === "runcommands") return true;
           if (m.action === "event" && (m.type === "runcommands" || m.event === "runcommands")) {
             return true;
           }
@@ -271,17 +320,19 @@ export async function connectMeshcentralApi(opts) {
         ? msg.console
         : typeof msg.output === "string"
           ? msg.output
-          : typeof msg.result === "string" && msg.result !== "ok" && msg.result !== "OK"
+          : typeof msg.result === "string"
             ? msg.result
             : typeof msg.msg === "string"
               ? msg.msg
               : JSON.stringify(msg);
     const ok =
+      msg.action === "msg" ||
       msg.result == null ||
       msg.result === "ok" ||
       msg.result === "OK" ||
       typeof msg.console === "string" ||
-      typeof msg.output === "string";
+      typeof msg.output === "string" ||
+      (typeof msg.result === "string" && msg.result.length > 0);
     return { ok: Boolean(ok), output, raw: msg };
   }
 
@@ -311,8 +362,16 @@ export function flattenNodesPayload(nodes) {
     return out;
   }
   for (const [meshid, list] of Object.entries(nodes)) {
-    if (!Array.isArray(list)) continue;
-    for (const n of list) {
+    /** @type {unknown[]} */
+    let items = [];
+    if (Array.isArray(list)) {
+      items = list;
+    } else if (list && typeof list === "object") {
+      items = Object.values(list);
+    } else {
+      continue;
+    }
+    for (const n of items) {
       if (!isObject(n)) continue;
       out.push({ ...n, meshid: typeof n.meshid === "string" ? n.meshid : meshid });
     }

@@ -1,7 +1,9 @@
 {
   "id": "mailcow",
   "title": "Mailcow (full mail server stack)",
-  "env_required": ["HDC_MAILCOW_API_KEY"],
+  "env_required": [
+    "HDC_MAILCOW_API_KEY"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/mailcow-a.json",
     "inventory/manual/services/mailcow.json"
@@ -18,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

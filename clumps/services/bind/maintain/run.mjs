@@ -298,6 +298,7 @@ async function main() {
         vaultAccess,
         deployment,
         proxmoxPackageRoot: proxmoxRoot,
+        repoRoot: root,
       });
       const existing = results.find((r) => r.system_id === deployment.systemId);
       if (existing) {

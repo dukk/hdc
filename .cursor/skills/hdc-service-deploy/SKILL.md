@@ -21,6 +21,7 @@ End-to-end workflow for **configure → plan → approve → deploy → validate
 3. **Dependencies are opt-in** — list them in the plan; run only what the user approved ([dependencies.md](dependencies.md)).
 4. **Secrets:** vault key **names** only in plans and chat; use `readLineQuestion(..., { mask: true })` when prompting; never log values.
 5. **Logging:** package progress on **stderr**; keep **stdout** clean for JSON ([hdc-automation-logging](../../../.cursor/rules/hdc-automation-logging.mdc)).
+6. **No root scratch scripts:** never write `tmp-*` at the repo root — fix/extend clump scripts or (only if unavoidable) `tools/scripts/tmp-*` ([hdc-automation](../../../.cursor/rules/hdc-automation.mdc)).
 
 ## Entry points
 

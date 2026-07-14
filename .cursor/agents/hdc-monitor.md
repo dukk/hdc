@@ -39,6 +39,16 @@ node apps/hdc-cli/cli.mjs run service gatus query -- --live
 4. Create task files under `hdc-private/operations/tasks/` for issues needing SRE (`role: hdc-sre`).
 5. Set `needs_decision: true` and priority `critical`/`high` for public outages or cert expiry < 7d.
 
+## Monthly backup verification
+
+Once per calendar month (or when Manager asks):
+
+1. Query Proxmox backup / PBS status when available via `proxmox query` / maintain report sections.
+2. Query Synology DSM backup / Hyper Backup health via `synology-nas query --live` when configured.
+3. Write findings into the monitor digest under **Backup verification**.
+4. If no successful recent backup or restore never tested: enqueue `role: hdc-sre` task
+   `restore-test-<YYYY-MM>` (priority medium) for an approved restore drill — do not run restore yourself.
+
 ## Constraints
 
 - Do not deploy or maintain without Manager approval.

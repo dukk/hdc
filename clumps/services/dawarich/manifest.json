@@ -1,7 +1,10 @@
 {
   "id": "dawarich",
   "title": "Dawarich (location history)",
-  "env_required": ["HDC_DAWARICH_SECRET_KEY_BASE", "HDC_DAWARICH_DB_PASSWORD"],
+  "env_required": [
+    "HDC_DAWARICH_SECRET_KEY_BASE",
+    "HDC_DAWARICH_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/dawarich-a.json",
     "inventory/manual/services/dawarich.json"
@@ -17,9 +20,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

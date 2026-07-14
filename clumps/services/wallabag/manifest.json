@@ -1,7 +1,10 @@
 {
   "id": "wallabag",
   "title": "Wallabag read-it-later",
-  "env_required": ["HDC_WALLABAG_DB_PASSWORD", "HDC_WALLABAG_SECRET"],
+  "env_required": [
+    "HDC_WALLABAG_DB_PASSWORD",
+    "HDC_WALLABAG_SECRET"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/wallabag-a.json",
     "inventory/manual/services/wallabag.json"
@@ -15,9 +18,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

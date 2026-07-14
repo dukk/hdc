@@ -1,7 +1,9 @@
 {
   "id": "windows-desktop",
   "title": "Windows 11 desktop (Proxmox QEMU)",
-  "env_required": ["HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/vm-win11-a.json",
     "inventory/manual/services/windows-desktop.json"
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

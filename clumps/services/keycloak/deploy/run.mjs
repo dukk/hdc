@@ -4,6 +4,7 @@
  *
  * Usage: hdc run service keycloak deploy -- [--instance a | --system-id keycloak-a] [--skip-install]
  *        hdc run service keycloak deploy -- [--skip-existing | --redeploy-existing]
+ *        [--skip-realms] [--prune] [--realm <id>] [--dry-run] [--rotate-user-passwords]
  */
 import { lxcHostnameFromSystemId } from "../../../../apps/hdc-cli/lib/inventory-naming.mjs";
 import { basename, dirname, join } from "node:path";
@@ -25,6 +26,7 @@ import { resolveProvisionVmid } from "../../../infrastructure/proxmox/lib/proxmo
 import { databasePasswordVaultKey, resolveKeycloakDeployments } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { installKeycloakInCt, readCtPrimaryIp, resolvePveSshForHost } from "../lib/keycloak-install.mjs";
+import { reconcileKeycloakRealmsForConfig } from "../lib/keycloak-realms.mjs";
 import { adminPasswordVaultKey, databaseConfig, hostPort, normalizeExternalUrl } from "../lib/keycloak-render.mjs";
 import { resolveLxcRootPassword } from "../../ollama/lib/lxc-password.mjs";
 import { promptExistingGuestAction } from "../lib/prompt-existing.mjs";
@@ -320,8 +322,10 @@ async function deployOne(deployment, flags, log, runOpts) {
   }
 
   const keycloakCfg = isObject(keycloak) ? keycloak : {};
+  /** @type {{ adminPassword: string; dbPassword: string; adminKey: string; dbKey: string } | null} */
+  let secrets = null;
   if (shouldInstall(install)) {
-    const secrets = await loadSecrets(deployment, runOpts.vault);
+    secrets = await loadSecrets(deployment, runOpts.vault);
     installResult = await installKeycloakInCt(
       pveSsh.user,
       pveSsh.host,
@@ -348,8 +352,40 @@ async function deployOne(deployment, flags, log, runOpts) {
   }
 
   const ip = readCtPrimaryIp(pveSsh.user, pveSsh.host, guestVmid);
+  const skipRealms = flagGet(flags, "skip-realms", "skip_realms") !== undefined;
+  const prune = flagGet(flags, "prune") !== undefined;
+  const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
+  const rotateUserPasswords =
+    flagGet(flags, "rotate-user-passwords", "rotate_user_passwords") !== undefined;
+  const realmFilterRaw = flagGet(flags, "realm");
+  const realmFilter =
+    typeof realmFilterRaw === "string" && realmFilterRaw.trim() ? realmFilterRaw.trim() : undefined;
+
+  /** @type {Record<string, unknown> | null} */
+  let realmsResult = null;
+  if (shouldInstall(install) && secrets && !skipRealms) {
+    errout.write(`[hdc] ${target} ${verb}: ${systemId}: reconciling realms/users …\n`);
+    realmsResult = await reconcileKeycloakRealmsForConfig(keycloakCfg, runOpts.vault, {
+      skipRealms: false,
+      prune,
+      dryRun,
+      rotateUserPasswords,
+      realmFilter,
+      adminPassword: secrets.adminPassword,
+      ctIp: ip,
+      pveUser: pveSsh.user,
+      pveHost: pveSsh.host,
+      vmid: guestVmid,
+      waitHealth: true,
+      log: (line) => errout.write(`[hdc] ${target} ${verb}: ${systemId}: ${line}\n`),
+    });
+  } else if (skipRealms) {
+    realmsResult = { ok: true, skipped: true, message: "realms skipped" };
+  }
+
+  const realmsOk = realmsResult == null || realmsResult.ok !== false;
   return {
-    ok: provisionResult.ok && installResult.ok,
+    ok: provisionResult.ok && installResult.ok && realmsOk,
     system_id: systemId,
     host_id: hostId,
     mode,
@@ -360,6 +396,7 @@ async function deployOne(deployment, flags, log, runOpts) {
     upstream_url: ip ? `http://${ip}:${hostPort(keycloakCfg)}` : null,
     result: provisionResult,
     install: installResult,
+    realms: realmsResult,
   };
 }
 

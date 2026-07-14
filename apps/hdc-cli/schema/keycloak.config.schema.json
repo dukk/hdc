@@ -30,7 +30,14 @@
             "properties": {
               "image_tag": { "type": "string" },
               "host_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "public_url": { "type": "string", "pattern": "^https?://.+" },
               "external_url": { "type": "string", "pattern": "^https?://.+" },
+              "api_url": {
+                "anyOf": [
+                  { "type": "string", "pattern": "^https?://.+" },
+                  { "type": "null" }
+                ]
+              },
               "admin_user": { "type": "string" },
               "admin_password_vault_key": { "type": "string" },
               "database": {
@@ -38,10 +45,63 @@
                 "properties": {
                   "mode": { "enum": ["bundled", "external"] }
                 }
+              },
+              "realms": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/realm" }
               }
             }
           }
         }
+      }
+    }
+  },
+  "$defs": {
+    "realmUser": {
+      "type": "object",
+      "required": ["username", "password_vault_key"],
+      "additionalProperties": true,
+      "properties": {
+        "username": { "type": "string", "minLength": 1 },
+        "email": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "email_verified": { "type": "boolean" },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "password_vault_key": { "type": "string", "minLength": 1 },
+        "temporary_password": { "type": "boolean" }
+      }
+    },
+    "realm": {
+      "type": "object",
+      "required": ["realm"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "realm": { "type": "string", "minLength": 1, "not": { "const": "master" } },
+        "enabled": { "type": "boolean" },
+        "display_name": { "type": "string" },
+        "login_with_email_allowed": { "type": "boolean" },
+        "registration_allowed": { "type": "boolean" },
+        "reset_password_allowed": { "type": "boolean" },
+        "remember_me": { "type": "boolean" },
+        "verify_email": { "type": "boolean" },
+        "ssl_required": { "type": "string", "enum": ["external", "all", "none"] },
+        "mail": { "$ref": "#/$defs/realmMail" },
+        "users": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/realmUser" }
+        }
+      }
+    },
+    "realmMail": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "from": { "type": "string" },
+        "from_display_name": { "type": "string" },
+        "reply_to": { "type": "string" }
       }
     }
   }

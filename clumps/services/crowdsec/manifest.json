@@ -9,13 +9,24 @@
   "operation_report": {
     "next_steps": [
       "Run query --live to confirm CrowdSec LAPI health on the CT.",
-      "Use maintain --sync-bouncers after nginx-waf nodes are reachable over SSH."
+      "Use maintain --sync-bouncers after nginx-waf nodes are reachable over SSH (firewall bouncer; never lua nginx bouncer)."
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

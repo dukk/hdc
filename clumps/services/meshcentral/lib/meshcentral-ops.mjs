@@ -18,7 +18,7 @@ export function diskCommand(platform) {
 }
 
 /**
- * Remote command that prints a single JSON object with system/cpu/memory/disk/mac.
+ * Remote command that prints a single JSON object with system/cpu/memory/disk/gpu/mac.
  * @param {"windows" | "linux" | "unknown" | string} platform
  */
 export function hardwareCommand(platform) {
@@ -33,18 +33,39 @@ export function hardwareCommand(platform) {
       "$disks=@(Get-CimInstance Win32_LogicalDisk -Filter \"DriveType=3\" | " +
       "ForEach-Object { [pscustomobject]@{ device=$_.DeviceID; " +
       "size_gb=[math]::Round(($_.Size/1GB),2); free_gb=[math]::Round(($_.FreeSpace/1GB),2) } }); " +
+      "$gpus=@(); " +
+      "$nvsmi=Get-Command nvidia-smi -ErrorAction SilentlyContinue; " +
+      "if ($nvsmi) { " +
+      "  $nv=(& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null); " +
+      "  if ($nv) { " +
+      "    foreach ($line in @($nv)) { " +
+      "      $p=($line -split ',',2); if ($p.Count -lt 2) { continue }; " +
+      "      $nm=$p[0].Trim(); $mb=0; [void][double]::TryParse($p[1].Trim(),[ref]$mb); " +
+      "      if ($nm) { $gpus += [pscustomobject]@{ name=$nm; vram_mb=[int][math]::Round($mb) } } " +
+      "    } " +
+      "  } " +
+      "}; " +
+      "if (-not $gpus.Count) { " +
+      "  $gpus=@(Get-CimInstance Win32_VideoController | " +
+      "    Where-Object { $_.Name -and ($_.Name -notmatch 'Basic Display|Microsoft Remote|Remote Desktop|Microsoft Basic') } | " +
+      "    ForEach-Object { " +
+      "      $vram=$null; if ($_.AdapterRAM -and $_.AdapterRAM -gt 0) { " +
+      "        $vram=[int][math]::Round(([uint64]([uint32]$_.AdapterRAM))/1MB) }; " +
+      "      [pscustomobject]@{ name=$_.Name; vram_mb=$vram } " +
+      "    }) " +
+      "}; " +
       "[pscustomobject]@{ " +
       "manufacturer=$cs.Manufacturer; model=$cs.Model; serial=$bios.SerialNumber; " +
       "cpu_model=$cpu.Name; logical_cores=[int]$cs.NumberOfLogicalProcessors; " +
       "memory_gb=[math]::Round(($cs.TotalPhysicalMemory/1GB),2); " +
-      "mac=$(if($nic){$nic.MACAddress}else{$null}); disks=$disks " +
+      "mac=$(if($nic){$nic.MACAddress}else{$null}); disks=$disks; gpus=$gpus " +
       "} | ConvertTo-Json -Compress -Depth 5"
     );
   }
   // Linux: emit JSON via python3 when available; else minimal shell JSON.
   return (
     "python3 - <<'PY'\n" +
-    "import json, os, re, glob\n" +
+    "import json, os, re, glob, shutil, subprocess\n" +
     "def r(p):\n" +
     "  try:\n" +
     "    return open(p).read().strip()\n" +
@@ -81,8 +102,30 @@ export function hardwareCommand(platform) {
     "  addr=r(os.path.join(iface,'address'))\n" +
     "  if addr and addr!='00:00:00:00:00:00':\n" +
     "    mac=addr; break\n" +
+    "gpus=[]\n" +
+    "nvsmi=shutil.which('nvidia-smi')\n" +
+    "if nvsmi:\n" +
+    "  try:\n" +
+    "    out=subprocess.check_output([nvsmi,'--query-gpu=name,memory.total','--format=csv,noheader,nounits'],text=True,stderr=subprocess.DEVNULL,timeout=15)\n" +
+    "    for line in out.splitlines():\n" +
+    "      parts=[p.strip() for p in line.split(',',1)]\n" +
+    "      if len(parts)<2 or not parts[0]: continue\n" +
+    "      try: mb=int(round(float(parts[1])))\n" +
+    "      except Exception: mb=None\n" +
+    "      gpus.append({'name':parts[0],'vram_mb':mb})\n" +
+    "  except Exception:\n" +
+    "    pass\n" +
+    "if not gpus and shutil.which('lspci'):\n" +
+    "  try:\n" +
+    "    out=subprocess.check_output(['lspci'],text=True,stderr=subprocess.DEVNULL,timeout=15)\n" +
+    "    for line in out.splitlines():\n" +
+    "      if re.search(r'VGA compatible controller|3D controller|Display controller', line, re.I):\n" +
+    "        name=re.sub(r'^[0-9a-f:.]+\\s+[^:]+:\\s*','',line,flags=re.I).strip()\n" +
+    "        if name: gpus.append({'name':name,'vram_mb':None})\n" +
+    "  except Exception:\n" +
+    "    pass\n" +
     "print(json.dumps({'manufacturer':manuf,'model':model,'serial':serial,'cpu_model':cpu_model," +
-    "'logical_cores':cores,'memory_gb':round(mem_kb/1048576,2),'mac':mac or None,'disks':disks}))\n" +
+    "'logical_cores':cores,'memory_gb':round(mem_kb/1048576,2),'mac':mac or None,'disks':disks,'gpus':gpus}))\n" +
     "PY"
   );
 }
@@ -188,6 +231,24 @@ export function parseHardwareOutput(output) {
     typeof memRaw === "number" ? memRaw : typeof memRaw === "string" ? Number(memRaw) : NaN;
   if (Number.isFinite(mem) && mem > 0) {
     hardware.push({ type: "memory", total_gb: Math.round(mem * 100) / 100 });
+  }
+  const gpus = Array.isArray(payload.gpus) ? payload.gpus : [];
+  for (const g of gpus) {
+    if (!isObject(g)) continue;
+    const gpuName =
+      typeof g.name === "string"
+        ? g.name.trim()
+        : typeof g.model === "string"
+          ? g.model.trim()
+          : "";
+    if (!gpuName) continue;
+    /** @type {Record<string, unknown>} */
+    const gpu = { type: "gpu", model: gpuName };
+    const vramRaw = g.vram_mb ?? g.vram_MB ?? g.memory_mb;
+    const vram =
+      typeof vramRaw === "number" ? vramRaw : typeof vramRaw === "string" ? Number(vramRaw) : NaN;
+    if (Number.isFinite(vram) && vram > 0) gpu.vram_mb = Math.round(vram);
+    hardware.push(gpu);
   }
   const disks = Array.isArray(payload.disks) ? payload.disks : [];
   for (const d of disks) {

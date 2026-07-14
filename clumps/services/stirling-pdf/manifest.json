@@ -1,7 +1,9 @@
 {
   "id": "stirling-pdf",
   "title": "Stirling PDF",
-  "env_required": ["HDC_STIRLING_PDF_ADMIN_PASSWORD"],
+  "env_required": [
+    "HDC_STIRLING_PDF_ADMIN_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/stirling-pdf-a.json",
     "inventory/manual/services/stirling-pdf.json"
@@ -14,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

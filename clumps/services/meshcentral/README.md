@@ -44,8 +44,11 @@ node apps/hdc-cli/cli.mjs run service meshcentral query -- --import --yes
 # Identity/IP only (no remote hardware collect)
 node apps/hdc-cli/cli.mjs run service meshcentral query -- --import --yes --skip-hardware
 
-# Disk / info for one device
+# Disk for one device
 node apps/hdc-cli/cli.mjs run service meshcentral query -- --device lan-1
+
+# Full hardware (CPU/RAM/GPU/disk) for one or more devices
+node apps/hdc-cli/cli.mjs run service meshcentral query -- --live --hardware --device lan-1
 
 # Power, updates, software
 node apps/hdc-cli/cli.mjs run service meshcentral maintain -- --device lan-1 --power wake

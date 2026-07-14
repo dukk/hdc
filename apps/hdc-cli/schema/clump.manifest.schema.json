@@ -53,7 +53,7 @@
         "title": { "type": "string", "minLength": 1 },
         "verb": {
           "type": "string",
-          "enum": ["deploy", "maintain", "query", "teardown"]
+          "enum": ["deploy", "maintain", "query", "health", "teardown"]
         },
         "invoke": {
           "type": "string",

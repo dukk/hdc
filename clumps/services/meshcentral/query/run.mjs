@@ -5,6 +5,7 @@
  * Usage: hdc run service meshcentral query -- [--instance a]
  *        hdc run service meshcentral query -- --live
  *        hdc run service meshcentral query -- --live --device lan-1
+ *        hdc run service meshcentral query -- --live --hardware --device lan-1
  *        hdc run service meshcentral query -- --import --yes
  *        hdc run service meshcentral query -- --import --yes --skip-hardware
  */
@@ -97,14 +98,36 @@ async function queryDevicesApi(cfg, flags, argv) {
       if (!resolved.ok) {
         return { ok: false, message: resolved.message, devices: live };
       }
+      const wantHardware = flagGet(flags, "hardware") !== undefined;
       /** @type {Record<string, unknown>[]} */
       const detailed = [];
       for (const d of resolved.devices) {
         /** @type {Record<string, unknown>} */
         const row = { ...d };
         if (d.online && d.node_id) {
-          log(`collecting disk for ${d.id || d.name} …`);
-          row.disk = await collectDisk(session.client, d, { log });
+          if (wantHardware) {
+            log(`collecting hardware for ${d.id || d.name} …`);
+            try {
+              row.hardware = await collectHardware(session.client, d, { log });
+            } catch (e) {
+              row.hardware = {
+                ok: false,
+                message: String(/** @type {Error} */ (e).message || e),
+              };
+            }
+          } else {
+            log(`collecting disk for ${d.id || d.name} …`);
+            try {
+              row.disk = await collectDisk(session.client, d, { log });
+            } catch (e) {
+              row.disk = {
+                ok: false,
+                message: String(/** @type {Error} */ (e).message || e),
+              };
+            }
+          }
+        } else if (wantHardware) {
+          row.hardware = { ok: false, message: "device offline" };
         } else {
           row.disk = { ok: false, message: "device offline" };
         }

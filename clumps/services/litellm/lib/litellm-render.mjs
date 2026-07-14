@@ -1,3 +1,5 @@
+import { litellmMailEnvLines } from "../../../lib/app-mail-render.mjs";
+
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -100,7 +102,7 @@ export function openaiBackendEnvVar(backendId) {
 /**
  * @param {unknown} modelList
  * @param {{ ollama: { id: string; url: string }[]; openai: { id: string; url: string }[] }} backends
- * @returns {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }[]}
+ * @returns {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string; order?: number; weight?: number; complexity_router_config?: Record<string, unknown>; complexity_router_default_model?: string }[]}
  */
 export function normalizeModelList(modelList, backends) {
   if (!Array.isArray(modelList) || modelList.length === 0) {
@@ -108,9 +110,8 @@ export function normalizeModelList(modelList, backends) {
   }
   const ollamaIds = new Set(backends.ollama.map((b) => b.id));
   const openaiIds = new Set(backends.openai.map((b) => b.id));
-  /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }[]} */
+  /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string; order?: number; weight?: number; complexity_router_config?: Record<string, unknown>; complexity_router_default_model?: string }[]} */
   const out = [];
-  const seen = new Set();
   for (const raw of modelList) {
     if (!isObject(raw)) continue;
     const modelName = typeof raw.model_name === "string" ? raw.model_name.trim() : "";
@@ -119,17 +120,32 @@ export function normalizeModelList(modelList, backends) {
     if (!modelName || !provider || !model) {
       throw new Error("each model_list entry needs model_name, provider, and model");
     }
-    if (provider !== "ollama" && provider !== "openrouter" && provider !== "openai") {
+    if (
+      provider !== "ollama" &&
+      provider !== "openrouter" &&
+      provider !== "openai" &&
+      provider !== "auto_router"
+    ) {
       throw new Error(
-        `model_list ${JSON.stringify(modelName)}: provider must be ollama, openai, or openrouter`,
+        `model_list ${JSON.stringify(modelName)}: provider must be ollama, openai, openrouter, or auto_router`,
       );
     }
-    if (seen.has(modelName)) {
-      throw new Error(`duplicate model_list model_name ${JSON.stringify(modelName)}`);
-    }
-    seen.add(modelName);
-    /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string }} */
+    /** @type {{ model_name: string; provider: string; model: string; ollama_backend_id?: string; openai_backend_id?: string; order?: number; weight?: number; complexity_router_config?: Record<string, unknown>; complexity_router_default_model?: string }} */
     const entry = { model_name: modelName, provider, model };
+    if (raw.order !== undefined && raw.order !== null) {
+      const order = typeof raw.order === "number" ? raw.order : Number(raw.order);
+      if (!Number.isFinite(order) || order < 1) {
+        throw new Error(`model_list ${JSON.stringify(modelName)}: order must be an integer >= 1`);
+      }
+      entry.order = Math.floor(order);
+    }
+    if (raw.weight !== undefined && raw.weight !== null) {
+      const weight = typeof raw.weight === "number" ? raw.weight : Number(raw.weight);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        throw new Error(`model_list ${JSON.stringify(modelName)}: weight must be a number > 0`);
+      }
+      entry.weight = weight;
+    }
     if (provider === "ollama") {
       const backendId =
         typeof raw.ollama_backend_id === "string"
@@ -152,6 +168,25 @@ export function normalizeModelList(modelList, backends) {
         );
       }
       entry.openai_backend_id = backendId;
+    } else if (provider === "auto_router") {
+      if (model !== "complexity_router") {
+        throw new Error(
+          `model_list ${JSON.stringify(modelName)}: auto_router model must be complexity_router`,
+        );
+      }
+      if (isObject(raw.complexity_router_config)) {
+        entry.complexity_router_config = /** @type {Record<string, unknown>} */ (
+          raw.complexity_router_config
+        );
+      } else if (raw.complexity_router_config != null) {
+        throw new Error(
+          `model_list ${JSON.stringify(modelName)}: complexity_router_config must be an object`,
+        );
+      }
+      if (typeof raw.complexity_router_default_model === "string") {
+        const def = raw.complexity_router_default_model.trim();
+        if (def) entry.complexity_router_default_model = def;
+      }
     }
     out.push(entry);
   }
@@ -326,6 +361,8 @@ export function renderLitellmEnv(litellm, secrets) {
   if (openrouterKey) {
     lines.push(`OPENROUTER_API_KEY=${openrouterKey}`);
   }
+
+  lines.push(...litellmMailEnvLines(litellm));
 
   return `${lines.join("\n")}\n`;
 }

@@ -2,8 +2,12 @@
   "id": "uptime-kuma",
   "title": "Uptime Kuma monitoring",
   "env_required": [],
-  "env_includes": ["oci-compute"],
-  "inventory_docs": ["inventory/manual/systems/uptime-kuma-a.json"],
+  "env_includes": [
+    "oci-compute"
+  ],
+  "inventory_docs": [
+    "inventory/manual/systems/uptime-kuma-a.json"
+  ],
   "operation_report": {
     "next_steps": [
       "Open http://<ct-ip>:3001 and complete the first-run admin setup in the web UI.",
@@ -12,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

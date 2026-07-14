@@ -7,7 +7,14 @@
     "inventory/manual/systems/ (physical hosts with automation_targets: [\"client\"])"
   ],
   "verbs": {
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   }
 }

@@ -196,4 +196,22 @@ describe("manifests", () => {
     expect(verbSpec(m, "maintain")).toBeNull();
     expect(verbSpec(m, "query")).toEqual({ script: "run.mjs" });
   });
+
+  it("resolveRunInvocation accepts health verb", () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-manifests-"));
+    writeTree(root, {
+      "services/vw/manifest.json": JSON.stringify({
+        id: "vw",
+        verbs: {
+          query: { script: "run.mjs" },
+          health: { script: "run.mjs" },
+        },
+      }),
+    });
+    const m = discoverManifests(root)[0];
+    const inv = resolveRunInvocation(["vw", "health"], m);
+    expect(inv.error).toBeUndefined();
+    expect(inv.verb).toBe("health");
+    expect(verbSpec(m, "health")?.script).toBe("run.mjs");
+  });
 });

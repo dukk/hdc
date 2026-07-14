@@ -1,7 +1,10 @@
 {
   "id": "paperless-ngx",
   "title": "Paperless-ngx document management",
-  "env_required": ["HDC_PAPERLESS_SECRET_KEY", "HDC_PAPERLESS_DB_PASSWORD"],
+  "env_required": [
+    "HDC_PAPERLESS_SECRET_KEY",
+    "HDC_PAPERLESS_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/paperless-ngx-a.json",
     "inventory/manual/services/paperless-ngx.json"
@@ -15,9 +18,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

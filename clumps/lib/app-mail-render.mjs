@@ -173,6 +173,43 @@ export function affineMailEnvLines(affine) {
 }
 
 /**
+ * SMTP env lines for LiteLLM docker .env when mail.enabled.
+ * Uses mailEnabledFromConfig only (no `to` required — invites/key emails go to user addresses).
+ * Omits SMTP_USERNAME/PASSWORD so LiteLLM does not attempt AUTH on the internal relay.
+ * Sets PROXY_BASE_URL from litellm.public_url when present (links in email templates).
+ * @param {Record<string, unknown>} litellm
+ */
+export function litellmMailEnvLines(litellm) {
+  const mail = mailBlockFromService(litellm);
+  if (!mailEnabledFromConfig(mail)) return [];
+  const relay = loadMailRelayAppSettings();
+  const from =
+    mail && typeof mail.from === "string" && mail.from.trim()
+      ? mail.from.trim()
+      : relay.from;
+
+  /** @type {string[]} */
+  const lines = [
+    `SMTP_HOST=${relay.host}`,
+    `SMTP_PORT=${relay.port}`,
+    "SMTP_TLS=False",
+    `SMTP_SENDER_EMAIL=${from}`,
+  ];
+
+  const publicUrl = typeof litellm.public_url === "string" ? litellm.public_url.trim() : "";
+  if (publicUrl) {
+    try {
+      const origin = new URL(publicUrl).origin.replace(/\/+$/, "");
+      if (origin) lines.push(`PROXY_BASE_URL=${origin}`);
+    } catch {
+      // ignore invalid public_url here; renderLitellmEnv / parsePublicUrl validates elsewhere
+    }
+  }
+
+  return lines;
+}
+
+/**
  * SMTP env lines for Vaultwarden docker .env when mail.enabled.
  * @param {Record<string, unknown>} vaultwarden
  */

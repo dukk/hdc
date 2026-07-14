@@ -1,7 +1,9 @@
 {
   "id": "immich",
   "title": "Immich photo library",
-  "env_required": ["HDC_IMMICH_DB_PASSWORD"],
+  "env_required": [
+    "HDC_IMMICH_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/immich-a.json",
     "inventory/manual/systems/vm-immich-a.json",
@@ -17,9 +19,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

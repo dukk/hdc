@@ -40,7 +40,14 @@
     }
   ],
   "verbs": {
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   }
 }

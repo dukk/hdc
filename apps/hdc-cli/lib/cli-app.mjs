@@ -1180,7 +1180,8 @@ async function cmdRun(deps, root, argv) {
   const cwd = runScriptDir(m, platform, verb);
   const script = deps.join(cwd, spec.script);
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
-  const pipeStdoutJson = verb === "query" || verb === "deploy" || verb === "teardown";
+  const pipeStdoutJson =
+    verb === "query" || verb === "health" || verb === "deploy" || verb === "teardown";
   const runEnv = buildClumpRunEnv(deps, root, m);
   const r = deps.spawnSync(deps.execPath, [script, ...extra], {
     cwd,

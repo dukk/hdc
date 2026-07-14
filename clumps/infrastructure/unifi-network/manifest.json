@@ -1,7 +1,9 @@
 {
   "id": "unifi-network",
   "title": "UniFi Network",
-  "env_required": ["HDC_UNIFI_NETWORK_API_KEY"],
+  "env_required": [
+    "HDC_UNIFI_NETWORK_API_KEY"
+  ],
   "inventory_docs": [
     "clumps/infrastructure/unifi-network/config.json"
   ],
@@ -20,8 +22,15 @@
     }
   ],
   "verbs": {
-    "query": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" }
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   },
   "operation_report": {
     "next_steps": [

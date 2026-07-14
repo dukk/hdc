@@ -1,7 +1,9 @@
 {
   "id": "searxng",
   "title": "SearXNG metasearch",
-  "env_required": ["HDC_SEARXNG_SECRET"],
+  "env_required": [
+    "HDC_SEARXNG_SECRET"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/searxng-a.json",
     "inventory/manual/services/searxng.json"
@@ -14,9 +16,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }

@@ -42,6 +42,41 @@
             "type": "object",
             "properties": { "enabled": { "type": "boolean" } }
           },
+          "ollama": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "version": { "type": "string" },
+              "listen": { "type": "string" },
+              "origins": { "type": "string" },
+              "models": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    { "type": "string" },
+                    {
+                      "type": "object",
+                      "required": ["name"],
+                      "properties": { "name": { "type": "string", "minLength": 1 } }
+                    }
+                  ]
+                }
+              },
+              "install_dir": { "type": "string" },
+              "models_dir": { "type": "string" },
+              "service_name": { "type": "string" },
+              "include_rocm": { "type": "boolean" },
+              "include_mlx": { "type": "boolean" },
+              "schedule": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "start_local": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" },
+                  "stop_local": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" }
+                }
+              }
+            }
+          },
           "wol": {
             "type": "object",
             "properties": {

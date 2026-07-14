@@ -1,0 +1,41 @@
+flowchart TB
+    subgraph Operator
+        OP[Operator<br/>Discord / email / web UI / IDE chat]
+    end
+
+    subgraph LiteLLM["litellm-a (existing LXC) — AI gateway + A2A registry"]
+        GW[Model routing<br/>/v1 OpenAI-compatible]
+        REG[A2A registry + gateway<br/>agent cards, /a2a/&lt;agent&gt;]
+        KEYS[Virtual keys, spend, logs]
+    end
+
+    subgraph AgentsHost["hdc-agents-a (new LXC on PVE) — one container per agent"]
+        MGR[hdc-manager]
+        MON[hdc-monitor]
+        SRE[hdc-sre]
+        SECX[hdc-security-expert]
+        SECA[hdc-security-architect]
+        NETA[hdc-network-architect]
+        RES[hdc-research]
+        ENG[hdc-engineer *proposed*]
+    end
+
+    subgraph State["hdc-private operations/ (durable state)"]
+        TQ[(tasks/*.md)]
+        RPT[(reports/, proposals/)]
+        POL[(delegation-policy.md)]
+    end
+
+    subgraph Infra["Infrastructure"]
+        CLI[hdc CLI via hdc-mcp allowlist]
+        LAB[Proxmox / Synology / UniFi / services]
+    end
+
+    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG -- publish card / discover peers --> REG
+    MGR -- delegate via /a2a --> REG -- route --> MON & SRE & SECX & RES
+    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG -- LLM calls --> GW
+    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG <--> TQ & RPT
+    POL --> MGR
+    MGR <--> OP
+    SRE & ENG --> CLI --> LAB
+    LAB -- query --> MON & SECX

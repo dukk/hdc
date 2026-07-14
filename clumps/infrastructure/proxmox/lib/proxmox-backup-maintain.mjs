@@ -21,8 +21,21 @@ import { lxcTemplateStorageFromConfig } from "./proxmox-provision-config.mjs";
 import { fetchPveStorageList } from "./proxmox-storage-maintain.mjs";
 import { pveFormBody, pveJsonRequest, pveDataArray } from "./pve-http.mjs";
 import { notificationsMaintainEnabledFromConfig } from "./proxmox-notifications-maintain.mjs";
+import {
+  backupFrequencyTagForProfile,
+  ensureGuestBackupFrequencyTag,
+  liveBackupFrequencyTag,
+  parseProxmoxTags,
+} from "./proxmox-guest-tags.mjs";
+import { getLxcConfig, getQemuConfig } from "./proxmox-guest-resources.mjs";
 
 /** @typedef {{ schedule: string; prune_backups: string; mode: string; compress: string; storage?: string }} BackupProfileSpec */
+
+/** Night window for staggered jobs: midnight–06:00 local (360 minutes). */
+export const BACKUP_STAGGER_WINDOW_MINUTES = 360;
+
+/** Weekday tokens for Proxmox calendar schedules (Mon–Sun). */
+export const BACKUP_DOW = Object.freeze(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 
 export const DEFAULT_BACKUP_PROFILES = {
   weekly: {
@@ -32,14 +45,20 @@ export const DEFAULT_BACKUP_PROFILES = {
     compress: "zstd",
   },
   daily: {
-    schedule: "daily",
-    prune_backups: "keep-last=7",
+    schedule: "03:00",
+    prune_backups: "keep-last=3",
     mode: "snapshot",
     compress: "zstd",
   },
   hourly: {
     schedule: "hourly",
-    prune_backups: "keep-daily=7,keep-last=3",
+    prune_backups: "keep-last=3,keep-daily=7",
+    mode: "snapshot",
+    compress: "zstd",
+  },
+  "twice-weekly": {
+    schedule: "mon,thu 03:00",
+    prune_backups: "keep-last=3",
     mode: "snapshot",
     compress: "zstd",
   },
@@ -48,6 +67,9 @@ export const DEFAULT_BACKUP_PROFILES = {
 const DEFAULT_JOB_ID_PREFIX = "hdc-backup";
 const DEFAULT_DEFAULT_PROFILE = "weekly";
 const DEFAULT_DEFAULT_STORAGE = "nas-a";
+
+/** Profiles whose schedule is computed into the midnight–6am window. */
+const STAGGERED_PROFILES = new Set(["daily", "weekly", "twice-weekly"]);
 
 const BACKUP_COMPARE_KEYS = [
   "enabled",
@@ -64,6 +86,101 @@ const BACKUP_COMPARE_KEYS = [
 /** @param {unknown} v */
 function isObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * @param {string} s
+ * @returns {number}
+ */
+export function hashStringToUint(s) {
+  let h = 2166136261;
+  const str = String(s ?? "");
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * @param {number} minuteOfWindow
+ * @returns {string} HH:MM in 00:00–05:59
+ */
+export function formatNightTime(minuteOfWindow) {
+  const span = BACKUP_STAGGER_WINDOW_MINUTES;
+  const m = ((Math.floor(minuteOfWindow) % span) + span) % span;
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.profile
+ * @param {string} opts.systemId
+ * @param {number} [opts.index] Sorted index within profile cohort (for even DOW / time spread)
+ * @param {number} [opts.total] Cohort size
+ * @returns {string}
+ */
+export function computeStaggeredBackupSchedule(opts) {
+  const profile = String(opts.profile ?? "").trim() || "weekly";
+  const systemId = String(opts.systemId ?? "");
+  const h = hashStringToUint(systemId);
+
+  if (profile === "hourly") return "hourly";
+
+  const useIndex = typeof opts.index === "number" && typeof opts.total === "number" && opts.total > 0;
+  const nightMinute = useIndex
+    ? Math.floor((opts.index * BACKUP_STAGGER_WINDOW_MINUTES) / opts.total) % BACKUP_STAGGER_WINDOW_MINUTES
+    : h % BACKUP_STAGGER_WINDOW_MINUTES;
+  const time = formatNightTime(nightMinute);
+
+  if (profile === "daily") return time;
+
+  if (profile === "twice-weekly") {
+    const primary = useIndex ? opts.index % 7 : h % 7;
+    const gap = 3 + (h % 2); // 3 or 4 → always ≥3 days apart
+    const secondary = (primary + gap) % 7;
+    const days = [primary, secondary].sort((a, b) => a - b);
+    return `${BACKUP_DOW[days[0]]},${BACKUP_DOW[days[1]]} ${time}`;
+  }
+
+  // weekly (default)
+  const dow = useIndex ? opts.index % 7 : h % 7;
+  return `${BACKUP_DOW[dow]} ${time}`;
+}
+
+/**
+ * Days between two DOW indices (0–6), shortest forward distance on the week.
+ * @param {number} a
+ * @param {number} b
+ */
+export function weekdayGapDays(a, b) {
+  return Math.min(Math.abs(a - b), 7 - Math.abs(a - b));
+}
+
+/**
+ * @param {string} schedule
+ * @returns {{ days: string[]; time: string | null }}
+ */
+export function parseBackupScheduleParts(schedule) {
+  const s = String(schedule ?? "").trim().toLowerCase();
+  if (!s || s === "hourly" || s === "daily") {
+    return { days: [], time: s === "hourly" || s === "daily" ? null : null };
+  }
+  const m = s.match(/^([a-z,]+)\s+(\d{1,2}:\d{2})$/);
+  if (m) {
+    return {
+      days: m[1]
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean),
+      time: m[2],
+    };
+  }
+  const timeOnly = s.match(/^(\d{1,2}:\d{2})$/);
+  if (timeOnly) return { days: [], time: timeOnly[1] };
+  return { days: [], time: null };
 }
 
 /**
@@ -88,6 +205,19 @@ export function backupManageFromDeployments(cfg) {
   const backups = provision.backups;
   if (!isObject(backups)) return true;
   return backups.manage_from_deployments !== false && backups.manage_from_deployments !== 0;
+}
+
+/**
+ * When true (default), non-template cluster guests missing from packages get weekly jobs.
+ * @param {unknown} cfg
+ */
+export function backupIncludeClusterOrphansFromConfig(cfg) {
+  if (!isProxmoxConfigObject(cfg)) return true;
+  const provision = cfg.provision;
+  if (!isObject(provision)) return true;
+  const backups = provision.backups;
+  if (!isObject(backups)) return true;
+  return backups.include_cluster_orphans !== false && backups.include_cluster_orphans !== 0;
 }
 
 /**
@@ -206,9 +336,10 @@ function mergeBackupObjects(a, b) {
 /**
  * @param {unknown} cfg
  * @param {unknown} serviceBackup
- * @returns {{ profile: string; schedule: string; storage: string; prune_backups: string; mode: string; compress: string }}
+ * @param {{ systemId?: string; index?: number; total?: number; applyStagger?: boolean }} [opts]
+ * @returns {{ profile: string; schedule: string; storage: string; prune_backups: string; mode: string; compress: string; frequency_tag: string | null; schedule_explicit: boolean }}
  */
-export function resolveBackupSpec(cfg, serviceBackup) {
+export function resolveBackupSpec(cfg, serviceBackup, opts = {}) {
   const profiles = backupProfilesFromConfig(cfg);
   const defaultProfile = backupDefaultProfileFromConfig(cfg);
   const defaultStorage = backupDefaultStorageFromConfig(cfg);
@@ -216,10 +347,24 @@ export function resolveBackupSpec(cfg, serviceBackup) {
   const profileName =
     typeof merged.profile === "string" && merged.profile.trim() ? merged.profile.trim() : defaultProfile;
   const profile = profiles[profileName] ?? profiles[defaultProfile] ?? DEFAULT_BACKUP_PROFILES.weekly;
+  const scheduleExplicit =
+    typeof merged.schedule === "string" && Boolean(merged.schedule.trim());
+  const applyStagger = opts.applyStagger !== false;
+  let schedule = scheduleExplicit ? String(merged.schedule).trim() : profile.schedule;
+  if (!scheduleExplicit && applyStagger && STAGGERED_PROFILES.has(profileName) && opts.systemId) {
+    schedule = computeStaggeredBackupSchedule({
+      profile: profileName,
+      systemId: opts.systemId,
+      index: opts.index,
+      total: opts.total,
+    });
+  } else if (!scheduleExplicit && profileName === "hourly") {
+    schedule = "hourly";
+  }
+
   return {
     profile: profileName,
-    schedule:
-      typeof merged.schedule === "string" && merged.schedule.trim() ? merged.schedule.trim() : profile.schedule,
+    schedule,
     storage:
       typeof merged.storage === "string" && merged.storage.trim()
         ? merged.storage.trim()
@@ -230,7 +375,44 @@ export function resolveBackupSpec(cfg, serviceBackup) {
         : profile.prune_backups,
     mode: typeof merged.mode === "string" && merged.mode.trim() ? merged.mode.trim() : profile.mode,
     compress: typeof merged.compress === "string" && merged.compress.trim() ? merged.compress.trim() : profile.compress,
+    frequency_tag: backupFrequencyTagForProfile(profileName),
+    schedule_explicit: scheduleExplicit,
   };
+}
+
+/**
+ * Apply cohort-based stagger to package-collected targets (mutates schedule in place).
+ * @param {Array<{ systemId: string; backup: ReturnType<typeof resolveBackupSpec> & { schedule_explicit?: boolean } }>} targets
+ * @param {unknown} cfg
+ */
+export function applyStaggeredSchedulesToTargets(targets, cfg) {
+  /** @type {Map<string, typeof targets>} */
+  const byProfile = new Map();
+  for (const t of targets) {
+    const profile = t.backup.profile;
+    if (!STAGGERED_PROFILES.has(profile)) continue;
+    if (t.backup.schedule_explicit) continue;
+    if (!byProfile.has(profile)) byProfile.set(profile, []);
+    byProfile.get(profile).push(t);
+  }
+  for (const [, cohort] of byProfile) {
+    cohort.sort((a, b) => a.systemId.localeCompare(b.systemId));
+    const total = cohort.length;
+    for (let i = 0; i < total; i++) {
+      const t = cohort[i];
+      const next = resolveBackupSpec(cfg, { profile: t.backup.profile }, {
+        systemId: t.systemId,
+        index: i,
+        total,
+        applyStagger: true,
+      });
+      t.backup = {
+        ...t.backup,
+        schedule: next.schedule,
+        frequency_tag: next.frequency_tag,
+      };
+    }
+  }
 }
 
 /**
@@ -278,11 +460,35 @@ export function deploymentBackupRow(deployment, defaultsBackup) {
 }
 
 /**
+ * Top-level deployments[] plus nested deployment_groups[].deployments[].
+ * @param {Record<string, unknown>} data
+ * @returns {Record<string, unknown>[]}
+ */
+export function collectDeploymentsFromPackageData(data) {
+  /** @type {Record<string, unknown>[]} */
+  const rows = [];
+  if (Array.isArray(data.deployments)) {
+    for (const d of data.deployments) {
+      if (isObject(d)) rows.push(d);
+    }
+  }
+  if (Array.isArray(data.deployment_groups)) {
+    for (const g of data.deployment_groups) {
+      if (!isObject(g) || !Array.isArray(g.deployments)) continue;
+      for (const d of g.deployments) {
+        if (isObject(d)) rows.push(d);
+      }
+    }
+  }
+  return rows;
+}
+
+/**
  * @param {string} root
  * @param {unknown} cfg
  */
 export function collectBackupTargetsFromPackages(root, cfg) {
-  /** @type {Map<string, { systemId: string; hostId: string; vmid: number | null; lookupName: string; backup: ReturnType<typeof resolveBackupSpec> }>} */
+  /** @type {Map<string, { systemId: string; hostId: string; vmid: number | null; lookupName: string; backup: ReturnType<typeof resolveBackupSpec>; orphan?: boolean }>} */
   const bySystem = new Map();
   const servicesDir = join(root, "clumps", "services");
   let entries = [];
@@ -302,28 +508,52 @@ export function collectBackupTargetsFromPackages(root, cfg) {
     const loaded = tryLoadClumpConfigOrExample(pkgRoot, { exampleRel });
     if (!loaded || !isObject(loaded.data)) continue;
     const defaultsBackup = isObject(loaded.data.defaults) ? loaded.data.defaults.backup : null;
-    const deployments = loaded.data.deployments;
-    if (!Array.isArray(deployments)) continue;
+    const rootBackup = isObject(loaded.data.backup) ? loaded.data.backup : null;
+    let deployments = collectDeploymentsFromPackageData(loaded.data);
+    if (
+      !deployments.length &&
+      isObject(loaded.data.deploy) &&
+      isObject(loaded.data.proxmox)
+    ) {
+      deployments = [
+        {
+          system_id: loaded.data.deploy.system_id,
+          mode: loaded.data.deploy.mode,
+          hostname:
+            isObject(loaded.data.proxmox.lxc) && typeof loaded.data.proxmox.lxc.hostname === "string"
+              ? loaded.data.proxmox.lxc.hostname
+              : undefined,
+          proxmox: loaded.data.proxmox,
+          backup: rootBackup,
+        },
+      ];
+    }
     for (const d of deployments) {
-      const row = deploymentBackupRow(d, defaultsBackup);
+      const row = deploymentBackupRow(d, defaultsBackup ?? rootBackup);
       if (!row) continue;
-      row.backup = resolveBackupSpec(cfg, mergeBackupObjects(defaultsBackup, isObject(d) ? d.backup : null));
+      const backup = resolveBackupSpec(
+        cfg,
+        mergeBackupObjects(defaultsBackup ?? rootBackup, isObject(d) ? d.backup : null),
+        { systemId: row.systemId, applyStagger: false },
+      );
       bySystem.set(row.systemId, {
         systemId: row.systemId,
         hostId: row.hostId,
         vmid: row.vmid,
         lookupName: row.lookupName,
-        backup: row.backup,
+        backup,
       });
     }
   }
-  return [...bySystem.values()];
+  const targets = [...bySystem.values()];
+  applyStaggeredSchedulesToTargets(targets, cfg);
+  return targets;
 }
 
 /**
  * @param {Record<string, unknown>[]} resources
  * @param {string} name
- * @returns {{ vmid: number; node: string; name: string; template: boolean } | null}
+ * @returns {{ vmid: number; node: string; name: string; template: boolean; type: "lxc"|"qemu" } | null}
  */
 export function locateGuestByNameInCluster(resources, name) {
   const want = name.trim().toLowerCase();
@@ -335,14 +565,55 @@ export function locateGuestByNameInCluster(resources, name) {
     const node = typeof r.node === "string" ? r.node.trim() : "";
     if (!node) continue;
     const template = r.template === 1 || r.template === true;
+    const type = r.type === "lxc" ? "lxc" : "qemu";
     return {
       vmid: r.vmid,
       node,
       name: typeof r.name === "string" ? r.name.trim() : `vmid-${r.vmid}`,
       template,
+      type,
     };
   }
   return null;
+}
+
+/**
+ * Build weekly backup targets for non-template cluster guests not already covered.
+ *
+ * @param {object} opts
+ * @param {Record<string, unknown>[]} opts.resources
+ * @param {Set<number>} opts.coveredVmids
+ * @param {unknown} opts.cfg
+ * @param {string} opts.hostId Fallback host id for cluster membership
+ * @returns {Array<{ systemId: string; hostId: string; vmid: number; lookupName: string; backup: ReturnType<typeof resolveBackupSpec>; orphan: true; guestType: "lxc"|"qemu"; node: string }>}
+ */
+export function collectClusterOrphanBackupTargets(opts) {
+  const { resources, coveredVmids, cfg, hostId } = opts;
+  /** @type {Array<{ systemId: string; hostId: string; vmid: number; lookupName: string; backup: ReturnType<typeof resolveBackupSpec>; orphan: true; guestType: "lxc"|"qemu"; node: string }>} */
+  const orphans = [];
+  for (const r of resources) {
+    if (typeof r.vmid !== "number") continue;
+    if (r.template === 1 || r.template === true) continue;
+    if (coveredVmids.has(r.vmid)) continue;
+    const type = r.type === "lxc" ? "lxc" : r.type === "qemu" ? "qemu" : null;
+    if (!type) continue;
+    const node = typeof r.node === "string" ? r.node.trim() : "";
+    if (!node) continue;
+    const name =
+      typeof r.name === "string" && r.name.trim() ? r.name.trim() : `vmid-${r.vmid}`;
+    orphans.push({
+      systemId: name,
+      hostId,
+      vmid: r.vmid,
+      lookupName: name,
+      orphan: true,
+      guestType: type,
+      node,
+      backup: resolveBackupSpec(cfg, { profile: "weekly" }, { systemId: name, applyStagger: false }),
+    });
+  }
+  applyStaggeredSchedulesToTargets(orphans, cfg);
+  return orphans;
 }
 
 /**
@@ -487,6 +758,19 @@ export function hostIdToClusterKeyFromConfig(cfg) {
 }
 
 /**
+ * @param {Record<string, unknown>[]} resources
+ * @param {number} vmid
+ * @returns {{ node: string; name: string; template: boolean; type: "lxc"|"qemu" } | null}
+ */
+function locateGuestWithType(resources, vmid) {
+  const located = locateVmidInCluster(resources, vmid);
+  if (!located) return null;
+  const row = resources.find((r) => r.vmid === vmid);
+  const type = row?.type === "lxc" ? "lxc" : "qemu";
+  return { ...located, type };
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.clumpRoot
  * @param {string} [opts.repoRoot]
@@ -517,15 +801,11 @@ export async function runProxmoxBackupMaintain(opts) {
 
   const jobIdPrefix = backupJobIdPrefixFromConfig(cfg);
   const hostCluster = hostIdToClusterKeyFromConfig(cfg);
-  const targets = collectBackupTargetsFromPackages(root, cfg);
-
-  if (!targets.length) {
-    warn("backup maintain: no backup targets found in service package deployments — skip.");
-    return { ok: true, skipped: false, results: [] };
-  }
+  const includeOrphans = backupIncludeClusterOrphansFromConfig(cfg);
+  const packageTargets = collectBackupTargetsFromPackages(root, cfg);
 
   log(
-    `backup maintain: ${targets.length} target(s); prefix ${JSON.stringify(jobIdPrefix)}${dryRun ? " [dry-run]" : ""}${prune ? " [prune]" : ""}.`,
+    `backup maintain: ${packageTargets.length} package target(s); prefix ${JSON.stringify(jobIdPrefix)}${includeOrphans ? "; include cluster orphans" : ""}${dryRun ? " [dry-run]" : ""}${prune ? " [prune]" : ""}.`,
   );
 
   const configPath = join(clumpRoot, "config.json");
@@ -553,11 +833,8 @@ export async function runProxmoxBackupMaintain(opts) {
     const members = byCluster.get(clusterKey);
     if (!members?.length) continue;
 
-    const clusterTargets = targets.filter((t) => hostCluster.get(t.hostId) === clusterKey);
-    if (!clusterTargets.length) continue;
-
     const lead = members[0];
-    log(`Cluster ${JSON.stringify(clusterKey)}: reconcile ${clusterTargets.length} backup job(s) …`);
+    const clusterPackageTargets = packageTargets.filter((t) => hostCluster.get(t.hostId) === clusterKey);
 
     const configCluster = clusterConfigByKey(cfg, clusterKey);
     const auth = await authorizeProxmoxForClusterMembers({
@@ -593,10 +870,110 @@ export async function runProxmoxBackupMaintain(opts) {
       continue;
     }
 
+    /** @type {Set<number>} */
+    const coveredVmids = new Set();
+    /** @type {Array<any>} */
+    const resolvedPackage = [];
+
+    for (const target of clusterPackageTargets) {
+      let vmid = target.vmid;
+      let node = "";
+      /** @type {"lxc"|"qemu"|null} */
+      let guestType = null;
+      if (vmid === null) {
+        const located = locateGuestByNameInCluster(resources, target.lookupName);
+        if (!located) {
+          warn(`[${target.systemId}] guest ${JSON.stringify(target.lookupName)} not found in cluster — skip.`);
+          results.push({
+            systemId: target.systemId,
+            hostId: target.hostId,
+            profile: target.backup.profile,
+            frequencyTag: target.backup.frequency_tag,
+            schedule: target.backup.schedule,
+            storage: target.backup.storage,
+            clusterKey,
+            ok: false,
+            action: "skipped",
+            error: "guest not found",
+          });
+          continue;
+        }
+        if (located.template) {
+          warn(`[${target.systemId}] ${JSON.stringify(target.lookupName)} is a template — skip.`);
+          results.push({
+            systemId: target.systemId,
+            hostId: target.hostId,
+            profile: target.backup.profile,
+            clusterKey,
+            ok: false,
+            action: "skipped",
+            error: "template guest",
+          });
+          continue;
+        }
+        vmid = located.vmid;
+        node = located.node;
+        guestType = located.type;
+      } else {
+        const located = locateGuestWithType(resources, vmid);
+        if (!located) {
+          warn(`[${target.systemId}] vmid ${vmid} not found in cluster — skip.`);
+          results.push({
+            systemId: target.systemId,
+            hostId: target.hostId,
+            profile: target.backup.profile,
+            vmid,
+            clusterKey,
+            ok: false,
+            action: "skipped",
+            error: "vmid not found",
+          });
+          continue;
+        }
+        if (located.template) {
+          warn(`[${target.systemId}] vmid ${vmid} is a template — skip.`);
+          results.push({
+            systemId: target.systemId,
+            hostId: target.hostId,
+            profile: target.backup.profile,
+            vmid,
+            clusterKey,
+            ok: false,
+            action: "skipped",
+            error: "template guest",
+          });
+          continue;
+        }
+        node = located.node;
+        guestType = located.type;
+      }
+      coveredVmids.add(vmid);
+      resolvedPackage.push({ ...target, vmid, node, guestType });
+    }
+
+    /** @type {ReturnType<typeof collectClusterOrphanBackupTargets>} */
+    let orphans = [];
+    if (includeOrphans) {
+      orphans = collectClusterOrphanBackupTargets({
+        resources,
+        coveredVmids,
+        cfg,
+        hostId: lead.id,
+      });
+    }
+
+    /** @type {Array<any>} */
+    const clusterTargets = [...resolvedPackage, ...orphans];
+    if (!clusterTargets.length) {
+      log(`Cluster ${JSON.stringify(clusterKey)}: no backup targets.`);
+    } else {
+      log(
+        `Cluster ${JSON.stringify(clusterKey)}: reconcile ${clusterTargets.length} backup job(s) (${resolvedPackage.length} package, ${orphans.length} orphan) …`,
+      );
+    }
+
     const liveById = new Map(
-      liveJobs
-        .filter((j) => typeof j.id === "string")
-        .map((j) => [String(j.id), j]),
+      liveJobs.filter((j) => typeof j.id === "string").map((j) => [String(j.id), j]),
     );
 
     for (const target of clusterTargets) {
@@ -605,31 +982,28 @@ export async function runProxmoxBackupMaintain(opts) {
         systemId: target.systemId,
         hostId: target.hostId,
         profile: target.backup.profile,
+        frequencyTag: target.backup.frequency_tag,
+        schedule: target.backup.schedule,
+        storage: target.backup.storage,
         clusterKey,
+        orphan: Boolean(target.orphan),
       };
 
-      let vmid = target.vmid;
-      if (vmid === null) {
-        const located = locateGuestByNameInCluster(resources, target.lookupName);
-        if (!located) {
-          warn(`[${target.systemId}] guest ${JSON.stringify(target.lookupName)} not found in cluster — skip.`);
-          row.ok = false;
-          row.action = "skipped";
-          row.error = "guest not found";
-          results.push(row);
-          continue;
-        }
-        if (located.template) {
-          warn(`[${target.systemId}] ${JSON.stringify(target.lookupName)} is a template — skip.`);
-          row.ok = false;
-          row.action = "skipped";
-          row.error = "template guest";
-          results.push(row);
-          continue;
-        }
-        vmid = located.vmid;
-      } else {
-        const located = locateVmidInCluster(resources, vmid);
+      const vmid = target.vmid;
+      if (vmid === null || vmid === undefined) {
+        warn(`[${target.systemId}] guest ${JSON.stringify(target.lookupName)} not found in cluster — skip.`);
+        row.ok = false;
+        row.action = "skipped";
+        row.error = "guest not found";
+        results.push(row);
+        continue;
+      }
+
+      let node = typeof target.node === "string" ? target.node : "";
+      /** @type {"lxc"|"qemu"|null} */
+      let guestType = target.guestType ?? null;
+      if (!node || !guestType) {
+        const located = locateGuestWithType(resources, vmid);
         if (!located) {
           warn(`[${target.systemId}] vmid ${vmid} not found in cluster — skip.`);
           row.ok = false;
@@ -646,9 +1020,14 @@ export async function runProxmoxBackupMaintain(opts) {
           results.push(row);
           continue;
         }
+        node = located.node;
+        guestType = located.type;
       }
 
       row.vmid = vmid;
+      row.node = node;
+      row.guestType = guestType;
+
       const storageCheck = storageSupportsBackup(storageRows, target.backup.storage);
       if (!storageCheck.ok) {
         warn(
@@ -662,60 +1041,166 @@ export async function runProxmoxBackupMaintain(opts) {
       const jobId = String(desired.id);
       desiredJobIds.add(jobId);
       row.id = jobId;
+      row.desiredTag = target.backup.frequency_tag;
 
       const live = liveById.get(jobId);
+      /** @type {string} */
+      let jobAction = "unchanged";
       if (live && backupJobsMatch(desired, live)) {
-        log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} OK.`);
-        row.ok = true;
-        row.action = "unchanged";
-        results.push(row);
-        continue;
-      }
-
-      if (live) {
-        log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} differs — will update${dryRun ? " [dry-run]" : ""}.`);
-        row.action = "update";
+        log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} OK (${desired.schedule}).`);
+        jobAction = "unchanged";
+      } else if (live) {
+        log(
+          `[${target.systemId}] backup job ${JSON.stringify(jobId)} differs — will update${dryRun ? " [dry-run]" : ""}.`,
+        );
+        jobAction = "update";
       } else {
-        log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} missing — will create${dryRun ? " [dry-run]" : ""}.`);
-        row.action = "create";
+        log(
+          `[${target.systemId}] backup job ${JSON.stringify(jobId)} missing — will create${dryRun ? " [dry-run]" : ""}.`,
+        );
+        jobAction = "create";
       }
 
-      if (dryRun) {
-        row.ok = true;
-        results.push(row);
-        continue;
+      let jobOk = true;
+      if (jobAction !== "unchanged" && !dryRun) {
+        try {
+          const form = live ? buildBackupJobPutForm(desired, live) : pveFormBody(desired);
+          if (live) {
+            await pveJsonRequest(
+              "PUT",
+              auth.host.apiBase,
+              `/cluster/backup/${encodeURIComponent(jobId)}`,
+              auth.authorization,
+              auth.rejectUnauthorized,
+              form,
+            );
+          } else {
+            await pveJsonRequest(
+              "POST",
+              auth.host.apiBase,
+              "/cluster/backup",
+              auth.authorization,
+              auth.rejectUnauthorized,
+              form,
+            );
+          }
+          log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} ${live ? "updated" : "created"}.`);
+        } catch (e) {
+          jobOk = false;
+          ok = false;
+          const err = /** @type {Error} */ (e).message || String(e);
+          warn(`[${target.systemId}] backup job ${JSON.stringify(jobId)} failed: ${err}`);
+          row.error = err;
+        }
       }
 
-      try {
-        const form = live ? buildBackupJobPutForm(desired, live) : pveFormBody(desired);
-        if (live) {
-          await pveJsonRequest(
-            "PUT",
-            auth.host.apiBase,
-            `/cluster/backup/${encodeURIComponent(jobId)}`,
-            auth.authorization,
-            auth.rejectUnauthorized,
-            form,
+      /** @type {string | null} */
+      let liveTag = null;
+      let tagOk = true;
+      let tagAction = "unchanged";
+      const desiredTag = target.backup.frequency_tag;
+
+      if (desiredTag && guestType) {
+        if (dryRun) {
+          tagAction = "dry-run";
+          liveTag = desiredTag;
+          log(
+            `[${target.systemId}] [dry-run] would ensure ${guestType} ${vmid} frequency tag ${JSON.stringify(desiredTag)}`,
           );
         } else {
-          await pveJsonRequest(
-            "POST",
+          try {
+            const tagResult = await ensureGuestBackupFrequencyTag({
+              guestType,
+              apiBase: auth.host.apiBase,
+              authorization: auth.authorization,
+              rejectUnauthorized: auth.rejectUnauthorized,
+              node,
+              vmid,
+              profile: target.backup.profile,
+              log: (line) => log(`[${target.systemId}] ${line}`),
+            });
+            tagOk = tagResult.ok !== false;
+            tagAction = tagResult.changed ? "updated" : "unchanged";
+            liveTag = tagResult.liveTag ?? desiredTag;
+            if (!tagOk) {
+              ok = false;
+              row.error = tagResult.message || "frequency tag ensure failed";
+            }
+          } catch (e) {
+            tagOk = false;
+            ok = false;
+            const err = /** @type {Error} */ (e).message || String(e);
+            warn(`[${target.systemId}] frequency tag failed: ${err}`);
+            row.error = err;
+          }
+        }
+
+        // Validate live tags vs desired (re-read when not dry-run)
+        if (!dryRun && tagOk) {
+          try {
+            const statusOpts = {
+              apiBase: auth.host.apiBase,
+              authorization: auth.authorization,
+              rejectUnauthorized: auth.rejectUnauthorized,
+              node,
+              vmid,
+            };
+            const guestCfg =
+              guestType === "lxc" ? await getLxcConfig(statusOpts) : await getQemuConfig(statusOpts);
+            const tags = parseProxmoxTags(typeof guestCfg.tags === "string" ? guestCfg.tags : "");
+            liveTag = liveBackupFrequencyTag(tags);
+            if (liveTag !== desiredTag) {
+              tagOk = false;
+              ok = false;
+              const msg = `frequency tag mismatch: live=${JSON.stringify(liveTag)} desired=${JSON.stringify(desiredTag)}`;
+              warn(`[${target.systemId}] ${msg}`);
+              row.error = msg;
+              row.tagValidation = "mismatch";
+            } else {
+              row.tagValidation = "ok";
+            }
+          } catch (e) {
+            tagOk = false;
+            ok = false;
+            const err = /** @type {Error} */ (e).message || String(e);
+            warn(`[${target.systemId}] frequency tag validate failed: ${err}`);
+            row.error = err;
+          }
+        }
+      }
+
+      // Validate schedule/job after write
+      let scheduleValidation = "ok";
+      if (!dryRun && jobOk) {
+        try {
+          const refreshed = await fetchPveBackupJobs(
             auth.host.apiBase,
-            "/cluster/backup",
             auth.authorization,
             auth.rejectUnauthorized,
-            form,
+          );
+          const liveJob = refreshed.find((j) => j.id === jobId);
+          if (!liveJob || !backupJobsMatch(desired, liveJob)) {
+            scheduleValidation = "mismatch";
+            ok = false;
+            jobOk = false;
+            const msg = `backup job schedule/spec mismatch for ${JSON.stringify(jobId)}`;
+            warn(`[${target.systemId}] ${msg}`);
+            row.error = row.error ? `${row.error}; ${msg}` : msg;
+          }
+        } catch (e) {
+          scheduleValidation = "error";
+          warn(
+            `[${target.systemId}] could not re-fetch backup jobs for validate: ${/** @type {Error} */ (e).message || e}`,
           );
         }
-        log(`[${target.systemId}] backup job ${JSON.stringify(jobId)} ${live ? "updated" : "created"}.`);
-        row.ok = true;
-      } catch (e) {
-        ok = false;
-        const err = /** @type {Error} */ (e).message || String(e);
-        warn(`[${target.systemId}] backup job ${JSON.stringify(jobId)} failed: ${err}`);
-        row.ok = false;
-        row.error = err;
       }
+
+      row.ok = jobOk && tagOk && scheduleValidation === "ok";
+      row.action = jobAction;
+      row.tagAction = tagAction;
+      row.liveTag = liveTag;
+      row.scheduleValidation = scheduleValidation;
+      if (!row.ok) ok = false;
       results.push(row);
     }
 

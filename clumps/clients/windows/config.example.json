@@ -22,6 +22,16 @@
       "os": "windows",
       "enabled": true,
       "updates": { "enabled": true },
+      // Opt-in: standalone zip + NSSM Windows service (not OllamaSetup.exe tray app).
+      // "ollama": {
+      //   "enabled": true,
+      //   "listen": "0.0.0.0",
+      //   "models": ["llama3.2:latest"],
+      //   "install_dir": "C:\\Program Files\\Ollama",
+      //   "models_dir": "C:\\ProgramData\\Ollama\\models",
+      //   "service_name": "Ollama",
+      //   "schedule": { "enabled": true, "start_local": "23:00", "stop_local": "08:00" }
+      // },
       "wol": { "mac": "aa:bb:cc:dd:ee:ff" },
       "auth": {
         // Default: HDC_WINRM_USER in .env; password vault HDC_WINRM_USER_PASSWORD (one secret for all hosts).

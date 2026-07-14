@@ -1,3 +1,4 @@
+import { repoRoot as resolveRepoRoot } from "../../apps/hdc-cli/paths.mjs";
 import { flagGet } from "./parse-argv-flags.mjs";
 import { waitForAptLock } from "./apt-lock-wait.mjs";
 import {
@@ -19,6 +20,22 @@ export function wazuhAgentSkippedByFlags(flags) {
 /** @returns {string} */
 export function wazuhAgentInstalledCheckCommand() {
   return "dpkg -s wazuh-agent >/dev/null 2>&1";
+}
+
+/** @returns {string} */
+export function wazuhAgentVersionQueryCommand() {
+  return "dpkg-query -W -f='${Version}' wazuh-agent 2>/dev/null || true";
+}
+
+/**
+ * @param {string} installedVersion e.g. 4.14.6-1
+ * @param {string} wantedRelease e.g. 4.10.3
+ */
+export function wazuhAgentVersionMatches(installedVersion, wantedRelease) {
+  const installed = String(installedVersion || "").trim();
+  const wanted = String(wantedRelease || "").trim();
+  if (!installed || !wanted) return true;
+  return installed === wanted || installed.startsWith(`${wanted}-`);
 }
 
 /**
@@ -78,7 +95,8 @@ export async function ensureWazuhAgent(opts) {
     return { ok: true, skipped: true, message: "skipped by flag" };
   }
 
-  const pxRoot = resolveProxmoxPackageRoot(opts.proxmoxPackageRoot, opts.repoRoot);
+  const root = opts.repoRoot || resolveRepoRoot();
+  const pxRoot = resolveProxmoxPackageRoot(opts.proxmoxPackageRoot, root);
   const { wazuh: block } = loadGuestAgentsConfig(pxRoot);
   if (!guestAgentBlockEnabled(block)) {
     return { ok: true, skipped: true, message: "guest_agents.wazuh disabled or not configured" };
@@ -111,15 +129,35 @@ export async function ensureWazuhAgent(opts) {
   }
 
   const already = opts.exec.run(wazuhAgentInstalledCheckCommand(), { capture: true }).status === 0;
+  const agentVersion = resolveWazuhManagerRelease(root);
+  let wrongVersion = false;
+  let installedVersion = "";
+  if (already && agentVersion) {
+    const ver = opts.exec.run(wazuhAgentVersionQueryCommand(), { capture: true });
+    installedVersion = String(ver.stdout || "").trim();
+    wrongVersion = !wazuhAgentVersionMatches(installedVersion, agentVersion);
+  }
 
   try {
-    if (!already) {
+    if (!already || wrongVersion) {
       const lock = await waitForAptLock(opts.exec, opts.log);
       if (!lock.ok) {
         return { ok: false, skipped: false, message: lock.message };
       }
     }
-    const agentVersion = resolveWazuhManagerRelease(opts.repoRoot);
+    if (wrongVersion) {
+      opts.log.info(
+        `${opts.exec.label}: removing mismatched wazuh-agent ${installedVersion || "?"} (want ${agentVersion})`,
+      );
+      const purge = opts.exec.run(
+        "export DEBIAN_FRONTEND=noninteractive; apt-get purge -y -qq wazuh-agent; rm -rf /var/ossec",
+        { capture: true },
+      );
+      if (purge.status !== 0) {
+        const detail = `${purge.stderr}${purge.stdout}`.trim() || `exit ${purge.status}`;
+        throw new Error(detail);
+      }
+    }
     opts.log.info(
       `${opts.exec.label}: ensuring Wazuh agent → ${managerHost}${agentVersion ? ` (release ${agentVersion})` : ""}`,
     );
@@ -132,8 +170,13 @@ export async function ensureWazuhAgent(opts) {
     return {
       ok: true,
       skipped: false,
-      message: already ? "agent ensured" : "agent installed",
+      message: wrongVersion
+        ? "agent reinstalled"
+        : already
+          ? "agent ensured"
+          : "agent installed",
       manager_host: managerHost,
+      ...(agentVersion ? { release: agentVersion } : {}),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

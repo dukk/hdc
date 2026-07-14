@@ -2,10 +2,21 @@
   "id": "bind",
   "title": "BIND DNS",
   "env_required": [],
-  "inventory_docs": ["inventory/manual/systems/vm-bind-a.json"],
+  "inventory_docs": [
+    "inventory/manual/systems/vm-bind-a.json"
+  ],
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    }
   }
 }

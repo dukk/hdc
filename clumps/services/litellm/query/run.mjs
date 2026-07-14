@@ -4,6 +4,7 @@
  *
  * Usage: hdc run service litellm query -- [--instance a]
  *        hdc run service litellm query -- --live
+ *        (--live includes DB auth drift booleans + /v1/models when Docker is up)
  */
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,7 +1,9 @@
 {
   "id": "affine",
   "title": "AFFiNE workspace",
-  "env_required": ["HDC_AFFINE_DB_PASSWORD"],
+  "env_required": [
+    "HDC_AFFINE_DB_PASSWORD"
+  ],
   "inventory_docs": [
     "inventory/manual/systems/affine-a.json",
     "inventory/manual/services/affine.json"
@@ -15,9 +17,20 @@
     ]
   },
   "verbs": {
-    "deploy": { "script": "run.mjs" },
-    "maintain": { "script": "run.mjs" },
-    "query": { "script": "run.mjs" },
-    "teardown": { "script": "run.mjs" }
+    "deploy": {
+      "script": "run.mjs"
+    },
+    "maintain": {
+      "script": "run.mjs"
+    },
+    "query": {
+      "script": "run.mjs"
+    },
+    "health": {
+      "script": "run.mjs"
+    },
+    "teardown": {
+      "script": "run.mjs"
+    }
   }
 }
