@@ -61,6 +61,28 @@
           }
         }
       }
+    },
+    "ip_block": {
+      "type": "object",
+      "description": "HDC-managed source IP bans via UniFi address-group (maintain --block / --unblock).",
+      "additionalProperties": true,
+      "properties": {
+        "group_name": {
+          "type": "string",
+          "default": "hdc-auto-block",
+          "description": "UniFi firewall address-group name. Create a WAN_IN DROP policy that uses this group."
+        },
+        "default_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 30
+        },
+        "never_block_cidrs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Override site CIDRs that must never be blocked (defaults from ip-allocations)."
+        }
+      }
     }
   }
 }

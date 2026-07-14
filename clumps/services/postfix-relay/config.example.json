@@ -35,7 +35,13 @@
     "myhostname": "postfix-relay.lan.example",
     "myorigin": "example.com",
     "mynetworks": "127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 192.0.2.0/24",
-    "inet_interfaces": "all"
+    "inet_interfaces": "all",
+    "transport": [
+      {
+        "domain": "hdc.example.invalid",
+        "nexthop": "relay:[192.0.2.62]:25"
+      }
+    ]
   },
   "smtp": {
     "provider": "smtp2go",

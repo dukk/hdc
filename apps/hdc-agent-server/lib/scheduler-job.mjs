@@ -153,12 +153,27 @@ export async function runScheduledCliJob(opts) {
     );
     const reportPath = parseReportPathFromStderr(stderr);
     if (reportPath && existsSync(reportPath)) {
+      const role = String(process.env.HDC_AGENT_ROLE || "").trim();
+      const roleFromEnv = role
+        ? String(process.env[`HDC_AGENT_MAIL_FROM_${role.replace(/-/g, "_").toUpperCase()}`] || "").trim()
+        : "";
+      const from =
+        roleFromEnv ||
+        (mail.from != null ? String(mail.from) : undefined) ||
+        undefined;
       sendReportEmail({
         to: String(mail.to),
-        from: mail.from != null ? String(mail.from) : undefined,
+        from,
         subject: `${mail.subject_prefix || "[HDC]"} ${scheduleId} — ${ok ? "OK" : "FAILED"}`,
         markdownPath: reportPath,
         env: process.env,
+      });
+      await sendDiscord({
+        installRoot,
+        title: `${discordPrefix} email sent`,
+        message: `To: ${mail.to}\nFrom: ${from || "(relay default)"}\nSubject: ${scheduleId}`,
+        silent: true,
+        webhookVaultKey: discordWebhookKey,
       });
     }
   }

@@ -7,6 +7,10 @@
     ".235": "203.0.113.235",
     ".236": "203.0.113.236"
   },
+  "ip_block": {
+    "group_name": "hdc-auto-block",
+    "default_days": 30
+  },
   "port_forwards": [
     {
       "id": "pf-example-service",

@@ -67,6 +67,10 @@ paste into [Mermaid Live](https://mermaid.live) or Kroki.)*
 Hub-and-spoke summary:
 
 - **Operator** (Discord / email / web UI / IDE) talks only to **hdc-manager**.
+  Inbound operator and Wazuh mail lands at `manager@hdc.dukk.org` (aliases for
+  specialist roles forward there). Manager IMAP poll creates/updates tasks;
+  trusted `dukk@dukk.org` may approve/reject by email when SPF/DKIM/DMARC pass.
+  Fleet alerts send From the role alias or manager — not `noreply@`.
 - **hdc-agents-a** runs one container per roster agent; all call **LiteLLM** for
   models and A2A publish/discover/route.
 - Durable state lives in **hdc-private** `operations/` (tasks, reports, policy).

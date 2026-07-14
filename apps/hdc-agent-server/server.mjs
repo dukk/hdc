@@ -69,7 +69,7 @@ server.listen(port, "0.0.0.0", () => {
   startScheduleLoop({
     role,
     runSweep: async () => {
-      const result = runDispatcher({
+      const result = await runDispatcher({
         role,
         hdcRoot,
         privateRoot,

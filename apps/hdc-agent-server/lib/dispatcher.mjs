@@ -11,6 +11,10 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { listTasks, writeTaskReport } from "./operations-fs.mjs";
+import { notifyDiscordDecision } from "./notify-agents-discord.mjs";
+import { processManagerMailbox } from "./manager-mailbox.mjs";
+
+export { notifyDiscordDecision };
 
 /**
  * @param {string} hdcRoot
@@ -41,7 +45,8 @@ export function sha256Hex(text) {
 }
 
 /**
- * Tasks the manager may auto-run without operator approval (query-only suggestions).
+ * Tasks the manager may auto-run without operator approval (query-only suggestions
+ * or approved UniFi IP-block maintain).
  *
  * @param {ReturnType<typeof import("./operations-fs.mjs").validateTaskFrontmatter>} task
  */
@@ -51,7 +56,11 @@ export function canAutoRunTask(task) {
   if (task.needs_decision) return false;
   const cmds = task.suggested_commands ?? [];
   if (!cmds.length) return false;
-  return cmds.every((c) => /\bquery\b/.test(c) && !/\b(deploy|teardown|prune)\b/.test(c));
+  return cmds.every(
+    (c) =>
+      (/\bquery\b/.test(c) && !/\b(deploy|teardown|prune)\b/.test(c)) ||
+      (/unifi-network\s+maintain/.test(c) && /--block\b/.test(c) && !/\b--prune\b/.test(c)),
+  );
 }
 
 /**
@@ -104,43 +113,6 @@ export function newestMtimeMs(dir, nameRe) {
 }
 
 /**
- * @param {string} hdcRoot
- * @param {string} privateRoot
- * @param {string} title
- * @param {string} message
- * @param {string} [taskId]
- */
-export function notifyDiscordDecision(hdcRoot, privateRoot, title, message, taskId) {
-  const script = join(hdcRoot, "apps", "hdc-cli", "lib", "notify-discord.mjs");
-  if (!existsSync(script)) {
-    return { ok: false, error: "notify-discord.mjs missing" };
-  }
-  /** @type {string[]} */
-  const args = [
-    script,
-    "--title",
-    title,
-    "--message",
-    message,
-    "--webhook-vault-key",
-    "HDC_AGENTS_DISCORD_WEBHOOK_URL",
-    "--fallback-webhook-vault-key",
-    "HDC_OPS_DISCORD_WEBHOOK_URL",
-  ];
-  const tid = String(taskId ?? "").trim();
-  if (tid) {
-    args.push("--decision", "--task-id", tid);
-  }
-  const r = spawnSync(process.execPath, args, {
-    cwd: hdcRoot,
-    env: { ...process.env, HDC_PRIVATE_ROOT: privateRoot || process.env.HDC_PRIVATE_ROOT },
-    encoding: "utf8",
-    timeout: 60_000,
-  });
-  return { ok: r.status === 0, status: r.status, stderr: r.stderr?.slice(0, 500) };
-}
-
-/**
  * @typedef {{ id: string, prompt: string, local?: boolean, peer_url?: string }} DispatcherWorkItem
  * @typedef {{
  *   role: string,
@@ -179,6 +151,39 @@ export function peerA2aBaseUrl(peerRole, env = process.env) {
 }
 
 /**
+ * @param {string} hdcRoot
+ * @param {string} privateRoot
+ */
+function loadMailboxConfig(hdcRoot, privateRoot) {
+  const metaPath = join(
+    String(process.env.HDC_AGENTS_META_ROOT || "/opt/hdc-agents-meta").trim() ||
+      "/opt/hdc-agents-meta",
+    "mailbox.json",
+  );
+  if (existsSync(metaPath)) {
+    try {
+      return JSON.parse(readFileSync(metaPath, "utf8"));
+    } catch {
+      /* fall through */
+    }
+  }
+  for (const p of [
+    join(privateRoot, "clumps", "services", "hdc-agents", "config.json"),
+    join(hdcRoot, "clumps", "services", "hdc-agents", "config.json"),
+  ]) {
+    if (!existsSync(p)) continue;
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      const agents = raw?.defaults?.hdc_agents ?? raw?.hdc_agents;
+      if (agents?.mailbox && typeof agents.mailbox === "object") return agents.mailbox;
+    } catch {
+      /* next */
+    }
+  }
+  return { enabled: true };
+}
+
+/**
  * Scripted triage / work detection. Returns work items for the LLM harness;
  * empty `work` means idle (no model call).
  *
@@ -189,7 +194,7 @@ export function peerA2aBaseUrl(peerRole, env = process.env) {
  * @param {(line: string) => void} [opts.log]
  * @param {number} [opts.nowMs]
  */
-export function runDispatcher(opts) {
+export async function runDispatcher(opts) {
   const log = opts.log ?? ((line) => process.stderr.write(`${line}\n`));
   const nowMs = opts.nowMs ?? Date.now();
   const privateRoot = opts.privateRoot?.trim() || "";
@@ -255,9 +260,22 @@ export function runDispatcher(opts) {
  * @param {number} opts.nowMs
  * @param {(line: string) => void} opts.log
  */
-function dispatchManager(opts) {
+async function dispatchManager(opts) {
+  try {
+    await processManagerMailbox({
+      hdcRoot: opts.hdcRoot,
+      privateRoot: opts.privateRoot,
+      mailboxConfig: loadMailboxConfig(opts.hdcRoot, opts.privateRoot),
+      log: opts.log,
+    });
+  } catch (e) {
+    opts.log(`[dispatcher] mailbox poll failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   const tasks = listTasks(opts.privateRoot, { includeDone: true });
-  const reportPath = writeTaskReport(opts.privateRoot, tasks, { source: "hdc-agent-server-dispatcher" });
+  const reportPath = writeTaskReport(opts.privateRoot, tasks, {
+    source: "hdc-agent-server-dispatcher",
+  });
 
   const state = loadDispatcherState(opts.privateRoot);
   /** @type {string[]} */
@@ -292,7 +310,6 @@ function dispatchManager(opts) {
   const work = [];
 
   const reportsDir = join(opts.privateRoot, "operations", "reports");
-  // Ignore our own manager-triage digests so writing them does not retrigger LLM every tick.
   const newestReport = newestMtimeMs(reportsDir, /^(?!manager-triage-).+\.md$/i);
   const lastReport = Number(state.manager_last_report_mtime ?? 0);
   const agentsReports = join(opts.hdcRoot, "clumps", "services", "hdc-agents", "reports");
@@ -360,7 +377,9 @@ function dispatchManager(opts) {
     `Task report: ${reportPath}`,
     "",
     "## Open tasks",
-    ...tasks.filter((t) => t.status !== "done").map((t) => `- **${t.id}** (${t.priority}/${t.status}) — ${t.title}`),
+    ...tasks
+      .filter((t) => t.status !== "done")
+      .map((t) => `- **${t.id}** (${t.priority}/${t.status}) — ${t.title}`),
     "",
   ].join("\n");
   writeFileSync(digestPath, digest, "utf8");
@@ -387,8 +406,6 @@ function dispatchManager(opts) {
 }
 
 /**
- * Run allowlisted hdc queries; invoke LLM only when combined stdout hash changes.
- *
  * @param {object} opts
  * @param {string} opts.role
  * @param {string} opts.hdcRoot

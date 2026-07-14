@@ -102,8 +102,8 @@ describe("operations-fs roles", () => {
 });
 
 describe("dispatcher", () => {
-  it("idles when private root unset", () => {
-    const r = runDispatcher({
+  it("idles when private root unset", async () => {
+    const r = await runDispatcher({
       role: "hdc-manager",
       hdcRoot: HDC_ROOT,
       privateRoot: "",
@@ -112,12 +112,12 @@ describe("dispatcher", () => {
     assert.equal(r.work.length, 0);
   });
 
-  it("manager refreshes report and idles without new signals or runnable tasks", () => {
+  it("manager refreshes report and idles without new signals or runnable tasks", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-disp-"));
     try {
       mkdirSync(join(root, "operations", "tasks"), { recursive: true });
       mkdirSync(join(root, "operations", "reports"), { recursive: true });
-      const r = runDispatcher({
+      const r = await runDispatcher({
         role: "hdc-manager",
         hdcRoot: HDC_ROOT,
         privateRoot: root,
@@ -132,7 +132,7 @@ describe("dispatcher", () => {
     }
   });
 
-  it("manager enqueues peer A2A for approved task", () => {
+  it("manager enqueues peer A2A for approved task", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-disp-"));
     try {
       mkdirSync(join(root, "operations", "tasks"), { recursive: true });
@@ -145,7 +145,7 @@ describe("dispatcher", () => {
         title: "Fix immich",
         suggested_commands: ["node apps/hdc-cli/cli.mjs run service immich query -- --live"],
       });
-      const r = runDispatcher({
+      const r = await runDispatcher({
         role: "hdc-manager",
         hdcRoot: HDC_ROOT,
         privateRoot: root,
@@ -189,13 +189,13 @@ describe("dispatcher", () => {
     );
   });
 
-  it("research idles when brief exists", () => {
+  it("research idles when brief exists", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-disp-"));
     try {
       const date = new Date().toISOString().slice(0, 10);
       mkdirSync(join(root, "operations", "reports"), { recursive: true });
       writeFileSync(join(root, "operations", "reports", `research-${date}.md`), "# already\n");
-      const r = runDispatcher({
+      const r = await runDispatcher({
         role: "hdc-research",
         hdcRoot: HDC_ROOT,
         privateRoot: root,

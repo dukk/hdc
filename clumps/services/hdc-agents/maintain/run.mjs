@@ -161,6 +161,7 @@ async function maintainOne(deployment, flags, vaultAccess) {
       skipUpgrade,
       composeEnv: guestSecrets.composeEnv,
       schedulesJson: guestSecrets.schedulesJson,
+      mailboxJson: guestSecrets.mailboxJson,
       metaRoot,
     },
   );

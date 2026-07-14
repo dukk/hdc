@@ -87,10 +87,35 @@ export async function prepareAgentsGuestSecrets(opts) {
   }
 
   const mail = hdcAgents.mail && typeof hdcAgents.mail === "object" ? hdcAgents.mail : {};
+  const mailbox =
+    hdcAgents.mailbox && typeof hdcAgents.mailbox === "object"
+      ? /** @type {Record<string, unknown>} */ (hdcAgents.mailbox)
+      : {};
   const discord =
     hdcAgents.discord && typeof hdcAgents.discord === "object"
       ? /** @type {Record<string, unknown>} */ (hdcAgents.discord)
       : {};
+
+  const mailboxPassKey =
+    typeof mailbox.password_vault_key === "string" && mailbox.password_vault_key.trim()
+      ? mailbox.password_vault_key.trim()
+      : "HDC_MAILCOW_MAILBOX_MANAGER_HDC_DUKK_ORG_PASSWORD";
+  let mailboxPass = String((await vault.getSecret(mailboxPassKey, { optional: true })) ?? "").trim();
+  if (!mailboxPass) {
+    mailboxPass = randomBytes(24).toString("base64url");
+    await vault.setSecret(mailboxPassKey, mailboxPass);
+  }
+  envLines.push(`HDC_MANAGER_MAILBOX_PASSWORD=${mailboxPass}`);
+
+  const roleFrom =
+    mail.role_from && typeof mail.role_from === "object"
+      ? /** @type {Record<string, unknown>} */ (mail.role_from)
+      : {};
+  for (const [role, addr] of Object.entries(roleFrom)) {
+    if (typeof addr === "string" && addr.trim()) {
+      envLines.push(`HDC_AGENT_MAIL_FROM_${role.replace(/-/g, "_").toUpperCase()}=${addr.trim()}`);
+    }
+  }
 
   const agentsWebhookVaultKey =
     typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
@@ -153,8 +178,31 @@ export async function prepareAgentsGuestSecrets(opts) {
     },
   }));
 
+  /** @type {Record<string, unknown>} */
+  const mailboxJson = {
+    enabled: mailbox.enabled !== false,
+    host:
+      typeof mailbox.host === "string" && mailbox.host.trim()
+        ? mailbox.host.trim()
+        : "mailcow-a.hdc.dukk.org",
+    port: typeof mailbox.port === "number" ? mailbox.port : 993,
+    user:
+      typeof mailbox.user === "string" && mailbox.user.trim()
+        ? mailbox.user.trim()
+        : "manager@hdc.dukk.org",
+    password_env: "HDC_MANAGER_MAILBOX_PASSWORD",
+    password_vault_key: mailboxPassKey,
+    trusted_senders: Array.isArray(mailbox.trusted_senders)
+      ? mailbox.trusted_senders
+      : ["dukk@dukk.org"],
+    wazuh_alert_level_min:
+      typeof mailbox.wazuh_alert_level_min === "number" ? mailbox.wazuh_alert_level_min : 10,
+    block_days: typeof mailbox.block_days === "number" ? mailbox.block_days : 30,
+  };
+
   return {
     composeEnv: `${envLines.join("\n")}\n`,
     schedulesJson: `${JSON.stringify({ schedules }, null, 2)}\n`,
+    mailboxJson: `${JSON.stringify(mailboxJson, null, 2)}\n`,
   };
 }

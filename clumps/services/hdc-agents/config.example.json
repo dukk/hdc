@@ -30,9 +30,23 @@
       "mail": {
         "enabled": true,
         "to": "ops@example.invalid",
-        "from": "noreply@example.invalid",
+        "from": "manager@hdc.example.invalid",
         "subject_prefix": "[HDC]",
-        "on_failure_only": false
+        "on_failure_only": false,
+        "role_from": {
+          "hdc-manager": "manager@hdc.example.invalid",
+          "hdc-monitor": "monitor@hdc.example.invalid"
+        }
+      },
+      "mailbox": {
+        "enabled": true,
+        "host": "mailcow-a.hdc.example.invalid",
+        "port": 993,
+        "user": "manager@hdc.example.invalid",
+        "password_vault_key": "HDC_MAILCOW_MAILBOX_MANAGER_HDC_EXAMPLE_INVALID_PASSWORD",
+        "trusted_senders": ["ops@example.invalid"],
+        "wazuh_alert_level_min": 10,
+        "block_days": 30
       },
       "discord": {
         "enabled": true,

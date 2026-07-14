@@ -399,7 +399,31 @@ export function normalizeUnifiConfig(cfg) {
     portForwards,
     portForwardsById,
     managedPortForwards: portForwards.filter((p) => p.managed !== false),
+    ipBlock: normalizeIpBlockConfig(cfg.ip_block),
   };
+}
+
+/**
+ * @param {unknown} raw
+ */
+export function normalizeIpBlockConfig(raw) {
+  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
+  const groupName =
+    typeof o.group_name === "string" && o.group_name.trim()
+      ? o.group_name.trim()
+      : "hdc-auto-block";
+  /** @type {string[]} */
+  let neverBlockCidrs = [];
+  if (Array.isArray(o.never_block_cidrs)) {
+    neverBlockCidrs = o.never_block_cidrs
+      .filter((c) => typeof c === "string" && c.trim())
+      .map((c) => String(c).trim());
+  }
+  const defaultDays =
+    typeof o.default_days === "number" && Number.isFinite(o.default_days) && o.default_days > 0
+      ? o.default_days
+      : 30;
+  return { groupName, neverBlockCidrs, defaultDays };
 }
 
 /**

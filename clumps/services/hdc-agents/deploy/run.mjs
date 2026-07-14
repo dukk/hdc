@@ -401,6 +401,7 @@ async function deployOne(deployment, flags, log, runOpts) {
     secretOpts = {
       composeEnv: guestSecrets.composeEnv,
       schedulesJson: guestSecrets.schedulesJson,
+      mailboxJson: guestSecrets.mailboxJson,
       metaRoot,
     };
     installResult = await installHdcAgentsInCt(
