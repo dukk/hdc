@@ -49,7 +49,7 @@ export const ROLE_POLICIES = Object.freeze({
     runVerbs: new Set(["query", "health", "maintain", "deploy"]),
     allowDeployWithApprovedTask: true,
   },
-  "hdc-sre": {
+  "hdc-sre-ops": {
     tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord"]),
     runVerbs: new Set(["query", "health", "maintain", "deploy"]),
     allowDeployWithApprovedTask: true,
@@ -75,6 +75,10 @@ export const ROLE_POLICIES = Object.freeze({
     runVerbs: new Set(["query", "health"]),
   },
   "hdc-engineer": {
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run"]),
+    runVerbs: new Set(["query", "health"]),
+  },
+  "hdc-sre-engineer": {
     tools: new Set(["hdc_list", "hdc_help", "hdc_run"]),
     runVerbs: new Set(["query", "health"]),
   },
@@ -104,7 +108,8 @@ export function resolveAgentRole(env = process.env) {
  * @param {string} [role]
  */
 export function getRolePolicy(role) {
-  const r = String(role ?? DEFAULT_AGENT_ROLE).trim() || DEFAULT_AGENT_ROLE;
+  const raw = String(role ?? DEFAULT_AGENT_ROLE).trim() || DEFAULT_AGENT_ROLE;
+  const r = raw === "hdc-sre" ? "hdc-sre-ops" : raw;
   const policy = ROLE_POLICIES[r];
   if (!policy) {
     throw new Error(

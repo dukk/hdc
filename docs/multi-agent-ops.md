@@ -74,57 +74,56 @@ Hub-and-spoke summary:
 - **hdc-agents-a** runs one container per roster agent; all call **LiteLLM** for
   models and A2A publish/discover/route.
 - Durable state lives in **hdc-private** `operations/` (tasks, reports, policy).
-- **hdc-sre** / **hdc-engineer** reach the lab through **hdc-mcp** → hdc CLI.
+- **hdc-sre-ops** / **hdc-sre-engineer** / **hdc-engineer** reach diagnostics through **hdc-mcp** → hdc CLI (deploy/maintain only for **hdc-sre-ops** on approved tasks).
+
+## Repository ownership
+
+Three repositories map to three build/ops agents (see each repo README):
+
+| Repository | Primary agent | Owns |
+| --- | --- | --- |
+| **hdc** | `hdc-engineer` | CLI, schemas, `hdc/package/*`, agent fleet, tests |
+| **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, examples |
+| **hdc-private** | `hdc-sre-ops` | Live config, inventory, `operations/` |
+
+Handoffs: clump script failure → `hdc-sre-engineer`; CLI failure → `hdc-engineer`; approved production run → `hdc-sre-ops`.
 
 ## Agent roster
 
-### Existing agents (formalized)
+### Fleet agents
 
 | Agent | Lifecycle role | Access | Trigger |
 | --- | --- | --- | --- |
 | `hdc-manager` | Orchestrate | Task files, Discord, A2A delegation | Hourly triage loop + A2A + on demand |
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
-| `hdc-sre` | **Deploy / Maintain** | Full hdc CLI on `approved` tasks | Per approved task (A2A from manager) |
+| `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
+| `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; read-only `query` | Failure reports, package scaffolds |
+| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; read-only `query` | Failure reports, platform features |
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / after incidents |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
 | `hdc-research` | **Build** (discovery) | Read-only + web | Queued topics + weekly brief; suggestions via web/email/inbox |
-| `hdc-ops` | Legacy alias | — | Deprecated; defers to sre/manager |
+| `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
-### Proposed addition: `hdc-engineer`
+Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
 
-The stub roles "HDC Software Engineer" and "HDC Deployment Engineer" map onto the
-roster as follows:
+### Build roles (revised 2026-07-14)
 
-- **Deployment Engineer → stays `hdc-sre`.** Greenfield deploys are already covered
-  by `hdc-sre` + the `hdc-service-deploy` skill (discovery → `plan.md` → approval →
-  deploy → dependency wiring). A separate deployer would split ownership of the same
-  CLI surface for no gain.
-- **Software Engineer → new `hdc-engineer`.** Today nobody owns the *automation
-  codebase* itself. `hdc-sre` runs packages; `hdc-engineer` builds and repairs them:
-  - Fix clump scripts that failed in `daily-maintain` or deploy reports (prefer extending
-    `clumps/` — never dump root `tmp-*` scratchpads; ephemeral helpers only under
-    `tools/scripts/tmp-*` per `.cursor/rules/hdc-automation.mdc`).
-  - Extend the hdc CLI, schemas, and shared libs with tests
-    (`.cursor/rules/hdc-testing.mdc`, coverage thresholds).
-  - Implement planned-but-missing features (`docs lint`, `inventory apply`).
-  - Scaffold new packages requested by research/manager (manifest, `config.example.json`,
-    `.env.example`, schema, README) ready for `hdc-sre` to deploy.
-  - Constraint: writes code and tests in the repo; **never** touches production —
-    handing a tested package to `hdc-sre` is the boundary.
+- **`hdc-engineer`** owns the **hdc** platform (CLI, schemas, agent-server, tests). Never runs production deploy/maintain.
+- **`hdc-sre-engineer`** owns **hdc-clumps** package automation. Never edits hdc-private or runs live deploy/maintain.
+- **`hdc-sre-ops`** owns **hdc-private** live state and executes approved deploy/maintain via hdc-service-deploy.
 
-  Definition at `apps/hdc-agent-server/agents/hdc-engineer.md` (+ IDE pointers),
-  task role `hdc-engineer` in the task schema, and its own container in `hdc-agents`.
+Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9202 (sre-ops).
 
 ### Lifecycle coverage matrix
 
 | Lifecycle | Sense | Decide | Act |
 | --- | --- | --- | --- |
-| **Build** | hdc-research (candidates), failure reports | Manager + operator | **hdc-engineer** (code), hdc-network-architect (design) |
-| **Secure** | hdc-security-expert (Wazuh/CrowdSec/WAF) | hdc-security-architect proposals → Manager | hdc-security-expert (bounded response), hdc-sre (hardening deploys) |
-| **Monitor** | hdc-monitor (uptime-kuma, proxmox, gatus) | Manager triage | hdc-sre (fix tasks) |
-| **Deploy** | proxmox-resource-planning skill (capacity) | plan.md + operator approval | hdc-sre via hdc-service-deploy |
-| **Maintain** | daily-maintain reports, query drift | delegation policy (autonomous vs approved) | `maintain daily` recipe + hdc-sre |
+| **Build** | hdc-research (candidates), failure reports | Manager + operator | **hdc-engineer** (platform), **hdc-sre-engineer** (packages), hdc-network-architect (design) |
+| **Secure** | hdc-security-expert (Wazuh/CrowdSec/WAF) | hdc-security-architect proposals → Manager | hdc-security-expert (bounded response), hdc-sre-ops (hardening deploys) |
+| **Monitor** | hdc-monitor (uptime-kuma, proxmox, gatus) | Manager triage | hdc-sre-ops (fix tasks), hdc-sre-engineer (script fixes) |
+| **Deploy** | proxmox-resource-planning skill (capacity) | plan.md + operator approval | hdc-sre-ops via hdc-service-deploy |
+| **Maintain** | daily-maintain reports, query drift | delegation policy (autonomous vs approved) | `maintain daily` recipe + hdc-sre-ops |
 
 ## Agent runtime: one Docker container per agent on PVE
 
@@ -136,8 +135,8 @@ pattern — a new **`clumps/services/hdc-agents`** package:
   `proxmox-resource-planning` (start ~4 vCPU / 8 GiB; agents are I/O-bound on LLM
   calls, not CPU). Additional instances (`-b`) can pin containers to another
   hypervisor later without design changes.
-- **Compose:** one service per agent (`hdc-manager`, `hdc-monitor`, `hdc-sre`,
-  `hdc-security-expert`, `hdc-security-architect`, `hdc-network-architect`,
+- **Compose:** one service per agent (`hdc-manager`, `hdc-monitor`, `hdc-sre-ops`,
+  `hdc-sre-engineer`, `hdc-security-expert`, `hdc-security-architect`, `hdc-network-architect`,
   `hdc-research`, `hdc-engineer`). Standard verbs: `deploy` (LXC + compose up),
   `maintain` (re-render, pull, `up -d`, guest baseline), `query --live` (container
   + agent-card health), `teardown`.
@@ -176,7 +175,7 @@ agent container is registered declaratively:
     "url": "http://hdc-agents-a.hdc.example:9201",   // container's A2A endpoint
     "description": "HDC monitoring: health queries, digests, SRE task creation"
   }
-  // … one entry per agent, ports 9200 (manager) … 9207 (engineer)
+  // … one entry per agent, ports 9200 (manager) … 9208 (sre-engineer)
 ]
 ```
 
@@ -211,7 +210,7 @@ runtimes must honor:
 - **Task files** `operations/tasks/{id}.md` with YAML frontmatter: `id`, `role`,
   `priority` (critical/high/medium/low), `status`
   (`pending → approved → in_progress → blocked/done`), `needs_decision`, `evidence`,
-  `suggested_commands`. Add `hdc-engineer` to the allowed roles.
+  `suggested_commands`. Allowed roles include `hdc-engineer`, `hdc-sre-engineer`, and `hdc-sre-ops`.
 - **A2A triggers, files decide.** An A2A message may *ask* an agent to act, but the
   agent still validates against the task file and delegation policy before any
   non-read action. Task state stays guest-authoritative in hdc-private.

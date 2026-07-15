@@ -22,7 +22,7 @@ Prefer `hdc_run` tools:
 1. Compare results to prior digest in `hdc-private/operations/reports/monitor-*.md`.
 2. Check recent daily-maintain and package operation reports.
 3. Write digest: `hdc-private/operations/reports/monitor-<ISO-timestamp>.md`.
-4. Create task files under `hdc-private/operations/tasks/` for issues needing SRE (`role: hdc-sre`).
+4. Create task files under `hdc-private/operations/tasks/` for issues needing ops (`role: hdc-sre-ops`) or package fixes (`role: hdc-sre-engineer`).
 5. Set `needs_decision: true` and priority `critical`/`high` for public outages or cert expiry < 7d.
 
 ## Monthly backup verification

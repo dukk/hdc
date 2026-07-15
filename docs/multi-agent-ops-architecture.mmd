@@ -12,12 +12,13 @@ flowchart TB
     subgraph AgentsHost["hdc-agents-a (new LXC on PVE) — one container per agent"]
         MGR[hdc-manager]
         MON[hdc-monitor]
-        SRE[hdc-sre]
+        SREOPS[hdc-sre-ops]
+        SREENG[hdc-sre-engineer]
         SECX[hdc-security-expert]
         SECA[hdc-security-architect]
         NETA[hdc-network-architect]
         RES[hdc-research]
-        ENG[hdc-engineer *proposed*]
+        ENG[hdc-engineer]
     end
 
     subgraph State["hdc-private operations/ (durable state)"]
@@ -31,11 +32,11 @@ flowchart TB
         LAB[Proxmox / Synology / UniFi / services]
     end
 
-    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG -- publish card / discover peers --> REG
-    MGR -- delegate via /a2a --> REG -- route --> MON & SRE & SECX & RES
-    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG -- LLM calls --> GW
-    MGR & MON & SRE & SECX & SECA & NETA & RES & ENG <--> TQ & RPT
+    MGR & MON & SREOPS & SREENG & SECX & SECA & NETA & RES & ENG -- publish card / discover peers --> REG
+    MGR -- delegate via /a2a --> REG -- route --> MON & SREOPS & SREENG & SECX & RES
+    MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG <--> TQ & RPT
     POL --> MGR
     MGR <--> OP
-    SRE & ENG --> CLI --> LAB
+    SREOPS --> CLI --> LAB
+    SREENG & ENG --> CLI
     LAB -- query --> MON & SECX

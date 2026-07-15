@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 /** @typedef {"pending"|"approved"|"in_progress"|"blocked"|"done"} TaskStatus */
 /** @typedef {"critical"|"high"|"medium"|"low"} TaskPriority */
-/** @typedef {"hdc-manager"|"hdc-sre"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-engineer"} TaskRole */
+/** @typedef {"hdc-manager"|"hdc-sre-ops"|"hdc-sre-engineer"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-engineer"} TaskRole */
 
 export const TASK_STATUSES = /** @type {const} */ ([
   "pending",
@@ -22,7 +22,8 @@ export const TASK_PRIORITIES = /** @type {const} */ ([
 
 export const TASK_ROLES = /** @type {const} */ ([
   "hdc-manager",
-  "hdc-sre",
+  "hdc-sre-ops",
+  "hdc-sre-engineer",
   "hdc-monitor",
   "hdc-security-expert",
   "hdc-security-architect",

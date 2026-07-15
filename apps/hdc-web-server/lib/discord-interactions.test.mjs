@@ -88,7 +88,7 @@ describe("discord-interactions", () => {
       join(tasksDir, "task-a.md"),
       `---
 id: task-a
-role: hdc-sre
+role: hdc-sre-ops
 priority: medium
 status: pending
 needs_decision: true
@@ -113,7 +113,7 @@ Body
       join(tasksDir, "task-b.md"),
       `---
 id: task-b
-role: hdc-sre
+role: hdc-sre-ops
 priority: medium
 status: pending
 needs_decision: true
@@ -140,7 +140,7 @@ Body
       join(tasksDir, "task-c.md"),
       `---
 id: task-c
-role: hdc-sre
+role: hdc-sre-ops
 priority: high
 status: pending
 needs_decision: true

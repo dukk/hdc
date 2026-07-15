@@ -37,9 +37,15 @@ describe("hdc-mcp-server policy", () => {
     expect(() => assertAllowedRunVerb("maintain", "hdc-engineer")).toThrow(/not allowed/);
   });
 
-  it("allows deploy for sre/manager only with role policy", () => {
-    expect(assertAllowedRunVerb("deploy", "hdc-sre")).toBe("deploy");
+  it("allows deploy for sre-ops/manager only with role policy", () => {
+    expect(assertAllowedRunVerb("deploy", "hdc-sre-ops")).toBe("deploy");
+    expect(getRolePolicy("hdc-sre-ops").allowDeployWithApprovedTask).toBe(true);
     expect(getRolePolicy("hdc-sre").allowDeployWithApprovedTask).toBe(true);
+  });
+
+  it("restricts sre-engineer to query and health", () => {
+    expect(assertAllowedRunVerb("query", "hdc-sre-engineer")).toBe("query");
+    expect(() => assertAllowedRunVerb("deploy", "hdc-sre-engineer")).toThrow(/not allowed/);
   });
 
   it("blocks tools by role", () => {
@@ -107,7 +113,7 @@ status: pending
       assertApprovedTaskForDeploy({
         verb: "deploy",
         taskId: "ok",
-        role: "hdc-sre",
+        role: "hdc-sre-ops",
         privateRoot: "/priv",
         exists,
         readFile,
@@ -117,7 +123,7 @@ status: pending
       assertApprovedTaskForDeploy({
         verb: "deploy",
         taskId: "pending",
-        role: "hdc-sre",
+        role: "hdc-sre-ops",
         privateRoot: "/priv",
         exists,
         readFile,
@@ -126,7 +132,7 @@ status: pending
     expect(() =>
       assertApprovedTaskForDeploy({
         verb: "deploy",
-        role: "hdc-sre",
+        role: "hdc-sre-ops",
         privateRoot: "/priv",
       }),
     ).toThrow(/task_id/);

@@ -7,6 +7,16 @@ description: >-
 
 # HDC agent team conventions
 
+## Repository ownership
+
+| Repository | Primary agent | Owns |
+| --- | --- | --- |
+| **hdc** | `hdc-engineer` | CLI, schemas, shared runtime, agent fleet, tests |
+| **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, `config.example.json` |
+| **hdc-private** | `hdc-sre-ops` | Live `config.json`, inventory, `operations/` |
+
+Handoffs: package script failure → `hdc-sre-engineer`; CLI/runtime failure → `hdc-engineer`; approved production run → `hdc-sre-ops`.
+
 ## Paths (hdc-private)
 
 | Path | Purpose |
@@ -34,7 +44,7 @@ Each task is `operations/tasks/<id>.md` with YAML frontmatter: `id`, `role`, `pr
 
 **Priority:** `critical` | `high` | `medium` | `low`
 
-**Role:** `hdc-manager` | `hdc-sre` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer`
+**Role:** `hdc-manager` | `hdc-sre-ops` | `hdc-sre-engineer` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer`
 
 ## Agent roster (canonical)
 
@@ -42,12 +52,13 @@ Each task is `operations/tasks/<id>.md` with YAML frontmatter: `id`, `role`, `pr
 | --- | --- |
 | Manager | `apps/hdc-agent-server/agents/hdc-manager.md` |
 | Monitor | `apps/hdc-agent-server/agents/hdc-monitor.md` |
-| SRE | `apps/hdc-agent-server/agents/hdc-sre.md` |
+| SRE ops | `apps/hdc-agent-server/agents/hdc-sre-ops.md` |
+| SRE engineer | `apps/hdc-agent-server/agents/hdc-sre-engineer.md` |
+| Platform engineer | `apps/hdc-agent-server/agents/hdc-engineer.md` |
 | Security expert | `apps/hdc-agent-server/agents/hdc-security-expert.md` |
 | Security architect | `apps/hdc-agent-server/agents/hdc-security-architect.md` |
 | Network architect | `apps/hdc-agent-server/agents/hdc-network-architect.md` |
 | Research | `apps/hdc-agent-server/agents/hdc-research.md` |
-| Engineer | `apps/hdc-agent-server/agents/hdc-engineer.md` |
 
 ## Rules
 
@@ -73,3 +84,5 @@ Primary runtime: hdc-agent-server containers on hdc-agents-a; Tasks UI via hdc-w
 ## Deprecated
 
 `operations/task-queue.json` is deprecated — use per-task files under `operations/tasks/` instead.
+
+Legacy role id **`hdc-sre`** → **`hdc-sre-ops`**.

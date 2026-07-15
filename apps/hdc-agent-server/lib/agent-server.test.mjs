@@ -88,14 +88,16 @@ describe("schedule", () => {
   it("defaults manager 15m monitor 60m", () => {
     expect(defaultScheduleMinutes("hdc-manager")).toBe(15);
     expect(defaultScheduleMinutes("hdc-monitor")).toBe(60);
-    expect(resolveScheduleMinutes("hdc-sre", {})).toBe(0);
+    expect(resolveScheduleMinutes("hdc-sre-ops", {})).toBe(0);
     expect(resolveScheduleMinutes("hdc-monitor", { HDC_AGENT_SCHEDULE_MINUTES: "off" })).toBe(0);
   });
 });
 
 describe("operations-fs roles", () => {
-  it("includes hdc-engineer", () => {
+  it("includes build and ops roles", () => {
     expect(TASK_ROLES).toContain("hdc-engineer");
+    expect(TASK_ROLES).toContain("hdc-sre-engineer");
+    expect(TASK_ROLES).toContain("hdc-sre-ops");
   });
 });
 
@@ -137,7 +139,7 @@ describe("dispatcher", () => {
       mkdirSync(join(root, "operations", "reports"), { recursive: true });
       createTask(root, {
         id: "2026-07-14-approved-sre",
-        role: "hdc-sre",
+        role: "hdc-sre-ops",
         status: "approved",
         priority: "high",
         title: "Fix immich",
@@ -153,8 +155,10 @@ describe("dispatcher", () => {
       expect(r.work.length).toBeGreaterThanOrEqual(1);
       const peer = r.work.find((w) => w.id === "task-2026-07-14-approved-sre");
       expect(peer).toBeTruthy();
-      expect(peer?.peer_url).toBe("http://hdc-sre:9202");
-      expect(peerA2aBaseUrl("hdc-sre")).toBe("http://hdc-sre:9202");
+      expect(peer?.peer_url).toBe("http://hdc-sre-ops:9202");
+      expect(peerA2aBaseUrl("hdc-sre-ops")).toBe("http://hdc-sre-ops:9202");
+      expect(peerA2aBaseUrl("hdc-sre")).toBe("http://hdc-sre-ops:9202");
+      expect(peerA2aBaseUrl("hdc-sre-engineer")).toBe("http://hdc-sre-engineer:9208");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

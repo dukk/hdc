@@ -59,7 +59,7 @@ describe("hdc-mcp-server api-keys", () => {
 
   it("rejects wrong keys", () => {
     const root = tmpPrivate();
-    registerMcpApiKeyHash(root, { role: "hdc-sre", secret: mintMcpApiKeySecret() });
+    registerMcpApiKeyHash(root, { role: "hdc-sre-ops", secret: mintMcpApiKeySecret() });
     expect(resolveMcpApiKey(mintMcpApiKeySecret(), root)).toBeNull();
   });
 

@@ -129,25 +129,29 @@ export function newestMtimeMs(dir, nameRe) {
 const PEER_PORTS = {
   "hdc-manager": 9200,
   "hdc-monitor": 9201,
+  "hdc-sre-ops": 9202,
   "hdc-sre": 9202,
   "hdc-security-expert": 9203,
   "hdc-security-architect": 9204,
   "hdc-network-architect": 9205,
   "hdc-research": 9206,
   "hdc-engineer": 9207,
+  "hdc-sre-engineer": 9208,
 };
 
 /**
- * Compose service hostname = role id (e.g. hdc-sre).
+ * Compose service hostname = role id (e.g. hdc-sre-ops).
  * @param {string} peerRole
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function peerA2aBaseUrl(peerRole, env = process.env) {
-  const override = env[`HDC_AGENT_PEER_URL_${peerRole.replace(/-/g, "_").toUpperCase()}`];
+  const normalized =
+    peerRole === "hdc-sre" ? "hdc-sre-ops" : peerRole;
+  const override = env[`HDC_AGENT_PEER_URL_${normalized.replace(/-/g, "_").toUpperCase()}`];
   if (override?.trim()) return override.trim().replace(/\/$/, "");
-  const port = PEER_PORTS[peerRole];
+  const port = PEER_PORTS[normalized] ?? PEER_PORTS[peerRole];
   if (!port) return null;
-  const host = String(env.HDC_AGENT_PEER_HOST ?? peerRole).trim() || peerRole;
+  const host = String(env.HDC_AGENT_PEER_HOST ?? normalized).trim() || normalized;
   return `http://${host}:${port}`;
 }
 
@@ -224,7 +228,7 @@ export async function runDispatcher(opts) {
         ],
         llmPrompt:
           "Scheduled monitor sweep. Probe hashes changed (or first run). Analyze health, " +
-          "write operations/reports/monitor-*.md, enqueue hdc-sre tasks for actionable issues.",
+          "write operations/reports/monitor-*.md, enqueue hdc-sre-ops tasks for actionable issues.",
       });
     case "hdc-security-expert":
       return dispatchProbeThenLlm({

@@ -38,9 +38,13 @@ description: >-
 3. Delegate via LiteLLM A2A when fleet is healthy.
 4. On completion, set `done` and update `task-report.md`.
 
-## Daily-maintain failures → hdc-engineer
+## Daily-maintain failures
 
-Failed steps → create `role: hdc-engineer` tasks with report paths as `evidence`. Do not assign `hdc-sre` until engineer handoff says ready.
+Failed steps → route by root cause:
+
+- **CLI / platform** → `role: hdc-engineer`
+- **Package script** → `role: hdc-sre-engineer`
+- **Approved production run** → `role: hdc-sre-ops` after code handoff when needed
 
 ## Never without `approved`
 

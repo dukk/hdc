@@ -39,11 +39,13 @@ When unset, the **default** profile matches the historical safe set (`query`/`ma
 | --- | --- | --- |
 | *(default)* | all five | `query`, `health`, `maintain` |
 | `hdc-manager` | all five | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
-| `hdc-sre` | list, help, run, Discord | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
+| `hdc-sre-ops` | list, help, run, Discord | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
 | `hdc-monitor` | list, help, run, Discord | `query`, `health` |
 | `hdc-security-expert` | list, help, run, Discord | `query`, `health`, `maintain` |
 | `hdc-scheduler` | list, help, daily, run, Discord | `query`, `health`, `maintain` |
-| `hdc-security-architect` / `hdc-network-architect` / `hdc-research` / `hdc-engineer` | list, help, run | `query`, `health` |
+| `hdc-security-architect` / `hdc-network-architect` / `hdc-research` / `hdc-engineer` / `hdc-sre-engineer` | list, help, run | `query`, `health` |
+
+Legacy role id **`hdc-sre`** maps to **`hdc-sre-ops`** in policy resolution.
 
 Deploy checks `hdc-private/operations/tasks/<task_id>.md` frontmatter `status: approved`. Policy lives in [`apps/hdc-mcp-server/lib/policy.mjs`](../../apps/hdc-mcp-server/lib/policy.mjs).
 

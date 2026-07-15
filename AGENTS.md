@@ -1589,18 +1589,19 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 
 ## Agent team (hdc-agent-server fleet)
 
-Eight role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
+Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
 
-| Agent | Role |
-| --- | --- |
-| [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation |
-| [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests |
-| [`hdc-sre`](apps/hdc-agent-server/agents/hdc-sre.md) | Approved deploy/maintain on live systems |
-| [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | Automation codebase: clumps, CLI, schemas, tests (no production deploy) |
-| [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response |
-| [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals |
-| [`hdc-network-architect`](apps/hdc-agent-server/agents/hdc-network-architect.md) | Read-only network/DNS proposals |
-| [`hdc-research`](apps/hdc-agent-server/agents/hdc-research.md) | Tool research briefs |
+| Agent | Role | Repository |
+| --- | --- | --- |
+| [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation | — |
+| [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests | — |
+| [`hdc-sre-ops`](apps/hdc-agent-server/agents/hdc-sre-ops.md) | Approved deploy/maintain on live systems | hdc-private |
+| [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples | hdc-clumps |
+| [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | CLI, schemas, agent fleet, tests (no production deploy) | hdc |
+| [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response | — |
+| [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals | — |
+| [`hdc-network-architect`](apps/hdc-agent-server/agents/hdc-network-architect.md) | Read-only network/DNS proposals | — |
+| [`hdc-research`](apps/hdc-agent-server/agents/hdc-research.md) | Tool research briefs | — |
 
 Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/). IDE pointers under `.cursor/` / `.claude/` remain for human local sessions. Architecture: [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
 
@@ -1612,7 +1613,7 @@ Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
 
 **Discord alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). Messages include OS hostname or `HDC_OPS_DISCORD_HOST`.
 
-Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre** / **hdc-manager**.
+Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre-ops** / **hdc-manager**. Role id **`hdc-sre`** is deprecated.
 
 ## hdc-mcp-server and run-daily in this repo
 
@@ -1638,5 +1639,5 @@ node apps/hdc-cli/cli.mjs run service hdc-agents maintain --
 | Agent team | [`apps/hdc-agent-server/skills/hdc-agent-team/`](apps/hdc-agent-server/skills/hdc-agent-team/SKILL.md), [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) |
 | Multi-agent architecture | [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md) |
 | Claude Code entry point | [`CLAUDE.md`](CLAUDE.md); thin pointers under `.claude/skills/` and `.claude/agents/` |
-| Operator workflow | [`apps/hdc-agent-server/skills/hdc-ops/SKILL.md`](apps/hdc-agent-server/skills/hdc-ops/SKILL.md), [`apps/hdc-agent-server/agents/hdc-sre.md`](apps/hdc-agent-server/agents/hdc-sre.md) |
+| Operator workflow | [`apps/hdc-agent-server/skills/hdc-ops/SKILL.md`](apps/hdc-agent-server/skills/hdc-ops/SKILL.md), [`apps/hdc-agent-server/agents/hdc-sre-ops.md`](apps/hdc-agent-server/agents/hdc-sre-ops.md) |
 | Human README | [README.md](README.md) |

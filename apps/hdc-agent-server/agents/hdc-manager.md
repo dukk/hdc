@@ -22,13 +22,17 @@ You coordinate the HDC agent team. Team conventions and manager skill are inject
 Discover peers via LiteLLM (not a static roster):
 
 1. List agents under LiteLLM A2A / agent cards with the manager virtual key.
-2. Filter by card skills / role name (`hdc-monitor`, `hdc-sre`, …).
+2. Filter by card skills / role name (`hdc-monitor`, `hdc-sre-ops`, `hdc-sre-engineer`, …).
 3. Delegate with `message/send` to the peer — LiteLLM authenticates, logs spend, and proxies.
 4. Always validate task files + `delegation-policy.md` before any non-read action.
 
-## Daily-maintain → engineer
+## Daily-maintain triage
 
-When scanning digests / daily-maintain reports for failed steps, create tasks with `role: hdc-engineer`, evidence pointing at the report path, and a follow-up `hdc-sre` task only after code is fixed.
+When scanning digests / daily-maintain reports for failed steps:
+
+- **CLI / platform bug** → `role: hdc-engineer`
+- **Package script bug** → `role: hdc-sre-engineer`
+- **Approved production run** → `role: hdc-sre-ops` (after engineer/sre-engineer handoff when code changed)
 
 ## Escalation
 
