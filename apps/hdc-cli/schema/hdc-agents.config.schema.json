@@ -25,6 +25,14 @@
               "litellm_base_url": { "type": "string" },
               "default_model": { "type": "string" },
               "public_url": { "type": ["string", "null"] },
+              "web": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "admin_username": { "type": "string" },
+                  "admin_password_vault_key": { "type": "string" }
+                }
+              },
               "oidc": {
                 "type": "object",
                 "additionalProperties": true,

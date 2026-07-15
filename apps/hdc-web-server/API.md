@@ -14,9 +14,24 @@ Authorization: Bearer <token>
 
 Authenticated as synthetic user `api-token`.
 
-### OIDC SSO (web UI)
+### Password login (web UI, default)
 
-Human login uses Keycloak (Authorization Code + PKCE) via the BFF:
+Human login uses an encrypted htpasswd file at `{metaRoot}/.htpasswd.enc` (AES-256-GCM, key from `HDC_WEB_UI_SESSION_SECRET`). On first start the server creates an `admin` user (configurable) with `HDC_WEB_ADMIN_PASSWORD` or a generated password.
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{"username":"admin","password":"..."}
+```
+
+On success, sets `hdc_web_session` HttpOnly cookie (24h). Rate-limited after repeated failures.
+
+Requires `HDC_WEB_UI_SESSION_SECRET`. Set `auth.mode` to `oidc` in `web-config.json` to disable password login.
+
+### OIDC SSO (optional)
+
+When fully configured, humans may also use Keycloak (Authorization Code + PKCE) via the BFF:
 
 1. `GET /api/auth/oidc/login` → 302 to the IdP
 2. IdP returns to `GET /api/auth/oidc/callback`
@@ -24,14 +39,13 @@ Human login uses Keycloak (Authorization Code + PKCE) via the BFF:
 
 Env: `HDC_WEB_OIDC_ISSUER`, `HDC_WEB_OIDC_CLIENT_ID`, `HDC_WEB_OIDC_CLIENT_SECRET`, `HDC_WEB_PUBLIC_URL` (or `HDC_WEB_OIDC_REDIRECT_URI`), plus `HDC_WEB_UI_SESSION_SECRET`.
 
-`POST /api/auth/login` (password) returns **410 Gone**.
-
 ### Public
 
 | Method | Path | Response |
 |--------|------|----------|
 | GET | `/api/health` | `{"ok":true}` |
-| GET | `/api/auth/me` | `{user, oidc_configured, …}` (`user` may be null) |
+| GET | `/api/auth/me` | `{user, password_login_enabled, oidc_configured, …}` (`user` may be null) |
+| POST | `/api/auth/login` | Password login; sets cookie |
 | GET | `/api/auth/oidc/login` | 302 to IdP |
 | GET | `/api/auth/oidc/callback` | 302 to app with session cookie |
 | POST | `/api/discord/interactions` | Discord Interactions (Ed25519-verified). Requires `HDC_OPS_DISCORD_PUBLIC_KEY`. Handles PING and hdc-ops Approve/Deny message components (`custom_id` `hdc:approve:<taskId>` / `hdc:deny:<taskId>`), patching task status like the Tasks UI (`approved` / `blocked`). |
@@ -44,9 +58,9 @@ Env: `HDC_WEB_OIDC_ISSUER`, `HDC_WEB_OIDC_CLIENT_ID`, `HDC_WEB_OIDC_CLIENT_SECRE
 |--------|------|------|-------|
 | GET | `/api/auth/oidc/login` | — | Start SSO |
 | GET | `/api/auth/oidc/callback` | — | OIDC redirect; sets cookie |
-| POST | `/api/auth/login` | — | **410** — password login removed |
+| POST | `/api/auth/login` | `{username, password}` | Password login; sets cookie; 429 when rate-limited |
 | POST / GET | `/api/auth/logout` | — | Clears cookie; may return `logout_url` for IdP end-session |
-| GET | `/api/auth/me` | — | `{user, install_root, private_root, meta_root, oidc_configured}` |
+| GET | `/api/auth/me` | — | `{user, install_root, private_root, meta_root, password_login_enabled, oidc_configured}` |
 
 ### Schedules
 

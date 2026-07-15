@@ -745,7 +745,7 @@ Example: `hdc run service hermes deploy -- --instance a`
 
 Set `hdc_agents.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-job `mail` / `discord`. The scripted dispatcher owns agent intervals; cron/schedules run deterministic hdc CLI (and `run-daily`). **Tasks UI:** hdc-web-server on `hdc-agents-a:9120` for approving guest-authoritative task files under hdc-private `operations/tasks/`.
 
-Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Web UI: Keycloak SSO (`hdc_agents.oidc` + vault `HDC_WEB_OIDC_CLIENT_SECRET` from keycloak maintain) plus `HDC_WEB_UI_SESSION_SECRET` / `HDC_WEB_API_TOKEN`. Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
+Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Web UI: encrypted htpasswd login by default (`HDC_WEB_UI_SESSION_SECRET` encrypts `{metaRoot}/.htpasswd.enc`; optional vault `HDC_WEB_ADMIN_PASSWORD` for first admin bootstrap) plus `HDC_WEB_API_TOKEN` for agents. Optional Keycloak SSO when `hdc_agents.oidc` is set (`HDC_WEB_OIDC_CLIENT_SECRET` from keycloak maintain). Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
 
 Example: `hdc run service hdc-agents deploy -- --instance a`
 
