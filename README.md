@@ -4,6 +4,8 @@ Automation and documentation for a manually deployed home data center.
 
 > **Public repo:** automation code and `config.example.json` templates live here. Live `config.json`, inventory, and operator notes belong in a separate private **hdc-private** checkout (`HDC_PRIVATE_ROOT`).
 
+**New adopters:** start with [Three repositories](docs/three-repos.md) for how hdc, hdc-private, and hdc-clumps fit together and how to set up your site.
+
 ## Agent ownership
 
 This repository is the **platform** home for the **`hdc-engineer`** fleet agent: CLI, schemas, shared package runtime, agent fleet, tests, and public docs. Package automation scripts live in [**hdc-clumps**](../hdc-clumps/README.md) (`hdc-sre-engineer`); live operator state lives in [**hdc-private**](../hdc-private/README.md) (`hdc-sre-ops`). See [multi-agent operations](docs/multi-agent-ops.md) for the full roster and handoff rules.
