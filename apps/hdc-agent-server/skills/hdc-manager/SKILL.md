@@ -13,6 +13,7 @@ description: >-
 2. Read `operations/delegation-policy.md`
 3. List latest files in `operations/reports/` (monitor, security, research)
 4. Scan hdc-agents / daily-maintain reports for recent failures
+5. Check clump repo sync state (`hdc_list`); run `hdc_clumps_sync` after sre-engineer handoffs before delegating sre-ops
 
 ## Prioritization
 
@@ -43,8 +44,8 @@ description: >-
 Failed steps → route by root cause:
 
 - **CLI / platform** → `role: hdc-engineer`
-- **Package script** → `role: hdc-sre-engineer`
-- **Approved production run** → `role: hdc-sre-ops` after code handoff when needed
+- **Package script** → `role: hdc-sre-engineer` (then manager `hdc_clumps_sync` before sre-ops)
+- **Approved production run** → `role: hdc-sre-ops` after code handoff and manager sync when needed
 
 ## Never without `approved`
 

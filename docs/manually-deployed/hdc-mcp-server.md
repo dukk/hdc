@@ -27,7 +27,10 @@ The server communicates over stdin/stdout (JSON-RPC). Do not log to stdout excep
 | `hdc_help` | CLI help topics |
 | `hdc_maintain_daily` | Non-destructive daily maintain recipe |
 | `hdc_run` | Single clump verb (role-dependent; see below) |
+| `hdc_clumps_sync` | Clone or pull hdc-clumps repos into local cache (**hdc-manager** only) |
 | `hdc_notify_discord` | Post to agents Discord (`HDC_AGENTS_DISCORD_WEBHOOK_URL`, fallback `HDC_OPS_DISCORD_WEBHOOK_URL`) |
+
+**`hdc_clumps_sync` parameters:** `action` (`init` or `sync`, default `sync`), optional `repo`, optional `ref` (branch/tag/commit rollback override), optional `dry_run`.
 
 **Blocked globally:** `secrets`, `teardown`, `users`, and destructive flags (`--prune`, `--reboot`, `--destroy-existing`, `--rolling-restart`).
 
@@ -37,8 +40,8 @@ When unset, the **default** profile matches the historical safe set (`query`/`ma
 
 | Role | Tools | `hdc_run` verbs |
 | --- | --- | --- |
-| *(default)* | all five | `query`, `health`, `maintain` |
-| `hdc-manager` | all five | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
+| *(default)* | all five (no `hdc_clumps_sync`) | `query`, `health`, `maintain` |
+| `hdc-manager` | all six (includes `hdc_clumps_sync`) | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
 | `hdc-sre-ops` | list, help, run, Discord | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
 | `hdc-monitor` | list, help, run, Discord | `query`, `health` |
 | `hdc-security-expert` | list, help, run, Discord | `query`, `health`, `maintain` |

@@ -11,6 +11,7 @@ import {
   handleHdcHelp,
   handleHdcList,
   handleHdcMaintainDaily,
+  handleHdcClumpsSync,
   handleHdcNotifyDiscord,
   handleHdcRun,
 } from "./lib/tools.mjs";
@@ -33,7 +34,7 @@ const allowedVerbs = [...rolePolicy.runVerbs];
 
 const server = new McpServer({
   name: "hdc-mcp-server",
-  version: "1.2.0",
+  version: "1.3.0",
 });
 
 /** @param {import("./lib/policy.mjs").McpToolName} name */
@@ -91,6 +92,26 @@ if (toolAllowed("hdc_run")) {
       dry_run: z.boolean().optional().describe("Reserved for future use"),
     },
     async (args) => handleHdcRun(args),
+  );
+}
+
+if (toolAllowed("hdc_clumps_sync")) {
+  server.tool(
+    "hdc_clumps_sync",
+    "Clone or pull hdc-clumps package repos into the local cache (manager only). Use init on first bootstrap; sync after git updates. Optional ref overrides branch/tag/commit for rollback.",
+    {
+      action: z
+        .enum(["init", "sync"])
+        .optional()
+        .describe('Clumps subcommand (default: "sync")'),
+      repo: z.string().optional().describe("Limit to one repo id from .hdc/clumps-repos.json"),
+      ref: z
+        .string()
+        .optional()
+        .describe("One-shot ref override (branch, tag, or commit) for rollback"),
+      dry_run: z.boolean().optional().describe("Plan only; do not clone or pull"),
+    },
+    async (args) => handleHdcClumpsSync(args),
   );
 }
 

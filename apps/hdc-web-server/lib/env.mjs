@@ -47,6 +47,10 @@ export function resolveUiPassword() {
   return envFirst("HDC_WEB_UI_PASSWORD", "HDC_HDC_RUNNER_UI_PASSWORD");
 }
 
+export function resolveAdminPassword() {
+  return envFirst("HDC_WEB_ADMIN_PASSWORD");
+}
+
 export function resolveSessionSecret() {
   return envFirst("HDC_WEB_UI_SESSION_SECRET", "HDC_HDC_RUNNER_UI_SESSION_SECRET");
 }

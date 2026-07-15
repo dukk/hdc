@@ -1,6 +1,7 @@
 import { loadRolePrompt, stripFrontmatter } from "./role-prompt.mjs";
 import { loadAutomationRules, loadSkillsForRole } from "./skill-load.mjs";
 import {
+  handleHdcClumpsSync,
   handleHdcHelp,
   handleHdcList,
   handleHdcMaintainDaily,
@@ -14,6 +15,7 @@ const TOOL_HANDLERS = {
   hdc_help: handleHdcHelp,
   hdc_maintain_daily: handleHdcMaintainDaily,
   hdc_run: handleHdcRun,
+  hdc_clumps_sync: handleHdcClumpsSync,
   hdc_notify_discord: handleHdcNotifyDiscord,
 };
 
@@ -79,6 +81,25 @@ function openAiToolsForRole(role) {
             dry_run: { type: "boolean" },
             skip_clients: { type: "boolean" },
             skip_upgrades: { type: "boolean" },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_clumps_sync")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_clumps_sync",
+        description:
+          "Clone or pull hdc-clumps repos into local cache (init first bootstrap; sync after git updates; optional ref for rollback)",
+        parameters: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["init", "sync"] },
+            repo: { type: "string" },
+            ref: { type: "string" },
+            dry_run: { type: "boolean" },
           },
         },
       },

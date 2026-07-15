@@ -1590,10 +1590,10 @@ Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent
 
 | Agent | Role | Repository |
 | --- | --- | --- |
-| [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation | — |
+| [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation, `hdc_clumps_sync` on fleet host | — |
 | [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests | — |
 | [`hdc-sre-ops`](apps/hdc-agent-server/agents/hdc-sre-ops.md) | Approved deploy/maintain on live systems | hdc-private |
-| [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples | hdc-clumps |
+| [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples (git commit/push) | hdc-clumps |
 | [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | CLI, schemas, agent fleet, tests (no production deploy) | hdc |
 | [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response | — |
 | [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals | — |
@@ -1601,6 +1601,8 @@ Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent
 | [`hdc-research`](apps/hdc-agent-server/agents/hdc-research.md) | Tool research briefs | — |
 
 Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/). IDE pointers under `.cursor/` / `.claude/` remain for human local sessions. Architecture: [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
+
+**Clump cache handoff:** sre-engineer pushes hdc-clumps git → manager `hdc_clumps_sync` on the fleet MCP host → sre-ops runs approved live ops.
 
 **Operations state:** `operations/tasks/*.md`, `task-report.md`, `delegation-policy.md`, `ip-allocations.md`, `reports/`, `proposals/`. Approvals via hdc-web-server Tasks UI / A2A on hdc-agents-a `:9120`.
 
@@ -1614,7 +1616,7 @@ Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **
 
 ## hdc-mcp-server and run-daily in this repo
 
-- **MCP server:** [`apps/hdc-mcp-server/server.mjs`](apps/hdc-mcp-server/server.mjs) — stdio MCP exposing `hdc_list`, `hdc_help`, `hdc_maintain_daily`, `hdc_run` (query/maintain only), `hdc_notify_discord`. Policy blocks secrets, deploy, teardown, and destructive flags.
+- **MCP server:** [`apps/hdc-mcp-server/server.mjs`](apps/hdc-mcp-server/server.mjs) — stdio MCP exposing `hdc_list`, `hdc_help`, `hdc_maintain_daily`, `hdc_run`, `hdc_clumps_sync` (manager only), `hdc_notify_discord`. Policy blocks secrets, teardown, and destructive flags.
 - **Scheduled daily:** [`apps/hdc-agent-server/bin/run-daily.mjs`](apps/hdc-agent-server/bin/run-daily.mjs) — deterministic `maintain daily` + Discord (no LLM). hdc-agents schedule `hdc-ops-daily` uses `cli: ["run-daily"]`.
 - **Docs:** [`docs/manually-deployed/hdc-mcp-server.md`](docs/manually-deployed/hdc-mcp-server.md).
 

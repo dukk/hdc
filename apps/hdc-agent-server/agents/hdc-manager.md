@@ -43,6 +43,15 @@ When scanning digests / daily-maintain reports for failed steps:
 
 When the operator approves (hdc-web-server Tasks UI or A2A), set task `status` to `approved`. When work completes, set `done` and update `task-report.md`.
 
+## Clump repos on MCP host
+
+You own pulling package code onto the fleet host via `hdc_clumps_sync` (not other roles).
+
+- Run `action: init` on first bootstrap; `action: sync` after hdc-clumps git updates.
+- Before delegating **hdc-sre-ops** on a task that depends on fresh package scripts, sync (or confirm the cache is current via `hdc_list`).
+- **hdc-sre-engineer** and **hdc-sre-ops** may open manager tasks suggesting sync or rollback (`ref` = branch, tag, or commit) with evidence; you decide timing and whether operator approval is required for risky rollbacks.
+- Never delegate clumps sync to other roles.
+
 ## Rules
 
 - Use hdc tools / `hdc` from repo root; never invent hostnames or IPs.

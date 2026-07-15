@@ -3,7 +3,8 @@
  * hdc-web-server — LAN web UI + JSON API (ported from hdc-runner web UI).
  *
  * Port: HDC_WEB_PORT (default 9120)
- * Auth: Keycloak OIDC (SSO) → hdc_web_session cookie; HDC_WEB_API_TOKEN Bearer for agents
+ * Auth: encrypted htpasswd (default) or Keycloak OIDC (optional) → hdc_web_session cookie;
+ *       HDC_WEB_API_TOKEN Bearer for agents
  */
 import { createServer } from "node:http";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
@@ -17,6 +18,8 @@ import {
   sessionClearCookieHeader,
   resolveAuthUser,
   parseCookies,
+  isLoginRateLimited,
+  recordLoginFailure,
 } from "./lib/auth.mjs";
 import {
   listSchedulesWithStatus,
@@ -62,7 +65,9 @@ import {
   resolveSessionSecret,
   resolveApiToken,
   resolvePort,
+  resolveAdminPassword,
 } from "./lib/env.mjs";
+import { ensureHtpasswdStore, verifyUser } from "./lib/htpasswd.mjs";
 import {
   resolveOidcConfig,
   fetchOidcDiscovery,
@@ -126,12 +131,77 @@ function loadWebConfig(metaRoot) {
       enabled: true,
       host: "0.0.0.0",
       port: 9120,
-      username: "hdc",
+      auth: {
+        mode: "htpasswd",
+        htpasswd_file: ".htpasswd.enc",
+        admin_username: "admin",
+      },
       allowed_verbs: ["query", "maintain"],
       max_concurrent_jobs: 1,
     };
   }
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+/**
+ * @param {ReturnType<typeof loadWebConfig>} webConfig
+ */
+function resolveAuthConfig(webConfig) {
+  const auth =
+    webConfig.auth && typeof webConfig.auth === "object"
+      ? /** @type {Record<string, unknown>} */ (webConfig.auth)
+      : {};
+  const mode = typeof auth.mode === "string" && auth.mode.trim() ? auth.mode.trim() : "htpasswd";
+  const htpasswdFile =
+    typeof auth.htpasswd_file === "string" && auth.htpasswd_file.trim()
+      ? auth.htpasswd_file.trim()
+      : ".htpasswd.enc";
+  const adminUsername =
+    typeof auth.admin_username === "string" && auth.admin_username.trim()
+      ? auth.admin_username.trim()
+      : "admin";
+  return { mode, htpasswdFile, adminUsername };
+}
+
+/**
+ * @param {ReturnType<typeof loadWebConfig>} webConfig
+ * @param {string} metaRoot
+ * @param {string} sessionSecret
+ * @returns {{ passwordLoginEnabled: boolean; htpasswdStore: Map<string, string> | null }}
+ */
+function bootstrapHtpasswdAuth(webConfig, metaRoot, sessionSecret) {
+  const { mode, htpasswdFile, adminUsername } = resolveAuthConfig(webConfig);
+  if (mode === "oidc") {
+    return { passwordLoginEnabled: false, htpasswdStore: null };
+  }
+  if (!sessionSecret) {
+    process.stderr.write(
+      "[hdc-web-server] warning: HDC_WEB_UI_SESSION_SECRET not set — password login disabled\n",
+    );
+    return { passwordLoginEnabled: false, htpasswdStore: null };
+  }
+
+  const filePath = join(metaRoot, htpasswdFile);
+  const result = ensureHtpasswdStore({
+    filePath,
+    encryptKey: sessionSecret,
+    adminUsername,
+    adminPassword: resolveAdminPassword(),
+  });
+
+  if (result.createdAdmin) {
+    if (result.generatedPassword) {
+      process.stderr.write(
+        `[hdc-web-server] created admin user '${adminUsername}' with generated password: ${result.generatedPassword} (save it now; not shown again)\n`,
+      );
+    } else {
+      process.stderr.write(
+        `[hdc-web-server] created admin user '${adminUsername}' from HDC_WEB_ADMIN_PASSWORD\n`,
+      );
+    }
+  }
+
+  return { passwordLoginEnabled: true, htpasswdStore: result.store };
 }
 
 /**
@@ -197,8 +267,18 @@ function serveStatic(urlPath) {
  * @param {string} sessionSecret
  * @param {string} [apiToken]
  * @param {ReturnType<typeof resolveOidcConfig>} oidc
+ * @param {{ passwordLoginEnabled: boolean; htpasswdStore: Map<string, string> | null }} htpasswdAuth
  */
-async function handleRequest(req, res, webConfig, roots, sessionSecret, apiToken, oidc) {
+async function handleRequest(
+  req,
+  res,
+  webConfig,
+  roots,
+  sessionSecret,
+  apiToken,
+  oidc,
+  htpasswdAuth,
+) {
   const { hdcRoot: INSTALL_ROOT, privateRoot: PRIVATE_ROOT, metaRoot: META_ROOT, logDir } = roots;
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const path = url.pathname;
@@ -245,9 +325,29 @@ async function handleRequest(req, res, webConfig, roots, sessionSecret, apiToken
   }
 
   if (path === "/api/auth/login" && req.method === "POST") {
-    return jsonResponse(res, 410, {
-      error: "password login removed; use GET /api/auth/oidc/login",
-    });
+    if (!htpasswdAuth.passwordLoginEnabled || !htpasswdAuth.htpasswdStore || !sessionSecret) {
+      return jsonResponse(res, 503, { error: "password login not configured" });
+    }
+    if (isLoginRateLimited()) {
+      return jsonResponse(res, 429, { error: "too many login attempts; try again later" });
+    }
+    try {
+      const body = /** @type {{ username?: string; password?: string }} */ (await readJsonBody(req));
+      const username = String(body.username ?? "").trim();
+      const password = String(body.password ?? "");
+      if (!verifyUser(htpasswdAuth.htpasswdStore, username, password)) {
+        recordLoginFailure();
+        return jsonResponse(res, 401, { error: "invalid username or password" });
+      }
+      const sessionToken = createSessionToken(username, sessionSecret);
+      return jsonResponse(res, 200, { ok: true, user: username }, {
+        "Set-Cookie": sessionSetCookieHeader(sessionToken),
+      });
+    } catch (e) {
+      return jsonResponse(res, 400, {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   if (path === "/api/auth/oidc/login" && req.method === "GET") {
@@ -350,6 +450,7 @@ async function handleRequest(req, res, webConfig, roots, sessionSecret, apiToken
       private_root: PRIVATE_ROOT,
       meta_root: META_ROOT,
       oidc_configured: oidc.configured,
+      password_login_enabled: htpasswdAuth.passwordLoginEnabled,
     });
   }
 
@@ -357,6 +458,7 @@ async function handleRequest(req, res, webConfig, roots, sessionSecret, apiToken
     path.startsWith("/api/") &&
     path !== "/api/health" &&
     path !== "/api/discord/interactions" &&
+    path !== "/api/auth/login" &&
     path !== "/api/auth/oidc/login" &&
     path !== "/api/auth/oidc/callback" &&
     path !== "/api/auth/me";
@@ -648,15 +750,23 @@ function main() {
   const sessionSecret = resolveSessionSecret();
   const apiToken = resolveApiToken();
   const oidc = resolveOidcConfig(process.env);
-  if (!sessionSecret) {
+  const htpasswdAuth = bootstrapHtpasswdAuth(webConfig, resolved.metaRoot, sessionSecret);
+
+  if (!sessionSecret && !htpasswdAuth.passwordLoginEnabled) {
     process.stderr.write(
       "[hdc-web-server] warning: HDC_WEB_UI_SESSION_SECRET not set — sessions disabled (legacy HDC_HDC_RUNNER_* also accepted)\n",
     );
   }
-  if (!oidc.configured) {
+  const oidcPartial =
+    Boolean(process.env.HDC_WEB_OIDC_ISSUER?.trim()) ||
+    Boolean(process.env.HDC_WEB_OIDC_CLIENT_ID?.trim()) ||
+    Boolean(process.env.HDC_WEB_OIDC_CLIENT_SECRET?.trim());
+  if (oidcPartial && !oidc.configured) {
     process.stderr.write(
-      "[hdc-web-server] warning: OIDC not configured (HDC_WEB_OIDC_ISSUER / CLIENT_ID / CLIENT_SECRET / PUBLIC_URL or REDIRECT_URI) — SSO login disabled\n",
+      "[hdc-web-server] warning: OIDC partially configured — set issuer, client id, client secret, and public URL or redirect URI for SSO\n",
     );
+  } else if (!oidc.configured && !oidcPartial) {
+    process.stderr.write("[hdc-web-server] OIDC not configured — SSO login disabled\n");
   }
   if (!apiToken) {
     process.stderr.write(
@@ -676,6 +786,7 @@ function main() {
       sessionSecret,
       apiToken || undefined,
       oidc,
+      htpasswdAuth,
     ).catch((e) => {
       jsonResponse(res, 500, { error: e instanceof Error ? e.message : String(e) });
     });

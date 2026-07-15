@@ -37,11 +37,16 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [loginError, setLoginError] = useState("");
   const [oidcConfigured, setOidcConfigured] = useState(false);
+  const [passwordLoginEnabled, setPasswordLoginEnabled] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("admin");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
 
   const refreshMe = useCallback(async () => {
     const me = await api("/auth/me");
     setUser(me.user ?? null);
     setOidcConfigured(me.oidc_configured === true);
+    setPasswordLoginEnabled(me.password_login_enabled === true);
   }, []);
 
   useEffect(() => {
@@ -60,6 +65,24 @@ export default function App() {
   function onSsoLogin() {
     setLoginError("");
     window.location.href = "/api/auth/oidc/login";
+  }
+
+  async function onPasswordLogin(e) {
+    e.preventDefault();
+    setLoginError("");
+    setLoginBusy(true);
+    try {
+      await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      });
+      setLoginPassword("");
+      await refreshMe();
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoginBusy(false);
+    }
   }
 
   async function onLogout() {
@@ -83,11 +106,42 @@ export default function App() {
     return (
       <Panel>
         <h1>HDC Web</h1>
-        <Message>Sign in with SSO to manage scheduled jobs, tasks, and inventory.</Message>
-        <Button onClick={onSsoLogin} disabled={!oidcConfigured}>
-          Sign in with SSO
-        </Button>
-        {!oidcConfigured ? <Message tone="error">OIDC is not configured on this server.</Message> : null}
+        <Message>Sign in to manage scheduled jobs, tasks, and inventory.</Message>
+        {passwordLoginEnabled ? (
+          <form onSubmit={onPasswordLogin}>
+            <Field label="Username">
+              <TextInput
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                autoComplete="username"
+                disabled={loginBusy}
+              />
+            </Field>
+            <Field label="Password">
+              <TextInput
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                autoComplete="current-password"
+                disabled={loginBusy}
+              />
+            </Field>
+            <Button type="submit" disabled={loginBusy || !loginUsername || !loginPassword}>
+              Sign in
+            </Button>
+          </form>
+        ) : null}
+        {oidcConfigured ? (
+          <>
+            {passwordLoginEnabled ? <Message>Or sign in with SSO.</Message> : null}
+            <Button onClick={onSsoLogin} disabled={loginBusy} variant={passwordLoginEnabled ? "secondary" : undefined}>
+              Sign in with SSO
+            </Button>
+          </>
+        ) : null}
+        {!passwordLoginEnabled && !oidcConfigured ? (
+          <Message tone="error">No login method is configured on this server.</Message>
+        ) : null}
         {loginError ? <Message tone="error">{loginError}</Message> : null}
       </Panel>
     );

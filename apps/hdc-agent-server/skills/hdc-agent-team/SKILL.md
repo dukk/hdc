@@ -12,10 +12,11 @@ description: >-
 | Repository | Primary agent | Owns |
 | --- | --- | --- |
 | **hdc** | `hdc-engineer` | CLI, schemas, shared runtime, agent fleet, tests |
-| **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, `config.example.json` |
+| **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, `config.example.json` (git commit/push) |
 | **hdc-private** | `hdc-sre-ops` | Live `config.json`, inventory, `operations/` |
+| **Clump cache (MCP host)** | `hdc-manager` | `hdc_clumps_sync` (`init` / `sync`; optional `ref` rollback) |
 
-Handoffs: package script failure → `hdc-sre-engineer`; CLI/runtime failure → `hdc-engineer`; approved production run → `hdc-sre-ops`.
+Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `hdc-manager` (sync cache) → `hdc-sre-ops` (approved live run); CLI/runtime failure → `hdc-engineer`.
 
 ## Paths (hdc-private)
 

@@ -3,7 +3,7 @@ import path from "node:path";
 
 /** @typedef {'client' | 'infrastructure' | 'service'} AllowedTier */
 
-/** @typedef {'hdc_list' | 'hdc_help' | 'hdc_maintain_daily' | 'hdc_run' | 'hdc_notify_discord'} McpToolName */
+/** @typedef {'hdc_list' | 'hdc_help' | 'hdc_maintain_daily' | 'hdc_run' | 'hdc_notify_discord' | 'hdc_clumps_sync'} McpToolName */
 
 /** Default profile when HDC_AGENT_ROLE is unset (IDE / run-daily). */
 export const DEFAULT_AGENT_ROLE = "default";
@@ -45,6 +45,7 @@ export const ROLE_POLICIES = Object.freeze({
       "hdc_maintain_daily",
       "hdc_run",
       "hdc_notify_discord",
+      "hdc_clumps_sync",
     ]),
     runVerbs: new Set(["query", "health", "maintain", "deploy"]),
     allowDeployWithApprovedTask: true,

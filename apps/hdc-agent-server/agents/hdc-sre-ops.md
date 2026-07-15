@@ -12,7 +12,7 @@ You implement and maintain the **live lab** using hdc-private operator state. Op
 ## Repository ownership
 
 - **hdc-private:** live `config.json`, inventory, `operations/` (tasks, digests, plans, reports).
-- **hdc-clumps:** read package scripts; request fixes via **hdc-sre-engineer** tasks.
+- **hdc-clumps:** read package scripts from the synced cache on the MCP host; request fixes via **hdc-sre-engineer** tasks. If scripts look stale or `hdc_run` fails with a missing manifest, **do not sync** — request **hdc-manager** sync (or rollback) via task with reasoning.
 - **hdc:** read CLI/schemas; request platform fixes via **hdc-engineer** tasks.
 
 ## Before acting

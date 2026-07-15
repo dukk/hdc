@@ -22,14 +22,17 @@ You own **hdc-clumps** package automation — deploy/maintain/query scripts, man
 - **Never** run production `deploy`, `teardown`, `maintain --prune`, or live maintain against the lab. That is **hdc-sre-ops** after task `status: approved`.
 - **Never** edit live `config.json`, inventory, or `operations/` in hdc-private.
 - **Never** change the hdc CLI platform (`apps/hdc-cli/`, schemas, agent-server) — that is **hdc-engineer**.
-- Hand off: mark task `done`, open or update an `hdc-sre-ops` task with evidence for approved production runs.
+- **Never** run `clumps init` / `sync` on the MCP server — that is **hdc-manager** after you commit and push hdc-clumps.
+- Hand off: mark task `done`, open or update an `hdc-sre-ops` task with evidence for approved production runs; open a **hdc-manager** task requesting `hdc_clumps_sync` with commit SHA / branch before sre-ops runs.
 
 ## Workflow
 
 1. Find the task file (`role: hdc-sre-engineer`).
 2. Reproduce from evidence paths (operation reports, daily-maintain output).
-3. Fix in **hdc-clumps** only.
-4. Update task to `done` and note handoff for hdc-sre-ops.
+3. Fix in **hdc-clumps** only; **commit and push to git**.
+4. Open or update a **hdc-manager** task requesting sync (include commit, branch, and why sre-ops should proceed).
+5. If a bad package change is live, suggest manager rollback via task (`ref` + severity).
+6. Update your task to `done` after the handoff notes are written.
 
 ## Rules
 

@@ -258,6 +258,95 @@ export async function handleHdcNotifyDiscord(args = {}) {
 }
 
 /**
+ * Env var name for a one-shot clump repo ref override.
+ * @param {string} repoId
+ */
+export function clumpRepoRefEnvKey(repoId) {
+  const id = String(repoId ?? "").trim().toUpperCase().replace(/-/g, "_");
+  return `HDC_CLUMPS_REPO_${id}_REF`;
+}
+
+/**
+ * Build argv for `hdc clumps init|sync`.
+ * @param {Record<string, unknown>} [opts]
+ * @returns {string[]}
+ */
+export function buildClumpsSyncArgv(opts = {}) {
+  const action = String(opts.action ?? "sync").trim().toLowerCase();
+  if (action !== "init" && action !== "sync") {
+    throw new Error(`action must be "init" or "sync" (got ${JSON.stringify(opts.action)})`);
+  }
+  /** @type {string[]} */
+  const argv = ["clumps", action];
+  if (typeof opts.repo === "string" && opts.repo.trim()) {
+    argv.push("--repo", opts.repo.trim());
+  }
+  if (opts.dry_run === true || opts.dryRun === true) argv.push("--dry-run");
+  return argv;
+}
+
+/**
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcClumpsSync(args = {}) {
+  try {
+    applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_clumps_sync");
+    const action = String(args.action ?? "sync").trim().toLowerCase();
+    if (action !== "init" && action !== "sync") {
+      throw new Error(`action must be "init" or "sync" (got ${JSON.stringify(args.action)})`);
+    }
+    const repo = typeof args.repo === "string" ? args.repo.trim() : "";
+    const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+    const argv = buildClumpsSyncArgv({
+      action,
+      repo: repo || undefined,
+      dry_run: args.dry_run === true,
+    });
+
+    const { deps, capture, resetCapture } = createHdcMcpContext();
+    resetCapture();
+
+    /** @type {Record<string, string | undefined>} */
+    const savedEnv = {};
+    if (ref) {
+      const repoId = repo || "hdc-clumps";
+      const key = clumpRepoRefEnvKey(repoId);
+      savedEnv[key] = deps.env[key];
+      deps.env[key] = ref;
+      process.env[key] = ref;
+    }
+
+    let code;
+    try {
+      code = await runCli(argv, deps);
+    } finally {
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) {
+          delete deps.env[key];
+          delete process.env[key];
+        } else {
+          deps.env[key] = value;
+          process.env[key] = value;
+        }
+      }
+    }
+
+    return toolTextResult({
+      ok: code === 0,
+      exitCode: code,
+      action,
+      repo: repo || null,
+      ref: ref || null,
+      log: capture.logLines,
+      errors: capture.errorLines,
+    });
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
  * Build argv for maintain daily from a plain options object.
  * @param {Record<string, unknown>} [opts]
  * @returns {string[]}

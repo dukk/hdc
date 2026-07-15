@@ -55,6 +55,21 @@ describe("hdc-mcp-server policy", () => {
     expect(() => assertToolAllowedForRole("hdc_list", "hdc-engineer")).not.toThrow();
   });
 
+  it("allows hdc_clumps_sync for manager only", () => {
+    expect(() => assertToolAllowedForRole("hdc_clumps_sync", "hdc-manager")).not.toThrow();
+    expect(getRolePolicy("hdc-manager").tools.has("hdc_clumps_sync")).toBe(true);
+    expect(getRolePolicy("hdc-sre-ops").tools.has("hdc_clumps_sync")).toBe(false);
+    expect(getRolePolicy("hdc-sre-engineer").tools.has("hdc_clumps_sync")).toBe(false);
+    expect(getRolePolicy("hdc-scheduler").tools.has("hdc_clumps_sync")).toBe(false);
+    expect(() => assertToolAllowedForRole("hdc_clumps_sync", "hdc-sre-engineer")).toThrow(
+      /not allowed/,
+    );
+    expect(() => assertToolAllowedForRole("hdc_clumps_sync", "hdc-sre-ops")).toThrow(
+      /not allowed/,
+    );
+    expect(() => assertToolAllowedForRole("hdc_clumps_sync", "hdc-monitor")).toThrow(/not allowed/);
+  });
+
   it("resolves HDC_AGENT_ROLE from env", () => {
     expect(resolveAgentRole({})).toBe("default");
     expect(resolveAgentRole({ HDC_AGENT_ROLE: "hdc-monitor" })).toBe("hdc-monitor");

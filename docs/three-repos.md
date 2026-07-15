@@ -45,6 +45,10 @@ flowchart TB
 
 On `hdc run`, the CLI loads a package script from hdc-clumps (or cache), merges **your** config and inventory from hdc-private, and executes using shared helpers from hdc.
 
+### Fleet runtime (hdc-agents)
+
+On the hdc-agents guest, package scripts run from the **local clump cache** (`~/.hdc/clump-repos/` after `hdc clumps init` / `sync`), not directly from a git checkout. **hdc-sre-engineer** commits and pushes hdc-clumps changes; **hdc-manager** pulls them onto the MCP host via `hdc_clumps_sync` before **hdc-sre-ops** runs approved deploy/maintain. Human operators may still run `hdc clumps sync` on their workstation.
+
 ## Repository roles
 
 | Repo | Required? | You typically… | Upstream relationship |

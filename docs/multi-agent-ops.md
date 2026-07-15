@@ -86,7 +86,7 @@ Three repositories map to three build/ops agents (see each repo README):
 | **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, examples |
 | **hdc-private** | `hdc-sre-ops` | Live config, inventory, `operations/` |
 
-Handoffs: clump script failure → `hdc-sre-engineer`; CLI failure → `hdc-engineer`; approved production run → `hdc-sre-ops`.
+Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc-manager` (`hdc_clumps_sync`) → `hdc-sre-ops` (approved live run); CLI failure → `hdc-engineer`.
 
 ## Agent roster
 
@@ -110,7 +110,8 @@ Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
 ### Build roles (revised 2026-07-14)
 
 - **`hdc-engineer`** owns the **hdc** platform (CLI, schemas, agent-server, tests). Never runs production deploy/maintain.
-- **`hdc-sre-engineer`** owns **hdc-clumps** package automation. Never edits hdc-private or runs live deploy/maintain.
+- **`hdc-sre-engineer`** owns **hdc-clumps** package automation (commit/push git). Never edits hdc-private, runs live deploy/maintain, or syncs clumps on the MCP host.
+- **`hdc-manager`** owns **`hdc_clumps_sync`** on the fleet host — pull package code after git updates before delegating sre-ops.
 - **`hdc-sre-ops`** owns **hdc-private** live state and executes approved deploy/maintain via hdc-service-deploy.
 
 Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9202 (sre-ops).

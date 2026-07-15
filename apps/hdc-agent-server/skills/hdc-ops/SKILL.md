@@ -45,6 +45,8 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
    Writes `apps/hdc-cli/reports/daily-maintain-<timestamp>.md`. Schedule via Task Scheduler or cron on the operator host.
 
+   Fleet agents on hdc-agents use MCP tools (`hdc_run`, `hdc_clumps_sync`, …) — not raw `hdc clumps` on the server except via **hdc-manager** `hdc_clumps_sync`. Human operators may still run `hdc clumps init` / `sync` locally.
+
 4. **Lint** inventory JSON (`docs lint`). Optional **`docs sync`** runs the same validation; hdc does not read or write companion `.md` files.
 
    `hdc docs lint`
