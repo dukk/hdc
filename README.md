@@ -6,6 +6,16 @@ Automation and documentation for a manually deployed home data center.
 
 **New adopters:** start with [Three repositories](docs/three-repos.md) for how hdc, hdc-private, and hdc-clumps fit together and how to set up your site.
 
+## What are clumps?
+
+A **clump** is just a package or bundle of related scripts — a `manifest.json` plus `deploy/`, `maintain/`, and `query/` automation for one service or capability. You could call it a plugin or a module; those words are fine and accurate, but they are also everywhere. This project had fun with the naming instead of adding one more generic label.
+
+![Dung beetles rolling server clumps through the woods](assets/b85c275b-8e32-491d-a77f-59ad56886f16.jpg)
+
+HDC is about leveraging AI-assisted code — however sloppy it might be — to support a home-lab hobby that is **always learning** and **always growing**. The stereotype is part of the point: embrace messy iteration, ship automation, learn from what breaks, and **fail forward** rather than waiting for polish that never ships.
+
+For how the three repos fit together, see [Three repositories](docs/three-repos.md). To bootstrap package code on your machine, see [Clump packages (hdc-clumps)](#clump-packages-hdc-clumps) below.
+
 ## Agent ownership
 
 This repository is the **platform** home for the **`hdc-engineer`** fleet agent: CLI, schemas, shared package runtime, agent fleet, tests, and public docs. Package automation scripts live in [**hdc-clumps**](../hdc-clumps/README.md) (`hdc-sre-engineer`); live operator state lives in [**hdc-private**](../hdc-private/README.md) (`hdc-sre-ops`). See [multi-agent operations](docs/multi-agent-ops.md) for the full roster and handoff rules.
@@ -41,7 +51,7 @@ Clump `config.json` files and inventory JSON (except [`operations/inventory/syst
 
 ## Clump packages (hdc-clumps)
 
-Service and infrastructure packages live in the separate **[hdc-clumps](https://github.com/dukk/hdc-clumps)** repository — owned by **`hdc-sre-engineer`** for package scripts. Bootstrap on a new machine:
+See [What are clumps?](#what-are-clumps) above. Service and infrastructure packages live in the separate **[hdc-clumps](https://github.com/dukk/hdc-clumps)** repository — owned by **`hdc-sre-engineer`** for package scripts. Bootstrap on a new machine:
 
 ```bash
 hdc clumps init
