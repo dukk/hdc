@@ -16,6 +16,9 @@ description: >-
 | `operations/delegation-policy.md` | Approval rules |
 | `operations/ip-allocations.md` | IP group boundaries and next-free addresses |
 | `operations/reports/` | Monitor, security, research digests |
+| `operations/research/index.md` | Research topic index (status, outcome, report links) |
+| `operations/research/suggestions.md` | Research suggestion inbox (manager triage) |
+| `operations/research/topics/<id>.md` | Per-topic frontmatter + notes |
 | `operations/proposals/security/` | Security architect output |
 | `operations/proposals/network/` | Network architect output |
 
@@ -57,7 +60,8 @@ Each task is `operations/tasks/<id>.md` with YAML frontmatter: `id`, `role`, `pr
 
 - Monitor: `operations/reports/monitor-<ISO8601-basic>.md`
 - Security: `operations/reports/security-<ISO8601-basic>.md`
-- Research: `operations/reports/research-<YYYY-MM-DD>.md`
+- Research weekly: `operations/reports/research-<YYYY-MM-DD>.md`
+- Research topic: `operations/reports/research-topic-<id>-<YYYY-MM-DD>.md`
 - Manager: `operations/reports/manager-triage-<YYYY-MM-DD>.md`
 
 ## Runtime

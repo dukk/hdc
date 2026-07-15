@@ -32,4 +32,22 @@ describe("manager-mailbox parse", () => {
     expect(parseWazuhSourceIp("", "srcip: 203.0.113.9")).toBe("203.0.113.9");
     expect(parseWazuhSourceIp("", "srcip: 10.0.0.5")).toBe(null);
   });
+
+  it("classifies research suggestions", () => {
+    const r = classifyMail(
+      "Research: macOS on Proxmox",
+      "Evaluate https://github.com/jvivs/osx-proxmox",
+      "dukk@dukk.org",
+    );
+    expect(r.kind).toBe("research_suggestion");
+    if (r.kind === "research_suggestion") {
+      expect(r.title).toBe("macOS on Proxmox");
+    }
+    expect(classifyMail("Other", "[research] new tool", "dukk@dukk.org").kind).toBe(
+      "research_suggestion",
+    );
+    expect(classifyMail("approve task-1", "HDC Research: foo", "dukk@dukk.org").kind).toBe(
+      "research_suggestion",
+    );
+  });
 });

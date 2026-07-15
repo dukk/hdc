@@ -11,6 +11,7 @@ import {
   readTask,
   updateTaskStatus,
 } from "./operations-fs.mjs";
+import { appendSuggestion } from "./research-topics.mjs";
 import { fetchUnseenMessages } from "./imap-client.mjs";
 import { notifyDiscordSilent, notifyDiscordDecision } from "./notify-agents-discord.mjs";
 import {
@@ -130,10 +131,15 @@ export function classifyMail(subject, body, from) {
     /ossec/i.test(subject) ||
     /\[wazuh\]/i.test(subject);
 
+  const isResearchSuggestion =
+    /^\s*research\s*:/i.test(subject) ||
+    /\[research\]/i.test(blob) ||
+    /\bhdc research\s*:/i.test(blob);
+
   const decisionMatch = blob.match(
     /\b(approve|accept|reject|deny)\b[\s:#-]*([a-z0-9][a-z0-9._-]*)/i,
   );
-  if (decisionMatch && !isWazuh) {
+  if (decisionMatch && !isWazuh && !isResearchSuggestion) {
     const action = decisionMatch[1].toLowerCase();
     const taskId = decisionMatch[2];
     const approve = action === "approve" || action === "accept";
@@ -144,6 +150,17 @@ export function classifyMail(subject, body, from) {
     const level = parseWazuhLevel(subject, body);
     const srcIp = parseWazuhSourceIp(subject, body);
     return { kind: /** @type {const} */ ("wazuh"), fromEmail, level, srcIp, subject };
+  }
+
+  if (isResearchSuggestion) {
+    const title = subject.replace(/^\s*research\s*:\s*/i, "").trim() || subject.trim();
+    return {
+      kind: /** @type {const} */ ("research_suggestion"),
+      fromEmail,
+      subject,
+      title,
+      body,
+    };
   }
 
   return { kind: /** @type {const} */ ("general"), fromEmail, subject, body };
@@ -276,6 +293,14 @@ export async function processManagerMailbox(opts) {
         kind,
         alertLevelMin,
         blockDays,
+        log,
+      });
+    } else if (kind.kind === "research_suggestion") {
+      handleResearchSuggestion({
+        privateRoot: opts.privateRoot,
+        hdcRoot: opts.hdcRoot,
+        kind,
+        messageKey: key,
         log,
       });
     } else {
@@ -416,6 +441,49 @@ function handleWazuh(opts) {
     `Wazuh→UniFi block task ${id} assigned to hdc-security-expert`,
   );
   log(`[mailbox] created/approved block task ${id}`);
+}
+
+/**
+ * @param {object} opts
+ */
+function handleResearchSuggestion(opts) {
+  const { kind, messageKey, privateRoot, hdcRoot, log } = opts;
+  const title = kind.title || kind.subject || "Research suggestion";
+  const urlMatch = String(kind.body).match(/https?:\/\/[^\s<>"']+/i);
+  const url = urlMatch ? urlMatch[0] : "";
+
+  appendSuggestion(privateRoot, {
+    title,
+    body: String(kind.body).trim(),
+    url,
+    source: `email:${kind.fromEmail || "unknown"}`,
+  });
+
+  const slug = createHash("sha256").update(messageKey).digest("hex").slice(0, 10);
+  const id = `research-suggest-${slug}`;
+  const existing = listTasks(privateRoot, { includeDone: true }).find((t) => t.id === id);
+  if (existing) {
+    updateTaskStatus(privateRoot, id, { status: existing.status });
+    notifyDiscordSilent(hdcRoot, privateRoot, "HDC task updated", `Research suggestion ${id} touched`);
+    log(`[mailbox] research suggestion task exists: ${id}`);
+    return;
+  }
+
+  createTask(privateRoot, {
+    id,
+    role: "hdc-manager",
+    priority: "low",
+    status: "pending",
+    title: `Triage research suggestion: ${title}`.slice(0, 120),
+    evidence: ["manager mailbox", messageKey, "operations/research/suggestions.md"],
+    body:
+      `From: ${kind.fromEmail}\n\n` +
+      `Research suggestion received by email. Review operations/research/suggestions.md ` +
+      `and promote to operations/research/topics/<id>.md with status queued when ready.\n\n` +
+      `${String(kind.body).slice(0, 4000)}\n`,
+  });
+  notifyDiscordSilent(hdcRoot, privateRoot, "HDC task created", `Research suggestion: ${id}`);
+  log(`[mailbox] created research triage task ${id}`);
 }
 
 /**

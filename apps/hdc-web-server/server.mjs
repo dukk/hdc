@@ -50,6 +50,7 @@ import {
   readTask,
   readTaskReport,
 } from "./lib/tasks.mjs";
+import { getResearchPayload, postResearchSuggestion } from "./lib/research.mjs";
 import {
   handleDiscordInteractionPayload,
   readRawBody,
@@ -524,6 +525,26 @@ async function handleRequest(req, res, webConfig, roots, sessionSecret, apiToken
 
   if (path === "/api/agents" && req.method === "GET") {
     return jsonResponse(res, 200, { agents: listAgentRoster(INSTALL_ROOT) });
+  }
+
+  if (path === "/api/research" && req.method === "GET") {
+    return jsonResponse(res, 200, getResearchPayload(PRIVATE_ROOT));
+  }
+
+  if (path === "/api/research/suggestions" && req.method === "POST") {
+    if (user === "api-token") {
+      return jsonResponse(res, 403, { error: "session authentication required for suggestions" });
+    }
+    try {
+      const body = /** @type {Record<string, unknown>} */ (await readJsonBody(req));
+      const result = postResearchSuggestion(PRIVATE_ROOT, body, { user, sessionOnly: true });
+      if (!result.ok) {
+        return jsonResponse(res, result.status ?? 400, { error: result.error });
+      }
+      return jsonResponse(res, result.status ?? 201, { ok: true, suggestion: result.suggestion });
+    } catch (e) {
+      return jsonResponse(res, 400, { error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   if (path === "/api/tasks/report" && req.method === "GET") {

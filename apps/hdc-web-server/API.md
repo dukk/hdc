@@ -105,5 +105,15 @@ Default `allowed_verbs`: `query`, `maintain` only. `deploy` and `teardown` are n
 
 Task files live under hdc-private `operations/tasks/` via `operations-fs.mjs`.
 
+### Research
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/research` | Yes | Topic index, suggestions inbox, topic summaries |
+| POST | `/api/research/suggestions` | Session only | Append suggestion to `operations/research/suggestions.md` |
+
+Research topics live under hdc-private `operations/research/` via `research-topics.mjs`.
+Email `manager@hdc.dukk.org` with subject `Research: <title>` for the same inbox (manager triage).
+
 Discord buttons call the same status write path as PATCH (internal user `discord`).
 Deny sets `status: blocked` and `blocked_reason: Operator declined via Discord`.

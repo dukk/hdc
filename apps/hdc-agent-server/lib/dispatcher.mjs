@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { listTasks, writeTaskReport } from "./operations-fs.mjs";
+import { listQueuedTopics } from "./research-topics.mjs";
 import { notifyDiscordDecision } from "./notify-agents-discord.mjs";
 import { processManagerMailbox } from "./manager-mailbox.mjs";
 
@@ -463,6 +464,30 @@ function dispatchProbeThenLlm(opts) {
  */
 function dispatchResearch(opts) {
   const date = new Date(opts.nowMs).toISOString().slice(0, 10);
+  const queued = listQueuedTopics(opts.privateRoot);
+
+  if (queued.length > 0) {
+    const topicList = queued
+      .map((t) => `- ${t.id}: ${t.title}${t.url ? ` (${t.url})` : ""}`)
+      .join("\n");
+    return {
+      role: "hdc-research",
+      invoked_llm: true,
+      work: [
+        {
+          id: `research-topics-${date}`,
+          local: true,
+          prompt:
+            `Process queued research topics (priority over weekly brief).\n\n` +
+            `Queued topics:\n${topicList}\n\n` +
+            `For each topic: set status in_progress, write operations/reports/research-topic-<id>-${date}.md, ` +
+            `set status done with outcome and report path, regenerate operations/research/index.md. ` +
+            `Create low-priority manager tasks for adopt or manual-only outcomes.`,
+        },
+      ],
+    };
+  }
+
   const path = join(opts.privateRoot, "operations", "reports", `research-${date}.md`);
   if (existsSync(path)) {
     return {

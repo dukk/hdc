@@ -11,6 +11,7 @@
 3. Classify:
    - **Wazuh level ≥ 10** with external source IP → create/approve `hdc-security-expert` task with `unifi-network maintain --block` suggested command (auto-runnable).
    - **Trusted sender decision** (`approve`/`reject` + task id) requiring Authentication-Results SPF/DKIM/DMARC pass; spoof → noisy Discord, no task change.
+   - **Research suggestion** (`Research: <title>` subject, `[research]` or `HDC Research:` in body) → append `operations/research/suggestions.md` + create manager triage task `research-suggest-<slug>`.
    - **Other mail** → create/update manager task (keyed by Message-ID).
 4. Persist watermark in `operations/.mailbox-state.json`.
 

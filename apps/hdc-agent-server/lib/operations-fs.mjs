@@ -90,10 +90,11 @@ export function parseFrontmatter(raw) {
   let currentList = [];
 
   for (const line of yamlBlock.split(/\r?\n/)) {
-    const trimmed = line.trim();
+    const normalized = line.replace(/\r$/, "");
+    const trimmed = normalized.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
 
-    const listMatch = line.match(/^(\s*)-\s+(.*)$/);
+    const listMatch = normalized.match(/^(\s*)-\s+(.*)$/);
     if (listMatch && currentKey) {
       let val = listMatch[2].trim();
       if (
@@ -107,7 +108,7 @@ export function parseFrontmatter(raw) {
       continue;
     }
 
-    const kv = line.match(/^([a-z_][a-z0-9_]*)\s*:\s*(.*)$/i);
+    const kv = trimmed.match(/^([a-z_][a-z0-9_]*)\s*:\s*(.*)$/i);
     if (!kv) continue;
     currentKey = kv[1];
     currentList = [];

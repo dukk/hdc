@@ -209,6 +209,43 @@ describe("dispatcher", () => {
     }
   });
 
+  it("research runs queued topics even when daily brief exists", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-disp-"));
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      mkdirSync(join(root, "operations", "reports"), { recursive: true });
+      mkdirSync(join(root, "operations", "research", "topics"), { recursive: true });
+      writeFileSync(join(root, "operations", "reports", `research-${date}.md`), "# already\n");
+      writeFileSync(
+        join(root, "operations", "research", "topics", "queued-one.md"),
+        [
+          "---",
+          "id: queued-one",
+          'title: "Queued topic"',
+          "status: queued",
+          "priority: low",
+          "suggested_by: operator",
+          "created_at: 2026-07-14T00:00:00Z",
+          "updated_at: 2026-07-14T00:00:00Z",
+          "---",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const r = await runDispatcher({
+        role: "hdc-research",
+        hdcRoot: HDC_ROOT,
+        privateRoot: root,
+        nowMs: Date.now(),
+        log: () => {},
+      });
+      assert.equal(r.work.length, 1);
+      assert.match(r.work[0].prompt || "", /queued-one/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("sha256Hex is stable", () => {
     assert.equal(sha256Hex("a"), sha256Hex("a"));
     assert.notEqual(sha256Hex("a"), sha256Hex("b"));

@@ -88,7 +88,7 @@ Hub-and-spoke summary:
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / after incidents |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + web | Weekly brief |
+| `hdc-research` | **Build** (discovery) | Read-only + web | Queued topics + weekly brief; suggestions via web/email/inbox |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre/manager |
 
 ### Proposed addition: `hdc-engineer`

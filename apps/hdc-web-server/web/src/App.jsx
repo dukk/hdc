@@ -22,6 +22,7 @@ import {
 const TABS = [
   { id: "dashboard", label: "Dashboard" },
   { id: "tasks", label: "Tasks" },
+  { id: "research", label: "Research" },
   { id: "schedules", label: "Schedules" },
   { id: "run", label: "Run package" },
   { id: "jobs", label: "Jobs" },
@@ -107,6 +108,7 @@ export default function App() {
       <main>
         {tab === "dashboard" && <Dashboard />}
         {tab === "tasks" && <Tasks onRan={() => setTab("jobs")} />}
+        {tab === "research" && <Research />}
         {tab === "schedules" && <Schedules onRan={() => setTab("jobs")} />}
         {tab === "run" && <RunPackage onStarted={() => setTab("jobs")} />}
         {tab === "jobs" && <Jobs />}
@@ -236,6 +238,100 @@ function Tasks({ onRan }) {
       {error ? <Message tone="error">{error}</Message> : null}
       <Table columns={columns} rows={tasks} rowKey={(t) => t.id} />
       <LogView>{report}</LogView>
+    </section>
+  );
+}
+
+function Research() {
+  const [data, setData] = useState({ topics: [], index: "", suggestions: "" });
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [body, setBody] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api("/research");
+      setData({
+        topics: r.topics ?? [],
+        index: r.index ?? "",
+        suggestions: r.suggestions ?? "",
+      });
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submitSuggestion(e) {
+    e.preventDefault();
+    setMessage("");
+    try {
+      await api("/research/suggestions", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          url: url || undefined,
+          body: body || undefined,
+        }),
+      });
+      setTitle("");
+      setUrl("");
+      setBody("");
+      setMessage("Suggestion added to inbox. Manager triage promotes topics to queued.");
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const columns = [
+    { key: "id", header: "ID", render: (t) => <code>{t.id}</code> },
+    { key: "title", header: "Title", render: (t) => t.title },
+    { key: "status", header: "Status", render: (t) => t.status },
+    { key: "outcome", header: "Outcome", render: (t) => t.outcome || "—" },
+    {
+      key: "report",
+      header: "Report",
+      render: (t) => (t.report ? <code>{t.report}</code> : "—"),
+    },
+  ];
+
+  return (
+    <section>
+      <h2>Research</h2>
+      <Message>
+        Topic index, suggestion inbox, and new ideas. Email manager@hdc.dukk.org with subject{" "}
+        <code>Research: &lt;title&gt;</code> or edit suggestions in hdc-private.
+      </Message>
+      {error ? <Message tone="error">{error}</Message> : null}
+      {message ? <Message tone="ok">{message}</Message> : null}
+
+      <h3>Topic index</h3>
+      <Table columns={columns} rows={data.topics} rowKey={(t) => t.id} />
+      <LogView>{data.index}</LogView>
+
+      <h3>Suggest a topic</h3>
+      <Panel as="form" onSubmit={submitSuggestion}>
+        <Field label="Title">
+          <TextInput value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </Field>
+        <Field label="URL (optional)">
+          <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+        </Field>
+        <Field label="Notes (optional)">
+          <TextInput value={body} onChange={(e) => setBody(e.target.value)} />
+        </Field>
+        <Button type="submit">Add suggestion</Button>
+      </Panel>
+
+      <h3>Suggestions inbox</h3>
+      <LogView>{data.suggestions || "(empty)"}</LogView>
     </section>
   );
 }
