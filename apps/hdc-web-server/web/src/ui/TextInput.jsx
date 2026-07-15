@@ -7,8 +7,9 @@
  * @param {string} [props.placeholder]
  * @param {string} [props.type]
  * @param {boolean} [props.required]
+ * @param {boolean} [props.disabled]
  */
-export function TextInput({ value, onChange, placeholder, type = "text", required }) {
+export function TextInput({ value, onChange, placeholder, type = "text", required, disabled }) {
   return (
     <input
       className="input"
@@ -16,6 +17,7 @@ export function TextInput({ value, onChange, placeholder, type = "text", require
       value={value}
       placeholder={placeholder}
       required={required}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     />
   );
