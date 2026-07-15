@@ -9,9 +9,9 @@ import {
   normalizeTagList,
   normalizeUriList,
   resolveEffectiveApplication,
-} from "../../../clumps/infrastructure/discord/lib/discord-config.mjs";
-import { buildDerivedRedirectUris } from "../../../clumps/infrastructure/discord/lib/derive-redirect-uris.mjs";
-import { importRowsToApplications } from "../../../clumps/infrastructure/discord/lib/discord-import.mjs";
+} from "hdc/clump/infrastructure/discord/lib/discord-config.mjs";
+import { buildDerivedRedirectUris } from "hdc/clump/infrastructure/discord/lib/derive-redirect-uris.mjs";
+import { importRowsToApplications } from "hdc/clump/infrastructure/discord/lib/discord-import.mjs";
 
 describe("discord-config", () => {
   it("defaultBotTokenVaultKey slugifies app id", () => {

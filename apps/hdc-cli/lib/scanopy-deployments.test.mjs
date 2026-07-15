@@ -5,7 +5,7 @@ import {
   normalizeScanopyConfig,
   postgresPasswordVaultKey,
   resolveScanopyDeployments,
-} from "../../../clumps/services/scanopy/lib/deployments.mjs";
+} from "hdc/clump/services/scanopy/lib/deployments.mjs";
 
 describe("scanopy deployments", () => {
   const v2 = {
@@ -68,7 +68,7 @@ describe("scanopy deployments", () => {
 describe("scanopy render", () => {
   it("composeFileUrl for latest and tags", async () => {
     const { composeFileUrl, renderScanopyEnv, resolvePublicUrl } = await import(
-      "../../../clumps/services/scanopy/lib/scanopy-render.mjs"
+      "hdc/clump/services/scanopy/lib/scanopy-render.mjs"
     );
     expect(composeFileUrl("latest")).toContain("/refs/heads/main/");
     expect(composeFileUrl("v0.16.2")).toContain("/refs/tags/v0.16.2/");

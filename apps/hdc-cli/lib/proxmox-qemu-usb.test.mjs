@@ -3,7 +3,7 @@ import {
   formatUsbEntry,
   normalizeUsbList,
   validateUsbVendorProduct,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-usb.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-usb.mjs";
 
 describe("proxmox-qemu-usb", () => {
   it("formatUsbEntry builds Proxmox usb string", () => {

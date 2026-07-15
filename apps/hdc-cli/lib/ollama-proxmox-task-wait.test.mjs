@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPveUpid } from "../../../clumps/services/ollama/lib/proxmox-task-wait.mjs";
+import { extractPveUpid } from "hdc/clump/services/ollama/lib/proxmox-task-wait.mjs";
 
 describe("extractPveUpid", () => {
   it("returns trimmed UPID string", () => {

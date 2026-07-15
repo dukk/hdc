@@ -9,18 +9,17 @@ import {
   loadProxmoxHostsByCluster,
   proxmoxClusterRefFromHost,
   resolveProxmoxHost,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-config.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-config.mjs";
 import {
   formatTemplateNotFoundMessage,
   listQemuGuests,
   listQemuTemplates,
   locateVmidInCluster,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 
-const examplePath = join(
-  process.cwd(),
-  "clumps/infrastructure/proxmox/config.example.json",
-);
+import { clumpPath } from "hdc/package/clumps-root.mjs";
+
+const examplePath = clumpPath("infrastructure/proxmox/config.example.json");
 
 describe("proxmox-config", () => {
   const cfg = JSON.parse(readFileSync(examplePath, "utf8"));

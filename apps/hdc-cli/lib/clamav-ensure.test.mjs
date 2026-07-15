@@ -2,21 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import {
   aptLockProbeCommand,
   waitForAptLock,
-} from "../../../clumps/lib/apt-lock-wait.mjs";
+} from "hdc/package/apt-lock-wait.mjs";
 import {
   clamavAptInstallCommand,
   clamavEnableServicesCommand,
   clamavInstalledCheckCommand,
   clamavSkippedByFlags,
   ensureClamav,
-} from "../../../clumps/lib/clamav-ensure.mjs";
+} from "hdc/package/clamav-ensure.mjs";
 import {
   clamavAptPackagesForProfile,
   clamavConfigApplyCommandForProfile,
   clamavEnableServicesCommandForProfile,
   resolveClamavProfile,
-} from "../../../clumps/lib/clamav-resource-profile.mjs";
-import { listSshTargetsFromPackageConfig } from "../../../clumps/lib/maintain-clamav-only.mjs";
+} from "hdc/package/clamav-resource-profile.mjs";
+import { listSshTargetsFromPackageConfig } from "hdc/package/maintain-clamav-only.mjs";
 
 describe("clamav-ensure", () => {
   it("exposes dpkg check for clamav", () => {

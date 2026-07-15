@@ -5,7 +5,7 @@ import {
   haosEfiSecureBootNeedsRepair,
   haosEfidisk0Spec,
   resolveHaosImportedDiskVolume,
-} from "../../../clumps/services/homeassistant/lib/proxmox-haos-vm.mjs";
+} from "hdc/clump/services/homeassistant/lib/proxmox-haos-vm.mjs";
 
 describe("resolveHaosImportedDiskVolume", () => {
   it("prefers unused0 after importdisk", () => {

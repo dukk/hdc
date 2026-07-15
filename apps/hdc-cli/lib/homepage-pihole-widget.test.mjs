@@ -6,7 +6,7 @@ import {
   piholeWidgetEnabled,
   piholeWidgetSettings,
   resolvePiholeWidgetInstances,
-} from "../../../clumps/services/homepage/lib/homepage-pihole-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-pihole-widget.mjs";
 
 describe("homepage pihole widget", () => {
   it("ipFromIpConfig extracts address from static ip_config", () => {

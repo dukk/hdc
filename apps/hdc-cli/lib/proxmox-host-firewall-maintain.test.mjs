@@ -11,7 +11,7 @@ import {
   mergeHdcFirewallSection,
   normalizeSourceCidr,
   resolveMaintainSourceAllowed,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-firewall-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-firewall-maintain.mjs";
 
 const fixtureCfg = {
   schema_version: 1,

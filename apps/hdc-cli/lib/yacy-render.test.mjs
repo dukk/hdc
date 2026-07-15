@@ -6,7 +6,7 @@ import {
   renderComposeYaml,
   renderYacyEnv,
   resolvePublicUrl,
-} from "../../../clumps/services/yacy/lib/yacy-render.mjs";
+} from "hdc/clump/services/yacy/lib/yacy-render.mjs";
 
 describe("yacy render", () => {
   it("renderComposeYaml includes image and ports", () => {

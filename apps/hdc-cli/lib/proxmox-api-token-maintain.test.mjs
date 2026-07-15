@@ -10,13 +10,13 @@ import {
   pveumEnsureRoleAndAclScript,
   pveumEnsureRoleCommands,
   pveumEnsureTokenAclCommand,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
-import { pveProfileForMajor } from "../../../clumps/infrastructure/proxmox/lib/pve-version.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
+import { pveProfileForMajor } from "hdc/clump/infrastructure/proxmox/lib/pve-version.mjs";
 import {
   parsePveApiTokenValue,
   proxmoxMaintainVerifyPaths,
   pveTokenAclId,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 
 describe("proxmox API token maintain", () => {
   it("hdcProxmoxTokenIdFromHostname builds hdc-prefixed slug", () => {

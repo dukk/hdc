@@ -4,11 +4,11 @@ import {
   acmeNameInDnsZone,
   acmeNamesCoveredByZone,
   buildCertonlyCommand,
-} from "../../../clumps/services/nginx-waf/lib/letsencrypt.mjs";
+} from "hdc/clump/services/nginx-waf/lib/letsencrypt.mjs";
 import {
   parseAcmeSettings,
   resolveSiteAcmeSettings,
-} from "../../../clumps/services/nginx-waf/lib/deployments.mjs";
+} from "hdc/clump/services/nginx-waf/lib/deployments.mjs";
 
 describe("resolveSiteAcmeSettings", () => {
   it("preserves dns settings when merging parsed group ACME", () => {

@@ -1,4 +1,5 @@
 import { basename, dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stderr as errout } from "node:process";
 
@@ -22,7 +23,15 @@ import { deriveHealthStatus, statusIsOk } from "./status.mjs";
 export async function runServiceHealth(opts) {
   const clumpRoot = opts.clumpRoot;
   const packageId = opts.packageId || basename(clumpRoot);
-  const family = resolveFamily(packageId, opts.family);
+  let manifestRaw = opts.manifestRaw ?? null;
+  if (!manifestRaw) {
+    try {
+      manifestRaw = JSON.parse(readFileSync(join(clumpRoot, "manifest.json"), "utf8"));
+    } catch {
+      manifestRaw = null;
+    }
+  }
+  const family = resolveFamily(packageId, opts.family, manifestRaw);
   const log = opts.log ?? ((line) => errout.write(`${line}\n`));
   const argv = opts.argv ?? process.argv.slice(2);
   const flags = parseArgvFlags(argv);
@@ -36,6 +45,7 @@ export async function runServiceHealth(opts) {
     clumpRoot,
     packageId,
     probe: opts.probe ?? {},
+    manifestRaw,
     instance: instance ? String(instance) : undefined,
   });
 

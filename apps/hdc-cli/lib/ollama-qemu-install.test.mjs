@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 // Test install script composition via reading module exports indirectly through deployments
 // (installOllamaInQemu requires SSH; we only verify gpu backend resolution path exists in deployments)
 
-import { normalizeOllamaConfig } from "../../../clumps/services/ollama/lib/deployments.mjs";
+import { normalizeOllamaConfig } from "hdc/clump/services/ollama/lib/deployments.mjs";
 
 describe("ollama-qemu install config", () => {
   it("accepts nvidia gpu_backend on QEMU deployment", () => {

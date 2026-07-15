@@ -3,7 +3,7 @@ import {
   buildInstallShellScript,
   buildSystemdExecStartLine,
   resolveLinuxUser,
-} from "../../../clumps/services/lms/lib/lms-install.mjs";
+} from "hdc/clump/services/lms/lib/lms-install.mjs";
 
 describe("lms install", () => {
   const install = { linux_user: "lms", gpu: false };

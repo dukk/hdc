@@ -8,8 +8,8 @@ import {
   migrateUptimeKumaConfigToSplitLayout,
   usesSplitUptimeKumaLayout,
   writeUptimeKumaConfig,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-config-write.mjs";
-import { UPTIME_KUMA_COMPACT_ARRAY_KEYS } from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-import.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-config-write.mjs";
+import { UPTIME_KUMA_COMPACT_ARRAY_KEYS } from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-import.mjs";
 
 const CONFIG_REL = "clumps/services/uptime-kuma/config.json";
 

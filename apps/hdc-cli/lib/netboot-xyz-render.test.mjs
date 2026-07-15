@@ -7,7 +7,7 @@ import {
   normalizeImage,
   normalizeImageTag,
   renderComposeYaml,
-} from "../../../clumps/services/netboot-xyz/lib/netboot-xyz-render.mjs";
+} from "hdc/clump/services/netboot-xyz/lib/netboot-xyz-render.mjs";
 
 const baseCfg = {
   image: "ghcr.io/netbootxyz/netbootxyz",

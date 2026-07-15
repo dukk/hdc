@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hdcMetadataPath,
   twentyEncryptionKeyId,
-} from "../../../clumps/services/twenty/lib/encryption-key-id.mjs";
+} from "hdc/clump/services/twenty/lib/encryption-key-id.mjs";
 
 describe("twenty encryption key id", () => {
   it("twentyEncryptionKeyId returns first 8 hex chars of sha256", () => {

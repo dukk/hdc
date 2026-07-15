@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { releaseTarballUrl } from "../../../clumps/services/solidtime/lib/solidtime-install.mjs";
-import { compareVersionTags } from "../../../clumps/services/solidtime/lib/solidtime-maintain.mjs";
+import { releaseTarballUrl } from "hdc/clump/services/solidtime/lib/solidtime-install.mjs";
+import { compareVersionTags } from "hdc/clump/services/solidtime/lib/solidtime-maintain.mjs";
 
 describe("solidtime release", () => {
   it("builds GitHub archive URL for a tag", () => {

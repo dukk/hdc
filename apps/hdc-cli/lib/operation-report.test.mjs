@@ -15,11 +15,11 @@ import {
   renderOperationReportMarkdown,
   setStdoutPayload,
   writeOperationReportFile,
-} from "../../../clumps/lib/operation-report.mjs";
+} from "hdc/package/operation-report.mjs";
 import {
   loadManualSystemSidecar,
   primaryIpFromSystem,
-} from "../../../clumps/lib/inventory-sidecar.mjs";
+} from "hdc/package/inventory-sidecar.mjs";
 
 describe("operation-report", () => {
   it("parseOperationReportArgv handles --no-report and --report", () => {

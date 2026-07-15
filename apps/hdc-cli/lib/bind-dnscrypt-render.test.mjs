@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ODOH_STATIC_STAMPS,
   renderDnscryptProxyToml,
-} from "../../../clumps/services/bind/lib/bind-dnscrypt-render.mjs";
+} from "hdc/clump/services/bind/lib/bind-dnscrypt-render.mjs";
 
 describe("bind-dnscrypt-render", () => {
   it("renders ODoH TOML with listen, server, relay, and static stamps", () => {

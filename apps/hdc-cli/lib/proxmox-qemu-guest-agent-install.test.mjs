@@ -3,9 +3,9 @@ import {
   agentEnabledInConfigRecord,
   enableQemuAgentInConfig,
   qemuGuestAgentAptInstallScript,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
-import * as guestAgent from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs";
-import * as pveHttp from "../../../clumps/infrastructure/proxmox/lib/pve-http.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-install.mjs";
+import * as guestAgent from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs";
+import * as pveHttp from "hdc/clump/infrastructure/proxmox/lib/pve-http.mjs";
 
 describe("proxmox-qemu-guest-agent-install", () => {
   it("qemuGuestAgentAptInstallScript installs package and enables service", () => {

@@ -11,7 +11,7 @@ import {
   resolveUpstreamUrl,
   resolveWebUrl,
   trustProxyFlag,
-} from "../../../clumps/services/rackula/lib/rackula-render.mjs";
+} from "hdc/clump/services/rackula/lib/rackula-render.mjs";
 
 describe("rackula-render", () => {
   const rackula = {

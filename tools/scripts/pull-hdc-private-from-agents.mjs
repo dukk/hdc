@@ -17,12 +17,12 @@ import { fileURLToPath } from "node:url";
 
 import { repoRoot } from "../../apps/hdc-cli/paths.mjs";
 import { hdcPrivateRoot, resolveRepoFile } from "../../apps/hdc-cli/lib/private-repo.mjs";
-import { loadClumpConfigFromClumpRoot } from "../../clumps/lib/clump-run-config.mjs";
-import { resolveHdcAgentsDeployments } from "../../clumps/services/hdc-agents/lib/deployments.mjs";
+import { loadClumpConfigFromClumpRoot } from "hdc/package/clump-run-config.mjs";
+import { resolveHdcAgentsDeployments } from "hdc/clump/services/hdc-agents/lib/deployments.mjs";
 import {
   readCtPrimaryIp,
   resolvePveSshForHost,
-} from "../../clumps/services/hdc-agents/lib/hdc-agents-install.mjs";
+} from "hdc/clump/services/hdc-agents/lib/hdc-agents-install.mjs";
 
 const GUEST_PRIVATE_ROOT = "/opt/hdc-private";
 const SSH_USER = "hdc";
@@ -227,7 +227,7 @@ function resolveGuestHost(publicRoot, flags) {
     }
   }
 
-  const inv = resolveRepoFile(publicRoot, `inventory/manual/systems/${systemId}.json`);
+  const inv = resolveRepoFile(publicRoot, `operations/manual/systems/${systemId}.json`);
   if (inv.found) {
     const doc = JSON.parse(readFileSync(inv.path, "utf8"));
     const nodes = doc?.access?.nodes;

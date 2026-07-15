@@ -33,7 +33,7 @@ describe("ensure-clump-env-examples", () => {
 
   it("ensureAllPackageEnvExamples creates missing stubs", () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-ensure-env-"));
-    const pkgDir = join(root, "clumps/services/demo-pkg");
+    const pkgDir = join(root, "services/demo-pkg");
     const manifest = {
       id: "demo-pkg",
       title: "Demo",
@@ -43,26 +43,41 @@ describe("ensure-clump-env-examples", () => {
     mkdirSync(pkgDir, { recursive: true });
     writeFileSync(join(pkgDir, "manifest.json"), JSON.stringify(manifest), "utf8");
 
-    const { created } = ensureAllPackageEnvExamples(root, { dryRun: false });
-    expect(created).toContain("clumps/services/demo-pkg");
-    expect(existsSync(join(pkgDir, ".env.example"))).toBe(true);
-    const example = readFileSync(join(pkgDir, ".env.example"), "utf8");
-    expect(example).toContain("HDC_DEMO_REQUIRED");
+    const prevClumpsRoot = process.env.HDC_CLUMPS_ROOT;
+    process.env.HDC_CLUMPS_ROOT = root;
+    try {
+      const { created } = ensureAllPackageEnvExamples(join(process.cwd()), { dryRun: false });
+      expect(created).toContain("clumps/services/demo-pkg");
+      expect(existsSync(join(pkgDir, ".env.example"))).toBe(true);
+      const example = readFileSync(join(pkgDir, ".env.example"), "utf8");
+      expect(example).toContain("HDC_DEMO_REQUIRED");
+    } finally {
+      if (prevClumpsRoot === undefined) delete process.env.HDC_CLUMPS_ROOT;
+      else process.env.HDC_CLUMPS_ROOT = prevClumpsRoot;
+    }
   });
 
   it("refreshRootEnvExampleIndex lists all packages", () => {
-    const root = mkdtempSync(join(tmpdir(), "hdc-ensure-index-"));
-    const pkgDir = join(root, "clumps/infrastructure/demo");
+    const publicRoot = mkdtempSync(join(tmpdir(), "hdc-ensure-index-"));
+    const clumpsRoot = mkdtempSync(join(tmpdir(), "hdc-ensure-clumps-"));
+    const pkgDir = join(clumpsRoot, "infrastructure/demo");
     mkdirSync(pkgDir, { recursive: true });
     writeFileSync(
       join(pkgDir, "manifest.json"),
       JSON.stringify({ id: "demo", verbs: {} }),
       "utf8",
     );
-    writeFileSync(join(root, ".env.example"), "# global\n", "utf8");
+    writeFileSync(join(publicRoot, ".env.example"), "# global\n", "utf8");
 
-    refreshRootEnvExampleIndex(root, { dryRun: false });
-    const text = readFileSync(join(root, ".env.example"), "utf8");
+    const prevClumpsRoot = process.env.HDC_CLUMPS_ROOT;
+    process.env.HDC_CLUMPS_ROOT = clumpsRoot;
+    try {
+      refreshRootEnvExampleIndex(publicRoot, { dryRun: false });
+    } finally {
+      if (prevClumpsRoot === undefined) delete process.env.HDC_CLUMPS_ROOT;
+      else process.env.HDC_CLUMPS_ROOT = prevClumpsRoot;
+    }
+    const text = readFileSync(join(publicRoot, ".env.example"), "utf8");
     expect(text).toContain("Package .env files");
     expect(text).toContain("clumps/infrastructure/demo/.env.example");
   });

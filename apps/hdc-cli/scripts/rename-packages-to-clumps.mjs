@@ -49,7 +49,7 @@ const REPLACEMENTS = [
   ['join("tools", "hdc", "reports"', 'join("apps", "hdc-cli", "reports"'],
   ["tools\\hdc\\", "apps\\hdc-cli\\"],
   ["tools/hdc/", "apps/hdc-cli/"],
-  ["packages/", "clumps/"],
+  ["packages/", "hdc/clump/"],
   ["parent of `tools/`", "parent of `apps/hdc-cli/`"],
   ["HDC packages under `packages/", "HDC clumps under `clumps/"],
   ["from packages/*/manifest.json", "from clumps/*/manifest.json"],

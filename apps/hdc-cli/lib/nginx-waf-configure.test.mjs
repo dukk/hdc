@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { configureNginxWafSites } from "../../../clumps/services/nginx-waf/lib/nginx-waf-configure.mjs";
-import { configureNginxSites } from "../../../clumps/services/nginx/lib/nginx-configure.mjs";
+import { configureNginxWafSites } from "hdc/clump/services/nginx-waf/lib/nginx-waf-configure.mjs";
+import { configureNginxSites } from "hdc/clump/services/nginx/lib/nginx-configure.mjs";
 
 const wafSampleSite = {
   id: "vaultwarden",

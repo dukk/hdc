@@ -5,7 +5,7 @@ import {
   normalizePostgresqlConfig,
   postgresqlGlobalSettings,
   resolvePostgresqlDeployments,
-} from "../../../clumps/services/postgresql/lib/deployments.mjs";
+} from "hdc/clump/services/postgresql/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

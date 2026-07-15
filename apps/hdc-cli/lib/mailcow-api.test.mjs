@@ -4,9 +4,9 @@ import {
   reconcileMailcowAliases,
   reconcileMailcowDomains,
   reconcileMailcowMailboxes,
-} from "../../../clumps/services/mailcow/lib/mailcow-api.mjs";
+} from "hdc/clump/services/mailcow/lib/mailcow-api.mjs";
 
-vi.mock("../../../clumps/lib/mail-relay-config.mjs", () => ({
+vi.mock("hdc/package/mail-relay-config.mjs", () => ({
   loadMailRelayClientDefaults: () => ({
     relay_hostname: "postfix-relay.home.example.invalid",
     relay_port: 25,

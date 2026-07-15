@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseResetAdminOutput, stripAnsi } from "../../../clumps/services/safeline/lib/safeline-admin-setup.mjs";
+import { parseResetAdminOutput, stripAnsi } from "hdc/clump/services/safeline/lib/safeline-admin-setup.mjs";
 
 describe("safeline-admin-setup", () => {
   it("stripAnsi removes color codes", () => {

@@ -6,7 +6,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/it-tools/lib/it-tools-render.mjs";
+} from "hdc/clump/services/it-tools/lib/it-tools-render.mjs";
 
 describe("it-tools-render", () => {
   const itTools = {

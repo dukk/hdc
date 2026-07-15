@@ -5,13 +5,13 @@ import {
   parseGuestBootOptions,
   parseProxmoxStartupString,
   startupSpecsEqual,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-startup.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-startup.mjs";
 import {
   collectStartupTargetsFromPackages,
   deploymentStartupRow,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-startup-maintain.mjs";
-import * as pveHttp from "../../../clumps/infrastructure/proxmox/lib/pve-http.mjs";
-import * as guestResources from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-startup-maintain.mjs";
+import * as pveHttp from "hdc/clump/infrastructure/proxmox/lib/pve-http.mjs";
+import * as guestResources from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 
 const apiOpts = {
   guestType: /** @type {const} */ ("qemu"),

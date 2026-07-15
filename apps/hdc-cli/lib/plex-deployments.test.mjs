@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseSynopkgStatus } from "../../../clumps/services/plex/lib/plex-synology.mjs";
+import { parseSynopkgStatus } from "hdc/clump/services/plex/lib/plex-synology.mjs";
 import {
   instanceFlagToSystemId,
   listPlexDeploymentSummaries,
   normalizePlexConfig,
   resolvePlexDeployments,
-} from "../../../clumps/services/plex/lib/deployments.mjs";
+} from "hdc/clump/services/plex/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

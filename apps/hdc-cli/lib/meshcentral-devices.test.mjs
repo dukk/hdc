@@ -7,15 +7,15 @@ import {
   meshAuthHeader,
   publicUrlToControlWss,
   resolveMeshcentralControlUrl,
-} from "../../../clumps/services/meshcentral/lib/meshcentral-api.mjs";
+} from "hdc/clump/services/meshcentral/lib/meshcentral-api.mjs";
 import {
   inferPlatformFromNode,
   normalizeLiveDevice,
   parseDeviceSelectors,
   resolveDevices,
   slugDeviceId,
-} from "../../../clumps/services/meshcentral/lib/meshcentral-devices.mjs";
-import { mergeDevicesFromLive, applyDevicesToConfig } from "../../../clumps/services/meshcentral/lib/meshcentral-inventory.mjs";
+} from "hdc/clump/services/meshcentral/lib/meshcentral-devices.mjs";
+import { mergeDevicesFromLive, applyDevicesToConfig } from "hdc/clump/services/meshcentral/lib/meshcentral-inventory.mjs";
 import {
   diskCommand,
   extractJsonPayload,
@@ -25,14 +25,14 @@ import {
   parseHardwareOutput,
   removeCommand,
   updatesCommand,
-} from "../../../clumps/services/meshcentral/lib/meshcentral-ops.mjs";
-import { normalizePowerAction } from "../../../clumps/services/meshcentral/lib/meshcentral-power.mjs";
+} from "hdc/clump/services/meshcentral/lib/meshcentral-ops.mjs";
+import { normalizePowerAction } from "hdc/clump/services/meshcentral/lib/meshcentral-power.mjs";
 import {
   allocateDeviceId,
   matchClientHostId,
   mergeSystemSidecar,
   preferClientDeviceId,
-} from "../../../clumps/services/meshcentral/lib/meshcentral-system-inventory.mjs";
+} from "hdc/clump/services/meshcentral/lib/meshcentral-system-inventory.mjs";
 
 describe("meshcentral-api helpers", () => {
   it("builds control.ashx wss url from public_url", () => {

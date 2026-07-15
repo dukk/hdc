@@ -10,7 +10,7 @@ import {
   resolveN8nUrlSettings,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/n8n/lib/n8n-render.mjs";
+} from "hdc/clump/services/n8n/lib/n8n-render.mjs";
 
 const baseN8n = {
   image_tag: "1.0.0",

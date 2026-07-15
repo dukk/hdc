@@ -4,7 +4,7 @@ import {
   listNextcloudDeploymentSummaries,
   normalizeNextcloudConfig,
   resolveNextcloudDeployments,
-} from "../../../clumps/services/nextcloud/lib/deployments.mjs";
+} from "hdc/clump/services/nextcloud/lib/deployments.mjs";
 
 describe("nextcloud deployments", () => {
   const v2 = {

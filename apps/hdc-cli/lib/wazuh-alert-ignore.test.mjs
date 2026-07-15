@@ -10,7 +10,7 @@ import {
   renderWazuhMonitorLocalRules,
   resolveWazuhAlertIgnore,
   wazuhAlertIgnoreSkippedByFlags,
-} from "../../../clumps/services/wazuh/lib/wazuh-alert-ignore.mjs";
+} from "hdc/clump/services/wazuh/lib/wazuh-alert-ignore.mjs";
 
 const SAMPLE_CONF = `<ossec_config>
   <global>

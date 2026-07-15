@@ -7,7 +7,7 @@ import {
   waitForMonitorListEvent,
   waitForNotificationListEvent,
   waitForStatusPageListEvent,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-api.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-api.mjs";
 
 describe("uptime-kuma-api monitorList", () => {
   it("monitorListRowsFromPayload converts object map to array", () => {

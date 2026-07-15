@@ -4,7 +4,7 @@ import {
   listGitlabDeploymentSummaries,
   normalizeGitlabConfig,
   resolveGitlabDeployments,
-} from "../../../clumps/services/gitlab/lib/deployments.mjs";
+} from "hdc/clump/services/gitlab/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

@@ -5,9 +5,9 @@ import {
   buildWazuhNotificationsSyncBash,
   emailChannelDrifts,
   smtpAccountDrifts,
-} from "../../../clumps/services/wazuh/lib/wazuh-notifications.mjs";
+} from "hdc/clump/services/wazuh/lib/wazuh-notifications.mjs";
 
-/** @type {import("../../../clumps/services/wazuh/lib/wazuh-mail-config.mjs").WazuhMailSettings} */
+/** @type {import("hdc/clump/services/wazuh/lib/wazuh-mail-config.mjs").WazuhMailSettings} */
 const mail = {
   enabled: true,
   smtp_server: "192.0.2.60",

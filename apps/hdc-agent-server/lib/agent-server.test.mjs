@@ -1,8 +1,8 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 import { extractMessageText } from "./a2a-http.mjs";
 import { createTaskQueue } from "./task-queue.mjs";
@@ -17,8 +17,6 @@ import {
 } from "./dispatcher.mjs";
 import { createTask, TASK_ROLES } from "./operations-fs.mjs";
 import { buildAgentCard } from "./agent-card.mjs";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HDC_ROOT = join(PACKAGE_ROOT, "..", "..");
@@ -31,7 +29,7 @@ describe("extractMessageText", () => {
         parts: [{ kind: "text", text: "hello agents" }],
       },
     });
-    assert.equal(text, "hello agents");
+    expect(text).toBe("hello agents");
   });
 });
 
@@ -39,38 +37,38 @@ describe("task queue", () => {
   it("runs one task and completes", async () => {
     const q = createTaskQueue();
     const task = q.enqueue("t1", "ping", async () => "pong");
-    assert.equal(task.status, "submitted");
+    expect(task.status).toBe("submitted");
     await new Promise((r) => setTimeout(r, 20));
     const done = q.get("t1");
-    assert.equal(done?.status, "completed");
-    assert.equal(done?.result, "pong");
+    expect(done?.status).toBe("completed");
+    expect(done?.result).toBe("pong");
   });
 });
 
 describe("stripFrontmatter", () => {
   it("removes yaml fence", () => {
     const out = stripFrontmatter("---\nname: x\n---\n\nBody here\n");
-    assert.match(out, /Body here/);
+    expect(out).toMatch(/Body here/);
   });
 });
 
 describe("role prompt paths", () => {
   it("loads from apps/hdc-agent-server/agents", () => {
     const path = rolePromptPath(HDC_ROOT, "hdc-manager");
-    assert.match(path.replace(/\\/g, "/"), /hdc-agent-server\/agents\/hdc-manager\.md$/);
+    expect(path.replace(/\\/g, "/")).toMatch(/hdc-agent-server\/agents\/hdc-manager\.md$/);
     const md = loadRolePrompt(HDC_ROOT, "hdc-manager");
-    assert.match(md, /HDC Manager/);
-    assert.doesNotMatch(md, /Cursor CLI/);
+    expect(md).toMatch(/HDC Manager/);
+    expect(md).not.toMatch(/Cursor CLI/);
   });
 });
 
 describe("skill inject", () => {
   it("lists fleet skills and loads manager skills", () => {
     const ids = listFleetSkillIds(HDC_ROOT);
-    assert.ok(ids.includes("hdc-agent-team"));
-    assert.ok(ids.includes("hdc-manager"));
+    expect(ids).toContain("hdc-agent-team");
+    expect(ids).toContain("hdc-manager");
     const text = loadSkillsForRole(HDC_ROOT, "hdc-manager");
-    assert.match(text, /hdc-agent-team|Task file/i);
+    expect(text).toMatch(/hdc-agent-team|Task file/i);
   });
 });
 
@@ -81,23 +79,23 @@ describe("agent card", () => {
       hostHeader: "127.0.0.1:9201",
       hdcRoot: HDC_ROOT,
     });
-    assert.equal(card.name, "hdc-monitor");
-    assert.ok(card.skills.some((s) => s.id === "hdc-monitor" || s.id === "hdc-agent-team"));
+    expect(card.name).toBe("hdc-monitor");
+    expect(card.skills.some((s) => s.id === "hdc-monitor" || s.id === "hdc-agent-team")).toBe(true);
   });
 });
 
 describe("schedule", () => {
   it("defaults manager 15m monitor 60m", () => {
-    assert.equal(defaultScheduleMinutes("hdc-manager"), 15);
-    assert.equal(defaultScheduleMinutes("hdc-monitor"), 60);
-    assert.equal(resolveScheduleMinutes("hdc-sre", {}), 0);
-    assert.equal(resolveScheduleMinutes("hdc-monitor", { HDC_AGENT_SCHEDULE_MINUTES: "off" }), 0);
+    expect(defaultScheduleMinutes("hdc-manager")).toBe(15);
+    expect(defaultScheduleMinutes("hdc-monitor")).toBe(60);
+    expect(resolveScheduleMinutes("hdc-sre", {})).toBe(0);
+    expect(resolveScheduleMinutes("hdc-monitor", { HDC_AGENT_SCHEDULE_MINUTES: "off" })).toBe(0);
   });
 });
 
 describe("operations-fs roles", () => {
   it("includes hdc-engineer", () => {
-    assert.ok(TASK_ROLES.includes("hdc-engineer"));
+    expect(TASK_ROLES).toContain("hdc-engineer");
   });
 });
 
@@ -108,8 +106,8 @@ describe("dispatcher", () => {
       hdcRoot: HDC_ROOT,
       privateRoot: "",
     });
-    assert.equal(r.invoked_llm, false);
-    assert.equal(r.work.length, 0);
+    expect(r.invoked_llm).toBe(false);
+    expect(r.work.length).toBe(0);
   });
 
   it("manager refreshes report and idles without new signals or runnable tasks", async () => {
@@ -124,9 +122,9 @@ describe("dispatcher", () => {
         nowMs: Date.now(),
         log: () => {},
       });
-      assert.equal(r.work.length, 0);
-      assert.ok(r.report_path);
-      assert.match(r.idle_reason || "", /no new reports|no runnable/);
+      expect(r.work.length).toBe(0);
+      expect(r.report_path).toBeTruthy();
+      expect(r.idle_reason || "").toMatch(/no new reports|no runnable/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -152,41 +150,38 @@ describe("dispatcher", () => {
         nowMs: Date.now(),
         log: () => {},
       });
-      assert.ok(r.work.length >= 1);
+      expect(r.work.length).toBeGreaterThanOrEqual(1);
       const peer = r.work.find((w) => w.id === "task-2026-07-14-approved-sre");
-      assert.ok(peer);
-      assert.equal(peer.peer_url, "http://hdc-sre:9202");
-      assert.equal(peerA2aBaseUrl("hdc-sre"), "http://hdc-sre:9202");
+      expect(peer).toBeTruthy();
+      expect(peer?.peer_url).toBe("http://hdc-sre:9202");
+      expect(peerA2aBaseUrl("hdc-sre")).toBe("http://hdc-sre:9202");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   it("canAutoRunTask allows approved", () => {
-    assert.equal(
+    expect(
       canAutoRunTask({
         status: "approved",
         needs_decision: false,
         suggested_commands: [],
       }),
-      true,
-    );
-    assert.equal(
+    ).toBe(true);
+    expect(
       canAutoRunTask({
         status: "pending",
         needs_decision: false,
         suggested_commands: ["node apps/hdc-cli/cli.mjs run service x query"],
       }),
-      true,
-    );
-    assert.equal(
+    ).toBe(true);
+    expect(
       canAutoRunTask({
         status: "pending",
         needs_decision: true,
         suggested_commands: ["node apps/hdc-cli/cli.mjs run service x query"],
       }),
-      false,
-    );
+    ).toBe(false);
   });
 
   it("research idles when brief exists", async () => {
@@ -202,8 +197,8 @@ describe("dispatcher", () => {
         nowMs: Date.now(),
         log: () => {},
       });
-      assert.equal(r.work.length, 0);
-      assert.match(r.idle_reason || "", /already exists/);
+      expect(r.work.length).toBe(0);
+      expect(r.idle_reason || "").toMatch(/already exists/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -239,15 +234,15 @@ describe("dispatcher", () => {
         nowMs: Date.now(),
         log: () => {},
       });
-      assert.equal(r.work.length, 1);
-      assert.match(r.work[0].prompt || "", /queued-one/);
+      expect(r.work.length).toBe(1);
+      expect(r.work[0].prompt || "").toMatch(/queued-one/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   it("sha256Hex is stable", () => {
-    assert.equal(sha256Hex("a"), sha256Hex("a"));
-    assert.notEqual(sha256Hex("a"), sha256Hex("b"));
+    expect(sha256Hex("a")).toBe(sha256Hex("a"));
+    expect(sha256Hex("a")).not.toBe(sha256Hex("b"));
   });
 });

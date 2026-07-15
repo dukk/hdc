@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectVhostDrift,
   parseLiveSiteVhost,
-} from "../../../clumps/services/nginx-waf/lib/nginx-waf-vhost-drift.mjs";
+} from "hdc/clump/services/nginx-waf/lib/nginx-waf-vhost-drift.mjs";
 
 const drawSite = {
   id: "draw",

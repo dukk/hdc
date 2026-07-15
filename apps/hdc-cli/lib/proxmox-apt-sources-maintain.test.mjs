@@ -8,7 +8,7 @@ import {
   debianSuiteForPveMajor,
   formatAptSourcesHostSummary,
   parseAptSourcesAudit,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-apt-sources-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-apt-sources-maintain.mjs";
 
 const fixtureCfg = {
   schema_version: 1,

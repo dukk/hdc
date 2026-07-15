@@ -5,18 +5,18 @@ import {
   renderSaslPasswd,
   renderSatelliteCfSnippet,
   SMTP2GO_RELAYHOST,
-} from "../../clumps/services/postfix-relay/lib/postfix-relay-render.mjs";
+} from "hdc/clump/services/postfix-relay/lib/postfix-relay-render.mjs";
 import {
   normalizeClientDefaults,
   resetMailRelayClientDefaultsCache,
   resolveSatelliteMyhostname,
-} from "../../clumps/lib/mail-relay-config.mjs";
+} from "hdc/package/mail-relay-config.mjs";
 import {
   mailRelaySkippedByFlags,
   shouldSkipMailRelayForDeployment,
-} from "../../clumps/lib/postfix-satellite-ensure.mjs";
-import { mailEnabledFromConfig } from "../../clumps/lib/mail-relay-settings.mjs";
-import { configurePostfixSatellite } from "../../clumps/services/postfix-relay/lib/postfix-satellite-configure.mjs";
+} from "hdc/package/postfix-satellite-ensure.mjs";
+import { mailEnabledFromConfig } from "hdc/package/mail-relay-settings.mjs";
+import { configurePostfixSatellite } from "hdc/clump/services/postfix-relay/lib/postfix-satellite-configure.mjs";
 
 describe("configurePostfixSatellite", () => {
   it("removes invalid main.cf include and sets relay via postconf", () => {

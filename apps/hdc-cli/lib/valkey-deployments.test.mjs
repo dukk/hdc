@@ -4,7 +4,7 @@ import {
   normalizeValkeyConfig,
   valkeyGlobalSettings,
   resolveValkeyDeployments,
-} from "../../../clumps/services/valkey/lib/deployments.mjs";
+} from "hdc/clump/services/valkey/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

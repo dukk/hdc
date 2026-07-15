@@ -5,14 +5,14 @@ const { pveJsonRequest, waitForPveTask } = vi.hoisted(() => ({
   waitForPveTask: vi.fn(),
 }));
 
-vi.mock("../../../clumps/infrastructure/proxmox/lib/pve-http.mjs", () => ({
+vi.mock("hdc/clump/infrastructure/proxmox/lib/pve-http.mjs", () => ({
   pveData: (body) => (body && typeof body === "object" && "data" in body ? body.data : body),
   pveFormBody: (fields) => new URLSearchParams(fields).toString(),
   pveJsonRequest,
   waitForPveTask,
 }));
 
-import { ensureLxcStarted, getLxcRuntimeStatus } from "../../../clumps/infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
+import { ensureLxcStarted, getLxcRuntimeStatus } from "hdc/clump/infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
 
 describe("proxmox-lxc-start", () => {
   const baseOpts = {

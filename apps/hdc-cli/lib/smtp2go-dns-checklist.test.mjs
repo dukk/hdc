@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDnsChecklist,
   domainVerificationSummary,
-} from "../../../clumps/infrastructure/smtp2go/lib/smtp2go-dns-checklist.mjs";
+} from "hdc/clump/infrastructure/smtp2go/lib/smtp2go-dns-checklist.mjs";
 
 describe("smtp2go-dns-checklist", () => {
   const liveRow = {

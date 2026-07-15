@@ -6,8 +6,8 @@ import {
   storageSpecForNodes,
   storageSpecsMatch,
   storageSpecToFormFields,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-storage-maintain.mjs";
-import { pveProfileForMajor } from "../../../clumps/infrastructure/proxmox/lib/pve-version.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-storage-maintain.mjs";
+import { pveProfileForMajor } from "hdc/clump/infrastructure/proxmox/lib/pve-version.mjs";
 
 describe("proxmox storage maintain", () => {
   it("storageIdsFromConfig defaults to nas-a and nas-b", () => {

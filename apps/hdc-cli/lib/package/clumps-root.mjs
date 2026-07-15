@@ -13,8 +13,18 @@ export function clumpsRoot(env = process.env) {
   if (explicit && existsSync(explicit)) return explicit;
   const legacy = join(repoRoot(), "clumps");
   if (existsSync(legacy)) return legacy;
+  const sibling = join(repoRoot(), "..", "hdc-clumps");
+  if (existsSync(sibling)) return sibling;
   if (explicit) return explicit;
   return legacy;
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function servicesPackagesDir(env = process.env) {
+  return join(clumpsRoot(env), "services");
 }
 
 /**
@@ -23,5 +33,5 @@ export function clumpsRoot(env = process.env) {
  * @returns {string}
  */
 export function clumpPath(...segments) {
-  return join(clumpsRoot(env), ...segments);
+  return join(clumpsRoot(process.env), ...segments);
 }

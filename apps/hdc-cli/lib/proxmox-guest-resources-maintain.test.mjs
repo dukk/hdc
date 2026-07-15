@@ -2,10 +2,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   proxmoxGuestTypeFromMode,
   syncProxmoxGuestResourcesOnMaintain,
-} from "../../../clumps/lib/proxmox-guest-resources-maintain.mjs";
-import * as deployAuth from "../../../clumps/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
-import * as guestResources from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
-import * as hostProvisioner from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+} from "hdc/package/proxmox-guest-resources-maintain.mjs";
+import * as deployAuth from "hdc/clump/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+import * as guestResources from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import * as hostProvisioner from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 
 describe("proxmox-guest-resources-maintain", () => {
   describe("proxmoxGuestTypeFromMode", () => {

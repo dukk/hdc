@@ -5,7 +5,7 @@ import {
   instanceFlagToSystemId,
   normalizeRustfsConfig,
   resolveRustfsDeployments,
-} from "../../../clumps/services/rustfs/lib/deployments.mjs";
+} from "hdc/clump/services/rustfs/lib/deployments.mjs";
 
 describe("rustfs deployments", () => {
   const baseDeployment = (letter, vmid, ip) => ({

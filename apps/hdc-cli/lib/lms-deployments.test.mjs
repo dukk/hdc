@@ -4,7 +4,7 @@ import {
   listLmsDeploymentSummaries,
   normalizeLmsConfig,
   resolveLmsDeployments,
-} from "../../../clumps/services/lms/lib/deployments.mjs";
+} from "hdc/clump/services/lms/lib/deployments.mjs";
 
 describe("lms deployments", () => {
   const v2Qemu = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectJwtSigningIssues } from "../../../clumps/services/twenty/lib/query-status.mjs";
+import { detectJwtSigningIssues } from "hdc/clump/services/twenty/lib/query-status.mjs";
 
 describe("twenty query jwt signing detection", () => {
   it("detectJwtSigningIssues flags signing and encryption key errors", () => {

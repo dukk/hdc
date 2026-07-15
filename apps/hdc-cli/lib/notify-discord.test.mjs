@@ -1,16 +1,16 @@
-import { describe, expect, it } from "vitest";
-
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, "notify-discord.mjs");
+const preload = pathToFileURL(join(here, "package", "preload.mjs")).href;
+const nodeImport = ["--import", preload];
 
 describe("notify-discord.mjs", () => {
   it("dry-run exits 0 with JSON stdout", () => {
-    const r = spawnSync(process.execPath, [script, "--dry-run", "--message", "test"], {
+    const r = spawnSync(process.execPath, [...nodeImport, script, "--dry-run", "--message", "test"], {
       encoding: "utf8",
       env: { ...process.env, HDC_SECRET_BACKEND: "local" },
     });
@@ -21,7 +21,7 @@ describe("notify-discord.mjs", () => {
   });
 
   it("requires --message", () => {
-    const r = spawnSync(process.execPath, [script, "--dry-run"], {
+    const r = spawnSync(process.execPath, [...nodeImport, script, "--dry-run"], {
       encoding: "utf8",
     });
     expect(r.status).toBe(2);
@@ -30,7 +30,7 @@ describe("notify-discord.mjs", () => {
   it("decision dry-run reports webhook mode without interactive env", () => {
     const r = spawnSync(
       process.execPath,
-      [script, "--dry-run", "--decision", "--task-id", "task-a", "--message", "decide"],
+      [...nodeImport, script, "--dry-run", "--decision", "--task-id", "task-a", "--message", "decide"],
       {
         encoding: "utf8",
         env: {
@@ -51,7 +51,7 @@ describe("notify-discord.mjs", () => {
   });
 
   it("requires --task-id with --decision", () => {
-    const r = spawnSync(process.execPath, [script, "--dry-run", "--decision", "--message", "x"], {
+    const r = spawnSync(process.execPath, [...nodeImport, script, "--dry-run", "--decision", "--message", "x"], {
       encoding: "utf8",
     });
     expect(r.status).toBe(2);
@@ -61,6 +61,7 @@ describe("notify-discord.mjs", () => {
     const r = spawnSync(
       process.execPath,
       [
+        ...nodeImport,
         script,
         "--dry-run",
         "--message",

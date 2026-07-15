@@ -18,7 +18,7 @@ import {
   DEFAULT_NEVER_BLOCK_CIDRS,
   isInternalIp,
   isValidIpv4,
-} from "../../../clumps/infrastructure/unifi-network/lib/unifi-ip-block.mjs";
+} from "hdc/clump/infrastructure/unifi-network/lib/unifi-ip-block.mjs";
 
 export const MAILBOX_STATE_REL = "operations/.mailbox-state.json";
 

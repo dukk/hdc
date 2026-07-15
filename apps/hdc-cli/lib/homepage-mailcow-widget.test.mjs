@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   mailcowWidgetEnabled,
   resolveMailcowWidgetCredentials,
-} from "../../../clumps/services/homepage/lib/homepage-mailcow-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-mailcow-widget.mjs";
 
 describe("homepage mailcow widget", () => {
   it("mailcowWidgetEnabled respects enabled flag", () => {

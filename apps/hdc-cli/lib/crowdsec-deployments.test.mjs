@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCrowdsecDeployments } from "../../../clumps/services/crowdsec/lib/deployments.mjs";
+import { resolveCrowdsecDeployments } from "hdc/clump/services/crowdsec/lib/deployments.mjs";
 
 describe("crowdsec deployments", () => {
   it("resolves crowdsec-a from deployments", () => {

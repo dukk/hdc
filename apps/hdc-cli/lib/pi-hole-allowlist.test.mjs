@@ -5,7 +5,7 @@ import {
   isValidAllowlistDomain,
   normalizeDomain,
   parseAllowlistListOutput,
-} from "../../../clumps/services/pi-hole/lib/pi-hole-allowlist.mjs";
+} from "hdc/clump/services/pi-hole/lib/pi-hole-allowlist.mjs";
 
 describe("pi-hole allowlist", () => {
   it("normalizes and dedupes allowlist config entries", () => {

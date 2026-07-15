@@ -8,7 +8,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/glances/lib/glances-render.mjs";
+} from "hdc/clump/services/glances/lib/glances-render.mjs";
 
 describe("glances-render", () => {
   const glances = {

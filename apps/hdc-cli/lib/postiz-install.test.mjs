@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInstallScript } from "../../../clumps/services/postiz/lib/postiz-install.mjs";
+import { buildInstallScript } from "hdc/clump/services/postiz/lib/postiz-install.mjs";
 
 describe("postiz install script", () => {
   it("expands PNPM_BIN in systemd ExecStart (not literal ${PNPM_BIN})", () => {

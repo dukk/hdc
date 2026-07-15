@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { storageSpecToFormFields } from "../../../clumps/infrastructure/proxmox/lib/proxmox-storage-maintain.mjs";
+import { storageSpecToFormFields } from "hdc/clump/infrastructure/proxmox/lib/proxmox-storage-maintain.mjs";
 import {
   parsePveVersionBody,
   parsePveVersionFromCli,
@@ -7,7 +7,7 @@ import {
   pveProfileForMajor,
   pveVersionFromConfigCluster,
   resolveClusterPveProfile,
-} from "../../../clumps/infrastructure/proxmox/lib/pve-version.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/pve-version.mjs";
 
 describe("pve version", () => {
   it("parsePveVersionBody reads release and major", () => {

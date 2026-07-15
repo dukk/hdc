@@ -31,7 +31,10 @@ describe("cli run client platform packages", () => {
     const capture = { logLines: [], errorLines: [], warnLines: [], stdoutChunks: [] };
     const code = await runCli(
       ["run", "client", "windows", "query", "--"],
-      createMemoryCliDeps({ root, clumpsDir: (r) => join(r, "clumps"), capture }),
+      createMemoryCliDeps({
+        root,
+        capture,
+      }),
     );
     expect(code).toBe(0);
     expect(JSON.parse(capture.stdoutChunks.join("")).probe).toBe("windows-query");

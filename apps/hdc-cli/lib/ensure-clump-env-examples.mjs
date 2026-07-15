@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { discoverAllClumpManifests } from "../manifests.mjs";
 import { ENV_KEY_TO_PACKAGE_ID } from "./env-key-clumps.mjs";
-
-const PACKAGE_TIERS = ["infrastructure", "services", "clients"];
 
 /**
  * @param {string} publicRoot
@@ -12,27 +11,25 @@ const PACKAGE_TIERS = ["infrastructure", "services", "clients"];
 export function discoverClumps(publicRoot) {
   /** @type {{ tier: string; id: string; rel: string; dir: string; title: string; envRequired: string[] }[]} */
   const out = [];
-  for (const tier of PACKAGE_TIERS) {
-    const tierDir = join(publicRoot, "clumps", tier);
-    if (!existsSync(tierDir)) continue;
-    for (const id of readdirSync(tierDir).sort((a, b) => a.localeCompare(b))) {
-      const dir = join(tierDir, id);
-      const manifestPath = join(dir, "manifest.json");
-      if (!existsSync(manifestPath)) continue;
-      let raw;
-      try {
-        raw = JSON.parse(readFileSync(manifestPath, "utf8"));
-      } catch {
-        continue;
-      }
-      const title =
-        typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : id;
-      const envRequired = Array.isArray(raw.env_required)
-        ? raw.env_required.map(String).filter(Boolean)
-        : [];
-      const rel = `clumps/${tier}/${id}`.replace(/\\/g, "/");
-      out.push({ tier, id, rel, dir, title, envRequired });
-    }
+  for (const m of discoverAllClumpManifests(publicRoot)) {
+    const raw = m.raw;
+    const id = String(raw.id || "").trim();
+    if (!id) continue;
+    const parts = m.dir.replace(/\\/g, "/").split("/");
+    const tier = parts.includes("clients")
+      ? "clients"
+      : parts.includes("infrastructure")
+        ? "infrastructure"
+        : parts.includes("services")
+          ? "services"
+          : "services";
+    const title =
+      typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : id;
+    const envRequired = Array.isArray(raw.env_required)
+      ? raw.env_required.map(String).filter(Boolean)
+      : [];
+    const rel = `clumps/${tier}/${id}`.replace(/\\/g, "/");
+    out.push({ tier, id, rel, dir: m.dir, title, envRequired });
   }
   return out;
 }

@@ -5,7 +5,7 @@ import {
   listAffineDeploymentSummaries,
   normalizeAffineConfig,
   resolveAffineDeployments,
-} from "../../../clumps/services/affine/lib/deployments.mjs";
+} from "hdc/clump/services/affine/lib/deployments.mjs";
 
 describe("affine deployments", () => {
   const v2 = {

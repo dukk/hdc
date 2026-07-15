@@ -6,7 +6,7 @@ import {
   renderOpenclawEnvFile,
   renderOpenclawJson,
   resolveDashboardUrl,
-} from "../../../clumps/services/openclaw/lib/openclaw-render.mjs";
+} from "hdc/clump/services/openclaw/lib/openclaw-render.mjs";
 
 describe("openclaw render", () => {
   const openclaw = {

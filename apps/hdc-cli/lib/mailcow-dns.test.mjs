@@ -5,7 +5,7 @@ import {
   buildDnsChecklist,
   dkimOwnerName,
   formatDnsChecklistMarkdown,
-} from "../../../clumps/services/mailcow/lib/mailcow-dns.mjs";
+} from "hdc/clump/services/mailcow/lib/mailcow-dns.mjs";
 
 describe("mailcow-dns", () => {
   const domain = {

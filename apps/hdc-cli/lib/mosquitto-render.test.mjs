@@ -7,7 +7,7 @@ import {
   renderMosquittoConf,
   tlsEnabled,
   tlsListenerPort,
-} from "../../../clumps/services/mosquitto/lib/mosquitto-render.mjs";
+} from "hdc/clump/services/mosquitto/lib/mosquitto-render.mjs";
 
 describe("mosquitto render", () => {
   const base = {

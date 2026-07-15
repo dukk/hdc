@@ -8,7 +8,7 @@ import {
   vaultKeyForWinrmPassword,
   WINRM_USER_PASSWORD_VAULT_KEY,
   wolDefaultsFromConfig,
-} from "../../../clumps/clients/lib/client-config.mjs";
+} from "hdc/package/clients/client-config.mjs";
 
 describe("client-config", () => {
   it("normalizeMac accepts common formats", () => {

@@ -7,9 +7,9 @@ import {
   parseGuestResourceSizing,
   rebootRequestedFromFlags,
   resolveRebootAfterResourceApply,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
-import * as lxcStart from "../../../clumps/infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
-import * as pveHttp from "../../../clumps/infrastructure/proxmox/lib/pve-http.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import * as lxcStart from "hdc/clump/infrastructure/proxmox/lib/proxmox-lxc-start.mjs";
+import * as pveHttp from "hdc/clump/infrastructure/proxmox/lib/pve-http.mjs";
 
 const apiOpts = {
   apiBase: "https://pve.test:8006",

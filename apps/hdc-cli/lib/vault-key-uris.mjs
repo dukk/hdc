@@ -1,22 +1,22 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { primaryIpFromSystem } from "../../../clumps/lib/inventory-sidecar.mjs";
-import { controllerFromPackageConfig } from "../../../clumps/infrastructure/unifi-network/lib/unifi-config.mjs";
-import { UNIFI_API_KEY_VAULT_KEY } from "../../../clumps/infrastructure/unifi-network/lib/vault-deps.mjs";
+import { primaryIpFromSystem } from "hdc/package/inventory-sidecar.mjs";
+import { controllerFromPackageConfig } from "hdc/clump/infrastructure/unifi-network/lib/unifi-config.mjs";
+import { UNIFI_API_KEY_VAULT_KEY } from "hdc/clump/infrastructure/unifi-network/lib/vault-deps.mjs";
 import {
   DEFAULT_AUDIOBOOKSHELF_TOKEN_VAULT_KEY,
-} from "../../../clumps/services/homepage/lib/homepage-audiobookshelf-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-audiobookshelf-widget.mjs";
 import {
   DEFAULT_HA_TOKEN_VAULT_KEY,
-} from "../../../clumps/services/homepage/lib/homepage-homeassistant-widget.mjs";
-import { DEFAULT_PLEX_TOKEN_VAULT_KEY } from "../../../clumps/services/homepage/lib/homepage-plex-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-homeassistant-widget.mjs";
+import { DEFAULT_PLEX_TOKEN_VAULT_KEY } from "hdc/clump/services/homepage/lib/homepage-plex-widget.mjs";
 import {
   ipFromCidr,
   isObject,
   serviceUrlFromHostPort,
   vaultKeyFromWidget,
-} from "../../../clumps/services/homepage/lib/homepage-widget-utils.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-widget-utils.mjs";
 import { discoverManifests, manifestId } from "../manifests.mjs";
 import { clumpsDir, repoRoot } from "../paths.mjs";
 import { loadClumpConfigFromClumpRoot } from "./clump-config.mjs";
@@ -438,7 +438,7 @@ function expandWithNginxAliases(urls, nginxIndex) {
 
 function loadSystemIpMap(publicRoot, env = process.env) {
   const out = new Map();
-  const invDir = resolveRepoFile(publicRoot, "inventory/manual/systems", env);
+  const invDir = resolveRepoFile(publicRoot, "operations/manual/systems", env);
   if (!invDir.found) return out;
   let names;
   try {
@@ -447,7 +447,7 @@ function loadSystemIpMap(publicRoot, env = process.env) {
     return out;
   }
   for (const name of names) {
-    const resolved = resolveRepoFile(publicRoot, `inventory/manual/systems/${name}`, env);
+    const resolved = resolveRepoFile(publicRoot, `operations/manual/systems/${name}`, env);
     if (!resolved.found) continue;
     try {
       const data = readResolvedRepoJson(resolved);

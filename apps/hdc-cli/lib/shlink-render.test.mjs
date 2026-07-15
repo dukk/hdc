@@ -12,7 +12,7 @@ import {
   resolveWebClientUrl,
   resolveWebUrl,
   webClientConfig,
-} from "../../../clumps/services/shlink/lib/shlink-render.mjs";
+} from "hdc/clump/services/shlink/lib/shlink-render.mjs";
 
 describe("shlink-render", () => {
   const shlink = {

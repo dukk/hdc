@@ -3,7 +3,7 @@ import {
   instanceFlagToSystemId,
   normalizeAsteriskConfig,
   resolveAsteriskDeployments,
-} from "../../../clumps/services/asterisk/lib/deployments.mjs";
+} from "hdc/clump/services/asterisk/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

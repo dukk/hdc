@@ -4,7 +4,7 @@ import {
   parseLocalApiPort,
   rewriteLocalApiPort,
   resolveSshCommand,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-ssh-tunnel.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-ssh-tunnel.mjs";
 
 describe("uptime-kuma-ssh-tunnel", () => {
   it("parseLocalApiPort reads localhost ports", () => {

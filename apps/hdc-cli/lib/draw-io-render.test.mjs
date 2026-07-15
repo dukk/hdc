@@ -6,7 +6,7 @@ import {
   renderComposeYaml,
   renderDrawIoEnv,
   resolveUpstreamUrl,
-} from "../../../clumps/services/draw-io/lib/draw-io-render.mjs";
+} from "hdc/clump/services/draw-io/lib/draw-io-render.mjs";
 
 describe("draw-io-render", () => {
   const drawIo = {

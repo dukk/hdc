@@ -8,7 +8,7 @@ import {
   renderComposeYaml,
   resolveIdServerHost,
   REQUIRED_PORTS,
-} from "../../../clumps/services/rustdesk/lib/rustdesk-render.mjs";
+} from "hdc/clump/services/rustdesk/lib/rustdesk-render.mjs";
 
 describe("rustdesk-render", () => {
   const rustdesk = {

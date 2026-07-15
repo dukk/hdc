@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeImmichConfig, instanceFlagToSystemId } from "../../../clumps/services/immich/lib/deployments.mjs";
-import { renderImmichEnv } from "../../../clumps/services/immich/lib/immich-render.mjs";
+import { normalizeImmichConfig, instanceFlagToSystemId } from "hdc/clump/services/immich/lib/deployments.mjs";
+import { renderImmichEnv } from "hdc/clump/services/immich/lib/immich-render.mjs";
 
 describe("normalizeImmichConfig synology-docker", () => {
   it("accepts immich-a with synology.instance", () => {

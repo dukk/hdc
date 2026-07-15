@@ -4,7 +4,7 @@ import {
   listPaperlessNgxDeploymentSummaries,
   normalizePaperlessNgxConfig,
   resolvePaperlessNgxDeployments,
-} from "../../../clumps/services/paperless-ngx/lib/deployments.mjs";
+} from "hdc/clump/services/paperless-ngx/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

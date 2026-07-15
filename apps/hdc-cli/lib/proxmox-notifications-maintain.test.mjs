@@ -5,7 +5,7 @@ import {
   notificationsMaintainEnabledFromConfig,
   notificationsSpecFromConfig,
   sendmailTargetMatches,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-notifications-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-notifications-maintain.mjs";
 
 const cfg = {
   provision: {

@@ -5,7 +5,7 @@ import {
   patchOssecXmlTag,
   patchWazuhManagerConfEmail,
   wazuhManagerAlertsSkippedByFlags,
-} from "../../../clumps/lib/wazuh-manager-alerts.mjs";
+} from "hdc/package/wazuh-manager-alerts.mjs";
 
 const SAMPLE_CONF = `<ossec_config>
   <global>

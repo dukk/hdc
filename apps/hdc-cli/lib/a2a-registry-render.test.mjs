@@ -9,7 +9,7 @@ import {
   renderDockerfile,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/a2a-registry/lib/a2a-registry-render.mjs";
+} from "hdc/clump/services/a2a-registry/lib/a2a-registry-render.mjs";
 
 describe("a2a-registry-render", () => {
   const a2aRegistry = {

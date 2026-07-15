@@ -3,7 +3,7 @@ import {
   instanceFlagToSystemId,
   normalizeOpenclawConfig,
   resolveOpenclawDeployments,
-} from "../../../clumps/services/openclaw/lib/deployments.mjs";
+} from "hdc/clump/services/openclaw/lib/deployments.mjs";
 
 describe("openclaw deployments", () => {
   const cfg = {

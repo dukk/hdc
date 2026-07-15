@@ -4,7 +4,7 @@ import {
   normalizeRedisConfig,
   redisGlobalSettings,
   resolveRedisDeployments,
-} from "../../../clumps/services/redis/lib/deployments.mjs";
+} from "hdc/clump/services/redis/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

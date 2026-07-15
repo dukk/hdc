@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildControllerQuorumVoters,
   renderServerProperties,
-} from "../../../clumps/services/kafka/lib/kafka-render.mjs";
+} from "hdc/clump/services/kafka/lib/kafka-render.mjs";
 
 describe("kafka-render", () => {
   it("builds controller.quorum.voters", () => {

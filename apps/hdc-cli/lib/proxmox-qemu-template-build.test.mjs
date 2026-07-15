@@ -3,7 +3,7 @@ import {
   cloudImageFilenameFromUrl,
   DEFAULT_QEMU_CLOUD_IMAGE,
   qemuTemplateBuildSpecFromConfig,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-template-build.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-template-build.mjs";
 
 describe("proxmox qemu template build", () => {
   it("cloudImageFilenameFromUrl uses URL basename", () => {

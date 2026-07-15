@@ -40,7 +40,12 @@ export function createMemoryCliDeps(opts) {
     warnLines: [],
     stdoutChunks: [],
   };
-  const env = { ...opts.envVars };
+  const env = {
+    ...process.env,
+    HDC_CLUMPS_ROOT: join(opts.root, "clumps"),
+    HDC_CLUMPS_CACHE: join(opts.root, ".clump-cache"),
+    ...opts.envVars,
+  };
   return {
     env,
     log: (...a) => {

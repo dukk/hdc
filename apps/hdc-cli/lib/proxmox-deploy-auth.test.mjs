@@ -4,7 +4,7 @@ import {
   proxmoxMaintainVerifyPaths,
   pveTokenAclId,
   vaultTokenKeyForHost,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-deploy-auth.mjs";
 
 describe("proxmox deploy auth", () => {
   it("vaultTokenKeyForHost uppercases and hyphenates host id", () => {

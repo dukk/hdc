@@ -4,7 +4,7 @@ import {
   primaryIpFromSystem,
   resolvePiHoleWebPassword,
   webPasswordVaultKey,
-} from "../../../clumps/services/pi-hole/lib/inventory.mjs";
+} from "hdc/clump/services/pi-hole/lib/inventory.mjs";
 
 describe("pi-hole inventory helpers", () => {
   it("reads primary ip from manual sidecar access.nodes", () => {

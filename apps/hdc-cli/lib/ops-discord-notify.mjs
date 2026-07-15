@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const notifyDiscordScript = join(here, "notify-discord.mjs");
 
 /**
- * @typedef {import("../../../clumps/lib/operation-report.mjs").OperationReportContext} OperationReportContext
+ * @typedef {import("hdc/package/operation-report.mjs").OperationReportContext} OperationReportContext
  */
 
 /**
@@ -388,7 +388,7 @@ export function buildOperationReportDiscordSummary(ctx) {
 }
 
 /**
- * @typedef {import("../../../clumps/infrastructure/proxmox/lib/proxmox-maintain-report.mjs").MaintainReportContext} MaintainReportContext
+ * @typedef {import("hdc/clump/infrastructure/proxmox/lib/proxmox-maintain-report.mjs").MaintainReportContext} MaintainReportContext
  */
 
 /**

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseDockerSectionOutput,
-} from "../../../clumps/infrastructure/synology-nas/lib/synology-docker-ensure.mjs";
-import { parseHealthCollectOutput } from "../../../clumps/infrastructure/synology-nas/lib/synology-query-remote.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/synology-docker-ensure.mjs";
+import { parseHealthCollectOutput } from "hdc/clump/infrastructure/synology-nas/lib/synology-query-remote.mjs";
 
 describe("parseDockerSectionOutput", () => {
   it("parses running Container Manager", () => {

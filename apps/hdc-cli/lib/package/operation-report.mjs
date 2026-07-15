@@ -305,11 +305,11 @@ export function defaultNextSteps(ctx) {
       const deployIp = deployIpFromResult(r);
       if (deployIp) {
         lines.push(
-          `Update \`inventory/manual/systems/${sid}.json\` → \`access.nodes[0].ip\` to \`${deployIp}\` if not already set.`,
+          `Update \`operations/manual/systems/${sid}.json\` → \`access.nodes[0].ip\` to \`${deployIp}\` if not already set.`,
         );
       } else {
         lines.push(
-          `Set \`access.nodes[0].ip\` in \`inventory/manual/systems/${sid}.json\` after the guest has an address.`,
+          `Set \`access.nodes[0].ip\` in \`operations/manual/systems/${sid}.json\` after the guest has an address.`,
         );
       }
     }
@@ -319,7 +319,7 @@ export function defaultNextSteps(ctx) {
     lines.push(`Re-run maintain on a schedule or after config changes: \`hdc run ${pkg} maintain\`.`);
   } else if (verb === "teardown") {
     lines.push("Confirm guests/containers are removed in Proxmox or Docker.");
-    lines.push("Update or remove related `inventory/manual/systems/*.json` sidecars if the system is retired.");
+    lines.push("Update or remove related `operations/manual/systems/*.json` sidecars if the system is retired.");
     lines.push("Remove unused vault secret names documented in the package manifest when no longer needed.");
   }
 

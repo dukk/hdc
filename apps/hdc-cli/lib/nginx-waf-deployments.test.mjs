@@ -10,7 +10,7 @@ import {
   resolveNginxWafGroups,
   resolveSiteAccessSettings,
   nginxWafGroupSettings,
-} from "../../../clumps/services/nginx-waf/lib/deployments.mjs";
+} from "hdc/clump/services/nginx-waf/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 3,

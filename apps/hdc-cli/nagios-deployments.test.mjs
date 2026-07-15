@@ -4,7 +4,7 @@ import {
   listNagiosDeploymentSummaries,
   normalizeNagiosConfig,
   resolveNagiosDeployments,
-} from "../../clumps/services/nagios/lib/deployments.mjs";
+} from "hdc/clump/services/nagios/lib/deployments.mjs";
 
 const validCfg = {
   schema_version: 2,

@@ -2,8 +2,14 @@
   "name": "hdc-cli",
   "private": true,
   "type": "module",
+  "imports": {
+    "hdc/package/*": "./lib/package/*",
+    "hdc/cli/*": "./*",
+    "hdc/clump/*": "../../../hdc-clumps/*"
+  },
   "exports": {
     "./package/*": "./lib/package/*",
+    "./lib/*": "./lib/*",
     "./paths.mjs": "./paths.mjs"
   }
 }

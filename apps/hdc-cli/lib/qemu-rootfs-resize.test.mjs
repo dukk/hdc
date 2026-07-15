@@ -5,7 +5,7 @@ import {
   resolveDeploymentHostname,
   resolveRootfsGbFromDeployment,
   syncQemuRootfsOnMaintain,
-} from "../../../clumps/lib/qemu-rootfs-resize.mjs";
+} from "hdc/package/qemu-rootfs-resize.mjs";
 
 describe("qemu-rootfs-resize", () => {
   it("growRootFilesystemScript includes growpart and resize2fs", () => {

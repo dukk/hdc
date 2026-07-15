@@ -7,12 +7,12 @@ import {
   buildNagiosBundleFromBind,
   nagiosHostName,
   nagiosHostNameFromFqdn,
-} from "../../clumps/services/nagios/lib/generate.mjs";
+} from "hdc/clump/services/nagios/lib/generate.mjs";
 import {
   dedupeBindRecordsByFqdn,
   loadBindForwardARecords,
   loadNagiosBindBundle,
-} from "../../clumps/services/nagios/lib/bind-monitored-hosts.mjs";
+} from "hdc/clump/services/nagios/lib/bind-monitored-hosts.mjs";
 
 describe("nagios generate from BIND", () => {
   it("builds host_name from sidecar id and node name", () => {

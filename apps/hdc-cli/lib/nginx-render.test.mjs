@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderSiteVhost,
   tlsDomainsFromSites,
-} from "../../../clumps/services/nginx/lib/nginx-render.mjs";
+} from "hdc/clump/services/nginx/lib/nginx-render.mjs";
 
 const sampleSite = {
   id: "example-app",

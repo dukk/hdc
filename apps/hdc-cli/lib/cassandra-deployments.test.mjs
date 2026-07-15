@@ -6,7 +6,7 @@ import {
   deriveSeedIps,
   normalizeCassandraConfig,
   resolveCassandraDeployments,
-} from "../../../clumps/services/cassandra/lib/deployments.mjs";
+} from "hdc/clump/services/cassandra/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

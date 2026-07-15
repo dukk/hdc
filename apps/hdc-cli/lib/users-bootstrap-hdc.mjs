@@ -7,10 +7,10 @@ import { resolveRepoFile, resolveRepoFilePath } from "./private-repo.mjs";
 import {
   remoteBootstrapHdcBash,
   remoteEnsureHdcAutomationUserBash,
-} from "../../../clumps/lib/linux-local-admin-user.mjs";
+} from "hdc/package/linux-local-admin-user.mjs";
 import {
   resolveHdcPasswordForSystem,
-} from "../../../clumps/lib/hdc-user-ensure.mjs";
+} from "hdc/package/hdc-user-ensure.mjs";
 
 export { remoteBootstrapHdcBash };
 

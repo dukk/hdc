@@ -6,7 +6,7 @@ import {
   buildComposeMaintainScript,
   buildComposeUpScript,
   composeDirFromStack,
-} from "../../../clumps/infrastructure/synology-nas/lib/synology-docker-compose.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/synology-docker-compose.mjs";
 
 describe("assertSafeComposePath", () => {
   it("accepts valid absolute paths", () => {

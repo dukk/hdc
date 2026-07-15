@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLxcRootPassword } from "../../../clumps/services/ollama/lib/lxc-password.mjs";
+import { resolveLxcRootPassword } from "hdc/clump/services/ollama/lib/lxc-password.mjs";
 
 describe("resolveLxcRootPassword", () => {
   it("uses config password when set", async () => {

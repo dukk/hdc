@@ -7,7 +7,7 @@ import {
   releaseDownloadUrl,
   resolveReleaseAsset,
   serverHasModel,
-} from "../../../clumps/services/llama-cpp/lib/llama-cpp-install.mjs";
+} from "hdc/clump/services/llama-cpp/lib/llama-cpp-install.mjs";
 
 describe("llama-cpp install", () => {
   it("resolveReleaseAsset maps backends", () => {

@@ -11,11 +11,11 @@ import {
   pveumSetUserPasswordScript,
   serviceAccountsFromConfig,
   validateServiceAccountClusterResources,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-service-account-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-service-account-maintain.mjs";
 import {
   pveumEnsureTokenAclCommand,
   pveumEnsureUserAclCommand,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-api-token-maintain.mjs";
 
 describe("proxmox service account maintain", () => {
   it("serviceAccountsFromConfig parses enabled accounts", () => {

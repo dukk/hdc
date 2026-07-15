@@ -8,7 +8,7 @@ import {
   buildBindLogPurgeScript,
   logPurgeSkippedByFlags,
   resolveBindLogPurgeSettings,
-} from "../../../clumps/services/bind/lib/bind-log-purge.mjs";
+} from "hdc/clump/services/bind/lib/bind-log-purge.mjs";
 
 describe("bind-log-purge", () => {
   it("buildBindLogPurgeScript includes threshold guard and purge steps", () => {

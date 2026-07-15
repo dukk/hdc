@@ -11,7 +11,7 @@ import {
   renderStirlingPdfEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/stirling-pdf/lib/stirling-pdf-render.mjs";
+} from "hdc/clump/services/stirling-pdf/lib/stirling-pdf-render.mjs";
 
 describe("stirling-pdf-render", () => {
   const stirlingPdf = {

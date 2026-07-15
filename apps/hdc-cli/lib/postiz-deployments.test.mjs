@@ -4,7 +4,7 @@ import {
   listPostizDeploymentSummaries,
   normalizePostizConfig,
   resolvePostizDeployments,
-} from "../../../clumps/services/postiz/lib/deployments.mjs";
+} from "hdc/clump/services/postiz/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

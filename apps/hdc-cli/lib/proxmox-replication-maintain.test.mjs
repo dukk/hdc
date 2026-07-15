@@ -11,7 +11,7 @@ import {
   resolveReplicationSpec,
   parseStorageIdFromDiskValue,
   storageTypeSupportsReplication,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-replication-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-replication-maintain.mjs";
 
 const proxmoxCfg = {
   provision: {

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PACKAGE_FAMILIES, resolveFamily } from "../../clumps/lib/service-health/families.mjs";
+import { PACKAGE_FAMILIES, resolveFamily, healthFromManifest } from "hdc/package/service-health/families.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const TIERS = ["services", "infrastructure", "clients"];
@@ -38,7 +38,9 @@ const SYNOLOGY = new Set(["plex", "synology-nas"]);
  * @param {string} packageId
  * @param {string} tier
  */
-function familyFor(packageId, tier) {
+function familyFor(packageId, tier, manifestRaw) {
+  const fromManifest = healthFromManifest(manifestRaw).family;
+  if (fromManifest) return fromManifest;
   if (PACKAGE_FAMILIES[packageId]) return PACKAGE_FAMILIES[packageId];
   if (CLIENTS.has(packageId) || tier === "clients") return "client";
   if (INFRA_API.has(packageId)) return "infra-api";
@@ -79,8 +81,8 @@ let skipped = 0;
 for (const tier of TIERS) {
   const tierDir = join(root, "clumps", tier);
   if (!existsSync(tierDir)) continue;
-  // import path from clumps/<tier>/<id>/health/run.mjs → clumps/lib
-  const importPath = "../../../lib";
+  // import path for health/run.mjs
+  const importPath = "hdc/package";
   for (const name of readdirSync(tierDir).sort()) {
     const clumpDir = join(tierDir, name);
     const mfPath = join(clumpDir, "manifest.json");
@@ -94,7 +96,7 @@ for (const tier of TIERS) {
     }
     if (!mf.verbs || typeof mf.verbs !== "object") mf.verbs = {};
     const packageId = typeof mf.id === "string" ? mf.id : name;
-    const family = familyFor(packageId, tier);
+    const family = familyFor(packageId, tier, mf);
 
     let wroteManifest = false;
     if (!mf.verbs.health) {

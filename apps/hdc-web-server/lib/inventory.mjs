@@ -1,43 +1,32 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+
+import { manualCategoryRel } from "../../hdc-cli/lib/inventory-paths.mjs";
+import { resolveRepoFile } from "../../hdc-cli/lib/private-repo.mjs";
+import { primaryIpFromSystem } from "../../hdc-cli/lib/package/inventory-sidecar.mjs";
 
 const VALID_CATEGORIES = new Set(["systems", "services", "networks", "targets"]);
 
 /**
- * @param {string} hdcRoot
- */
-async function loadPrimaryIpHelper(hdcRoot) {
-  try {
-    const mod = await import(
-      pathToFileURL(join(hdcRoot, "clumps", "lib", "inventory-sidecar.mjs")).href
-    );
-    return mod.primaryIpFromSystem;
-  } catch {
-    return () => null;
-  }
-}
-
-/**
  * @param {string} publicRoot
- * @param {string} privateRoot
  * @param {string} category
  */
-function inventoryDir(publicRoot, privateRoot, category) {
-  if (!VALID_CATEGORIES.has(category)) return null;
-  const privateDir = join(privateRoot, "inventory", "manual", category);
-  if (existsSync(privateDir)) return privateDir;
-  const publicDir = join(publicRoot, "inventory", "manual", category);
-  if (existsSync(publicDir)) return publicDir;
-  return privateDir;
-}
-
-/**
- * @param {string} dir
- */
-function listJsonIds(dir) {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+function listCategoryIds(publicRoot, category) {
+  const relDir = manualCategoryRel(category);
+  const legacyDir = `inventory/manual/${category}`;
+  const resolved = resolveRepoFile(publicRoot, relDir);
+  const legacy = resolveRepoFile(publicRoot, legacyDir);
+  const dir = resolved.found ? join(publicRoot, resolved.rel).replace(/\\/g, "/") : null;
+  const privateRoot = resolved.privateRoot;
+  const absDir = resolved.found
+    ? resolved.path.replace(/[/\\][^/\\]+$/, "")
+    : legacy.found
+      ? legacy.path.replace(/[/\\][^/\\]+$/, "")
+      : privateRoot
+        ? join(privateRoot, relDir)
+        : join(publicRoot, relDir);
+  if (!existsSync(absDir)) return [];
+  return readdirSync(absDir)
     .filter((f) => f.endsWith(".json") && !f.startsWith("_"))
     .map((f) => f.slice(0, -5))
     .sort((a, b) => a.localeCompare(b));
@@ -46,9 +35,8 @@ function listJsonIds(dir) {
 /**
  * @param {Record<string, unknown>} record
  * @param {string} category
- * @param {(s: unknown) => string | null} primaryIpFromSystem
  */
-function inventorySummary(record, category, primaryIpFromSystem) {
+function inventorySummary(record, category) {
   const id = typeof record.id === "string" ? record.id : null;
   const kind = typeof record.kind === "string" ? record.kind : category.slice(0, -1);
   /** @type {Record<string, unknown>} */
@@ -65,24 +53,18 @@ function inventorySummary(record, category, primaryIpFromSystem) {
 
 /**
  * @param {string} publicRoot
- * @param {string} privateRoot
+ * @param {string} _privateRoot
  * @param {string} category
  */
-export async function listInventoryCategory(publicRoot, privateRoot, category) {
-  const dir = inventoryDir(publicRoot, privateRoot, category);
-  if (!dir) return { error: "invalid category", items: [] };
-  const primaryIpFromSystem = await loadPrimaryIpHelper(publicRoot);
-  const ids = listJsonIds(dir);
+export async function listInventoryCategory(publicRoot, _privateRoot, category) {
+  if (!VALID_CATEGORIES.has(category)) return { error: "invalid category", items: [] };
+  const ids = listCategoryIds(publicRoot, category);
   const items = [];
   for (const id of ids) {
-    try {
-      const raw = JSON.parse(readFileSync(join(dir, `${id}.json`), "utf8"));
-      if (raw && typeof raw === "object") {
-        items.push(
-          inventorySummary(/** @type {Record<string, unknown>} */ (raw), category, primaryIpFromSystem),
-        );
-      }
-    } catch {
+    const got = getInventoryRecord(publicRoot, _privateRoot, category, id);
+    if (got.record && typeof got.record === "object") {
+      items.push(inventorySummary(/** @type {Record<string, unknown>} */ (got.record), category));
+    } else {
       items.push({ id, kind: category.slice(0, -1), parse_error: true });
     }
   }
@@ -91,28 +73,27 @@ export async function listInventoryCategory(publicRoot, privateRoot, category) {
 
 /**
  * @param {string} publicRoot
- * @param {string} privateRoot
+ * @param {string} _privateRoot
  * @param {string} category
  * @param {string} id
  */
-export function getInventoryRecord(publicRoot, privateRoot, category, id) {
+export function getInventoryRecord(publicRoot, _privateRoot, category, id) {
   if (!VALID_CATEGORIES.has(category)) return { error: "invalid category" };
   const safeId = String(id ?? "").trim();
   if (!safeId || safeId.includes("..") || safeId.includes("/") || safeId.includes("\\")) {
     return { error: "invalid id" };
   }
 
-  const privatePath = join(privateRoot, "inventory", "manual", category, `${safeId}.json`);
-  const publicPath = join(publicRoot, "inventory", "manual", category, `${safeId}.json`);
-
-  let path = null;
-  if (existsSync(privatePath)) path = privatePath;
-  else if (existsSync(publicPath)) path = publicPath;
-  else return { error: "not found" };
+  const rel = `${manualCategoryRel(category)}/${safeId}.json`;
+  const legacyRel = `inventory/manual/${category}/${safeId}.json`;
+  const resolved = resolveRepoFile(publicRoot, rel);
+  const legacy = resolveRepoFile(publicRoot, legacyRel);
+  const pick = resolved.found ? resolved : legacy.found ? legacy : null;
+  if (!pick) return { error: "not found" };
 
   try {
-    const data = JSON.parse(readFileSync(path, "utf8"));
-    return { category, id: safeId, record: data };
+    const data = JSON.parse(readFileSync(pick.path, "utf8"));
+    return { category, id: safeId, record: data, source: pick.source };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }

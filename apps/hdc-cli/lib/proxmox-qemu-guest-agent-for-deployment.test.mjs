@@ -4,8 +4,8 @@ import {
   locateQemuGuestByName,
   resolveQemuGuestPlacement,
   sshTargetForGuestAgentDeployment,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
-import * as hostProvisioner from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-guest-agent-for-deployment.mjs";
+import * as hostProvisioner from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-provisioner.mjs";
 
 describe("proxmox-qemu-guest-agent-for-deployment", () => {
   describe("guestHostnameForDeployment", () => {

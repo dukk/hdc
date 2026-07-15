@@ -6,7 +6,7 @@ import {
   migrateSitePoliciesV4,
   resolveLocationPolicyPlan,
   resolveSitePolicyPlan,
-} from "../../../clumps/services/nginx-waf/lib/nginx-waf-policies.mjs";
+} from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
 
 const catalog = mergePolicyDefinitions(
   {

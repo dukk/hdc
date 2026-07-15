@@ -4,20 +4,20 @@ import {
   buildCollectionsInstallScript,
   crowdsecCollections,
   crowdsecHubUpdateEnabled,
-} from "../../../clumps/services/crowdsec/lib/crowdsec-collections.mjs";
+} from "hdc/clump/services/crowdsec/lib/crowdsec-collections.mjs";
 import {
   filterBanDecisionsForUnifi,
   parseCrowdsecDecisionsJson,
   unifiBouncerGroupName,
   unifiBouncerMaxDecisions,
-} from "../../../clumps/services/crowdsec/lib/crowdsec-decisions.mjs";
+} from "hdc/clump/services/crowdsec/lib/crowdsec-decisions.mjs";
 import {
   crowdsecBouncers,
   crowdsecFirewallBouncers,
   crowdsecUnifiBouncers,
-} from "../../../clumps/services/crowdsec/lib/deployments.mjs";
-import { crowdsecUnifiSyslogConfig } from "../../../clumps/services/crowdsec/lib/crowdsec-unifi-syslog.mjs";
-import { guestAgentCollectionsForServices } from "../../../clumps/lib/guest-agents-config.mjs";
+} from "hdc/clump/services/crowdsec/lib/deployments.mjs";
+import { crowdsecUnifiSyslogConfig } from "hdc/clump/services/crowdsec/lib/crowdsec-unifi-syslog.mjs";
+import { guestAgentCollectionsForServices } from "hdc/package/guest-agents-config.mjs";
 
 describe("crowdsec-collections", () => {
   it("parses collections from config", () => {

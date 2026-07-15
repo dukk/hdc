@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveDiskFormat, scsi0VolumeSpec } from "../../../clumps/services/windows-desktop/lib/disk-format.mjs";
+import { resolveDiskFormat, scsi0VolumeSpec } from "hdc/clump/services/windows-desktop/lib/disk-format.mjs";
 import {
   normalizeSha256,
   windowsIsoRemotePath,
-} from "../../../clumps/services/windows-desktop/lib/windows-iso-ensure.mjs";
+} from "hdc/clump/services/windows-desktop/lib/windows-iso-ensure.mjs";
 
 describe("disk-format", () => {
   it("defaults to raw on local-lvm", () => {

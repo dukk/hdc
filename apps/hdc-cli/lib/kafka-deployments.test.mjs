@@ -5,7 +5,7 @@ import {
   normalizeKafkaConfig,
   resolveAllKafkaDeployments,
   resolveKafkaDeployments,
-} from "../../../clumps/services/kafka/lib/deployments.mjs";
+} from "hdc/clump/services/kafka/lib/deployments.mjs";
 
 const clusterId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 

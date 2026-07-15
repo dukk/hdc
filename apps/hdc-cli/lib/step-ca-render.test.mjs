@@ -4,7 +4,7 @@ import {
   patchCaJsonListenAddress,
   renderSystemdUnit,
   rewriteCaJsonPaths,
-} from "../../../clumps/services/step-ca/lib/step-ca-render.mjs";
+} from "hdc/clump/services/step-ca/lib/step-ca-render.mjs";
 
 const global = {
   caName: "HDC Internal CA",

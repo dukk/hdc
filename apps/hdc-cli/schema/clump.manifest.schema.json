@@ -22,6 +22,41 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "health": {
+      "type": "object",
+      "description": "Default health probe metadata for the health verb.",
+      "properties": {
+        "family": {
+          "type": "string",
+          "enum": [
+            "docker-lxc",
+            "docker-qemu",
+            "qemu-native",
+            "synology",
+            "infra-api",
+            "client",
+            "self-edge"
+          ]
+        },
+        "path": { "type": "string" },
+        "port": { "type": "number", "minimum": 1 }
+      }
+    },
+    "operation_report": {
+      "type": "object",
+      "properties": {
+        "next_steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "lib": {
+      "type": "object",
+      "properties": {
+        "package_root": { "type": "string" }
+      }
+    },
     "services": {
       "type": "array",
       "description": "Capabilities exposed by this package (especially infrastructure).",

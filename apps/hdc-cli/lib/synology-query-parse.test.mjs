@@ -7,7 +7,7 @@ import {
   parseHealthCollectOutput,
   parseMdstat,
   parseSynoupgradeCheck,
-} from "../../../clumps/infrastructure/synology-nas/lib/synology-query-remote.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/synology-query-remote.mjs";
 
 describe("parseDsmVersionLine", () => {
   it("parses productversion from synoinfo line", () => {

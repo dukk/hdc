@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   pveFormBody,
   pveTaskExitIsError,
-} from "../../../clumps/infrastructure/proxmox/lib/pve-http.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/pve-http.mjs";
 
 describe("pveFormBody", () => {
   it("encodeURIComponent preserves + in SSH keys (not URLSearchParams + as space)", () => {

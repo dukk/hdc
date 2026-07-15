@@ -5,7 +5,7 @@ import {
   vaultKeysForSynologySshPassword,
   wrapSynologySudoCommand,
   synologySshUserFromEnv,
-} from "../../../clumps/infrastructure/synology-nas/lib/synology-ssh.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/synology-ssh.mjs";
 
 describe("vaultKeyForSynologySshPassword", () => {
   it("maps nas-a / nas-b to NAS_A / NAS_B suffixes", () => {

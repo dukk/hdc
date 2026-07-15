@@ -116,11 +116,31 @@ export const PACKAGE_FAMILIES = {
 };
 
 /**
+ * @param {Record<string, unknown> | null | undefined} manifestRaw
+ * @returns {{ family?: string, path?: string, port?: number }}
+ */
+export function healthFromManifest(manifestRaw) {
+  if (!manifestRaw || typeof manifestRaw !== "object" || Array.isArray(manifestRaw)) return {};
+  const h = manifestRaw.health;
+  if (!h || typeof h !== "object" || Array.isArray(h)) return {};
+  /** @type {{ family?: string, path?: string, port?: number }} */
+  const out = {};
+  if (typeof h.family === "string" && h.family.trim()) out.family = h.family.trim();
+  if (typeof h.path === "string" && h.path.trim()) out.path = h.path.trim();
+  const port = Number(h.port);
+  if (Number.isFinite(port) && port > 0) out.port = port;
+  return out;
+}
+
+/**
  * @param {string} packageId
+ * @param {Record<string, unknown> | null | undefined} [manifestRaw]
  * @param {string} [familyOverride]
  */
-export function resolveFamily(packageId, familyOverride) {
+export function resolveFamily(packageId, familyOverride, manifestRaw) {
   if (familyOverride) return familyOverride;
+  const fromManifest = healthFromManifest(manifestRaw).family;
+  if (fromManifest) return fromManifest;
   if (PACKAGE_FAMILIES[packageId]) return PACKAGE_FAMILIES[packageId];
   return "docker-lxc";
 }

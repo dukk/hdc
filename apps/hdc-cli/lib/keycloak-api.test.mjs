@@ -10,16 +10,16 @@ import {
   clientRepresentationFromConfig,
   smtpServerNeedsUpdate,
   KEYCLOAK_BUILTIN_CLIENT_IDS,
-} from "../../../clumps/services/keycloak/lib/keycloak-api.mjs";
+} from "hdc/clump/services/keycloak/lib/keycloak-api.mjs";
 import {
   filterRealmsByFlag,
   normalizeRealmList,
   resolveKeycloakApiBaseUrl,
   buildRealmDriftFields,
   smtpServerFromMailConfig,
-} from "../../../clumps/services/keycloak/lib/keycloak-realms.mjs";
+} from "hdc/clump/services/keycloak/lib/keycloak-realms.mjs";
 
-vi.mock("../../../clumps/lib/mail-relay-settings.mjs", () => ({
+vi.mock("hdc/package/mail-relay-settings.mjs", () => ({
   loadMailRelayAppSettings: () => ({
     host: "postfix-relay.hdc.example.invalid",
     port: 25,
@@ -445,6 +445,17 @@ function mockClient(seed = {}) {
         const id = decodeURIComponent(clientSecret[2]);
         const found = (clientsByRealm[name] ?? []).find((c) => c.id === id);
         return { type: "secret", value: String(found?.secret ?? "") };
+      }
+      const idpList = path.match(/^\/admin\/realms\/([^/]+)\/identity-provider\/instances$/);
+      if (idpList && method === "GET") {
+        return [];
+      }
+      const idpOne = path.match(/^\/admin\/realms\/([^/]+)\/identity-provider\/instances\/([^/]+)$/);
+      if (idpOne && method === "GET") {
+        throw new Error(`identity provider ${decodeURIComponent(idpOne[2])} not found`);
+      }
+      if (idpOne && (method === "POST" || method === "PUT" || method === "DELETE")) {
+        return null;
       }
       throw new Error(`unexpected ${method} ${path}`);
     },

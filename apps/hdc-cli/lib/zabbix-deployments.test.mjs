@@ -6,7 +6,7 @@ import {
   resolveZabbixDeployments,
   zabbixDatabase,
   zabbixWebHttpPort,
-} from "../../../clumps/services/zabbix/lib/deployments.mjs";
+} from "hdc/clump/services/zabbix/lib/deployments.mjs";
 
 describe("zabbix deployments", () => {
   const v2Lxc = {

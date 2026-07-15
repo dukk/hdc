@@ -5,7 +5,7 @@ const { pveJsonRequest, waitForPveTask } = vi.hoisted(() => ({
   waitForPveTask: vi.fn(),
 }));
 
-vi.mock("../../../clumps/infrastructure/proxmox/lib/pve-http.mjs", () => ({
+vi.mock("hdc/clump/infrastructure/proxmox/lib/pve-http.mjs", () => ({
   pveData: (body) => (body && typeof body === "object" && "data" in body ? body.data : body),
   pveFormBody: (fields) => new URLSearchParams(fields).toString(),
   pveJsonRequest,
@@ -15,7 +15,7 @@ vi.mock("../../../clumps/infrastructure/proxmox/lib/pve-http.mjs", () => ({
 import {
   stopAndDestroyLxc,
   stopAndDestroyQemu,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-destroy.mjs";
 
 describe("proxmox-guest-destroy", () => {
   const baseOpts = {

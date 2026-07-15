@@ -5,7 +5,7 @@ import {
   dsmLogin,
   dsmPackageControl,
   probeHttpIdentity,
-} from "../../../clumps/infrastructure/synology-nas/lib/synology-dsm-api.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/synology-dsm-api.mjs";
 
 describe("synologyDsmBaseUrl", () => {
   it("defaults to https :5001", () => {

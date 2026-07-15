@@ -9,7 +9,7 @@ import {
   resolveUpstreamUrl,
   resolveWebUrl,
   sshHostPort,
-} from "../../../clumps/services/gitlab/lib/gitlab-render.mjs";
+} from "hdc/clump/services/gitlab/lib/gitlab-render.mjs";
 
 const baseGl = {
   external_url: "https://gitlab.example.invalid/",

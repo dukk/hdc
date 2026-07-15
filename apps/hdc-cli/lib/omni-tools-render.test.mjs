@@ -6,7 +6,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/omni-tools/lib/omni-tools-render.mjs";
+} from "hdc/clump/services/omni-tools/lib/omni-tools-render.mjs";
 
 describe("omni-tools-render", () => {
   const omniTools = {

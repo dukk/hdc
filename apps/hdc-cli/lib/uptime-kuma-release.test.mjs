@@ -5,7 +5,7 @@ import {
   normalizeReleaseTag,
   parseGithubLatestRelease,
   releaseTarballUrl,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-release.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-release.mjs";
 
 describe("uptime-kuma release", () => {
   it("normalizes tags with optional v prefix", () => {

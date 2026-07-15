@@ -18,8 +18,8 @@ import {
   pspSortFromApi,
   slugifyId,
   statusPageHasDrift,
-} from "../../../clumps/infrastructure/uptimerobot/lib/uptimerobot-config.mjs";
-import { liveStateToConfigEntries } from "../../../clumps/infrastructure/uptimerobot/lib/uptimerobot-import.mjs";
+} from "hdc/clump/infrastructure/uptimerobot/lib/uptimerobot-config.mjs";
+import { liveStateToConfigEntries } from "hdc/clump/infrastructure/uptimerobot/lib/uptimerobot-import.mjs";
 
 describe("uptimerobot-config", () => {
   it("slugifyId normalizes friendly names", () => {

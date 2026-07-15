@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { repoRoot } from "../paths.mjs";
 import {
@@ -19,6 +19,7 @@ export const HDC_INCLUDE_KEY = "$hdc.include";
  * @property {string} publicRoot
  * @property {NodeJS.ProcessEnv} env
  * @property {string} baseRel Repo-relative path of the file being processed
+ * @property {string} [basePath] Absolute path of the file being processed (external clump trees)
  * @property {Set<string>} visited Absolute paths already being included (cycle detection)
  */
 
@@ -232,7 +233,20 @@ function loadIncludeFile(directive, ctx) {
   assertIncludeDirectiveOnly(directive);
   const includeFile = includePathFromDirective(directive);
   const includeRel = resolveIncludeRelPath(ctx.baseRel, includeFile);
-  const resolved = resolveRepoFile(ctx.publicRoot, includeRel, ctx.env);
+  let resolved = resolveRepoFile(ctx.publicRoot, includeRel, ctx.env);
+  if (!resolved.found && ctx.basePath) {
+    const localInclude = join(dirname(ctx.basePath), includeFile);
+    if (existsSync(localInclude)) {
+      resolved = {
+        found: true,
+        path: localInclude,
+        rel: includeRel,
+        source: "public",
+        privateRoot: null,
+        publicPath: localInclude,
+      };
+    }
+  }
   if (!resolved.found) {
     throw missingRepoFileError(resolved, { label: `include ${includeRel} (from ${ctx.baseRel})` });
   }
@@ -245,7 +259,7 @@ function loadIncludeFile(directive, ctx) {
   ctx.visited.add(abs);
   try {
     const raw = readFileSync(abs, "utf8");
-    const childCtx = { ...ctx, baseRel: resolved.rel };
+    const childCtx = { ...ctx, baseRel: resolved.rel, basePath: abs };
     return preprocessPackageConfigText(raw, childCtx);
   } finally {
     ctx.visited.delete(abs);
@@ -318,6 +332,7 @@ export function createPreprocessContext(ctx = {}) {
     publicRoot: ctx.publicRoot ?? repoRoot(),
     env: ctx.env ?? process.env,
     baseRel: ctx.baseRel ?? "config.json",
+    basePath: ctx.basePath,
     visited: ctx.visited ?? new Set(),
   };
 }
@@ -342,6 +357,7 @@ export function readResolvedPackageConfigJson(resolved, opts = {}) {
     publicRoot: opts.publicRoot ?? repoRoot(),
     env: opts.env,
     baseRel: resolved.rel,
+    basePath: resolved.path,
   });
   return preprocessPackageConfigText(raw, ctx);
 }

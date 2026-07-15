@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderInputsConf, renderServerConf } from "../../../clumps/services/splunk/lib/splunk-render.mjs";
+import { renderInputsConf, renderServerConf } from "hdc/clump/services/splunk/lib/splunk-render.mjs";
 
 describe("splunk-render", () => {
   it("renders server.conf with serverName and mgmt port", () => {

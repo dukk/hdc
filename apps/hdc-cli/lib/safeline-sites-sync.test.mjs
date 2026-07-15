@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { planSiteSync } from "../../../clumps/services/safeline/lib/safeline-sites-sync.mjs";
+import { planSiteSync } from "hdc/clump/services/safeline/lib/safeline-sites-sync.mjs";
 
 describe("safeline-sites-sync", () => {
   const configSites = [

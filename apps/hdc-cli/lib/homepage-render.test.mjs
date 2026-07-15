@@ -5,7 +5,7 @@ import {
   renderComposeYaml,
   renderDockerfile,
   renderHomepageEnv,
-} from "../../../clumps/services/homepage/lib/homepage-render.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-render.mjs";
 
 describe("homepage-render", () => {
   it("renderComposeYaml uses build context and NET_RAW", () => {

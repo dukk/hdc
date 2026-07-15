@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 
 import {
   discoverManifests,
+  discoverAllClumpManifests,
   manifestByTierAndId,
   manifestId,
   manifestRunTier,
@@ -19,6 +20,7 @@ import {
   buildClumpRunEnv,
 } from "./clump-env.mjs";
 import { cliAppDir } from "../paths.mjs";
+import { primaryClumpsRoot } from "../manifests.mjs";
 import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
 import {
   buildDailyStepArgs,
@@ -71,7 +73,7 @@ import {
  * @returns {string}
  */
 function configPackageRoot(deps, root, tier, id) {
-  const manifests = discoverManifests(deps.clumpsDir(root));
+  const manifests = discoverAllClumpManifests(root, deps.env);
   const m = manifestByTierAndId(manifests, tier, id);
   if (m) return m.dir;
   const tierDir =
@@ -99,7 +101,7 @@ function stepHasConfig(deps, root, step) {
  * @returns {{ m: { path: string; dir: string; raw: Record<string, unknown> }; script: string; cwd: string } | { error: string }}
  */
 function resolveStepScript(deps, root, step) {
-  const manifests = discoverManifests(deps.clumpsDir(root));
+  const manifests = discoverAllClumpManifests(root, deps.env);
   const m = manifestByTierAndId(manifests, step.tier, step.id);
   if (!m) {
     return { error: `manifest not found for ${packageRefKey(step.tier, step.id)}` };
@@ -342,10 +344,11 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
     const started = Date.now();
     const pipeStdoutJson =
       step.verb === "query" || step.verb === "maintain";
+    const clumpRunEnv = buildClumpRunEnv(deps, root, resolved.m);
     const runEnv = augmentPackageSpawnEnv(
-      buildClumpRunEnv(deps, root, resolved.m),
-      cliAppDir(root),
-      deps.clumpsDir(root),
+      clumpRunEnv,
+      cliAppDir(),
+      primaryClumpsRoot(root, clumpRunEnv),
     );
     const r = deps.spawnSync(deps.execPath, [resolved.script, ...args], {
       cwd: resolved.cwd,

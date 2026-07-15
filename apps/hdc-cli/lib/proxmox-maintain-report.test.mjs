@@ -10,8 +10,8 @@ import {
   renderQemuGuestAgentMarkdown,
   renderTemplateChecksMarkdown,
   splitMaintainSummaryFlags,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-maintain-report.mjs";
-import { UBUNTU_LTS_RELEASES } from "../../../clumps/infrastructure/proxmox/lib/ubuntu-lts-catalog.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-maintain-report.mjs";
+import { UBUNTU_LTS_RELEASES } from "hdc/clump/infrastructure/proxmox/lib/ubuntu-lts-catalog.mjs";
 
 describe("proxmox-maintain-report", () => {
   it("splitMaintainSummaryFlags groups CLI flags into set and not set", () => {

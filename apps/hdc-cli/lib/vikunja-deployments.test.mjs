@@ -6,7 +6,7 @@ import {
   listVikunjaDeploymentSummaries,
   normalizeVikunjaConfig,
   resolveVikunjaDeployments,
-} from "../../../clumps/services/vikunja/lib/deployments.mjs";
+} from "hdc/clump/services/vikunja/lib/deployments.mjs";
 
 describe("vikunja deployments", () => {
   const v2 = {

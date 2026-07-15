@@ -9,7 +9,7 @@ import {
   filterApexNsConflicts,
   loadCloudflareFallbackRecords,
   mergeCloudflareFallbackRecords,
-} from "../../../clumps/services/bind/lib/bind-cloudflare-fallback.mjs";
+} from "hdc/clump/services/bind/lib/bind-cloudflare-fallback.mjs";
 
 describe("bind-cloudflare-fallback", () => {
   it("converts Cloudflare MX with priority", () => {

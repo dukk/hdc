@@ -4,8 +4,8 @@ import {
   isAllowedUbuntuLxcAppliance,
   lxcVolidForAppliance,
   ubuntuLtsByRelease,
-} from "../../../clumps/infrastructure/proxmox/lib/ubuntu-lts-catalog.mjs";
-import { lxcVolidsToPrune, qemuTemplatesToPrune } from "../../../clumps/infrastructure/proxmox/lib/proxmox-template-prune.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/ubuntu-lts-catalog.mjs";
+import { lxcVolidsToPrune, qemuTemplatesToPrune } from "hdc/clump/infrastructure/proxmox/lib/proxmox-template-prune.mjs";
 
 describe("ubuntu LTS catalog", () => {
   it("includes 22.04, 24.04, 26.04", () => {

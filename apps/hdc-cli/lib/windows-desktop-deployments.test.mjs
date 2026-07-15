@@ -3,7 +3,7 @@ import {
   normalizeWindowsDesktopConfig,
   parseIsoVolid,
   resolveWindowsDesktopDeployments,
-} from "../../../clumps/services/windows-desktop/lib/deployments.mjs";
+} from "hdc/clump/services/windows-desktop/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

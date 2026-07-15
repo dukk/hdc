@@ -13,7 +13,7 @@ import {
   resolveUpstreamUrl,
   resolveWebUrl,
   serverName,
-} from "../../../clumps/services/cloudbeaver/lib/cloudbeaver-render.mjs";
+} from "hdc/clump/services/cloudbeaver/lib/cloudbeaver-render.mjs";
 
 describe("cloudbeaver-render", () => {
   const cloudbeaver = {

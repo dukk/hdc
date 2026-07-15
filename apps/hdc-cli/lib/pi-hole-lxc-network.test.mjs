@@ -5,7 +5,7 @@ import {
   parseIpv4FromIpConfig,
   parseIpv4FromNet0,
   resolveLxcIpConfig,
-} from "../../../clumps/lib/lxc-network.mjs";
+} from "hdc/package/lxc-network.mjs";
 
 describe("pi-hole lxc network", () => {
   it("uses ip_config when set", () => {

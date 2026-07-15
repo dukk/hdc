@@ -12,7 +12,7 @@ import {
   rootUsedPercent,
   stillNeedsRootExpansion,
   shouldSkipGuestByName,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-rootdisk-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-rootdisk-maintain.mjs";
 
 const GIB = 1024 ** 3;
 

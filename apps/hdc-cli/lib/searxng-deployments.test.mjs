@@ -8,7 +8,7 @@ import {
   normalizeSearxngConfig,
   resolveSearxngDeployments,
   secretKeyVaultKey,
-} from "../../../clumps/services/searxng/lib/deployments.mjs";
+} from "hdc/clump/services/searxng/lib/deployments.mjs";
 
 describe("searxng deployments", () => {
   const v2 = {

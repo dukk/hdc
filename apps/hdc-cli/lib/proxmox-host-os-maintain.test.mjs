@@ -3,7 +3,7 @@ import {
   hostOsMaintainEnabledFromConfig,
   hostOsRebootWaitMsFromConfig,
   listProxmoxHypervisorSshTargets,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-os-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-os-maintain.mjs";
 
 describe("proxmox host OS maintain", () => {
   const cfg = {

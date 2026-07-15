@@ -6,7 +6,7 @@ import {
   ollamaBaseUrlsJoined,
   renderOpenWebuiEnv,
   secretKeyVaultKey,
-} from "../../../clumps/services/open-webui/lib/open-webui-render.mjs";
+} from "hdc/clump/services/open-webui/lib/open-webui-render.mjs";
 
 describe("open-webui render", () => {
   const backends = [

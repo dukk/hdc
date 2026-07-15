@@ -8,7 +8,7 @@ import {
   systemIdForClass,
   vmSystemId,
 } from "./lib/inventory-naming.mjs";
-import { deployTargetSystemId, NAGIOS_CLUSTER_NODE_IDS } from "../../clumps/lib/deploy-inventory.mjs";
+import { deployTargetSystemId, NAGIOS_CLUSTER_NODE_IDS } from "hdc/package/deploy-inventory.mjs";
 
 describe("inventory-naming", () => {
   it("builds class-prefixed ids with letter instances", () => {

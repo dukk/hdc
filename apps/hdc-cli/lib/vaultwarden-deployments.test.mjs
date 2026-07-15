@@ -4,7 +4,7 @@ import {
   listVaultwardenDeploymentSummaries,
   normalizeVaultwardenConfig,
   resolveVaultwardenDeployments,
-} from "../../../clumps/services/vaultwarden/lib/deployments.mjs";
+} from "hdc/clump/services/vaultwarden/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

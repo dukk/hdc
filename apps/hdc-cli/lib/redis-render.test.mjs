@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatClusterCreateArgs } from "../../../clumps/services/redis/lib/redis-cluster.mjs";
-import { renderRedisConf } from "../../../clumps/services/redis/lib/redis-render.mjs";
+import { formatClusterCreateArgs } from "hdc/clump/services/redis/lib/redis-cluster.mjs";
+import { renderRedisConf } from "hdc/clump/services/redis/lib/redis-render.mjs";
 
 describe("redis-render", () => {
   it("includes cluster-enabled and announce IP without password", () => {

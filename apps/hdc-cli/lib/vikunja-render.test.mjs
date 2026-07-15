@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { vikunjaMailEnvLines } from "../../../clumps/lib/app-mail-render.mjs";
+import { vikunjaMailEnvLines } from "hdc/package/app-mail-render.mjs";
 import {
   formatVikunjaPublicUrl,
   renderComposeYaml,
   renderVikunjaEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/vikunja/lib/vikunja-render.mjs";
+} from "hdc/clump/services/vikunja/lib/vikunja-render.mjs";
 
 describe("vikunja render", () => {
   const secrets = { jwtSecret: "jwt-test-secret", dbPassword: "db-test-secret" };

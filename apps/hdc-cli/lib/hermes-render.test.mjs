@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderHermesConfigYaml,
   resolvePrimaryOllamaBackend,
-} from "../../../clumps/services/hermes/lib/hermes-config-render.mjs";
+} from "hdc/clump/services/hermes/lib/hermes-config-render.mjs";
 import {
   apiPort,
   dashboardEnabled,
@@ -10,7 +10,7 @@ import {
   dashboardUsername,
   openrouterFallbackVaultKey,
   openrouterVaultKey,
-} from "../../../clumps/services/hermes/lib/deployments.mjs";
+} from "hdc/clump/services/hermes/lib/deployments.mjs";
 import {
   composeDir,
   dataDir,
@@ -18,7 +18,7 @@ import {
   renderComposeYaml,
   renderHermesEnv,
   resolveDashboardUrl,
-} from "../../../clumps/services/hermes/lib/hermes-render.mjs";
+} from "hdc/clump/services/hermes/lib/hermes-render.mjs";
 
 describe("hermes-render", () => {
   const hermes = {

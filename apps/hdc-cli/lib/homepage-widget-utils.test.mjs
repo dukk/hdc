@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { serviceUrlFromHostPort, serviceUrlFromPublicUrlOrHostPort, widgetBlockEnabled } from "../../../clumps/services/homepage/lib/homepage-widget-utils.mjs";
-import { glancesWidgetEnabled } from "../../../clumps/services/homepage/lib/homepage-glances-widget.mjs";
+import { serviceUrlFromHostPort, serviceUrlFromPublicUrlOrHostPort, widgetBlockEnabled } from "hdc/clump/services/homepage/lib/homepage-widget-utils.mjs";
+import { glancesWidgetEnabled } from "hdc/clump/services/homepage/lib/homepage-glances-widget.mjs";
 
 describe("homepage widget utils", () => {
   it("widgetBlockEnabled defaults true when enabled not false", () => {

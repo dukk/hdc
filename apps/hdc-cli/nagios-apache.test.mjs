@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildNagiosApacheEnableScript,
   buildNagiosInstallScript,
-} from "../../clumps/services/nagios/lib/nagios-install.mjs";
+} from "hdc/clump/services/nagios/lib/nagios-install.mjs";
 
 describe("nagios apache cgi", () => {
   it("enables mod_cgi and nagios4 apache confs", () => {

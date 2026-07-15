@@ -5,7 +5,7 @@ import {
   UPTIME_KUMA_USERNAME_ENV,
   resolveUptimeKumaCredentials,
   resolveUptimeKumaPassword,
-} from "../../../clumps/services/uptime-kuma/lib/vault-deps.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/vault-deps.mjs";
 
 describe("uptime-kuma vault-deps", () => {
   it("resolveUptimeKumaPassword uses getSecret with optional and returns trimmed value", async () => {

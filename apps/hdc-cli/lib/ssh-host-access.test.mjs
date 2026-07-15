@@ -7,7 +7,7 @@ import {
   buildSshArgv,
   createSshAskpassHelper,
 } from "./ssh-host-access.mjs";
-import { sshKeysMaintainEnabledFromConfig } from "../../../clumps/infrastructure/proxmox/lib/proxmox-ssh-keys-maintain.mjs";
+import { sshKeysMaintainEnabledFromConfig } from "hdc/clump/infrastructure/proxmox/lib/proxmox-ssh-keys-maintain.mjs";
 
 describe("ssh-host-access", () => {
   it("vaultKeyForProxmoxSshPassword uses host id suffix", () => {

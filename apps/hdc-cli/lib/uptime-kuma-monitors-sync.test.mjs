@@ -5,9 +5,9 @@ import {
   liveTagNamesAfterPrune,
   pruneMonitorTags,
   tagAssignmentsFromMonitorRow,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-monitors-sync.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-monitors-sync.mjs";
 
-/** @type {import('../../../clumps/services/uptime-kuma/lib/uptime-kuma-config.mjs').ConfigMonitor} */
+/** @type {import("hdc/clump/services/uptime-kuma/lib/uptime-kuma-config.mjs").ConfigMonitor} */
 const baseEntry = {
   id: "audiobookshelf",
   name: "Audiobookshelf",

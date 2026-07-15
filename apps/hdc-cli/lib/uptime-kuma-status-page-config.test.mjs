@@ -6,9 +6,9 @@ import {
   liveStatusPageToConfig,
   statusPageHasDrift,
   statusPageToSaveConfig,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-status-page-config.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-status-page-config.mjs";
 
-/** @type {import("../../../clumps/services/uptime-kuma/lib/uptime-kuma-status-page-config.mjs").ConfigStatusPage} */
+/** @type {import("hdc/clump/services/uptime-kuma/lib/uptime-kuma-status-page-config.mjs").ConfigStatusPage} */
 const sampleStatusPage = {
   id: "public",
   slug: "public",

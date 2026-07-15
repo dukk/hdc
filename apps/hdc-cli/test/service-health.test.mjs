@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { deriveHealthStatus, statusIsOk } from "../../../clumps/lib/service-health/status.mjs";
-import { joinUrlPath, hostnameFromUrl } from "../../../clumps/lib/service-health/resolve-endpoints.mjs";
+import { deriveHealthStatus, statusIsOk } from "hdc/package/service-health/status.mjs";
+import { joinUrlPath, hostnameFromUrl } from "hdc/package/service-health/resolve-endpoints.mjs";
 
 describe("service-health status", () => {
   it("marks healthy when public works", () => {

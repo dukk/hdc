@@ -13,7 +13,7 @@ const REPS = [
   ['join(publicRoot, "packages"', 'join(publicRoot, "clumps"'],
   ['join(privateRoot, "packages"', 'join(privateRoot, "clumps"'],
   ['join(root, "packages"', 'join(root, "clumps"'],
-  ['"packages/infrastructure/', '"clumps/infrastructure/'],
+  ['"packages/infrastructure/', '"hdc/clump/infrastructure/'],
   ['"packages/services/', '"clumps/services/'],
   ['"packages/clients/', '"clumps/clients/'],
 ];

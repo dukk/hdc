@@ -4,12 +4,12 @@ import {
   buildDirectorSysctlCommands,
   buildNatRealServerVerifyCommand,
   renderKeepalivedConf,
-} from "../../../clumps/services/keepalived/lib/keepalived-render.mjs";
+} from "hdc/clump/services/keepalived/lib/keepalived-render.mjs";
 import {
   finalizeDirectorDeployment,
   keepalivedGlobalSettings,
   normalizeKeepalivedConfig,
-} from "../../../clumps/services/keepalived/lib/deployments.mjs";
+} from "hdc/clump/services/keepalived/lib/deployments.mjs";
 
 const exampleCfg = {
   schema_version: 2,

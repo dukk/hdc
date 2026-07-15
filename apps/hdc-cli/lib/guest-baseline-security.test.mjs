@@ -2,22 +2,22 @@ import { describe, expect, it } from "vitest";
 import {
   buildClamavScanSystemdUnits,
   clamavScanScheduleSkippedByFlags,
-} from "../../../clumps/lib/clamav-scan-schedule.mjs";
+} from "hdc/package/clamav-scan-schedule.mjs";
 import {
   buildSystemdTimerInstallScript,
   staggerOffsetFromSystemId,
-} from "../../../clumps/lib/guest-systemd-unit-ensure.mjs";
+} from "hdc/package/guest-systemd-unit-ensure.mjs";
 import {
   buildUnattendedUpgradesConfigSnippet,
   unattendedUpgradesSkippedByFlags,
-} from "../../../clumps/lib/unattended-upgrades-ensure.mjs";
+} from "hdc/package/unattended-upgrades-ensure.mjs";
 import {
   crowdsecAgentSkippedByFlags,
-} from "../../../clumps/lib/crowdsec-agent-ensure.mjs";
+} from "hdc/package/crowdsec-agent-ensure.mjs";
 import {
   guestAgentsConfigFromProxmox,
   isNagiosGuestSystem,
-} from "../../../clumps/lib/guest-agents-config.mjs";
+} from "hdc/package/guest-agents-config.mjs";
 
 describe("guest-systemd-unit-ensure", () => {
   it("staggerOffsetFromSystemId is deterministic", () => {

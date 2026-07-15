@@ -7,7 +7,7 @@ import {
   generateBindTsigSecret,
   resolveBindTsigSecret,
   writeBindTsigSecretToConfig,
-} from "../../../clumps/services/bind/lib/bind-tsig.mjs";
+} from "hdc/clump/services/bind/lib/bind-tsig.mjs";
 
 describe("bind-tsig", () => {
   it("generateBindTsigSecret returns base64 of 32 bytes", () => {

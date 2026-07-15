@@ -6,6 +6,7 @@ import { cwd, stdin as input, stderr as rlOutput } from "node:process";
 import { loadDotenv } from "../env.mjs";
 import { defaultHostProbe } from "./host-probe.mjs";
 import { clumpsDir, repoRoot } from "../paths.mjs";
+import { primaryClumpsRoot } from "../manifests.mjs";
 import { defaultVaultPath } from "../vault.mjs";
 import { readLineMasked } from "./readline-masked.mjs";
 
@@ -43,7 +44,7 @@ export function createNodeCliDeps() {
     error: (...a) => console.error(...a),
     warn: (...a) => console.warn(...a),
     repoRoot,
-    clumpsDir,
+    clumpsDir: (root) => primaryClumpsRoot(root, process.env),
     join,
     resolve,
     isAbsolute,

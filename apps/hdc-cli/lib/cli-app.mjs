@@ -1,5 +1,7 @@
 import {
   discoverManifests,
+  discoverAllClumpManifests,
+  primaryClumpsRoot,
   envRequired,
   inventoryDocs,
   formatManifestServiceInvoke,
@@ -49,6 +51,11 @@ import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
 import { cliAppDir } from "../paths.mjs";
 import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
+import {
+  loadClumpsReposConfig,
+  resolveClumpRoots,
+  syncClumpRepo,
+} from "./clump-repos.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -108,6 +115,9 @@ function usage(deps) {
 Usage:
   ${c} help [ <topic> ... ]
   ${c} list
+  ${c} clumps list [--reference]
+  ${c} clumps sync [--repo <id>] [--dry-run]
+  ${c} clumps init
   ${c} run <tier> <clump> <verb> [-- <extra args...>]
   ${c} run <tier> <clump> <platform> <verb> [-- <extra args...>]   # when manifest lists "platforms"
   ${c} secrets path
@@ -302,7 +312,7 @@ Drill into one package or verb:
       );
     }
 
-    const manifests = discoverManifests(deps.clumpsDir(root));
+    const manifests = discoverAllClumpManifests(root, deps.env);
     const canonical = canonicalRunTier(tierToken);
     const tierManifests = manifests.filter((m) => manifestRunTier(m) === canonical);
 
@@ -1074,7 +1084,7 @@ function cmdEnv(deps, root, argv = []) {
   }
 
   if (packageRun) {
-    const manifests = discoverManifests(deps.clumpsDir(root));
+    const manifests = discoverAllClumpManifests(root, deps.env);
     const m = manifestByTierAndId(manifests, packageRun.tier, packageRun.id);
     if (!m) {
       die(deps, `env: no package ${packageRun.tier}/${packageRun.id}`);
@@ -1114,7 +1124,7 @@ function cmdEnv(deps, root, argv = []) {
 }
 
 function cmdList(deps, root) {
-  const manifests = discoverManifests(deps.clumpsDir(root));
+  const manifests = discoverAllClumpManifests(root, deps.env);
   deps.log("Clumps (manifest.json):");
   for (const tier of RUN_TIERS) {
     const tierManifests = manifests.filter((m) => manifestRunTier(m) === tier);
@@ -1148,12 +1158,46 @@ function cmdList(deps, root) {
  * @param {string} root
  * @param {string[]} argv
  */
+async function cmdClumps(deps, root, argv) {
+  const sub = argv[0] ?? "list";
+  const config = loadClumpsReposConfig(root, deps.env);
+  if (sub === "init" || sub === "sync") {
+    const dryRun = argv.includes("--dry-run");
+    const repoIdx = argv.indexOf("--repo");
+    const onlyId = repoIdx >= 0 ? argv[repoIdx + 1] : null;
+    const targets = config.repos.filter((r) => !onlyId || r.id === onlyId);
+    if (!targets.length) die(deps, `clumps: unknown repo ${JSON.stringify(onlyId)}`);
+    let failed = false;
+    for (const repo of targets) {
+      const r = syncClumpRepo(config, repo, {
+        dryRun,
+        log: (line) => deps.log(`[hdc] ${line}`),
+      });
+      if (!r.ok) failed = true;
+    }
+    if (failed) die(deps, "clumps sync: one or more repos failed");
+    return;
+  }
+  if (sub !== "list") die(deps, "clumps: need list, sync, or init");
+  const showReference = argv.includes("--reference");
+  deps.log("Clump repositories:");
+  for (const repo of config.repos) {
+    if (repo.mode === "reference" && !showReference) continue;
+    const rootEntry = resolveClumpRoots(config, { ...deps.env, HDC_REPO_ROOT: root }).find(
+      (r) => r.repoId === repo.id,
+    );
+    const count = rootEntry ? discoverManifests(rootEntry.root).length : 0;
+    const state = rootEntry ? `synced (${count} manifests)` : "missing — run: hdc clumps sync";
+    deps.log(`  ${repo.id}\t${repo.mode}\t${repo.url} @ ${repo.ref}\t${state}`);
+  }
+}
+
 async function cmdRun(deps, root, argv) {
   const { forward, extra } = splitRunArgs(argv);
   if (forward.length < 3) {
     die(deps, `run: need <tier> <clump> <verb> (tiers: ${runTiersUsage()})`);
   }
-  const manifests = discoverManifests(deps.clumpsDir(root));
+  const manifests = discoverAllClumpManifests(root, deps.env);
   const tierToken = forward[0];
   const m = resolveRunManifest(deps, manifests, tierToken, forward[1]);
   const inv = resolveRunInvocation(forward.slice(1), m);
@@ -1170,9 +1214,9 @@ async function cmdRun(deps, root, argv) {
   }
 
   if (verb !== "query") {
-    const runEnv = buildClumpRunEnv(deps, root, m);
+    const checkEnv = buildClumpRunEnv(deps, root, m);
     for (const key of envRequired(m)) {
-      if (!runEnv[key]) {
+      if (!checkEnv[key]) {
         deps.warn(`warning: env ${key} is not set (declared env_required in manifest)`);
       }
     }
@@ -1184,10 +1228,11 @@ async function cmdRun(deps, root, argv) {
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
   const pipeStdoutJson =
     verb === "query" || verb === "health" || verb === "deploy" || verb === "teardown";
+  const clumpRunEnv = buildClumpRunEnv(deps, root, m);
   const runEnv = augmentPackageSpawnEnv(
-    buildClumpRunEnv(deps, root, m),
-    cliAppDir(root),
-    deps.clumpsDir(root),
+    clumpRunEnv,
+    cliAppDir(),
+    primaryClumpsRoot(root, clumpRunEnv),
   );
   const r = deps.spawnSync(deps.execPath, [script, ...extra], {
     cwd,
@@ -1230,6 +1275,10 @@ export async function runCli(argv, deps) {
     }
     if (cmd === "list") {
       cmdList(deps, root);
+      return 0;
+    }
+    if (cmd === "clumps") {
+      await cmdClumps(deps, root, rest);
       return 0;
     }
     if (cmd === "env") {

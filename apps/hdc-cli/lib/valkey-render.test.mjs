@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatClusterCreateArgs } from "../../../clumps/services/valkey/lib/valkey-cluster.mjs";
-import { renderValkeyConf } from "../../../clumps/services/valkey/lib/valkey-render.mjs";
+import { formatClusterCreateArgs } from "hdc/clump/services/valkey/lib/valkey-cluster.mjs";
+import { renderValkeyConf } from "hdc/clump/services/valkey/lib/valkey-render.mjs";
 
 describe("valkey-render", () => {
   it("includes cluster-enabled and announce IP without password", () => {

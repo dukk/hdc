@@ -12,7 +12,7 @@ import {
   twilioCredentialUsernameVaultKey,
   twilioIdentifyCidrs,
   twilioTrunkName,
-} from "../../../clumps/services/asterisk/lib/asterisk-render.mjs";
+} from "hdc/clump/services/asterisk/lib/asterisk-render.mjs";
 
 const baseAsterisk = {
   sip_port: 5060,

@@ -7,7 +7,7 @@ import {
   normalizeLlamaCppConfig,
   resolveLlamaCppDeployment,
   resolveLlamaCppDeployments,
-} from "../../../clumps/services/llama-cpp/lib/deployments.mjs";
+} from "hdc/clump/services/llama-cpp/lib/deployments.mjs";
 
 describe("llama-cpp deployments", () => {
   const v2 = {

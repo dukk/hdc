@@ -3,7 +3,7 @@ import {
   bindGlobalSettings,
   normalizeBindConfig,
   resolveBindDeployments,
-} from "../../../clumps/services/bind/lib/deployments.mjs";
+} from "hdc/clump/services/bind/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

@@ -4,7 +4,7 @@ import {
   bindWidgetEnabled,
   buildBindWidgetStatsFiles,
   countBindZones,
-} from "../../../clumps/services/homepage/lib/homepage-bind-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-bind-widget.mjs";
 
 describe("homepage bind widget", () => {
   it("bindWidgetEnabled respects enabled flag", () => {

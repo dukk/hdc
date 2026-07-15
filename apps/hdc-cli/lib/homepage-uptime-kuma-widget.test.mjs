@@ -5,7 +5,7 @@ import {
   resolveUptimeKumaWidgetSlug,
   resolveUptimeKumaWidgetUrl,
   uptimeKumaWidgetEnvSuffix,
-} from "../../../clumps/services/homepage/lib/homepage-uptime-kuma-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-uptime-kuma-widget.mjs";
 
 const defaults = {
   uptime_kuma: {

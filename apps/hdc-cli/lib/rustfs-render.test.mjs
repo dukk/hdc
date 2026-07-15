@@ -8,7 +8,7 @@ import {
   resolveS3UpstreamPool,
   resolveS3UpstreamUrl,
   s3Port,
-} from "../../../clumps/services/rustfs/lib/rustfs-render.mjs";
+} from "hdc/clump/services/rustfs/lib/rustfs-render.mjs";
 
 describe("rustfs-render", () => {
   const rustfs = {

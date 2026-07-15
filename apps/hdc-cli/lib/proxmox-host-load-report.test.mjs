@@ -14,7 +14,7 @@ import {
   storagePoolsForNode,
   sumGuestResources,
   usagePercent,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-host-load-report.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-host-load-report.mjs";
 
 const pveBStatus = {
   cpuinfo: { cpus: 12 },

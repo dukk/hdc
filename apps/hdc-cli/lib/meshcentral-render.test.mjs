@@ -13,7 +13,7 @@ import {
   resolvePublicUrl,
   serviceSummary,
   trustedProxies,
-} from "../../../clumps/services/meshcentral/lib/meshcentral-render.mjs";
+} from "hdc/clump/services/meshcentral/lib/meshcentral-render.mjs";
 
 describe("meshcentral-render", () => {
   const meshcentral = {

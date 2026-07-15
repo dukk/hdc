@@ -98,9 +98,14 @@ function maybeBootstrapClumpConfig(publicRoot, clumpRoot, filename, opts) {
  * @param {string} [publicRoot]
  */
 export function clumpConfigRel(clumpRoot, filename = "config.json", publicRoot = repoRoot()) {
+  const norm = clumpRoot.replace(/\\/g, "/");
+  const m = norm.match(/\/(clients|infrastructure|services)\/([^/]+)\/?$/);
+  if (m) {
+    return `clumps/${m[1]}/${m[2]}/${filename}`;
+  }
   const rel = relative(publicRoot, join(clumpRoot, filename)).replace(/\\/g, "/");
   if (!rel || rel.startsWith("..")) {
-    throw new Error(`clumpRoot must be under repo root: ${clumpRoot}`);
+    throw new Error(`cannot derive config rel from clump root: ${clumpRoot}`);
   }
   return rel;
 }
@@ -213,6 +218,46 @@ export function tryLoadClumpConfigOrExample(clumpRoot, opts = {}) {
     );
   const exampleResolved = resolveRepoFile(publicRoot, exampleRel, opts.env);
   if (!exampleResolved.found) {
+    const localExample = join(clumpRoot, "config.example.json");
+    if (existsSync(localExample)) {
+      try {
+        const data = assertJsonObject(
+          readResolvedPackageConfigJson(
+            {
+              found: true,
+              path: localExample,
+              rel: exampleRel,
+              source: "public",
+            },
+            { publicRoot, env: opts.env, preprocess: opts.preprocess },
+          ),
+        );
+        return {
+          ok: true,
+          missing: false,
+          path: localExample,
+          rel: exampleRel,
+          source: "public",
+          data,
+          resolved: {
+            found: true,
+            path: localExample,
+            rel: exampleRel,
+            source: "public",
+            privateRoot: null,
+          },
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          missing: false,
+          path: localExample,
+          rel: exampleRel,
+          source: "public",
+          error: /** @type {Error} */ (e).message,
+        };
+      }
+    }
     return loaded;
   }
   try {

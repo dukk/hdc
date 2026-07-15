@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { effectiveToDesired } from "../../../clumps/infrastructure/discord/lib/discord-config.mjs";
+import { effectiveToDesired } from "hdc/clump/infrastructure/discord/lib/discord-config.mjs";
 import {
   diffApplication,
   patchBodyForDrift,
   uriSetDrift,
-} from "../../../clumps/infrastructure/discord/lib/discord-diff.mjs";
-import { planAppSync } from "../../../clumps/infrastructure/discord/lib/discord-sync.mjs";
-import { normalizeDiscordConfig } from "../../../clumps/infrastructure/discord/lib/discord-config.mjs";
+} from "hdc/clump/infrastructure/discord/lib/discord-diff.mjs";
+import { planAppSync } from "hdc/clump/infrastructure/discord/lib/discord-sync.mjs";
+import { normalizeDiscordConfig } from "hdc/clump/infrastructure/discord/lib/discord-config.mjs";
 
 describe("discord-diff", () => {
   it("uriSetDrift reports missing and extra URIs", () => {

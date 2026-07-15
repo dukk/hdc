@@ -12,7 +12,7 @@ import {
   hdcManagedHaComment,
   isHdcManagedHaComment,
   resolveHaSpec,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-ha-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-ha-maintain.mjs";
 
 const proxmoxCfg = {
   provision: {

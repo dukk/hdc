@@ -7,7 +7,7 @@ import {
   renderSettingsYaml,
   renderSearxngEnv,
   resolvePublicUrl,
-} from "../../../clumps/services/searxng/lib/searxng-render.mjs";
+} from "hdc/clump/services/searxng/lib/searxng-render.mjs";
 
 const SAMPLE_UPSTREAM = `general:
   instance_name: "SearXNG"

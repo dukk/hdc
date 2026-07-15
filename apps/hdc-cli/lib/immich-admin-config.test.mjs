@@ -7,8 +7,8 @@ import {
   sanitizeSystemConfigForStorage,
   smtpSummaryFromSystemConfig,
   systemConfigChanged,
-} from "../../../clumps/services/immich/lib/immich-admin-config.mjs";
-import { resetMailRelayClientDefaultsCache } from "../../../clumps/lib/mail-relay-config.mjs";
+} from "hdc/clump/services/immich/lib/immich-admin-config.mjs";
+import { resetMailRelayClientDefaultsCache } from "hdc/package/mail-relay-config.mjs";
 import {
   installMailRelayExampleMock,
   restoreMailRelayExampleMock,

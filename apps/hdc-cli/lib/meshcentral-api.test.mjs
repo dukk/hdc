@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { connectMeshcentralApi } from "../../../clumps/services/meshcentral/lib/meshcentral-api.mjs";
+import { connectMeshcentralApi } from "hdc/clump/services/meshcentral/lib/meshcentral-api.mjs";
 
 class FakeWebSocket extends EventEmitter {
   static OPEN = 1;

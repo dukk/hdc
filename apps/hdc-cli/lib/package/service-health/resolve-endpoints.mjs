@@ -1,8 +1,10 @@
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadManualSystemSidecar, primaryIpFromSystem } from "../inventory-sidecar.mjs";
 import { tryLoadClumpConfigFromClumpRoot } from "../clump-run-config.mjs";
-import { HEALTH_PATHS, DEFAULT_PORTS } from "./families.mjs";
+import { clumpsRoot } from "../clumps-root.mjs";
+import { HEALTH_PATHS, DEFAULT_PORTS, healthFromManifest } from "./families.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -63,12 +65,15 @@ export function publicUrlFromService(svc) {
 /**
  * @param {Record<string, unknown>} svc
  * @param {string} packageId
+ * @param {Record<string, unknown> | null | undefined} [manifestRaw]
  */
-export function portFromService(svc, packageId) {
+export function portFromService(svc, packageId, manifestRaw) {
   for (const key of ["host_port", "port", "listen_port", "http_port"]) {
     const n = Number(svc[key]);
     if (Number.isFinite(n) && n > 0) return n;
   }
+  const manifestPort = healthFromManifest(manifestRaw).port;
+  if (manifestPort) return manifestPort;
   return DEFAULT_PORTS[packageId] ?? 80;
 }
 
@@ -101,7 +106,7 @@ export function guestIpFromDeployment(deployment) {
  * @param {string} repoRoot
  */
 export function loadNginxWafEdge(repoRoot) {
-  const wafRoot = join(repoRoot, "clumps", "services", "nginx-waf");
+  const wafRoot = join(clumpsRoot(), "services", "nginx-waf");
   const loaded = tryLoadClumpConfigFromClumpRoot(wafRoot, {
     exampleRel: "clumps/services/nginx-waf/config.example.json",
   });
@@ -163,22 +168,28 @@ function tierFromClumpRoot(clumpRoot) {
  * @param {string} opts.clumpRoot
  * @param {string} opts.packageId
  * @param {Record<string, unknown>} [opts.probe]
+ * @param {Record<string, unknown>} [opts.manifestRaw]
  * @param {string} [opts.instance]
  */
 export function resolveHealthEndpoints(opts) {
   const packageId = opts.packageId;
+  const manifestRaw = opts.manifestRaw ?? null;
   const tier = tierFromClumpRoot(opts.clumpRoot);
   const loaded = tryLoadClumpConfigFromClumpRoot(opts.clumpRoot, {
     exampleRel: `clumps/${tier}/${packageId}/config.example.json`,
   });
   const cfg = loaded.ok && isObject(loaded.data) ? /** @type {Record<string, unknown>} */ (loaded.data) : null;
   const probe = opts.probe ?? {};
+  const manifestHealth = healthFromManifest(manifestRaw);
   const path =
-    typeof probe.path === "string" && probe.path ? probe.path : (HEALTH_PATHS[packageId] ?? "/");
+    typeof probe.path === "string" && probe.path
+      ? probe.path
+      : manifestHealth.path || HEALTH_PATHS[packageId] || "/";
   const svc = cfg ? serviceBlock(cfg, packageId) : {};
   const publicUrl =
     typeof probe.public_url === "string" ? probe.public_url : publicUrlFromService(svc);
-  const port = typeof probe.port === "number" ? probe.port : portFromService(svc, packageId);
+  const port =
+    typeof probe.port === "number" ? probe.port : portFromService(svc, packageId, manifestRaw);
   const hostname =
     typeof probe.hostname === "string"
       ? probe.hostname

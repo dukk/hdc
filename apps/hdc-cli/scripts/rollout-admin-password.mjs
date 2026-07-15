@@ -6,12 +6,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { ensureAdminUser } from "../../../clumps/lib/admin-user-ensure.mjs";
-import { createConfigureExec } from "../../../clumps/services/postfix-relay/lib/postfix-relay-configure.mjs";
-import { resolveGuestSshUser } from "../../../clumps/lib/guest-ssh-resolve.mjs";
-import { createPackageVaultAccess } from "../../../clumps/lib/package-vault-access.mjs";
-import { provisionLogFromConsole } from "../../../clumps/lib/host-provisioner.mjs";
-import { resolvePveSshForHost } from "../../../clumps/services/ollama/lib/ollama-install.mjs";
+import { ensureAdminUser } from "hdc/package/admin-user-ensure.mjs";
+import { createConfigureExec } from "hdc/clump/services/postfix-relay/lib/postfix-relay-configure.mjs";
+import { resolveGuestSshUser } from "hdc/package/guest-ssh-resolve.mjs";
+import { createPackageVaultAccess } from "hdc/package/package-vault-access.mjs";
+import { provisionLogFromConsole } from "hdc/package/host-provisioner.mjs";
+import { resolvePveSshForHost } from "hdc/clump/services/ollama/lib/ollama-install.mjs";
 import { loadDotenv } from "../env.mjs";
 import { hdcPrivateRoot } from "../lib/private-repo.mjs";
 import { loadClumpConfigFromClumpRoot } from "../lib/clump-config.mjs";
@@ -39,7 +39,7 @@ function deploymentsFromConfig(cfg) {
 
 /**
  * @param {Record<string, unknown>} deployment
- * @returns {import("../../../clumps/lib/clamav-ensure.mjs").ConfigureExec | null}
+ * @returns {import("hdc/package/clamav-ensure.mjs").ConfigureExec | null}
  */
 function resolveExecForDeployment(deployment) {
   const mode = typeof deployment.mode === "string" ? deployment.mode.trim() : "";

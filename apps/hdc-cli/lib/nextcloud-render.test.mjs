@@ -4,7 +4,7 @@ import {
   normalizeAioBlock,
   renderComposeYaml,
   resolveAioInterfaceUrl,
-} from "../../../clumps/services/nextcloud/lib/nextcloud-render.mjs";
+} from "hdc/clump/services/nextcloud/lib/nextcloud-render.mjs";
 
 describe("nextcloud render", () => {
   it("composeFileUrl points at official AIO compose", () => {

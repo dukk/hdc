@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractOnDemandUnitPrice } from "../../../clumps/infrastructure/aws/lib/aws-pricing.mjs";
+import { extractOnDemandUnitPrice } from "hdc/clump/infrastructure/aws/lib/aws-pricing.mjs";
 
 const sampleEc2Product = [
   {

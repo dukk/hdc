@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { isHostProvisioner, vmNotSupportedResult } from "../../../clumps/lib/host-provisioner.mjs";
-import { createUbuntuDockerHostProvisioner } from "../../../clumps/infrastructure/ubuntu/lib/ubuntu-docker-host-provisioner.mjs";
-import { flagGet, flagNumber, parseArgvFlags } from "../../../clumps/lib/parse-argv-flags.mjs";
+import { isHostProvisioner, vmNotSupportedResult } from "hdc/package/host-provisioner.mjs";
+import { createUbuntuDockerHostProvisioner } from "hdc/clump/infrastructure/ubuntu/lib/ubuntu-docker-host-provisioner.mjs";
+import { flagGet, flagNumber, parseArgvFlags } from "hdc/package/parse-argv-flags.mjs";
 
 describe("parseArgvFlags", () => {
   it("parses boolean flags and pairs", () => {

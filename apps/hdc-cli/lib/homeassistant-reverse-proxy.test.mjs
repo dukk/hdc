@@ -7,9 +7,9 @@ import {
   proxmoxVolumeToDevPath,
   reverseProxyConfigurationInSync,
   stripManagedReverseProxyBlocks,
-} from "../../../clumps/services/homeassistant/lib/haos-reverse-proxy-config.mjs";
-import { publicUrlNeedsReverseProxy } from "../../../clumps/services/homeassistant/lib/reverse-proxy-apply.mjs";
-import { resolveNginxWafTrustedProxies } from "../../../clumps/services/homeassistant/lib/resolve-nginx-waf-proxies.mjs";
+} from "hdc/clump/services/homeassistant/lib/haos-reverse-proxy-config.mjs";
+import { publicUrlNeedsReverseProxy } from "hdc/clump/services/homeassistant/lib/reverse-proxy-apply.mjs";
+import { resolveNginxWafTrustedProxies } from "hdc/clump/services/homeassistant/lib/resolve-nginx-waf-proxies.mjs";
 
 describe("homeassistant reverse proxy config", () => {
   const baseYaml = [

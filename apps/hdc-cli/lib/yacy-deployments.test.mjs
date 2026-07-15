@@ -6,7 +6,7 @@ import {
   listYacyDeploymentSummaries,
   normalizeYacyConfig,
   resolveYacyDeployments,
-} from "../../../clumps/services/yacy/lib/deployments.mjs";
+} from "hdc/clump/services/yacy/lib/deployments.mjs";
 
 describe("yacy deployments", () => {
   const v2 = {

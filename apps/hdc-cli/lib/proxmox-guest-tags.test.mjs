@@ -8,13 +8,13 @@ import {
   parseProxmoxTags,
   proxmoxGuestTypeFromMode,
   ensureGuestPackageTag,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
 import {
   collectTagTargetsFromPackages,
   deploymentTagRow,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-tags-maintain.mjs";
-import * as pveHttp from "../../../clumps/infrastructure/proxmox/lib/pve-http.mjs";
-import * as guestResources from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-tags-maintain.mjs";
+import * as pveHttp from "hdc/clump/infrastructure/proxmox/lib/pve-http.mjs";
+import * as guestResources from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
 
 describe("proxmox-guest-tags", () => {
   describe("normalizePackageTag", () => {

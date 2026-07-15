@@ -21,13 +21,13 @@ import {
   resolveBackupSpec,
   storageSupportsBackup,
   weekdayGapDays,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-backup-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-backup-maintain.mjs";
 import {
   BACKUP_FREQUENCY_TAGS,
   backupFrequencyTagForProfile,
   mergeBackupFrequencyTag,
   parseProxmoxTags,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-tags.mjs";
 
 const proxmoxCfg = {
   provision: {

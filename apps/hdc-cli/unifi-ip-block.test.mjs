@@ -8,11 +8,11 @@ import {
   planBlockIp,
   planUnblockIp,
   pruneExpiredBlocks,
-} from "../../clumps/infrastructure/unifi-network/lib/unifi-ip-block.mjs";
+} from "hdc/clump/infrastructure/unifi-network/lib/unifi-ip-block.mjs";
 import {
   renderMainCfSnippet,
   renderTransportMap,
-} from "../../clumps/services/postfix-relay/lib/postfix-relay-render.mjs";
+} from "hdc/clump/services/postfix-relay/lib/postfix-relay-render.mjs";
 
 describe("unifi-ip-block", () => {
   it("validates IPv4", () => {

@@ -3,12 +3,12 @@ import {
   expandDeployment,
   normalizeHomeassistantConfig,
   resolveHomeassistantDeployments,
-} from "../../../clumps/services/homeassistant/lib/deployments.mjs";
-import { haosOvaDownloadUrl } from "../../../clumps/services/homeassistant/lib/haos-image.mjs";
+} from "hdc/clump/services/homeassistant/lib/deployments.mjs";
+import { haosOvaDownloadUrl } from "hdc/clump/services/homeassistant/lib/haos-image.mjs";
 import {
   filterCoordinatorCandidates,
   parseLsusbOutput,
-} from "../../../clumps/services/homeassistant/lib/usb-preflight.mjs";
+} from "hdc/clump/services/homeassistant/lib/usb-preflight.mjs";
 
 describe("homeassistant deployments", () => {
   const sample = {

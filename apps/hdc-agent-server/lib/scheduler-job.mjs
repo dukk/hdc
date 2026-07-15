@@ -149,7 +149,7 @@ export async function runScheduledCliJob(opts) {
   const mail = /** @type {Record<string, unknown>} */ (schedule.mail ?? {});
   if (mail.enabled === true && (!mail.on_failure_only || !ok) && mail.to) {
     const { parseReportPathFromStderr, sendReportEmail } = await import(
-      pathToFileURL(join(installRoot, "clumps/lib/report-email.mjs")).href
+      pathToFileURL(join(installRoot, "apps/hdc-cli/lib/package/report-email.mjs")).href
     );
     const reportPath = parseReportPathFromStderr(stderr);
     if (reportPath && existsSync(reportPath)) {

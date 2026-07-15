@@ -5,7 +5,7 @@ import {
   diskstationWidgetEnabled,
   diskstationWidgetSettings,
   resolveDiskstationWidgetInstances,
-} from "../../../clumps/services/homepage/lib/homepage-diskstation-widget.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-diskstation-widget.mjs";
 
 describe("homepage diskstation widget", () => {
   it("diskstationInstanceEnvSlug uppercases letters", () => {

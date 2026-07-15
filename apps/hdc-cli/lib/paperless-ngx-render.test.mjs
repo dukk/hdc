@@ -6,7 +6,7 @@ import {
   renderDotEnv,
   renderPaperlessEnv,
   tikaEnabled,
-} from "../../../clumps/services/paperless-ngx/lib/paperless-ngx-render.mjs";
+} from "hdc/clump/services/paperless-ngx/lib/paperless-ngx-render.mjs";
 
 const baseCfg = {
   image_tag: "latest",

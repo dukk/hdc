@@ -6,7 +6,7 @@ import {
   renderTwentyEnv,
   resolveServerUrl,
   resolveWebUrl,
-} from "../../../clumps/services/twenty/lib/twenty-render.mjs";
+} from "hdc/clump/services/twenty/lib/twenty-render.mjs";
 import {
   installMailRelayExampleMock,
   restoreMailRelayExampleMock,

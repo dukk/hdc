@@ -11,13 +11,13 @@ import { loadClumpConfigFromClumpRoot } from "../lib/clump-config.mjs";
 import {
   normalizeNginxWafConfig,
   resolveNginxWafGroups,
-} from "../../../clumps/services/nginx-waf/lib/deployments.mjs";
-import { groupUsesModsecurity } from "../../../clumps/services/nginx-waf/lib/nginx-waf-policies.mjs";
+} from "hdc/clump/services/nginx-waf/lib/deployments.mjs";
+import { groupUsesModsecurity } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
 import {
   renderHdcNginxInclude,
   renderHdcNginxMaps,
   sitesNeedWebsocketMap,
-} from "../../../clumps/services/nginx-waf/lib/nginx-waf-render.mjs";
+} from "hdc/clump/services/nginx-waf/lib/nginx-waf-render.mjs";
 
 const root = repoRoot();
 const clumpRoot = join(root, "clumps", "services", "nginx-waf");

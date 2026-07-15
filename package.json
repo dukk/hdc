@@ -2,6 +2,11 @@
   "name": "hdc",
   "private": true,
   "type": "module",
+  "imports": {
+    "hdc/package/*": "./apps/hdc-cli/lib/package/*",
+    "hdc/cli/*": "./apps/hdc-cli/*",
+    "hdc/clump/*": "../hdc-clumps/*"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

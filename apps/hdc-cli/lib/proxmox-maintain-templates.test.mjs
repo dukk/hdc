@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseStorageVolid } from "../../../clumps/infrastructure/proxmox/lib/proxmox-config.mjs";
+import { parseStorageVolid } from "hdc/clump/infrastructure/proxmox/lib/proxmox-config.mjs";
 import {
   applianceTemplateFromVolid,
   provisionRequirementsFromConfig,
   pveAuthFailureHint,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-maintain-templates.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-maintain-templates.mjs";
 
 describe("proxmox maintain templates", () => {
   it("parseStorageVolid splits storage and volid", () => {

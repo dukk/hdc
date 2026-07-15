@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import * as guestResources from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
-import * as sshWait from "../../../clumps/lib/ssh-wait.mjs";
+import * as guestResources from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
+import * as sshWait from "hdc/package/ssh-wait.mjs";
 import {
   resolveQemuFirstBootWaitTiming,
   waitForQemuGuestSshAfterBoot,
-} from "../../../clumps/lib/qemu-guest-ssh-wait.mjs";
+} from "hdc/package/qemu-guest-ssh-wait.mjs";
 
 describe("qemu-guest-ssh-wait", () => {
   beforeEach(() => {

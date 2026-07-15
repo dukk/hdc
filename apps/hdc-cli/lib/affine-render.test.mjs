@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { affineMailEnvLines } from "../../../clumps/lib/app-mail-render.mjs";
+import { affineMailEnvLines } from "hdc/package/app-mail-render.mjs";
 import {
   composeDir,
   hostPort,
@@ -8,7 +8,7 @@ import {
   renderFullEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/affine/lib/affine-render.mjs";
+} from "hdc/clump/services/affine/lib/affine-render.mjs";
 import {
   installMailRelayExampleMock,
   restoreMailRelayExampleMock,

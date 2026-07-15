@@ -4,7 +4,7 @@ import {
   listN8nDeploymentSummaries,
   normalizeN8nConfig,
   resolveN8nDeployments,
-} from "../../../clumps/services/n8n/lib/deployments.mjs";
+} from "hdc/clump/services/n8n/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

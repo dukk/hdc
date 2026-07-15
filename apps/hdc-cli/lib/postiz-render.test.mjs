@@ -7,7 +7,7 @@ import {
   renderPostizEnv,
   resolveBaseUrl,
   resolveAccessUrl,
-} from "../../../clumps/services/postiz/lib/postiz-render.mjs";
+} from "hdc/clump/services/postiz/lib/postiz-render.mjs";
 
 describe("postiz render", () => {
   it("normalizePublicUrl strips trailing slash", () => {

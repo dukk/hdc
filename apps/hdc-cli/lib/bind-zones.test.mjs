@@ -10,7 +10,7 @@ import {
   ptrOwnerForIp,
   soaSerialFromTimestamp,
   validateZoneRecords,
-} from "../../../clumps/services/bind/lib/bind-zones.mjs";
+} from "hdc/clump/services/bind/lib/bind-zones.mjs";
 
 describe("bind-zones", () => {
   it("parses IPv4 CIDR", () => {

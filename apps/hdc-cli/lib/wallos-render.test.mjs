@@ -8,7 +8,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/wallos/lib/wallos-render.mjs";
+} from "hdc/clump/services/wallos/lib/wallos-render.mjs";
 
 describe("wallos-render", () => {
   const wallos = {

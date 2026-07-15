@@ -4,8 +4,8 @@ import {
   normalizeWazuhLogCollectionEntries,
   renderWazuhManagedLocalfileBlock,
   wazuhLogCollectionSkippedByFlags,
-} from "../../../clumps/lib/wazuh-log-collection.mjs";
-import { resolveNginxWafWazuhLogCollection } from "../../../clumps/services/nginx-waf/lib/wazuh-log-collection.mjs";
+} from "hdc/package/wazuh-log-collection.mjs";
+import { resolveNginxWafWazuhLogCollection } from "hdc/clump/services/nginx-waf/lib/wazuh-log-collection.mjs";
 
 describe("wazuh-log-collection", () => {
   it("normalizes and deduplicates log collection entries", () => {

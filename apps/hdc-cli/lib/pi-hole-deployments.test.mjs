@@ -4,7 +4,7 @@ import {
   listPiHoleDeploymentSummaries,
   normalizePiHoleConfig,
   resolvePiHoleDeployments,
-} from "../../../clumps/services/pi-hole/lib/deployments.mjs";
+} from "hdc/clump/services/pi-hole/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

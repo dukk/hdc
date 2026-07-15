@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/clumps-repos.schema.json",
+  "title": "HDC clump repositories manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "repos"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "cache_dir": {
+      "type": "string",
+      "description": "Local clone cache; ~ expands to user home."
+    },
+    "repos": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/repo" }
+    },
+    "precedence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Repo id order when resolving duplicate clump ids."
+    },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["repo"],
+        "properties": {
+          "repo": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "mode"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "default": "main" },
+        "mode": {
+          "type": "string",
+          "enum": ["active", "reference"]
+        }
+      }
+    }
+  }
+}

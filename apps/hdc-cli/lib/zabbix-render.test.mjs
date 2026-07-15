@@ -6,7 +6,7 @@ import {
   resolveWebUrl,
   zabbixComposeFile,
   zabbixRelease,
-} from "../../../clumps/services/zabbix/lib/zabbix-render.mjs";
+} from "hdc/clump/services/zabbix/lib/zabbix-render.mjs";
 
 describe("zabbix render", () => {
   const zabbixPgsql = { release: "7.0", database: "pgsql", web_http_port: 80 };

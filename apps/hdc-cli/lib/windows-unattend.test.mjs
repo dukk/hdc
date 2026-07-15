@@ -3,7 +3,7 @@ import {
   assertNoProductKeyInUnattend,
   renderAutounattendCloneXml,
   renderAutounattendXml,
-} from "../../../clumps/services/windows-desktop/lib/windows-unattend.mjs";
+} from "hdc/clump/services/windows-desktop/lib/windows-unattend.mjs";
 
 describe("windows-unattend", () => {
   it("renderAutounattendXml includes computer name and omits ProductKey", () => {

@@ -4,7 +4,7 @@ import {
   buildTimezoneConfScript,
   normalizeAliasList,
   normalizeMailboxList,
-} from "../../../clumps/services/mailcow/lib/mailcow-render.mjs";
+} from "hdc/clump/services/mailcow/lib/mailcow-render.mjs";
 
 describe("mailcow-render mailbox/alias normalize", () => {
   const mailcow = {

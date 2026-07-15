@@ -7,9 +7,9 @@ import {
   isGuestAgentPermissionError,
   qemuAgentEnabledFromConfig,
   summarizeGuestAgentCounts,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-guest-agent.mjs";
 
-/** @type {import("../../../clumps/infrastructure/proxmox/lib/proxmox-host-load-report.mjs").GuestConfig} */
+/** @type {import("hdc/clump/infrastructure/proxmox/lib/proxmox-host-load-report.mjs").GuestConfig} */
 const baseGuest = {
   vmid: 107,
   name: "portainer-a",

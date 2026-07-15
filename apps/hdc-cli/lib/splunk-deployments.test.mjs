@@ -4,7 +4,7 @@ import {
   normalizeSplunkConfig,
   resolveSplunkDeployments,
   splunkGlobalSettings,
-} from "../../../clumps/services/splunk/lib/deployments.mjs";
+} from "hdc/clump/services/splunk/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 1,

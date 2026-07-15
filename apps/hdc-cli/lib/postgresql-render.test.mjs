@@ -3,7 +3,7 @@ import {
   renderHdcPgHbaConf,
   renderHdcPostgresqlConf,
   replicationHbaLine,
-} from "../../../clumps/services/postgresql/lib/postgresql-render.mjs";
+} from "hdc/clump/services/postgresql/lib/postgresql-render.mjs";
 
 describe("postgresql-render", () => {
   it("renders replication settings when enabled", () => {

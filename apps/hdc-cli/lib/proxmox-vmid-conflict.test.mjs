@@ -4,7 +4,7 @@ import {
   isVmidConflictError,
   nextVmidCandidate,
   resolveProvisionVmid,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-vmid-conflict.mjs";
 
 describe("proxmox-vmid-conflict", () => {
   it("isVmidConflictError matches Proxmox clone/create collisions", () => {

@@ -5,7 +5,7 @@ import {
   normalizeSolidtimeConfig,
   normalizeVersionTag,
   resolveSolidtimeDeployments,
-} from "../../../clumps/services/solidtime/lib/deployments.mjs";
+} from "hdc/clump/services/solidtime/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

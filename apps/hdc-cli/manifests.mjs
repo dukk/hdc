@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { clumpsDir } from "./paths.mjs";
+import { clumpsDir as legacyClumpsDir } from "./paths.mjs";
+import { discoverAllManifests, loadClumpsReposConfig, resolveClumpRoots } from "./lib/clump-repos.mjs";
 
 export const VERBS = ["deploy", "maintain", "query", "health", "teardown"];
 
@@ -23,6 +24,42 @@ export const DIR_TO_RUN_TIER = {
 };
 
 const PACKAGE_DIRS = ["infrastructure", "services", "clients"];
+
+/**
+ * @param {string} publicRoot
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function discoverAllClumpManifests(publicRoot, env = process.env) {
+  const config = loadClumpsReposConfig(publicRoot, env);
+  const fromRepos = discoverAllManifests(config, env);
+  if (fromRepos.length) return fromRepos;
+  return discoverManifests(legacyClumpsDir(publicRoot));
+}
+
+/**
+ * Primary clumps tree for env resolution (first active repo root or in-tree).
+ * @param {string} publicRoot
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function primaryClumpsRoot(publicRoot, env = process.env) {
+  const config = loadClumpsReposConfig(publicRoot, env);
+  const roots = resolveClumpRoots(config, { ...env, HDC_REPO_ROOT: publicRoot }).filter(
+    (r) => r.mode === "active",
+  );
+  if (roots.length) return roots[0].root;
+  return legacyClumpsDir(publicRoot);
+}
+
+/**
+ * @param {string} dirPath
+ */
+function tierDirFromPath(dirPath) {
+  const parts = dirPath.replace(/\\/g, "/").split("/");
+  for (const tier of PACKAGE_DIRS) {
+    if (parts.includes(tier)) return tier;
+  }
+  return null;
+}
 
 /**
  * @param {string} clumpsDirAbs
@@ -56,9 +93,9 @@ export function discoverManifests(clumpsDirAbs) {
  * @param {string} root
  * @returns {Set<string>}
  */
-export function clumpManifestIds(root) {
+export function clumpManifestIds(root, env = process.env) {
   const ids = new Set();
-  for (const m of discoverManifests(clumpsDir(root))) {
+  for (const m of discoverAllClumpManifests(root, env)) {
     ids.add(manifestId(m));
   }
   return ids;
@@ -101,10 +138,8 @@ export function runTiersUsage() {
  * @returns {string | null} CLI tier token derived from manifest directory path.
  */
 export function manifestRunTier(m) {
-  const parts = m.dir.replace(/\\/g, "/").split("/");
-  const idx = parts.indexOf("clumps");
-  if (idx < 0 || idx + 1 >= parts.length) return null;
-  return DIR_TO_RUN_TIER[parts[idx + 1]] ?? null;
+  const tier = tierDirFromPath(m.dir);
+  return tier ? (DIR_TO_RUN_TIER[tier] ?? null) : null;
 }
 
 /**
@@ -117,8 +152,8 @@ export function manifestByTierAndId(manifests, tierToken, clumpId) {
   if (!m) return null;
   const expected = parseRunTier(tierToken);
   if (!expected) return null;
-  const dir = m.dir.replace(/\\/g, "/");
-  return dir.includes(`/clumps/${expected}/`) ? m : null;
+  const tier = tierDirFromPath(m.dir);
+  return tier === expected ? m : null;
 }
 
 /** @param {{ path: string, dir: string, raw: Record<string, unknown> }} m */

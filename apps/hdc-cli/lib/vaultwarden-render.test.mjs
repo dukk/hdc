@@ -9,7 +9,7 @@ import {
   renderVaultwardenEnv,
   resolveAdminUrl,
   resolveWebUrl,
-} from "../../../clumps/services/vaultwarden/lib/vaultwarden-render.mjs";
+} from "hdc/clump/services/vaultwarden/lib/vaultwarden-render.mjs";
 
 const baseVw = {
   domain: "https://vault.example.invalid/",

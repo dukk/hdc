@@ -3,7 +3,7 @@ import {
   confirmTeardown,
   teardownConfirmed,
   teardownDryRun,
-} from "../../../clumps/services/ollama/lib/teardown-confirm.mjs";
+} from "hdc/clump/services/ollama/lib/teardown-confirm.mjs";
 
 describe("ollama teardown confirm", () => {
   it("teardownDryRun detects --dry-run", () => {

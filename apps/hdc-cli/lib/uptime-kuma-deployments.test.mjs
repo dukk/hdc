@@ -4,8 +4,8 @@ import {
   resolveDeploymentConfigSlice,
   normalizeUptimeKumaConfig,
   instanceFlagToSystemId,
-} from "../../../clumps/services/uptime-kuma/lib/deployments.mjs";
-import { buildNotificationIdList } from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-notifications-sync.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/deployments.mjs";
+import { buildNotificationIdList } from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-notifications-sync.mjs";
 
 describe("uptime-kuma per-deployment config", () => {
   it("inherits root monitors when deployment has no monitors override", () => {

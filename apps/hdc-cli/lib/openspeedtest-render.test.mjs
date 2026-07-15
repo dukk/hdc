@@ -7,7 +7,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/openspeedtest/lib/openspeedtest-render.mjs";
+} from "hdc/clump/services/openspeedtest/lib/openspeedtest-render.mjs";
 
 describe("openspeedtest-render", () => {
   const openspeedtest = {

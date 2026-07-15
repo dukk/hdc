@@ -5,7 +5,7 @@ import {
   parseHdcSiteIdFromComment,
   renderSafelineEnv,
   siteToApiPayload,
-} from "../../../clumps/services/safeline/lib/safeline-render.mjs";
+} from "hdc/clump/services/safeline/lib/safeline-render.mjs";
 
 describe("safeline-render", () => {
   it("renders .env with required keys", () => {

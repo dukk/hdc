@@ -3,11 +3,11 @@ import {
   buildMaintainScript,
   buildPostgresPasswordSyncLines,
   buildStagedComposeUpLines,
-} from "../../../clumps/services/twenty/lib/twenty-install.mjs";
+} from "hdc/clump/services/twenty/lib/twenty-install.mjs";
 import {
   buildEncryptionKeyGuardLines,
   buildSigningKeyLogHealLines,
-} from "../../../clumps/services/twenty/lib/twenty-signing-key-heal.mjs";
+} from "hdc/clump/services/twenty/lib/twenty-signing-key-heal.mjs";
 
 describe("twenty install scripts", () => {
   it("buildPostgresPasswordSyncLines guards fresh volume and verifies auth", () => {

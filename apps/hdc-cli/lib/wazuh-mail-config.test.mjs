@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { resolveWazuhMailConfig } from "../../../clumps/services/wazuh/lib/wazuh-mail-config.mjs";
+import { resolveWazuhMailConfig } from "hdc/clump/services/wazuh/lib/wazuh-mail-config.mjs";
 import {
   installMailRelayExampleMock,
   restoreMailRelayExampleMock,

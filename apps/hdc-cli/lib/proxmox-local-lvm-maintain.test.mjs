@@ -5,7 +5,7 @@ import {
   localLvmExtendEnabledForHost,
   localLvmPoolsForHost,
   localLvmMaintainEnabledFromConfig,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-local-lvm-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-local-lvm-maintain.mjs";
 
 const fixtureCfg = {
   schema_version: 1,

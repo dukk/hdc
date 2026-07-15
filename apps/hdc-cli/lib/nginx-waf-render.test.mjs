@@ -18,9 +18,9 @@ import {
   sitesNeedWebsocketMap,
   tlsDomainsFromSites,
   validateTrustedCidrs,
-} from "../../../clumps/services/nginx-waf/lib/nginx-waf-render.mjs";
-import { resolveSitePolicyPlan } from "../../../clumps/services/nginx-waf/lib/nginx-waf-policies.mjs";
-import { mergePolicyDefinitions } from "../../../clumps/services/nginx-waf/lib/nginx-waf-policies.mjs";
+} from "hdc/clump/services/nginx-waf/lib/nginx-waf-render.mjs";
+import { resolveSitePolicyPlan } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
+import { mergePolicyDefinitions } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
 
 const testPolicyCatalog = mergePolicyDefinitions(
   {

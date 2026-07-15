@@ -11,7 +11,7 @@ import {
   renderDawarichEnv,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/dawarich/lib/dawarich-render.mjs";
+} from "hdc/clump/services/dawarich/lib/dawarich-render.mjs";
 
 describe("dawarich-render", () => {
   const dawarich = {

@@ -7,7 +7,7 @@ import {
   parseOllamaTagsJson,
   parseOllamaTagsResponse,
   syncOllamaModels,
-} from "../../../clumps/services/ollama/lib/ollama-models.mjs";
+} from "hdc/clump/services/ollama/lib/ollama-models.mjs";
 
 describe("ollama models", () => {
   it("normalizeModelNames accepts strings and objects", () => {

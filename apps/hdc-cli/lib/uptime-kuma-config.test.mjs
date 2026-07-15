@@ -14,15 +14,15 @@ import {
   shouldIgnoreTlsForUrl,
   slugifyMonitorId,
   tagNamesFromRow,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-config.mjs";
-import { liveMonitorsToConfigEntries } from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-import.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-config.mjs";
+import { liveMonitorsToConfigEntries } from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-import.mjs";
 import {
   homepageServiceToMonitor,
   monitorsFromHomepageServicesYaml,
   serviceNameToMonitorId,
-} from "../../../clumps/services/uptime-kuma/lib/uptime-kuma-homepage-import.mjs";
+} from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-homepage-import.mjs";
 
-/** @type {import("../../../clumps/services/uptime-kuma/lib/uptime-kuma-config.mjs").ConfigMonitor} */
+/** @type {import("hdc/clump/services/uptime-kuma/lib/uptime-kuma-config.mjs").ConfigMonitor} */
 const sampleConfigMonitor = {
   id: "pi-hole-a",
   name: "Pi-hole A",
@@ -38,7 +38,7 @@ const sampleConfigMonitor = {
   notes: null,
 };
 
-/** @type {import("../../../clumps/services/uptime-kuma/lib/uptime-kuma-config.mjs").LiveMonitor} */
+/** @type {import("hdc/clump/services/uptime-kuma/lib/uptime-kuma-config.mjs").LiveMonitor} */
 const sampleLiveMonitor = {
   ...sampleConfigMonitor,
   uptime_kuma_id: 1,

@@ -4,8 +4,8 @@ import {
   listGatusDeploymentSummaries,
   normalizeGatusConfig,
   resolveGatusDeployments,
-} from "../../../clumps/services/gatus/lib/deployments.mjs";
-import { normalizeGatusVersion } from "../../../clumps/services/gatus/lib/gatus-install.mjs";
+} from "hdc/clump/services/gatus/lib/deployments.mjs";
+import { normalizeGatusVersion } from "hdc/clump/services/gatus/lib/gatus-install.mjs";
 
 describe("gatus deployments", () => {
   const v2 = {

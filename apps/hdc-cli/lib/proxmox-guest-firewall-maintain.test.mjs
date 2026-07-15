@@ -6,7 +6,7 @@ import {
   vmidFromDeployment,
   HDC_GUEST_FW_MARKER_BEGIN,
   HDC_GUEST_FW_MARKER_END,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-guest-firewall-maintain.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-firewall-maintain.mjs";
 
 describe("proxmox guest firewall maintain", () => {
   it("guestFirewallPathForVmid uses cluster fw path", () => {

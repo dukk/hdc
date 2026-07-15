@@ -4,7 +4,7 @@ import {
   normalizeStepCaConfig,
   resolveStepCaDeployments,
   stepCaGlobalSettings,
-} from "../../../clumps/services/step-ca/lib/deployments.mjs";
+} from "hdc/clump/services/step-ca/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

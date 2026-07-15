@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   splunkDebFilename,
   splunkDownloadUrl,
-} from "../../../clumps/services/splunk/lib/splunk-install.mjs";
+} from "hdc/clump/services/splunk/lib/splunk-install.mjs";
 
 describe("splunk-install", () => {
   it("builds linux-amd64 deb filename and URL for 9.4+", () => {

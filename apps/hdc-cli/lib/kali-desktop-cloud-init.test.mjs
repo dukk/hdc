@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildKaliCloudInitFields } from "../../../clumps/services/kali-desktop/lib/proxmox-kali-cloud-init.mjs";
+import { buildKaliCloudInitFields } from "hdc/clump/services/kali-desktop/lib/proxmox-kali-cloud-init.mjs";
 
 describe("buildKaliCloudInitFields", () => {
   it("sets ciuser, cipassword, and ipconfig for Kali", () => {

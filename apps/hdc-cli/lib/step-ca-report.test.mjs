@@ -4,7 +4,7 @@ import {
   stepCaEndpointList,
   stepCaHttpsBase,
   stepCaReportExtraSections,
-} from "../../../clumps/services/step-ca/lib/step-ca-report.mjs";
+} from "hdc/clump/services/step-ca/lib/step-ca-report.mjs";
 
 describe("step-ca-report", () => {
   it("stepCaHttpsBase omits port 443", () => {

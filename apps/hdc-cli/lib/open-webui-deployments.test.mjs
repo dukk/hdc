@@ -4,7 +4,7 @@ import {
   listOpenWebuiDeploymentSummaries,
   normalizeOpenWebuiConfig,
   resolveOpenWebuiDeployments,
-} from "../../../clumps/services/open-webui/lib/deployments.mjs";
+} from "hdc/clump/services/open-webui/lib/deployments.mjs";
 
 const baseCfg = {
   schema_version: 2,

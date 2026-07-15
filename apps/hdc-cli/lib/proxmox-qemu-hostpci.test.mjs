@@ -3,7 +3,7 @@ import {
   formatHostpciEntry,
   normalizeHostpciList,
   validatePciBdf,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-qemu-hostpci.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-qemu-hostpci.mjs";
 
 describe("proxmox-qemu-hostpci", () => {
   it("formatHostpciEntry builds Proxmox hostpci string", () => {

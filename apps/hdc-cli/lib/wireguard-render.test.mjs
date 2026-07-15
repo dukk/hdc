@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listenPort, interfaceAddress } from "../../../clumps/services/wireguard/lib/wireguard-render.mjs";
+import { listenPort, interfaceAddress } from "hdc/clump/services/wireguard/lib/wireguard-render.mjs";
 
 describe("wireguard render", () => {
   it("listenPort defaults to 51820", () => {

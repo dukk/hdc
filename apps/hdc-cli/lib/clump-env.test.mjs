@@ -58,14 +58,14 @@ describe("buildClumpRunEnv", () => {
   it("loads package env without polluting parent process.env", () => {
     const publicRoot = mkdtempSync(join(tmpdir(), "hdc-run-"));
     const privateRoot = mkdtempSync(join(tmpdir(), "hdc-run-priv-"));
-    mkdirSync(join(publicRoot, "clumps/services/demo"), { recursive: true });
+    mkdirSync(join(publicRoot, "hdc/clump/services/demo"), { recursive: true });
     writeFileSync(
-      join(publicRoot, "clumps/services/demo/.env"),
+      join(publicRoot, "hdc/clump/services/demo/.env"),
       "HDC_DEMO_TOKEN=from-package\n",
       "utf8",
     );
     writeFileSync(
-      join(publicRoot, "clumps/services/demo/manifest.json"),
+      join(publicRoot, "hdc/clump/services/demo/manifest.json"),
       JSON.stringify({ id: "demo", verbs: { query: { script: "run.mjs" } } }),
       "utf8",
     );
@@ -73,8 +73,8 @@ describe("buildClumpRunEnv", () => {
     /** @type {NodeJS.ProcessEnv} */
     const parent = { HDC_PRIVATE_ROOT: privateRoot, HDC_VAULT_PASSPHRASE: "global" };
     const manifest = {
-      path: join(publicRoot, "clumps/services/demo/manifest.json"),
-      dir: join(publicRoot, "clumps/services/demo"),
+      path: join(publicRoot, "hdc/clump/services/demo/manifest.json"),
+      dir: join(publicRoot, "hdc/clump/services/demo"),
       raw: { id: "demo", verbs: { query: { script: "run.mjs" } } },
     };
     const deps = {
@@ -142,9 +142,9 @@ describe("buildClumpRunEnv", () => {
   it("passes BW_SESSION into package run env when vaultwarden session is active", async () => {
     clearBwSessionProcessCache();
     const publicRoot = mkdtempSync(join(tmpdir(), "hdc-bw-session-"));
-    mkdirSync(join(publicRoot, "clumps/services/demo"), { recursive: true });
+    mkdirSync(join(publicRoot, "hdc/clump/services/demo"), { recursive: true });
     writeFileSync(
-      join(publicRoot, "clumps/services/demo/manifest.json"),
+      join(publicRoot, "hdc/clump/services/demo/manifest.json"),
       JSON.stringify({ id: "demo", verbs: { query: { script: "run.mjs" } } }),
       "utf8",
     );
@@ -185,8 +185,8 @@ describe("buildClumpRunEnv", () => {
     expect(getProcessBwSession()).toBe("inherited-session-key");
 
     const manifest = {
-      path: join(publicRoot, "clumps/services/demo/manifest.json"),
-      dir: join(publicRoot, "clumps/services/demo"),
+      path: join(publicRoot, "hdc/clump/services/demo/manifest.json"),
+      dir: join(publicRoot, "hdc/clump/services/demo"),
       raw: { id: "demo", verbs: { query: { script: "run.mjs" } } },
     };
     const runEnv = buildClumpRunEnv(

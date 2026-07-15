@@ -13,6 +13,7 @@
  * HDC_OPS_DISCORD_APPLICATION_ID, HDC_OPS_DISCORD_PUBLIC_KEY, HDC_OPS_DISCORD_BOT_TOKEN,
  * HDC_OPS_DISCORD_CHANNEL_ID. Never log secrets.
  */
+import "./package/preload.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stderr, stdout } from "node:process";

@@ -6,7 +6,7 @@ import {
   oemWindowsLicenseEnabledFromConfig,
   parseOemLicenseProbeOutput,
   summarizeOemLicenseHost,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-oem-windows-license.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-oem-windows-license.mjs";
 
 describe("proxmox-oem-windows-license", () => {
   it("oemWindowsLicenseEnabledFromConfig respects enabled flag", () => {

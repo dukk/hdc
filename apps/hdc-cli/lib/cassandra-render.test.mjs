@@ -4,7 +4,7 @@ import {
   renderCassandraYaml,
   renderJvmOptions,
   renderRackDcProperties,
-} from "../../../clumps/services/cassandra/lib/cassandra-render.mjs";
+} from "hdc/clump/services/cassandra/lib/cassandra-render.mjs";
 
 describe("cassandra-render", () => {
   it("renderCassandraYaml includes cluster and seeds", () => {

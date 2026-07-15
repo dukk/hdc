@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   gatusListenPort,
   renderGatusConfigYaml,
-} from "../../../clumps/services/gatus/lib/gatus-render.mjs";
+} from "hdc/clump/services/gatus/lib/gatus-render.mjs";
 
 describe("gatus render", () => {
   it("renders endpoints with conditions", () => {

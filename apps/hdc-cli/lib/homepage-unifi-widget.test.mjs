@@ -5,14 +5,14 @@ import { fileURLToPath } from "node:url";
 import {
   resolveHomepageUnifiWidgetEnv,
   unifiWidgetEnabled,
-} from "../../../clumps/services/homepage/lib/homepage-unifi-widget.mjs";
-import { lintHomepageServicesYaml } from "../../../clumps/services/homepage/lib/homepage-services-lint.mjs";
+} from "hdc/clump/services/homepage/lib/homepage-unifi-widget.mjs";
+import { lintHomepageServicesYaml } from "hdc/clump/services/homepage/lib/homepage-services-lint.mjs";
 
 const unifiNetworkPackageRoot = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../clumps/infrastructure/unifi-network",
+  "../../../../hdc-clumps/infrastructure/unifi-network",
 );
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../clumps/services/homepage");
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../hdc-clumps/services/homepage");
 
 describe("homepage unifi widget", () => {
   it("unifiWidgetEnabled respects enabled flag", () => {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { lintHomepageServicesYaml } from "../../../clumps/services/homepage/lib/homepage-services-lint.mjs";
-import { parseHomepageServicesYaml } from "../../../clumps/services/homepage/lib/homepage-services-parse.mjs";
+import { lintHomepageServicesYaml } from "hdc/clump/services/homepage/lib/homepage-services-lint.mjs";
+import { parseHomepageServicesYaml } from "hdc/clump/services/homepage/lib/homepage-services-parse.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../clumps/services/homepage");
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../hdc-clumps/services/homepage");
 
 describe("homepage-services-parse", () => {
   it("parses group, service, icon, and widget", () => {

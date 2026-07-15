@@ -17,6 +17,7 @@ Automation and documentation for a manually deployed home data center. Agents op
   - macOS/Linux (after `chmod +x hdc`): `./hdc <command>`
 - **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored) for **global** CLI settings (vault passphrase, secret backend, `HDC_PRIVATE_ROOT`, ops Discord, guest baseline). Package-specific env vars live in `clumps/<tier>/<id>/.env` (see each package `.env.example`; prefer hdc-private). The root `.env.example` indexes all 96 packages; run `node apps/hdc-cli/scripts/ensure-clump-env-examples.mjs --write` after adding a clump to scaffold its `.env.example`. Merge order: hdc public then hdc-private for each path. `hdc run` loads only global + the target clump (and `env_includes`, auto-proxmox when config uses Proxmox). Migrate a monolithic root `.env` with `node apps/hdc-cli/scripts/migrate-root-env.mjs --dry-run`. API keys and passwords prefer the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
 - **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Clump `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed clump configs from examples: `node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). On supported infrastructure packages, `query --import --yes` (or package-specific import flags such as Cloudflare `--import-zones`) auto-seeds missing `config.json` from `config.example.json` in hdc-private before importing live API data. Shared loaders: [`apps/hdc-cli/lib/private-repo.mjs`](apps/hdc-cli/lib/private-repo.mjs), [`apps/hdc-cli/lib/clump-config.mjs`](apps/hdc-cli/lib/clump-config.mjs).
+- **hdc-clumps:** Package scripts live in the sibling [**hdc-clumps**](https://github.com/dukk/hdc-clumps) repo (or `~/.hdc/clump-repos/` after `hdc clumps init`). Manifest discovery reads [`.hdc/clumps-repos.json`](.hdc/clumps-repos.json); override with `HDC_CLUMPS_ROOT` for a local checkout.
 
 ### Clump config JSONC (comments + includes)
 
@@ -45,10 +46,10 @@ Example (split Cloudflare zones):
 
 | Path | Role |
 | --- | --- |
-| [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`) and shared libraries |
-| [`clumps/<clump>/`](clumps/) | Plugins: `manifest.json` plus `deploy/`, `maintain/`, `query/` (`run.mjs`) |
-| [`inventory/manual/`](inventory/manual/) | Authoritative sidecars in **hdc-private** (`systems/`, `networks/`, `services/`, `targets/`); public repo: [`systems/_example.json`](inventory/manual/systems/_example.json) only |
-| [`inventory/automated/`](inventory/automated/) | Overlay in **hdc-private** (per-file under `systems/`, `networks/`, `policies/`) |
+| [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and shared libraries |
+| **hdc-clumps** (external) | Plugins: `clients/`, `infrastructure/`, `services/` — bootstrap with `hdc clumps init` |
+| [`operations/manual/`](operations/manual/) | Authoritative sidecars in **hdc-private** (`systems/`, `networks/`, `services/`, `targets/`); public repo: [`systems/_example.json`](operations/manual/systems/_example.json) only |
+| [`operations/automated/`](operations/automated/) | Overlay in **hdc-private** (per-file under `systems/`, `networks/`, `policies/`) |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Human-oriented markdown for gear hdc does not manage end-to-end |
 
 Optional companion `*.md` next to inventory JSON is for humans/agents; **hdc does not read or write those files**.
@@ -61,6 +62,9 @@ Commands from [`apps/hdc-cli/lib/cli-app.mjs`](apps/hdc-cli/lib/cli-app.mjs):
 | --- | --- |
 | `help [topic …]` | Hierarchical usage |
 | `list` | Packages and manifest metadata |
+| `clumps list [--reference]` | Active and reference clump repos, sync status |
+| `clumps sync [--repo <id>] [--dry-run]` | Clone or pull external clump repos |
+| `clumps init` | Bootstrap default hdc-clumps cache |
 | `run <tier> <clump> <verb> [-- <args>]` | Run a package script (`deploy`, `maintain`, `query`, `health`, `teardown`); tier: `client`, `infrastructure`, or `service` |
 | `run <tier> <clump> <platform> <verb> [-- <args>]` | When manifest lists `platforms` (legacy platform-routed layout) |
 | `secrets path \| init \| change-passphrase \| set \| list \| get \| dump \| delete` | Encrypted vault for `HDC_*` secrets; `get`/`dump` write plaintext to files (unlock required) |
@@ -110,11 +114,11 @@ node apps/hdc-cli/cli.mjs maintain daily -- --skip service/trivy --skip-upgrades
 
 ## Inventory
 
-- **Manual sidecars:** `inventory/manual/{systems,networks,services,targets}/*.json`, discriminated by `kind`: `system`, `network`, `target`, or `services`.
-- **Systems** may list `services: [{ "id": "<id>", "nodes"?: ["…"] }]` pointing at `kind: "services"` records under `inventory/manual/services/` (by id only).
+- **Manual sidecars:** `operations/manual/{systems,networks,services,targets}/*.json`, discriminated by `kind`: `system`, `network`, `target`, or `services`.
+- **Systems** may list `services: [{ "id": "<id>", "nodes"?: ["…"] }]` pointing at `kind: "services"` records under `operations/manual/services/` (by id only).
 - **Targets:** `kind: "target"` with `automation_target` set to a package manifest id (e.g. `proxmox`, `unifi-network`).
 - **Schemas:** [`inventory.schema.json`](apps/hdc-cli/schema/inventory.schema.json) (union), plus `inventory.system.schema.json`, `inventory.network.schema.json`, `inventory.target.schema.json`, `inventory.services.schema.json`, `inventory.policy.schema.json`.
-- **Automated overlay:** plugins may write under `inventory/automated/`; use `resolveSystemById` in code when merging manual and automated facts.
+- **Automated overlay:** plugins may write under `operations/automated/`; use `resolveSystemById` in code when merging manual and automated facts.
 
 ### System id naming
 
@@ -178,7 +182,7 @@ Example: set `HDC_ADMIN_USER` in `.env`, then `node apps/hdc-cli/cli.mjs run ser
 ## Asterisk in this repo
 
 - **Config:** [`clumps/services/asterisk/config.json`](clumps/services/asterisk/config.json) (copy from [`config.example.json`](clumps/services/asterisk/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/asterisk-a.json`](inventory/manual/systems/asterisk-a.json) (LXC), [`vm-asterisk-a.json`](inventory/manual/systems/vm-asterisk-a.json) (QEMU); service sidecar [`inventory/manual/services/asterisk.json`](inventory/manual/services/asterisk.json).
+- **Inventory:** [`operations/manual/systems/asterisk-a.json`](operations/manual/systems/asterisk-a.json) (LXC), [`vm-asterisk-a.json`](operations/manual/systems/vm-asterisk-a.json) (QEMU); service sidecar [`operations/manual/services/asterisk.json`](operations/manual/services/asterisk.json).
 - **Schema:** [`apps/hdc-cli/schema/asterisk.config.schema.json`](apps/hdc-cli/schema/asterisk.config.schema.json).
 - **Twilio examples:** [`clumps/services/asterisk/examples/twilio/`](clumps/services/asterisk/examples/twilio/).
 
@@ -196,7 +200,7 @@ Example: `node apps/hdc-cli/cli.mjs run service asterisk deploy -- --instance a`
 ## Pi-hole in this repo
 
 - **Config:** [`clumps/services/pi-hole/config.json`](clumps/services/pi-hole/config.json) (copy from [`config.example.json`](clumps/services/pi-hole/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/pi-hole-a.json`](inventory/manual/systems/pi-hole-a.json), [`pi-hole-b.json`](inventory/manual/systems/pi-hole-b.json).
+- **Inventory:** [`operations/manual/systems/pi-hole-a.json`](operations/manual/systems/pi-hole-a.json), [`pi-hole-b.json`](operations/manual/systems/pi-hole-b.json).
 - **Schema:** [`apps/hdc-cli/schema/pi-hole.config.schema.json`](apps/hdc-cli/schema/pi-hole.config.schema.json).
 
 | Verb | Summary |
@@ -215,7 +219,7 @@ Vault: `HDC_PIHOLE_WEBPASSWORD` (optional; deploy uses config `pihole.webpasswor
 - **Per-deployment (schema v5):** Root/`defaults` supply shared `monitors[]`, `tags[]`, `status_pages[]`, `notifications[]`, and `uptime_kuma_auth`. Each `deployments[]` entry may override `monitors` (replace), `notifications` (replace), and `uptime_kuma_auth` (deep-merge). Use separate monitor trees (e.g. `monitors-public/*.json`) and credentials per instance (`HDC_UPTIME_KUMA_PASSWORD_EXT_A`, …). `maintain` syncs notifications then monitors per selected deployment; `--skip-notifications` skips notification reconcile.
 - **Modes:** `proxmox-lxc` (default) or `oci-vm` (Oracle Cloud via [`oci-compute`](clumps/infrastructure/oci-compute/); SSH install, no guest Linux baseline). OCI instances use `uptime_kuma_auth.api_via_ssh: true` and `api_url: http://127.0.0.1:3001` — hdc opens an SSH local forward for Socket.IO sync (port 3001 not exposed on WAN).
 - **Discord notifications:** `notifications[]` with `type: discord`, `discord_webhook_vault_key` (e.g. `HDC_OPS_DISCORD_WEBHOOK_URL`), `managed: true`, and `apply_to_monitors: true` (or per-monitor `notifications: ["id"]`).
-- **Inventory:** [`inventory/manual/systems/uptime-kuma-a.json`](inventory/manual/systems/uptime-kuma-a.json), optional `uptime-kuma-ext-a.json` (OCI); service sidecar [`inventory/manual/services/uptime-kuma.json`](inventory/manual/services/uptime-kuma.json).
+- **Inventory:** [`operations/manual/systems/uptime-kuma-a.json`](operations/manual/systems/uptime-kuma-a.json), optional `uptime-kuma-ext-a.json` (OCI); service sidecar [`operations/manual/services/uptime-kuma.json`](operations/manual/services/uptime-kuma.json).
 - **Schema:** [`apps/hdc-cli/schema/uptime-kuma.config.schema.json`](apps/hdc-cli/schema/uptime-kuma.config.schema.json).
 
 | Verb | Summary |
@@ -238,7 +242,7 @@ node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --resource up
 ## SolidTime in this repo
 
 - **Config:** [`clumps/services/solidtime/config.json`](clumps/services/solidtime/config.json) (copy from [`config.example.json`](clumps/services/solidtime/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/solidtime-a.json`](inventory/manual/systems/solidtime-a.json); service sidecar [`inventory/manual/services/solidtime.json`](inventory/manual/services/solidtime.json).
+- **Inventory:** [`operations/manual/systems/solidtime-a.json`](operations/manual/systems/solidtime-a.json); service sidecar [`operations/manual/services/solidtime.json`](operations/manual/services/solidtime.json).
 - **Schema:** [`apps/hdc-cli/schema/solidtime.config.schema.json`](apps/hdc-cli/schema/solidtime.config.schema.json).
 
 | Verb | Summary |
@@ -255,7 +259,7 @@ Example: `node apps/hdc-cli/cli.mjs run service solidtime deploy --`
 ## BIND DNS in this repo
 
 - **Config:** [`clumps/services/bind/config.json`](clumps/services/bind/config.json) (copy from [`config.example.json`](clumps/services/bind/config.example.json); keep local config out of git). Authoritative zone records live in `zones/*.json` sidecars referenced from root `config.json` via `{ "$hdc.include": "zones/<id>.json" }` (inline `zones[]` in one file also works). Each zone object has `id`, `zone_type`, `records`, optional `subnet` for reverse, optional `cloudflare_fallback` to merge public records from [`clumps/infrastructure/cloudflare/config.json`](clumps/infrastructure/cloudflare/config.json) with local overrides. Set static `deployments[].proxmox.qemu.ip` per node; no guest `vmid` in config (auto-allocated at deploy). Recursive upstream: plain `bind.forwarders` (default `1.1.1.1`, `1.0.0.1`) or **ODoH** via `bind.forward_upstream.mode: "odoh"` (installs **dnscrypt-proxy** on each VM; BIND forwards to `listen`, default `127.0.0.1:5300`; Cloudflare target `odoh-cloudflare` + configurable `relay`, default `odohrelay-crypto-sx`). ODoH is experimental (RFC 9230).
-- **Inventory:** [`inventory/manual/systems/vm-bind-a.json`](inventory/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](inventory/manual/systems/vm-bind-b.json).
+- **Inventory:** [`operations/manual/systems/vm-bind-a.json`](operations/manual/systems/vm-bind-a.json), [`vm-bind-b.json`](operations/manual/systems/vm-bind-b.json).
 - **Schema:** [`apps/hdc-cli/schema/bind.config.schema.json`](apps/hdc-cli/schema/bind.config.schema.json).
 
 | Verb | Summary |
@@ -271,7 +275,7 @@ Example: `node apps/hdc-cli/cli.mjs run service bind deploy -- --destroy-existin
 ## PostgreSQL in this repo
 
 - **Config:** [`clumps/services/postgresql/config.json`](clumps/services/postgresql/config.json) (copy from [`config.example.json`](clumps/services/postgresql/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-postgres-a.json`](inventory/manual/systems/vm-postgres-a.json), [`vm-postgres-b.json`](inventory/manual/systems/vm-postgres-b.json); service sidecar [`inventory/manual/services/postgresql.json`](inventory/manual/services/postgresql.json).
+- **Inventory:** [`operations/manual/systems/vm-postgres-a.json`](operations/manual/systems/vm-postgres-a.json), [`vm-postgres-b.json`](operations/manual/systems/vm-postgres-b.json); service sidecar [`operations/manual/services/postgresql.json`](operations/manual/services/postgresql.json).
 - **Schema:** [`apps/hdc-cli/schema/postgresql.config.schema.json`](apps/hdc-cli/schema/postgresql.config.schema.json).
 
 | Verb | Summary |
@@ -287,7 +291,7 @@ Example: `node apps/hdc-cli/cli.mjs run service postgresql deploy -- --instance 
 ## step-ca in this repo
 
 - **Config:** [`clumps/services/step-ca/config.json`](clumps/services/step-ca/config.json) (copy from [`config.example.json`](clumps/services/step-ca/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-step-ca-a.json`](inventory/manual/systems/vm-step-ca-a.json); service sidecar [`inventory/manual/services/step-ca.json`](inventory/manual/services/step-ca.json).
+- **Inventory:** [`operations/manual/systems/vm-step-ca-a.json`](operations/manual/systems/vm-step-ca-a.json); service sidecar [`operations/manual/services/step-ca.json`](operations/manual/services/step-ca.json).
 - **Schema:** [`apps/hdc-cli/schema/step-ca.config.schema.json`](apps/hdc-cli/schema/step-ca.config.schema.json).
 
 | Verb | Summary |
@@ -302,7 +306,7 @@ Example: `node apps/hdc-cli/cli.mjs run service step-ca deploy --`
 ## Cassandra in this repo
 
 - **Config:** [`clumps/services/cassandra/config.json`](clumps/services/cassandra/config.json) (copy from [`config.example.json`](clumps/services/cassandra/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-cassandra-a.json`](inventory/manual/systems/vm-cassandra-a.json), [`vm-cassandra-b.json`](inventory/manual/systems/vm-cassandra-b.json), [`vm-cassandra-c.json`](inventory/manual/systems/vm-cassandra-c.json); service sidecar [`inventory/manual/services/cassandra.json`](inventory/manual/services/cassandra.json).
+- **Inventory:** [`operations/manual/systems/vm-cassandra-a.json`](operations/manual/systems/vm-cassandra-a.json), [`vm-cassandra-b.json`](operations/manual/systems/vm-cassandra-b.json), [`vm-cassandra-c.json`](operations/manual/systems/vm-cassandra-c.json); service sidecar [`operations/manual/services/cassandra.json`](operations/manual/services/cassandra.json).
 - **Schema:** [`apps/hdc-cli/schema/cassandra.config.schema.json`](apps/hdc-cli/schema/cassandra.config.schema.json).
 
 | Verb | Summary |
@@ -318,7 +322,7 @@ Example: `node apps/hdc-cli/cli.mjs run service cassandra deploy -- --destroy-ex
 ## Redis Cluster in this repo
 
 - **Config:** [`clumps/services/redis/config.json`](clumps/services/redis/config.json) (copy from [`config.example.json`](clumps/services/redis/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-redis-a.json`](inventory/manual/systems/vm-redis-a.json), [`vm-redis-b.json`](inventory/manual/systems/vm-redis-b.json), [`vm-redis-c.json`](inventory/manual/systems/vm-redis-c.json); service sidecar [`inventory/manual/services/redis.json`](inventory/manual/services/redis.json).
+- **Inventory:** [`operations/manual/systems/vm-redis-a.json`](operations/manual/systems/vm-redis-a.json), [`vm-redis-b.json`](operations/manual/systems/vm-redis-b.json), [`vm-redis-c.json`](operations/manual/systems/vm-redis-c.json); service sidecar [`operations/manual/services/redis.json`](operations/manual/services/redis.json).
 - **Schema:** [`apps/hdc-cli/schema/redis.config.schema.json`](apps/hdc-cli/schema/redis.config.schema.json).
 
 | Verb | Summary |
@@ -334,7 +338,7 @@ Example: `node apps/hdc-cli/cli.mjs run service redis deploy --`
 ## Valkey Cluster in this repo
 
 - **Config:** [`clumps/services/valkey/config.json`](clumps/services/valkey/config.json) (copy from [`config.example.json`](clumps/services/valkey/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-valkey-a.json`](inventory/manual/systems/vm-valkey-a.json), [`vm-valkey-b.json`](inventory/manual/systems/vm-valkey-b.json), [`vm-valkey-c.json`](inventory/manual/systems/vm-valkey-c.json); service sidecar [`inventory/manual/services/valkey.json`](inventory/manual/services/valkey.json).
+- **Inventory:** [`operations/manual/systems/vm-valkey-a.json`](operations/manual/systems/vm-valkey-a.json), [`vm-valkey-b.json`](operations/manual/systems/vm-valkey-b.json), [`vm-valkey-c.json`](operations/manual/systems/vm-valkey-c.json); service sidecar [`operations/manual/services/valkey.json`](operations/manual/services/valkey.json).
 - **Schema:** [`apps/hdc-cli/schema/valkey.config.schema.json`](apps/hdc-cli/schema/valkey.config.schema.json).
 
 | Verb | Summary |
@@ -350,7 +354,7 @@ Example: `node apps/hdc-cli/cli.mjs run service valkey deploy --`
 ## Nginx WAF in this repo
 
 - **Config:** [`clumps/services/nginx-waf/config.json`](clumps/services/nginx-waf/config.json) (copy from [`config.example.json`](clumps/services/nginx-waf/config.example.json); keep local config out of git). **Schema v4** uses `deployment_groups[]` with a **policy catalog** (`defaults.nginx_waf.policy_definitions` + site/location `policies[]`); v3 `waf` / `access.internal_only` auto-migrate at normalize time.
-- **Inventory:** [`inventory/manual/systems/vm-nginx-waf-a.json`](inventory/manual/systems/vm-nginx-waf-a.json), [`vm-nginx-waf-b.json`](inventory/manual/systems/vm-nginx-waf-b.json); service sidecar [`inventory/manual/services/nginx-waf.json`](inventory/manual/services/nginx-waf.json).
+- **Inventory:** [`operations/manual/systems/vm-nginx-waf-a.json`](operations/manual/systems/vm-nginx-waf-a.json), [`vm-nginx-waf-b.json`](operations/manual/systems/vm-nginx-waf-b.json); service sidecar [`operations/manual/services/nginx-waf.json`](operations/manual/services/nginx-waf.json).
 - **Schema:** [`apps/hdc-cli/schema/nginx-waf.config.schema.json`](apps/hdc-cli/schema/nginx-waf.config.schema.json).
 
 | Verb | Summary |
@@ -370,7 +374,7 @@ Example: `node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --group ed
 ## Nginx web hosting in this repo
 
 - **Config:** [`clumps/services/nginx/config.json`](clumps/services/nginx/config.json) (copy from [`config.example.json`](clumps/services/nginx/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-nginx-a.json`](inventory/manual/systems/vm-nginx-a.json); service sidecar [`inventory/manual/services/nginx.json`](inventory/manual/services/nginx.json).
+- **Inventory:** [`operations/manual/systems/vm-nginx-a.json`](operations/manual/systems/vm-nginx-a.json); service sidecar [`operations/manual/services/nginx.json`](operations/manual/services/nginx.json).
 - **Schema:** [`apps/hdc-cli/schema/nginx.config.schema.json`](apps/hdc-cli/schema/nginx.config.schema.json).
 
 | Verb | Summary |
@@ -386,7 +390,7 @@ Example: `node apps/hdc-cli/cli.mjs run service nginx deploy -- --instance a`
 ## Splunk in this repo
 
 - **Config:** [`clumps/services/splunk/config.json`](clumps/services/splunk/config.json) (copy from [`config.example.json`](clumps/services/splunk/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-splunk-a.json`](inventory/manual/systems/vm-splunk-a.json); service sidecar [`inventory/manual/services/splunk.json`](inventory/manual/services/splunk.json).
+- **Inventory:** [`operations/manual/systems/vm-splunk-a.json`](operations/manual/systems/vm-splunk-a.json); service sidecar [`operations/manual/services/splunk.json`](operations/manual/services/splunk.json).
 - **Schema:** [`apps/hdc-cli/schema/splunk.config.schema.json`](apps/hdc-cli/schema/splunk.config.schema.json).
 
 | Verb | Summary |
@@ -404,7 +408,7 @@ Example: `node apps/hdc-cli/cli.mjs run service splunk deploy -- --destroy-exist
 ## Kafka in this repo
 
 - **Config:** [`clumps/services/kafka/config.json`](clumps/services/kafka/config.json) (copy from [`config.example.json`](clumps/services/kafka/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-kafka-a.json`](inventory/manual/systems/vm-kafka-a.json), [`vm-kafka-b.json`](inventory/manual/systems/vm-kafka-b.json), [`vm-kafka-c.json`](inventory/manual/systems/vm-kafka-c.json); service sidecar [`inventory/manual/services/kafka.json`](inventory/manual/services/kafka.json).
+- **Inventory:** [`operations/manual/systems/vm-kafka-a.json`](operations/manual/systems/vm-kafka-a.json), [`vm-kafka-b.json`](operations/manual/systems/vm-kafka-b.json), [`vm-kafka-c.json`](operations/manual/systems/vm-kafka-c.json); service sidecar [`operations/manual/services/kafka.json`](operations/manual/services/kafka.json).
 - **Schema:** [`apps/hdc-cli/schema/kafka.config.schema.json`](apps/hdc-cli/schema/kafka.config.schema.json).
 
 | Verb | Summary |
@@ -420,7 +424,7 @@ Example: `node apps/hdc-cli/cli.mjs run service kafka deploy --`
 ## Ollama in this repo
 
 - **Config:** [`clumps/services/ollama/config.json`](clumps/services/ollama/config.json) (copy from [`config.example.json`](clumps/services/ollama/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-ollama-a.json`](inventory/manual/systems/vm-ollama-a.json) (QEMU + GPU on hypervisor-d); `ollama-b/c` for LXC instances.
+- **Inventory:** [`operations/manual/systems/vm-ollama-a.json`](operations/manual/systems/vm-ollama-a.json) (QEMU + GPU on hypervisor-d); `ollama-b/c` for LXC instances.
 - **Schema:** [`apps/hdc-cli/schema/ollama.config.schema.json`](apps/hdc-cli/schema/ollama.config.schema.json).
 
 | Verb | Summary |
@@ -445,7 +449,7 @@ node apps/hdc-cli/cli.mjs run service ollama query -- --live
 ## vLLM in this repo
 
 - **Config:** [`clumps/services/vllm/config.json`](clumps/services/vllm/config.json) (copy from [`config.example.json`](clumps/services/vllm/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-vllm-a.json`](inventory/manual/systems/vm-vllm-a.json) (QEMU + GPU), [`vm-vllm-b.json`](inventory/manual/systems/vm-vllm-b.json) (QEMU CPU); service sidecar [`inventory/manual/services/vllm.json`](inventory/manual/services/vllm.json).
+- **Inventory:** [`operations/manual/systems/vm-vllm-a.json`](operations/manual/systems/vm-vllm-a.json) (QEMU + GPU), [`vm-vllm-b.json`](operations/manual/systems/vm-vllm-b.json) (QEMU CPU); service sidecar [`operations/manual/services/vllm.json`](operations/manual/services/vllm.json).
 - **Schema:** [`apps/hdc-cli/schema/vllm.config.schema.json`](apps/hdc-cli/schema/vllm.config.schema.json).
 
 | Verb | Summary |
@@ -462,7 +466,7 @@ Example: `node apps/hdc-cli/cli.mjs run service vllm deploy -- --instance a`
 ## Scanopy in this repo
 
 - **Config:** [`clumps/services/scanopy/config.json`](clumps/services/scanopy/config.json) (copy from [`config.example.json`](clumps/services/scanopy/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/scanopy-a.json`](inventory/manual/systems/scanopy-a.json); service sidecar [`inventory/manual/services/scanopy.json`](inventory/manual/services/scanopy.json).
+- **Inventory:** [`operations/manual/systems/scanopy-a.json`](operations/manual/systems/scanopy-a.json); service sidecar [`operations/manual/services/scanopy.json`](operations/manual/services/scanopy.json).
 - **Schema:** [`apps/hdc-cli/schema/scanopy.config.schema.json`](apps/hdc-cli/schema/scanopy.config.schema.json).
 
 | Verb | Summary |
@@ -479,7 +483,7 @@ Example: `node apps/hdc-cli/cli.mjs run service scanopy deploy --`
 ## YaCy in this repo
 
 - **Config:** [`clumps/services/yacy/config.json`](clumps/services/yacy/config.json) (copy from [`config.example.json`](clumps/services/yacy/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/yacy-a.json`](inventory/manual/systems/yacy-a.json); service sidecar [`inventory/manual/services/yacy.json`](inventory/manual/services/yacy.json).
+- **Inventory:** [`operations/manual/systems/yacy-a.json`](operations/manual/systems/yacy-a.json); service sidecar [`operations/manual/services/yacy.json`](operations/manual/services/yacy.json).
 - **Schema:** [`apps/hdc-cli/schema/yacy.config.schema.json`](apps/hdc-cli/schema/yacy.config.schema.json).
 
 | Verb | Summary |
@@ -496,7 +500,7 @@ Example: `node apps/hdc-cli/cli.mjs run service yacy deploy --`
 ## SearXNG in this repo
 
 - **Config:** [`clumps/services/searxng/config.json`](clumps/services/searxng/config.json) (copy from [`config.example.json`](clumps/services/searxng/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/searxng-a.json`](inventory/manual/systems/searxng-a.json); service sidecar [`inventory/manual/services/searxng.json`](inventory/manual/services/searxng.json).
+- **Inventory:** [`operations/manual/systems/searxng-a.json`](operations/manual/systems/searxng-a.json); service sidecar [`operations/manual/services/searxng.json`](operations/manual/services/searxng.json).
 - **Schema:** [`apps/hdc-cli/schema/searxng.config.schema.json`](apps/hdc-cli/schema/searxng.config.schema.json).
 
 | Verb | Summary |
@@ -514,7 +518,7 @@ Example: `node apps/hdc-cli/cli.mjs run service searxng deploy --`
 
 - **Config:** [`clumps/services/immich/config.json`](clumps/services/immich/config.json) (copy from [`config.example.json`](clumps/services/immich/config.example.json); keep local config out of git).
 - **Modes:** `synology-docker` (official compose on Synology via [`synology-nas`](clumps/infrastructure/synology-nas/) lib; `system_id` `immich-a`, `synology.instance` `a`) or `proxmox-qemu` / `configure-only` (Ubuntu VM + SSH; `vm-immich-a`).
-- **Inventory:** [`inventory/manual/systems/immich-a.json`](inventory/manual/systems/immich-a.json) (NAS Docker), optional [`vm-immich-a.json`](inventory/manual/systems/vm-immich-a.json); [`nas-a.json`](inventory/manual/systems/nas-a.json); service sidecar [`inventory/manual/services/immich.json`](inventory/manual/services/immich.json).
+- **Inventory:** [`operations/manual/systems/immich-a.json`](operations/manual/systems/immich-a.json) (NAS Docker), optional [`vm-immich-a.json`](operations/manual/systems/vm-immich-a.json); [`nas-a.json`](operations/manual/systems/nas-a.json); service sidecar [`operations/manual/services/immich.json`](operations/manual/services/immich.json).
 - **Schema:** [`apps/hdc-cli/schema/immich.config.schema.json`](apps/hdc-cli/schema/immich.config.schema.json).
 
 | Verb | Summary |
@@ -535,8 +539,8 @@ Example: `node apps/hdc-cli/cli.mjs run service immich query -- --system-id vm-i
 ## Plex in this repo
 
 - **Config:** [`clumps/services/plex/config.json`](clumps/services/plex/config.json) (copy from [`config.example.json`](clumps/services/plex/config.example.json); keep local config out of git).
-- **Mode:** `synology-package` only — native DSM **PlexMediaServer** on [`nas-a`](inventory/manual/systems/nas-a.json) via `synology.instance` `a` (SSH through [`synology-nas`](clumps/infrastructure/synology-nas/)).
-- **Inventory:** [`inventory/manual/systems/plex-a.json`](inventory/manual/systems/plex-a.json); service sidecar [`inventory/manual/services/plex.json`](inventory/manual/services/plex.json); host [`nas-a.json`](inventory/manual/systems/nas-a.json) lists `services: [{ "id": "plex" }]`.
+- **Mode:** `synology-package` only — native DSM **PlexMediaServer** on [`nas-a`](operations/manual/systems/nas-a.json) via `synology.instance` `a` (SSH through [`synology-nas`](clumps/infrastructure/synology-nas/)).
+- **Inventory:** [`operations/manual/systems/plex-a.json`](operations/manual/systems/plex-a.json); service sidecar [`operations/manual/services/plex.json`](operations/manual/services/plex.json); host [`nas-a.json`](operations/manual/systems/nas-a.json) lists `services: [{ "id": "plex" }]`.
 - **Schema:** [`apps/hdc-cli/schema/plex.config.schema.json`](apps/hdc-cli/schema/plex.config.schema.json).
 
 | Verb | Summary |
@@ -553,7 +557,7 @@ Example: `node apps/hdc-cli/cli.mjs run service plex query -- --live`
 ## Gatus in this repo
 
 - **Config:** [`clumps/services/gatus/config.json`](clumps/services/gatus/config.json) (copy from [`config.example.json`](clumps/services/gatus/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/gatus-a.json`](inventory/manual/systems/gatus-a.json); service sidecar [`inventory/manual/services/gatus.json`](inventory/manual/services/gatus.json).
+- **Inventory:** [`operations/manual/systems/gatus-a.json`](operations/manual/systems/gatus-a.json); service sidecar [`operations/manual/services/gatus.json`](operations/manual/services/gatus.json).
 - **Schema:** [`apps/hdc-cli/schema/gatus.config.schema.json`](apps/hdc-cli/schema/gatus.config.schema.json).
 
 | Verb | Summary |
@@ -570,7 +574,7 @@ Example: `node apps/hdc-cli/cli.mjs run service gatus deploy --`
 ## Globalping in this repo
 
 - **Config:** [`clumps/services/globalping/config.json`](clumps/services/globalping/config.json) (copy from [`config.example.json`](clumps/services/globalping/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/globalping-a.json`](inventory/manual/systems/globalping-a.json); service sidecar [`inventory/manual/services/globalping.json`](inventory/manual/services/globalping.json).
+- **Inventory:** [`operations/manual/systems/globalping-a.json`](operations/manual/systems/globalping-a.json); service sidecar [`operations/manual/services/globalping.json`](operations/manual/services/globalping.json).
 - **Schema:** [`apps/hdc-cli/schema/globalping.config.schema.json`](apps/hdc-cli/schema/globalping.config.schema.json).
 
 | Verb | Summary |
@@ -587,7 +591,7 @@ Example: `node apps/hdc-cli/cli.mjs run service globalping deploy -- --instance 
 ## CrowdSec in this repo
 
 - **Config:** [`clumps/services/crowdsec/config.json`](clumps/services/crowdsec/config.json) (copy from [`config.example.json`](clumps/services/crowdsec/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/crowdsec-a.json`](inventory/manual/systems/crowdsec-a.json); service sidecar [`inventory/manual/services/crowdsec.json`](inventory/manual/services/crowdsec.json).
+- **Inventory:** [`operations/manual/systems/crowdsec-a.json`](operations/manual/systems/crowdsec-a.json); service sidecar [`operations/manual/services/crowdsec.json`](operations/manual/services/crowdsec.json).
 - **Proxmox:** `provision.guest_agents.crowdsec` (`lapi_url`, optional `collections[]`, `collections_by_service`); vault `HDC_CROWDSEC_ENROLL_KEY`.
 - **UniFi:** remote syslog to LAPI CT (`crowdsec.unifi.syslog`); API bouncer sync to `crowdsec-block` group via `unifi-network` credentials; optional native UDM bouncer — [`docs/manually-deployed/crowdsec-unifi-bouncer.md`](docs/manually-deployed/crowdsec-unifi-bouncer.md).
 - **Schema:** [`apps/hdc-cli/schema/crowdsec.config.schema.json`](apps/hdc-cli/schema/crowdsec.config.schema.json).
@@ -607,7 +611,7 @@ Example: `node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-boun
 
 - **Config:** [`clumps/services/wazuh/config.json`](clumps/services/wazuh/config.json) (copy from [`config.example.json`](clumps/services/wazuh/config.example.json); keep local config out of git).
 - **Modes:** `proxmox-lxc` (`wazuh-a`) or `proxmox-qemu` (`vm-wazuh-a` + `configure.ssh.host`).
-- **Inventory:** [`inventory/manual/systems/wazuh-a.json`](inventory/manual/systems/wazuh-a.json) (LXC) or `vm-wazuh-a.json` (QEMU); service sidecar [`inventory/manual/services/wazuh.json`](inventory/manual/services/wazuh.json).
+- **Inventory:** [`operations/manual/systems/wazuh-a.json`](operations/manual/systems/wazuh-a.json) (LXC) or `vm-wazuh-a.json` (QEMU); service sidecar [`operations/manual/services/wazuh.json`](operations/manual/services/wazuh.json).
 - **Proxmox:** `provision.guest_agents.wazuh.manager_host` → manager IP; vault `HDC_WAZUH_AGENT_PASSWORD`.
 - **Schema:** [`apps/hdc-cli/schema/wazuh.config.schema.json`](apps/hdc-cli/schema/wazuh.config.schema.json).
 
@@ -625,7 +629,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wazuh deploy -- --instance a`
 ## Trivy in this repo
 
 - **Config:** [`clumps/services/trivy/config.json`](clumps/services/trivy/config.json) (copy from [`config.example.json`](clumps/services/trivy/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/trivy-a.json`](inventory/manual/systems/trivy-a.json); service sidecar [`inventory/manual/services/trivy.json`](inventory/manual/services/trivy.json).
+- **Inventory:** [`operations/manual/systems/trivy-a.json`](operations/manual/systems/trivy-a.json); service sidecar [`operations/manual/services/trivy.json`](operations/manual/services/trivy.json).
 - **Schema:** [`apps/hdc-cli/schema/trivy.config.schema.json`](apps/hdc-cli/schema/trivy.config.schema.json).
 
 | Verb | Summary |
@@ -642,7 +646,7 @@ Example: `node apps/hdc-cli/cli.mjs run service trivy maintain --`
 ## WireGuard in this repo
 
 - **Config:** [`clumps/services/wireguard/config.json`](clumps/services/wireguard/config.json) (copy from [`config.example.json`](clumps/services/wireguard/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/wireguard-a.json`](inventory/manual/systems/wireguard-a.json); service sidecar [`inventory/manual/services/wireguard.json`](inventory/manual/services/wireguard.json).
+- **Inventory:** [`operations/manual/systems/wireguard-a.json`](operations/manual/systems/wireguard-a.json); service sidecar [`operations/manual/services/wireguard.json`](operations/manual/services/wireguard.json).
 - **Schema:** [`apps/hdc-cli/schema/wireguard.config.schema.json`](apps/hdc-cli/schema/wireguard.config.schema.json).
 
 | Verb | Summary |
@@ -659,7 +663,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wireguard deploy --`
 ## Keycloak in this repo
 
 - **Config:** [`clumps/services/keycloak/config.json`](clumps/services/keycloak/config.json) (copy from [`config.example.json`](clumps/services/keycloak/config.example.json)). Optional split: `keycloak.realms[]` via `{ "$hdc.include": "realms/<id>.json" }` (see [`realms/example.json`](clumps/services/keycloak/realms/example.json)).
-- **Inventory:** [`inventory/manual/systems/keycloak-a.json`](inventory/manual/systems/keycloak-a.json); service sidecar [`inventory/manual/services/keycloak.json`](inventory/manual/services/keycloak.json).
+- **Inventory:** [`operations/manual/systems/keycloak-a.json`](operations/manual/systems/keycloak-a.json); service sidecar [`operations/manual/services/keycloak.json`](operations/manual/services/keycloak.json).
 - **Database:** `keycloak.database.mode`: `bundled` (Postgres in Compose) or `external` (shared [`postgresql`](clumps/services/postgresql/) VM).
 - **Schema:** [`apps/hdc-cli/schema/keycloak.config.schema.json`](apps/hdc-cli/schema/keycloak.config.schema.json).
 
@@ -677,7 +681,7 @@ Example: `node apps/hdc-cli/cli.mjs run service keycloak deploy --`
 ## Greenbone in this repo
 
 - **Config:** [`clumps/services/greenbone/config.json`](clumps/services/greenbone/config.json) (copy from [`config.example.json`](clumps/services/greenbone/config.example.json)).
-- **Inventory:** [`inventory/manual/systems/greenbone-a.json`](inventory/manual/systems/greenbone-a.json); service sidecar [`inventory/manual/services/greenbone.json`](inventory/manual/services/greenbone.json).
+- **Inventory:** [`operations/manual/systems/greenbone-a.json`](operations/manual/systems/greenbone-a.json); service sidecar [`operations/manual/services/greenbone.json`](operations/manual/services/greenbone.json).
 - **Schema:** [`apps/hdc-cli/schema/greenbone.config.schema.json`](apps/hdc-cli/schema/greenbone.config.schema.json).
 
 | Verb | Summary |
@@ -710,7 +714,7 @@ Example: `node apps/hdc-cli/cli.mjs run service nagios deploy -- --instance a`
 ## Hermes Agent in this repo
 
 - **Config:** [`clumps/services/hermes/config.json`](clumps/services/hermes/config.json) (copy from [`config.example.json`](clumps/services/hermes/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/hermes-a.json`](inventory/manual/systems/hermes-a.json); service sidecar [`inventory/manual/services/hermes.json`](inventory/manual/services/hermes.json).
+- **Inventory:** [`operations/manual/systems/hermes-a.json`](operations/manual/systems/hermes-a.json); service sidecar [`operations/manual/services/hermes.json`](operations/manual/services/hermes.json).
 - **Schema:** [`apps/hdc-cli/schema/hermes.config.schema.json`](apps/hdc-cli/schema/hermes.config.schema.json).
 
 | Verb | Summary |
@@ -729,7 +733,7 @@ Example: `node apps/hdc-cli/cli.mjs run service hermes deploy -- --instance a`
 ## HDC Agents fleet in this repo
 
 - **Config:** [`clumps/services/hdc-agents/config.json`](clumps/services/hdc-agents/config.json) (copy from [`config.example.json`](clumps/services/hdc-agents/config.example.json); keep local config in hdc-private).
-- **Inventory:** [`inventory/manual/systems/hdc-agents-a.json`](inventory/manual/systems/hdc-agents-a.json); service sidecar [`inventory/manual/services/hdc-agents.json`](inventory/manual/services/hdc-agents.json).
+- **Inventory:** [`operations/manual/systems/hdc-agents-a.json`](operations/manual/systems/hdc-agents-a.json); service sidecar [`operations/manual/services/hdc-agents.json`](operations/manual/services/hdc-agents.json).
 - **Runtime:** [`apps/hdc-agent-server/`](apps/hdc-agent-server/) — A2A 0.3 + LiteLLM tool loop + scripted dispatcher + hdc-mcp-server role policy. Canonical agents/skills under `apps/hdc-agent-server/{agents,skills}/`.
 - **Web UI / jobs API:** [`apps/hdc-web-server/`](apps/hdc-web-server/) on port **9120** (Tasks approval, schedules, inventory) — shipped with the hdc-agents guest (`meta_root` `/opt/hdc-agents-meta`).
 - **Architecture:** [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md).
@@ -751,7 +755,7 @@ Example: `node apps/hdc-cli/cli.mjs run service hdc-agents deploy -- --instance 
 ## Open WebUI in this repo
 
 - **Config:** [`clumps/services/open-webui/config.json`](clumps/services/open-webui/config.json) (copy from [`config.example.json`](clumps/services/open-webui/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/open-webui-a.json`](inventory/manual/systems/open-webui-a.json); service sidecar [`inventory/manual/services/open-webui.json`](inventory/manual/services/open-webui.json).
+- **Inventory:** [`operations/manual/systems/open-webui-a.json`](operations/manual/systems/open-webui-a.json); service sidecar [`operations/manual/services/open-webui.json`](operations/manual/services/open-webui.json).
 - **Schema:** [`apps/hdc-cli/schema/open-webui.config.schema.json`](apps/hdc-cli/schema/open-webui.config.schema.json).
 
 | Verb | Summary |
@@ -768,7 +772,7 @@ Example: `node apps/hdc-cli/cli.mjs run service open-webui deploy --`
 ## Vaultwarden in this repo
 
 - **Config:** [`clumps/services/vaultwarden/config.json`](clumps/services/vaultwarden/config.json) (copy from [`config.example.json`](clumps/services/vaultwarden/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vaultwarden-a.json`](inventory/manual/systems/vaultwarden-a.json); service sidecar [`inventory/manual/services/vaultwarden.json`](inventory/manual/services/vaultwarden.json).
+- **Inventory:** [`operations/manual/systems/vaultwarden-a.json`](operations/manual/systems/vaultwarden-a.json); service sidecar [`operations/manual/services/vaultwarden.json`](operations/manual/services/vaultwarden.json).
 - **Schema:** [`apps/hdc-cli/schema/vaultwarden.config.schema.json`](apps/hdc-cli/schema/vaultwarden.config.schema.json).
 
 | Verb | Summary |
@@ -787,7 +791,7 @@ Example: `node apps/hdc-cli/cli.mjs run service vaultwarden deploy -- --instance
 ## Mailcow in this repo
 
 - **Config:** [`clumps/services/mailcow/config.json`](clumps/services/mailcow/config.json) (copy from [`config.example.json`](clumps/services/mailcow/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/mailcow-a.json`](inventory/manual/systems/mailcow-a.json) (LXC), [`vm-mailcow-a.json`](inventory/manual/systems/vm-mailcow-a.json) (QEMU); service sidecar [`inventory/manual/services/mailcow.json`](inventory/manual/services/mailcow.json).
+- **Inventory:** [`operations/manual/systems/mailcow-a.json`](operations/manual/systems/mailcow-a.json) (LXC), [`vm-mailcow-a.json`](operations/manual/systems/vm-mailcow-a.json) (QEMU); service sidecar [`operations/manual/services/mailcow.json`](operations/manual/services/mailcow.json).
 - **Schema:** [`apps/hdc-cli/schema/mailcow.config.schema.json`](apps/hdc-cli/schema/mailcow.config.schema.json).
 
 | Verb | Summary |
@@ -808,7 +812,7 @@ Example: `node apps/hdc-cli/cli.mjs run service mailcow deploy -- --instance a -
 ## Wallos in this repo
 
 - **Config:** [`clumps/services/wallos/config.json`](clumps/services/wallos/config.json) (copy from [`config.example.json`](clumps/services/wallos/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/wallos-a.json`](inventory/manual/systems/wallos-a.json); service sidecar [`inventory/manual/services/wallos.json`](inventory/manual/services/wallos.json).
+- **Inventory:** [`operations/manual/systems/wallos-a.json`](operations/manual/systems/wallos-a.json); service sidecar [`operations/manual/services/wallos.json`](operations/manual/services/wallos.json).
 - **Schema:** [`apps/hdc-cli/schema/wallos.config.schema.json`](apps/hdc-cli/schema/wallos.config.schema.json).
 
 | Verb | Summary |
@@ -825,7 +829,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wallos deploy -- --instance a`
 ## Memos in this repo
 
 - **Config:** [`clumps/services/memos/config.json`](clumps/services/memos/config.json) (copy from [`config.example.json`](clumps/services/memos/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/memos-a.json`](inventory/manual/systems/memos-a.json); service sidecar [`inventory/manual/services/memos.json`](inventory/manual/services/memos.json).
+- **Inventory:** [`operations/manual/systems/memos-a.json`](operations/manual/systems/memos-a.json); service sidecar [`operations/manual/services/memos.json`](operations/manual/services/memos.json).
 - **Schema:** [`apps/hdc-cli/schema/memos.config.schema.json`](apps/hdc-cli/schema/memos.config.schema.json).
 
 | Verb | Summary |
@@ -842,7 +846,7 @@ Example: `node apps/hdc-cli/cli.mjs run service memos deploy -- --instance a`
 ## MeshCentral in this repo
 
 - **Config:** [`clumps/services/meshcentral/config.json`](clumps/services/meshcentral/config.json) (copy from [`config.example.json`](clumps/services/meshcentral/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/meshcentral-a.json`](inventory/manual/systems/meshcentral-a.json); service sidecar [`inventory/manual/services/meshcentral.json`](inventory/manual/services/meshcentral.json).
+- **Inventory:** [`operations/manual/systems/meshcentral-a.json`](operations/manual/systems/meshcentral-a.json); service sidecar [`operations/manual/services/meshcentral.json`](operations/manual/services/meshcentral.json).
 - **Schema:** [`apps/hdc-cli/schema/meshcentral.config.schema.json`](apps/hdc-cli/schema/meshcentral.config.schema.json).
 
 | Verb | Summary |
@@ -866,7 +870,7 @@ node apps/hdc-cli/cli.mjs run service meshcentral maintain -- --device lan-1 --p
 ## Rackula in this repo
 
 - **Config:** [`clumps/services/rackula/config.json`](clumps/services/rackula/config.json) (copy from [`config.example.json`](clumps/services/rackula/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/rackula-a.json`](inventory/manual/systems/rackula-a.json); service sidecar [`inventory/manual/services/rackula.json`](inventory/manual/services/rackula.json).
+- **Inventory:** [`operations/manual/systems/rackula-a.json`](operations/manual/systems/rackula-a.json); service sidecar [`operations/manual/services/rackula.json`](operations/manual/services/rackula.json).
 - **Schema:** [`apps/hdc-cli/schema/rackula.config.schema.json`](apps/hdc-cli/schema/rackula.config.schema.json).
 
 | Verb | Summary |
@@ -883,7 +887,7 @@ Example: `node apps/hdc-cli/cli.mjs run service rackula deploy -- --instance a`
 ## OpenSpeedTest in this repo
 
 - **Config:** [`clumps/services/openspeedtest/config.json`](clumps/services/openspeedtest/config.json) (copy from [`config.example.json`](clumps/services/openspeedtest/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/openspeedtest-a.json`](inventory/manual/systems/openspeedtest-a.json); service sidecar [`inventory/manual/services/openspeedtest.json`](inventory/manual/services/openspeedtest.json).
+- **Inventory:** [`operations/manual/systems/openspeedtest-a.json`](operations/manual/systems/openspeedtest-a.json); service sidecar [`operations/manual/services/openspeedtest.json`](operations/manual/services/openspeedtest.json).
 - **Schema:** [`apps/hdc-cli/schema/openspeedtest.config.schema.json`](apps/hdc-cli/schema/openspeedtest.config.schema.json).
 
 | Verb | Summary |
@@ -909,7 +913,7 @@ Use **litellm** `a2a_agents[]` and [docs/multi-agent-ops.md](docs/multi-agent-op
 ## IT-Tools in this repo
 
 - **Config:** [`clumps/services/it-tools/config.json`](clumps/services/it-tools/config.json) (copy from [`config.example.json`](clumps/services/it-tools/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/it-tools-a.json`](inventory/manual/systems/it-tools-a.json); service sidecar [`inventory/manual/services/it-tools.json`](inventory/manual/services/it-tools.json).
+- **Inventory:** [`operations/manual/systems/it-tools-a.json`](operations/manual/systems/it-tools-a.json); service sidecar [`operations/manual/services/it-tools.json`](operations/manual/services/it-tools.json).
 - **Schema:** [`apps/hdc-cli/schema/it-tools.config.schema.json`](apps/hdc-cli/schema/it-tools.config.schema.json).
 
 | Verb | Summary |
@@ -926,7 +930,7 @@ Example: `node apps/hdc-cli/cli.mjs run service it-tools deploy -- --instance a`
 ## OmniTools in this repo
 
 - **Config:** [`clumps/services/omni-tools/config.json`](clumps/services/omni-tools/config.json) (copy from [`config.example.json`](clumps/services/omni-tools/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/omni-tools-a.json`](inventory/manual/systems/omni-tools-a.json); service sidecar [`inventory/manual/services/omni-tools.json`](inventory/manual/services/omni-tools.json).
+- **Inventory:** [`operations/manual/systems/omni-tools-a.json`](operations/manual/systems/omni-tools-a.json); service sidecar [`operations/manual/services/omni-tools.json`](operations/manual/services/omni-tools.json).
 - **Schema:** [`apps/hdc-cli/schema/omni-tools.config.schema.json`](apps/hdc-cli/schema/omni-tools.config.schema.json).
 
 | Verb | Summary |
@@ -943,7 +947,7 @@ Example: `node apps/hdc-cli/cli.mjs run service omni-tools deploy -- --instance 
 ## Stirling PDF in this repo
 
 - **Config:** [`clumps/services/stirling-pdf/config.json`](clumps/services/stirling-pdf/config.json) (copy from [`config.example.json`](clumps/services/stirling-pdf/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/stirling-pdf-a.json`](inventory/manual/systems/stirling-pdf-a.json); service sidecar [`inventory/manual/services/stirling-pdf.json`](inventory/manual/services/stirling-pdf.json).
+- **Inventory:** [`operations/manual/systems/stirling-pdf-a.json`](operations/manual/systems/stirling-pdf-a.json); service sidecar [`operations/manual/services/stirling-pdf.json`](operations/manual/services/stirling-pdf.json).
 - **Schema:** [`apps/hdc-cli/schema/stirling-pdf.config.schema.json`](apps/hdc-cli/schema/stirling-pdf.config.schema.json).
 
 | Verb | Summary |
@@ -960,7 +964,7 @@ Example: `node apps/hdc-cli/cli.mjs run service stirling-pdf deploy -- --instanc
 ## n8n in this repo
 
 - **Config:** [`clumps/services/n8n/config.json`](clumps/services/n8n/config.json) (copy from [`config.example.json`](clumps/services/n8n/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/n8n-a.json`](inventory/manual/systems/n8n-a.json); service sidecar [`inventory/manual/services/n8n.json`](inventory/manual/services/n8n.json).
+- **Inventory:** [`operations/manual/systems/n8n-a.json`](operations/manual/systems/n8n-a.json); service sidecar [`operations/manual/services/n8n.json`](operations/manual/services/n8n.json).
 - **Schema:** [`apps/hdc-cli/schema/n8n.config.schema.json`](apps/hdc-cli/schema/n8n.config.schema.json).
 
 | Verb | Summary |
@@ -977,7 +981,7 @@ Example: `node apps/hdc-cli/cli.mjs run service n8n deploy -- --instance a`
 ## Listmonk in this repo
 
 - **Config:** [`clumps/services/listmonk/config.json`](clumps/services/listmonk/config.json) (copy from [`config.example.json`](clumps/services/listmonk/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/listmonk-a.json`](inventory/manual/systems/listmonk-a.json); service sidecar [`inventory/manual/services/listmonk.json`](inventory/manual/services/listmonk.json).
+- **Inventory:** [`operations/manual/systems/listmonk-a.json`](operations/manual/systems/listmonk-a.json); service sidecar [`operations/manual/services/listmonk.json`](operations/manual/services/listmonk.json).
 - **Schema:** [`apps/hdc-cli/schema/listmonk.config.schema.json`](apps/hdc-cli/schema/listmonk.config.schema.json).
 
 | Verb | Summary |
@@ -994,7 +998,7 @@ Example: `node apps/hdc-cli/cli.mjs run service listmonk deploy -- --instance a`
 ## Shlink in this repo
 
 - **Config:** [`clumps/services/shlink/config.json`](clumps/services/shlink/config.json) (copy from [`config.example.json`](clumps/services/shlink/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/shlink-a.json`](inventory/manual/systems/shlink-a.json); service sidecar [`inventory/manual/services/shlink.json`](inventory/manual/services/shlink.json).
+- **Inventory:** [`operations/manual/systems/shlink-a.json`](operations/manual/systems/shlink-a.json); service sidecar [`operations/manual/services/shlink.json`](operations/manual/services/shlink.json).
 - **Schema:** [`apps/hdc-cli/schema/shlink.config.schema.json`](apps/hdc-cli/schema/shlink.config.schema.json).
 
 | Verb | Summary |
@@ -1011,7 +1015,7 @@ Example: `node apps/hdc-cli/cli.mjs run service shlink deploy -- --instance a`
 ## Vikunja in this repo
 
 - **Config:** [`clumps/services/vikunja/config.json`](clumps/services/vikunja/config.json) (copy from [`config.example.json`](clumps/services/vikunja/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vikunja-a.json`](inventory/manual/systems/vikunja-a.json); service sidecar [`inventory/manual/services/vikunja.json`](inventory/manual/services/vikunja.json).
+- **Inventory:** [`operations/manual/systems/vikunja-a.json`](operations/manual/systems/vikunja-a.json); service sidecar [`operations/manual/services/vikunja.json`](operations/manual/services/vikunja.json).
 - **Schema:** [`apps/hdc-cli/schema/vikunja.config.schema.json`](apps/hdc-cli/schema/vikunja.config.schema.json).
 
 | Verb | Summary |
@@ -1028,7 +1032,7 @@ Example: `node apps/hdc-cli/cli.mjs run service vikunja deploy -- --instance a`
 ## Paperless-ngx in this repo
 
 - **Config:** [`clumps/services/paperless-ngx/config.json`](clumps/services/paperless-ngx/config.json) (copy from [`config.example.json`](clumps/services/paperless-ngx/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/paperless-ngx-a.json`](inventory/manual/systems/paperless-ngx-a.json); service sidecar [`inventory/manual/services/paperless-ngx.json`](inventory/manual/services/paperless-ngx.json).
+- **Inventory:** [`operations/manual/systems/paperless-ngx-a.json`](operations/manual/systems/paperless-ngx-a.json); service sidecar [`operations/manual/services/paperless-ngx.json`](operations/manual/services/paperless-ngx.json).
 - **Schema:** [`apps/hdc-cli/schema/paperless-ngx.config.schema.json`](apps/hdc-cli/schema/paperless-ngx.config.schema.json).
 
 | Verb | Summary |
@@ -1045,7 +1049,7 @@ Example: `node apps/hdc-cli/cli.mjs run service paperless-ngx deploy -- --instan
 ## Paperclip in this repo
 
 - **Config:** [`clumps/services/paperclip/config.json`](clumps/services/paperclip/config.json) (copy from [`config.example.json`](clumps/services/paperclip/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/paperclip-a.json`](inventory/manual/systems/paperclip-a.json); service sidecar [`inventory/manual/services/paperclip.json`](inventory/manual/services/paperclip.json).
+- **Inventory:** [`operations/manual/systems/paperclip-a.json`](operations/manual/systems/paperclip-a.json); service sidecar [`operations/manual/services/paperclip.json`](operations/manual/services/paperclip.json).
 - **Schema:** [`apps/hdc-cli/schema/paperclip.config.schema.json`](apps/hdc-cli/schema/paperclip.config.schema.json).
 
 | Verb | Summary |
@@ -1062,7 +1066,7 @@ Example: `node apps/hdc-cli/cli.mjs run service paperclip deploy -- --instance a
 ## Home Assistant in this repo
 
 - **Config:** [`clumps/services/homeassistant/config.json`](clumps/services/homeassistant/config.json) (copy from [`config.example.json`](clumps/services/homeassistant/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-homeassistant-a.json`](inventory/manual/systems/vm-homeassistant-a.json); service sidecar [`inventory/manual/services/homeassistant.json`](inventory/manual/services/homeassistant.json).
+- **Inventory:** [`operations/manual/systems/vm-homeassistant-a.json`](operations/manual/systems/vm-homeassistant-a.json); service sidecar [`operations/manual/services/homeassistant.json`](operations/manual/services/homeassistant.json).
 - **Schema:** [`apps/hdc-cli/schema/homeassistant.config.schema.json`](apps/hdc-cli/schema/homeassistant.config.schema.json).
 
 | Verb | Summary |
@@ -1079,7 +1083,7 @@ Example: `node apps/hdc-cli/cli.mjs run service homeassistant deploy -- --instan
 ## Kali desktop in this repo
 
 - **Config:** [`clumps/services/kali-desktop/config.json`](clumps/services/kali-desktop/config.json) (copy from [`config.example.json`](clumps/services/kali-desktop/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-kali-a.json`](inventory/manual/systems/vm-kali-a.json); service sidecar [`inventory/manual/services/kali-desktop.json`](inventory/manual/services/kali-desktop.json).
+- **Inventory:** [`operations/manual/systems/vm-kali-a.json`](operations/manual/systems/vm-kali-a.json); service sidecar [`operations/manual/services/kali-desktop.json`](operations/manual/services/kali-desktop.json).
 - **Schema:** [`apps/hdc-cli/schema/kali-desktop.config.schema.json`](apps/hdc-cli/schema/kali-desktop.config.schema.json).
 
 | Verb | Summary |
@@ -1101,7 +1105,7 @@ node apps/hdc-cli/cli.mjs run service kali-desktop deploy -- --instance a
 ## Windows desktop in this repo
 
 - **Config:** [`clumps/services/windows-desktop/config.json`](clumps/services/windows-desktop/config.json) (copy from [`config.example.json`](clumps/services/windows-desktop/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-win11-a.json`](inventory/manual/systems/vm-win11-a.json); service sidecar [`inventory/manual/services/windows-desktop.json`](inventory/manual/services/windows-desktop.json).
+- **Inventory:** [`operations/manual/systems/vm-win11-a.json`](operations/manual/systems/vm-win11-a.json); service sidecar [`operations/manual/services/windows-desktop.json`](operations/manual/services/windows-desktop.json).
 - **Schema:** [`apps/hdc-cli/schema/windows-desktop.config.schema.json`](apps/hdc-cli/schema/windows-desktop.config.schema.json).
 
 | Verb | Summary |
@@ -1123,7 +1127,7 @@ node apps/hdc-cli/cli.mjs run service windows-desktop deploy -- --instance a --w
 ## Nextcloud in this repo
 
 - **Config:** [`clumps/services/nextcloud/config.json`](clumps/services/nextcloud/config.json) (copy from [`config.example.json`](clumps/services/nextcloud/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/nextcloud-a.json`](inventory/manual/systems/nextcloud-a.json); service sidecar [`inventory/manual/services/nextcloud.json`](inventory/manual/services/nextcloud.json).
+- **Inventory:** [`operations/manual/systems/nextcloud-a.json`](operations/manual/systems/nextcloud-a.json); service sidecar [`operations/manual/services/nextcloud.json`](operations/manual/services/nextcloud.json).
 - **Schema:** [`apps/hdc-cli/schema/nextcloud.config.schema.json`](apps/hdc-cli/schema/nextcloud.config.schema.json).
 
 | Verb | Summary |
@@ -1140,7 +1144,7 @@ Example: `node apps/hdc-cli/cli.mjs run nextcloud deploy --`
 ## Postiz in this repo
 
 - **Config:** [`clumps/services/postiz/config.json`](clumps/services/postiz/config.json) (copy from [`config.example.json`](clumps/services/postiz/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/postiz-a.json`](inventory/manual/systems/postiz-a.json); service sidecar [`inventory/manual/services/postiz.json`](inventory/manual/services/postiz.json).
+- **Inventory:** [`operations/manual/systems/postiz-a.json`](operations/manual/systems/postiz-a.json); service sidecar [`operations/manual/services/postiz.json`](operations/manual/services/postiz.json).
 - **Schema:** [`apps/hdc-cli/schema/postiz.config.schema.json`](apps/hdc-cli/schema/postiz.config.schema.json).
 
 | Verb | Summary |
@@ -1157,7 +1161,7 @@ Example: `node apps/hdc-cli/cli.mjs run service postiz deploy --`
 ## LMS (LM Studio) in this repo
 
 - **Config:** [`clumps/services/lms/config.json`](clumps/services/lms/config.json) (copy from [`config.example.json`](clumps/services/lms/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/vm-lms-a.json`](inventory/manual/systems/vm-lms-a.json); service sidecar [`inventory/manual/services/lms.json`](inventory/manual/services/lms.json).
+- **Inventory:** [`operations/manual/systems/vm-lms-a.json`](operations/manual/systems/vm-lms-a.json); service sidecar [`operations/manual/services/lms.json`](operations/manual/services/lms.json).
 - **Schema:** [`apps/hdc-cli/schema/lms.config.schema.json`](apps/hdc-cli/schema/lms.config.schema.json).
 
 | Verb | Summary |
@@ -1176,7 +1180,7 @@ Example: `node apps/hdc-cli/cli.mjs run service lms deploy -- --instance a`
 ## Llama.cpp in this repo
 
 - **Config:** [`clumps/services/llama-cpp/config.json`](clumps/services/llama-cpp/config.json) (copy from [`config.example.json`](clumps/services/llama-cpp/config.example.json); keep local config out of git).
-- **Inventory:** optional [`inventory/manual/systems/llama-cpp-{a,b}.json`](inventory/manual/systems/) (LXC) or `vm-llama-cpp-a.json` (QEMU GPU).
+- **Inventory:** optional [`operations/manual/systems/llama-cpp-{a,b}.json`](operations/manual/systems/) (LXC) or `vm-llama-cpp-a.json` (QEMU GPU).
 - **Schema:** [`apps/hdc-cli/schema/llama-cpp.config.schema.json`](apps/hdc-cli/schema/llama-cpp.config.schema.json).
 
 | Verb | Summary |
@@ -1196,7 +1200,7 @@ Example: `node apps/hdc-cli/cli.mjs run service llama-cpp deploy -- --instance a
 
 - **Config:** per-clump `config.json` under `clumps/clients/{windows,ubuntu,raspberrypi}/` (copy from each `config.example.json`; keep local config out of git).
 - **Packages:** [`clumps/clients/windows/`](clumps/clients/windows/), [`clumps/clients/ubuntu/`](clumps/clients/ubuntu/) (manifest id `client-ubuntu`), [`clumps/clients/raspberrypi/`](clumps/clients/raspberrypi/).
-- **Inventory:** manual `inventory/manual/systems/*.json` with `automation_targets: ["client"]`, `access.nodes[]` with `ip`, `mac`, and `ssh` or `winrm` as needed.
+- **Inventory:** manual `operations/manual/systems/*.json` with `automation_targets: ["client"]`, `access.nodes[]` with `ip`, `mac`, and `ssh` or `winrm` as needed.
 - **Schema:** [`apps/hdc-cli/schema/client.config.schema.json`](apps/hdc-cli/schema/client.config.schema.json).
 - **Docs:** [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md), [`docs/manually-deployed/client-wol.md`](docs/manually-deployed/client-wol.md).
 
@@ -1225,7 +1229,7 @@ node apps/hdc-cli/cli.mjs run client client-ubuntu maintain -- --reboot --host-i
 ## Proxmox in this repo
 
 - **Config:** [`clumps/infrastructure/proxmox/config.json`](clumps/infrastructure/proxmox/config.json) (copy from [`config.example.json`](clumps/infrastructure/proxmox/config.example.json); keep local config out of git).
-- **Inventory:** hypervisors in `inventory/manual/systems/` (tag `proxmox` or `automation_targets: ["proxmox"]`), plus [`inventory/manual/targets/proxmox.json`](inventory/manual/targets/proxmox.json).
+- **Inventory:** hypervisors in `operations/manual/systems/` (tag `proxmox` or `automation_targets: ["proxmox"]`), plus [`operations/manual/targets/proxmox.json`](operations/manual/targets/proxmox.json).
 - **Schema:** [`apps/hdc-cli/schema/proxmox.config.schema.json`](apps/hdc-cli/schema/proxmox.config.schema.json).
 
 | hdc service id | Verb | Summary |
@@ -1408,7 +1412,7 @@ Example: `node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy
 ## Synology NAS in this repo
 
 - **Config:** [`clumps/infrastructure/synology-nas/config.json`](clumps/infrastructure/synology-nas/config.json) (copy from [`config.example.json`](clumps/infrastructure/synology-nas/config.example.json); keep local config out of git).
-- **Inventory:** [`inventory/manual/systems/nas-a.json`](inventory/manual/systems/nas-a.json), [`nas-b.json`](inventory/manual/systems/nas-b.json).
+- **Inventory:** [`operations/manual/systems/nas-a.json`](operations/manual/systems/nas-a.json), [`nas-b.json`](operations/manual/systems/nas-b.json).
 - **Schema:** [`apps/hdc-cli/schema/synology-nas.config.schema.json`](apps/hdc-cli/schema/synology-nas.config.schema.json).
 
 | Verb | Summary |

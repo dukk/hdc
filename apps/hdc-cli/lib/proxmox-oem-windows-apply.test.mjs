@@ -4,7 +4,7 @@ import {
   buildOemTableDumpScript,
   formatSmbios1Param,
   parseHostSmbiosOutput,
-} from "../../../clumps/infrastructure/proxmox/lib/proxmox-oem-windows-apply.mjs";
+} from "hdc/clump/infrastructure/proxmox/lib/proxmox-oem-windows-apply.mjs";
 
 describe("proxmox-oem-windows-apply", () => {
   it("buildOemTableDumpScript references node qemu-server dir", () => {

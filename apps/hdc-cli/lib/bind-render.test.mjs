@@ -6,7 +6,7 @@ import {
   renderNamedOptions,
   renderTsigKey,
   TSIG_KEY_NAME,
-} from "../../../clumps/services/bind/lib/bind-render.mjs";
+} from "hdc/clump/services/bind/lib/bind-render.mjs";
 
 describe("bind-render", () => {
   it("renders named options with ACLs", () => {

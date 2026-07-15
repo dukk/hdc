@@ -4,7 +4,7 @@ import {
   nginxGlobalSettings,
   normalizeNginxConfig,
   resolveNginxDeployments,
-} from "../../../clumps/services/nginx/lib/deployments.mjs";
+} from "hdc/clump/services/nginx/lib/deployments.mjs";
 
 const sampleCfg = {
   schema_version: 2,

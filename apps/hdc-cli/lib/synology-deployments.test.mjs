@@ -4,7 +4,7 @@ import {
   instanceFlagToSystemId,
   normalizeSynologyConfig,
   resolveSynologyDeployments,
-} from "../../../clumps/infrastructure/synology-nas/lib/deployments.mjs";
+} from "hdc/clump/infrastructure/synology-nas/lib/deployments.mjs";
 
 const fixture = {
   schema_version: 1,

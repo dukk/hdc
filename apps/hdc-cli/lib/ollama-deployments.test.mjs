@@ -5,7 +5,7 @@ import {
   normalizeOllamaConfig,
   resolveOllamaDeployment,
   resolveOllamaDeployments,
-} from "../../../clumps/services/ollama/lib/deployments.mjs";
+} from "hdc/clump/services/ollama/lib/deployments.mjs";
 
 describe("ollama deployments", () => {
   const v2Lxc = {

@@ -8,7 +8,7 @@ import {
   renderComposeYaml,
   resolveUpstreamUrl,
   resolveWebUrl,
-} from "../../../clumps/services/memos/lib/memos-render.mjs";
+} from "hdc/clump/services/memos/lib/memos-render.mjs";
 
 describe("memos-render", () => {
   const memos = {
