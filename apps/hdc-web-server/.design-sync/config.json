@@ -1,0 +1,43 @@
+{
+  "pkg": "hdc-web-server",
+  "globalName": "HdcUI",
+  "shape": "package",
+  "srcDir": "web/src/ui",
+  "cssEntry": "web/src/ui/styles.css",
+  "componentSrcMap": {
+    "Button": "web/src/ui/Button.jsx",
+    "Tabs": "web/src/ui/Tabs.jsx",
+    "StatCard": "web/src/ui/StatCard.jsx",
+    "CardGrid": "web/src/ui/CardGrid.jsx",
+    "Banner": "web/src/ui/Banner.jsx",
+    "Table": "web/src/ui/Table.jsx",
+    "LogView": "web/src/ui/LogView.jsx",
+    "StatusText": "web/src/ui/StatusText.jsx",
+    "Panel": "web/src/ui/Panel.jsx",
+    "Field": "web/src/ui/Field.jsx",
+    "TextInput": "web/src/ui/TextInput.jsx",
+    "SelectInput": "web/src/ui/SelectInput.jsx",
+    "SearchInput": "web/src/ui/SearchInput.jsx",
+    "Message": "web/src/ui/Message.jsx",
+    "ListRow": "web/src/ui/ListRow.jsx",
+    "Spinner": "web/src/ui/Spinner.jsx"
+  },
+  "dtsPropsFor": {
+    "Button": "variant?: \"primary\" | \"secondary\"; size?: \"md\" | \"sm\"; type?: \"button\" | \"submit\"; disabled?: boolean; onClick?: () => void; children: React.ReactNode;",
+    "Tabs": "tabs: { id: string; label: string }[]; activeId: string; onSelect: (id: string) => void;",
+    "StatCard": "label: React.ReactNode; value: React.ReactNode; tone?: \"default\" | \"ok\" | \"fail\";",
+    "CardGrid": "children: React.ReactNode;",
+    "Banner": "children: React.ReactNode;",
+    "Table": "columns: { key: string; header: React.ReactNode; render: (row: any) => React.ReactNode }[]; rows: any[]; rowKey: (row: any) => string; onRowClick?: (row: any) => void;",
+    "LogView": "children: React.ReactNode;",
+    "StatusText": "tone?: \"ok\" | \"fail\" | \"neutral\"; exitCode?: number | null; children: React.ReactNode;",
+    "Panel": "inline?: boolean; as?: \"div\" | \"form\"; onSubmit?: (e: React.FormEvent) => void; children: React.ReactNode;",
+    "Field": "label: React.ReactNode; children: React.ReactNode;",
+    "TextInput": "value: string; onChange: (value: string) => void; placeholder?: string; type?: string; required?: boolean;",
+    "SelectInput": "value: string; onChange: (value: string) => void; options: { value: string; label: React.ReactNode }[]; required?: boolean;",
+    "SearchInput": "value: string; onChange: (value: string) => void; placeholder?: string;",
+    "Message": "tone?: \"muted\" | \"error\"; children: React.ReactNode;",
+    "ListRow": "left: React.ReactNode; right: React.ReactNode; onClick?: () => void;",
+    "Spinner": "children?: React.ReactNode;"
+  }
+}

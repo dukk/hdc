@@ -1,2 +1,10 @@
 node_modules/
 dist/
+
+# design-sync (staged scripts, build output, machine state)
+.ds-sync/
+ds-bundle/
+dist-ui/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
