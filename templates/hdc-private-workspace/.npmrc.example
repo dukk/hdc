@@ -1,0 +1,3 @@
+# GitHub Packages: @dukk/hdc-cli
+@dukk:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}

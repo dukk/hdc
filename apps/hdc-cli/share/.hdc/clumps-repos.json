@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "cache_dir": "~/.hdc/clump-repos",
+  "repos": [
+    {
+      "id": "hdc-clumps",
+      "url": "https://github.com/dukk/hdc-clumps.git",
+      "ref": "main",
+      "mode": "active"
+    }
+  ],
+  "precedence": ["hdc-clumps"],
+  "overrides": {}
+}

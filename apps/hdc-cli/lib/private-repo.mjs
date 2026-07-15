@@ -148,22 +148,47 @@ export function normalizeRepoRelPath(relPath) {
 }
 
 /**
- * Resolve hdc-private root: HDC_PRIVATE_ROOT, else sibling ../hdc-private when it exists.
- * @param {string} publicRoot hdc repo root
+ * True when `dir` looks like an operator (hdc-private) workspace.
+ * @param {string} dir
+ */
+export function looksLikeOperatorWorkspace(dir) {
+  if (!dir || !existsSync(dir)) return false;
+  return (
+    existsSync(join(dir, "operations", "inventory")) ||
+    existsSync(join(dir, "clumps", "services")) ||
+    existsSync(join(dir, "clumps", "infrastructure"))
+  );
+}
+
+/**
+ * Resolve hdc-private root: HDC_PRIVATE_ROOT, else sibling ../hdc-private when it exists,
+ * else cwd when it looks like an operator workspace (and is not a full hdc platform tree).
+ * @param {string} publicRoot hdc repo / platform root
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {string} [cwd]
  * @returns {string | null}
  */
-export function hdcPrivateRoot(publicRoot, env = process.env) {
+export function hdcPrivateRoot(publicRoot, env = process.env, cwd = process.cwd()) {
   const fromEnv =
     typeof env.HDC_PRIVATE_ROOT === "string" && env.HDC_PRIVATE_ROOT.trim()
       ? env.HDC_PRIVATE_ROOT.trim()
       : "";
   if (fromEnv) {
-    const abs = resolve(fromEnv);
+    const abs = resolve(cwd, fromEnv);
     return existsSync(abs) ? abs : null;
   }
   const sibling = resolve(publicRoot, "..", DEFAULT_PRIVATE_DIR);
-  return existsSync(sibling) ? sibling : null;
+  if (existsSync(sibling)) return sibling;
+
+  const absCwd = resolve(cwd);
+  if (looksLikeOperatorWorkspace(absCwd)) {
+    // Never treat a full hdc platform checkout as the private workspace
+    if (existsSync(join(absCwd, "apps", "hdc-cli", "paths.mjs"))) {
+      return null;
+    }
+    return absCwd;
+  }
+  return null;
 }
 
 /**

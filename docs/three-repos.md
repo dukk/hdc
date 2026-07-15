@@ -10,6 +10,8 @@ HDC splits automation into three git repositories so you can run a homelab or sm
 
 **Minimum to operate:** clone **hdc** and create **hdc-private**. Package code can come from upstream via `hdc clumps init` (no hdc-clumps checkout required).
 
+**Alternative:** depend on `@dukk/hdc-cli` from GitHub Packages in your private operator repo (no hdc git checkout). See [npm workspace](npm-workspace.md).
+
 **Recommended:** also maintain **your own hdc-clumps fork** when you customize package scripts or add services. Day-to-day edits should stay in hdc-private (and your hdc-clumps fork); **pull hdc for platform updates** rather than maintaining a long-lived hdc fork.
 
 ## Architecture
@@ -92,6 +94,20 @@ Secrets never belong in git:
 JSON config and inventory reference vault keys by **name** only (for example `HDC_PROXMOX_API_TOKEN`), never values.
 
 ## Setup
+
+### Option: npm operator workspace (no hdc git clone)
+
+Use a private repo that depends on `@dukk/hdc-cli` and holds the same paths as hdc-private.
+Template: [`templates/hdc-private-workspace/`](../templates/hdc-private-workspace/). Guide: [npm workspace](npm-workspace.md).
+
+```bash
+cp -r templates/hdc-private-workspace my-hdc-site && cd my-hdc-site
+cp .npmrc.example .npmrc   # GITHUB_TOKEN with read:packages
+npm install
+cp .env.example .env       # HDC_PRIVATE_ROOT=.
+npx hdc clumps init
+npx hdc list
+```
 
 ### Minimum: hdc + hdc-private
 

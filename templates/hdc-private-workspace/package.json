@@ -1,0 +1,13 @@
+{
+  "name": "my-hdc-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "hdc": "hdc",
+    "clumps:init": "hdc clumps init",
+    "maintain:daily": "hdc maintain daily"
+  },
+  "dependencies": {
+    "@dukk/hdc-cli": "^0.1.0"
+  }
+}

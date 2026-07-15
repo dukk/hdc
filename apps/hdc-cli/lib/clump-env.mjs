@@ -86,14 +86,31 @@ export function loadMergedRepoDotenv(publicRoot, relPath, targetEnv, deps = {}) 
 }
 
 /**
- * @param {{ loadDotenv: (path: string, override?: boolean) => void; join: typeof join; existsSync?: typeof existsSync }} deps
- * @param {string} root
+ * Load platform `.env`, then workspace (hdc-private) `.env` with override so operator
+ * settings win. Re-resolves private root after platform load (may set HDC_PRIVATE_ROOT).
+ * @param {{
+ *   env: NodeJS.ProcessEnv | Record<string, string | undefined>;
+ *   loadDotenv?: (path: string, override?: boolean) => void;
+ *   join: typeof join;
+ *   existsSync?: typeof existsSync;
+ * }} deps
+ * @param {string} root Platform / public root
  */
 export function bootstrapGlobalEnv(deps, root) {
-  loadMergedRepoDotenv(root, ROOT_DOTENV_REL, deps.env, {
-    join: deps.join,
-    existsSync: deps.existsSync ?? existsSync,
-  });
+  const joinFn = deps.join;
+  const exists = deps.existsSync ?? existsSync;
+  const targetEnv = deps.env;
+  const publicPath = joinFn(root, ROOT_DOTENV_REL);
+  if (exists(publicPath)) {
+    applyDotenvFile(publicPath, targetEnv, false);
+  }
+  const privateRoot = hdcPrivateRoot(root, /** @type {NodeJS.ProcessEnv} */ (targetEnv));
+  if (privateRoot) {
+    const privatePath = joinFn(privateRoot, ROOT_DOTENV_REL);
+    if (exists(privatePath)) {
+      applyDotenvFile(privatePath, targetEnv, true);
+    }
+  }
   return root;
 }
 

@@ -266,4 +266,21 @@ describe("bootstrapGlobalEnv", () => {
     );
     expect(env.HDC_VAULT_PASSPHRASE).toBe("from-file");
   });
+
+  it("workspace .env overrides platform .env", () => {
+    const publicRoot = mkdtempSync(join(tmpdir(), "hdc-boot-pub-"));
+    const privateRoot = mkdtempSync(join(tmpdir(), "hdc-boot-priv-"));
+    writeFileSync(join(publicRoot, ".env"), "HDC_VAULT_PASSPHRASE=from-platform\nHDC_ONLY_PUBLIC=1\n", "utf8");
+    writeFileSync(
+      join(privateRoot, ".env"),
+      "HDC_VAULT_PASSPHRASE=from-workspace\nHDC_ONLY_PRIVATE=1\n",
+      "utf8",
+    );
+    /** @type {NodeJS.ProcessEnv} */
+    const env = { HDC_PRIVATE_ROOT: privateRoot };
+    bootstrapGlobalEnv({ env, join }, publicRoot);
+    expect(env.HDC_VAULT_PASSPHRASE).toBe("from-workspace");
+    expect(env.HDC_ONLY_PUBLIC).toBe("1");
+    expect(env.HDC_ONLY_PRIVATE).toBe("1");
+  });
 });

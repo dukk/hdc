@@ -1,0 +1,37 @@
+name: publish-hdc-cli
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout hdc-clumps
+        uses: actions/checkout@v4
+        with:
+          repository: dukk/hdc-clumps
+          path: hdc-clumps
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@dukk"
+      - run: npm ci
+      - run: npm test
+      - name: Sync share assets
+        run: node apps/hdc-cli/scripts/sync-share-assets.mjs
+      - name: Publish @dukk/hdc-cli
+        working-directory: apps/hdc-cli
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

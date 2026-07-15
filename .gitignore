@@ -13,6 +13,7 @@ clumps/**/*.json
 
 operations/inventory/**/*.json
 !operations/inventory/systems/_example.json
+!apps/hdc-cli/share/operations/inventory/systems/_example.json
 operations/automated/
 
 inventory/manual/**/*.json

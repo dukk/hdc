@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "example-service-a",
+  "kind": "system",
+  "system_class": "virtual",
+  "hosted_on_system_id": "hypervisor-a",
+  "tags": ["proxmox", "example"],
+  "automation_targets": ["example-package", "proxmox"],
+  "notes": "Fictional template system for public hdc. Copy to hdc-private with real ids and IPs.",
+  "last_verified": null,
+  "proxmox_cluster": {
+    "id": "example-proxmox-cluster",
+    "role": "node"
+  },
+  "services": [{ "id": "example-service", "nodes": ["a"] }],
+  "access": {
+    "nodes": [
+      {
+        "name": "a",
+        "hostnames": ["example-service-a.home.example.invalid"],
+        "ip": "192.0.2.50",
+        "web_ui": "http://192.0.2.50:8080",
+        "ssh": "ssh://hdc@192.0.2.50"
+      }
+    ]
+  },
+  "auth": {
+    "ssh_user_env": "HDC_GUEST_SSH_USER"
+  }
+}

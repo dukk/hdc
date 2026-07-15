@@ -1,15 +1,51 @@
 {
-  "name": "hdc-cli",
-  "private": true,
+  "name": "@dukk/hdc-cli",
+  "version": "0.1.0",
+  "description": "Home Data Center CLI and package runtime",
   "type": "module",
+  "bin": {
+    "hdc": "./cli.mjs"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dukk/hdc.git",
+    "directory": "apps/hdc-cli"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "marked": "^15.0.12"
+  },
   "imports": {
     "hdc/package/*": "./lib/package/*",
-    "hdc/cli/*": "./*",
-    "hdc/clump/*": "../../../hdc-clumps/*"
+    "hdc/cli/*": "./*"
   },
   "exports": {
+    ".": "./cli.mjs",
     "./package/*": "./lib/package/*",
     "./lib/*": "./lib/*",
-    "./paths.mjs": "./paths.mjs"
+    "./paths.mjs": "./paths.mjs",
+    "./schema/*": "./schema/*"
+  },
+  "files": [
+    "cli.mjs",
+    "paths.mjs",
+    "env.mjs",
+    "vault.mjs",
+    "manifests.mjs",
+    "lib/**/*",
+    "schema/**/*",
+    "share/**/*",
+    "!**/*.test.mjs",
+    "!test/**",
+    "!scripts/**"
+  ],
+  "scripts": {
+    "sync-share": "node ./scripts/sync-share-assets.mjs",
+    "prepublishOnly": "node ./scripts/sync-share-assets.mjs"
   }
 }

@@ -7,6 +7,7 @@ import {
   formatRepoJson,
   formatResolvedRepoFileLabel,
   hdcPrivateRoot,
+  looksLikeOperatorWorkspace,
   normalizeRepoRelPath,
   preferredNewFilePath,
   preferredClumpReportPath,
@@ -199,5 +200,27 @@ describe("private-repo", () => {
     expect(text).toContain('"type": "A"');
     expect(text.split("\n").length).toBeGreaterThan(8);
     expect(JSON.parse(text.trimEnd())).toEqual(data);
+  });
+
+  it("looksLikeOperatorWorkspace detects inventory or clumps/services", () => {
+    expect(looksLikeOperatorWorkspace(publicRoot)).toBe(false);
+    mkdirSync(join(privateRoot, "operations", "inventory"), { recursive: true });
+    expect(looksLikeOperatorWorkspace(privateRoot)).toBe(true);
+  });
+
+  it("hdcPrivateRoot resolves HDC_PRIVATE_ROOT=. relative to cwd", () => {
+    expect(hdcPrivateRoot(publicRoot, { HDC_PRIVATE_ROOT: "." }, privateRoot)).toBe(privateRoot);
+  });
+
+  it("hdcPrivateRoot auto-detects cwd operator workspace when not a platform tree", () => {
+    mkdirSync(join(privateRoot, "clumps", "services"), { recursive: true });
+    expect(hdcPrivateRoot(publicRoot, {}, privateRoot)).toBe(privateRoot);
+  });
+
+  it("hdcPrivateRoot does not treat hdc platform tree cwd as private", () => {
+    mkdirSync(join(publicRoot, "apps", "hdc-cli"), { recursive: true });
+    writeFileSync(join(publicRoot, "apps", "hdc-cli", "paths.mjs"), "", "utf8");
+    mkdirSync(join(publicRoot, "operations", "inventory"), { recursive: true });
+    expect(hdcPrivateRoot(publicRoot, {}, publicRoot)).toBeNull();
   });
 });
