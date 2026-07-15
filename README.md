@@ -4,7 +4,11 @@ Automation and documentation for a manually deployed home data center.
 
 > **Public repo:** automation code and `config.example.json` templates live here. Live `config.json`, inventory, and operator notes belong in a separate private **hdc-private** checkout (`HDC_PRIVATE_ROOT`).
 
-**New adopters:** start with [Three repositories](docs/three-repos.md) for how hdc, hdc-private, and hdc-clumps fit together and how to set up your site.
+**Build your own from scratch:** [Getting Started](docs/getting-started.md) takes you from nothing to a running lab with an agent fleet, in five steps.
+
+**How the repos fit together:** [Three repositories](docs/three-repos.md) — hdc, hdc-private, and hdc-clumps, and how to set up your site.
+
+**Want the big picture first?** [ARCHITECTURE.md](ARCHITECTURE.md) explains what HDC is and how it works end-to-end — the CLI and package runtime, the agent fleet, APIs, and deployment topology — with diagrams.
 
 ## What are clumps?
 

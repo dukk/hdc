@@ -2,6 +2,8 @@
 
 Automation and documentation for a manually deployed home data center. Agents operate and extend this repo via the **hdc** CLI and JSON inventory sidecars.
 
+> **System overview:** [ARCHITECTURE.md](ARCHITECTURE.md) is the end-to-end map — core ideas, the three-repo model, CLI/package runtime, agent fleet, APIs, and deployment topology, with diagrams. This file (AGENTS.md) is the detailed per-package reference and CLI manual.
+
 ## Role
 
 - Use structured facts from inventory and clump configs — **do not invent** hostnames, IPs, bridges, VLANs, pool names, or credentials.
