@@ -35,5 +35,8 @@ export function homepageWidgetPackageRoots(root) {
     uptimeKumaPackageRoot: join(root, "clumps", "services", "uptime-kuma"),
     crowdsecPackageRoot: join(root, "clumps", "services", "crowdsec"),
     unifiNetworkPackageRoot: join(root, "clumps", "infrastructure", "unifi-network"),
+    synologyNasPackageRoot: join(root, "clumps", "infrastructure", "synology-nas"),
+    mailcowPackageRoot: join(root, "clumps", "services", "mailcow"),
+    bindPackageRoot: join(root, "clumps", "services", "bind"),
   };
 }

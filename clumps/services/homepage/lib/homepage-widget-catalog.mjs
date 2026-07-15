@@ -88,6 +88,25 @@ export const HOMEPAGE_WIDGET_CATALOG = [
     configKey: "unifi_widget",
     placeholders: ["HOMEPAGE_VAR_UNIFI_URL", "HOMEPAGE_VAR_UNIFI_KEY"],
   },
+  {
+    tileNames: ["NAS-1 DSM", "NAS-2 DSM"],
+    widgetType: "diskstation",
+    configKey: "diskstation_widget",
+    placeholders: ["HOMEPAGE_VAR_DISKSTATION_"],
+  },
+  {
+    tileNames: ["Mailcow"],
+    widgetType: "mailcow",
+    configKey: "mailcow_widget",
+    placeholders: ["HOMEPAGE_VAR_MAILCOW_URL", "HOMEPAGE_VAR_MAILCOW_KEY"],
+  },
+  {
+    tileNames: ["BIND A", "BIND B"],
+    widgetType: "customapi",
+    configKey: "bind_widget",
+    placeholders: [],
+    builtin: true,
+  },
 ];
 
 /**

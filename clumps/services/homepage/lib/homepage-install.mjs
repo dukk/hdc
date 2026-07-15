@@ -43,14 +43,34 @@ function writeDockerfileHerdoc(dir, content) {
 }
 
 /**
+ * @param {string} dir
+ * @param {{ rel: string; json: Record<string, unknown> }[]} statsFiles
+ */
+function writeStatsFileHerdocs(dir, statsFiles) {
+  if (!statsFiles.length) return [];
+  /** @type {string[]} */
+  const lines = [`mkdir -p '${dir.replace(/'/g, `'\\''`)}/stats'`];
+  for (const file of statsFiles) {
+    const rel = file.rel.replace(/^\/+/, "");
+    const full = `${dir}/${rel}`.replace(/'/g, `'\\''`);
+    const parent = full.replace(/\/[^/]+$/, "");
+    const marker = `HDCSTATS${rel.replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
+    lines.push(`mkdir -p '${parent}'`);
+    lines.push(`cat > '${full}' <<'${marker}'`, `${JSON.stringify(file.json, null, 2)}\n`, marker);
+  }
+  return lines;
+}
+
+/**
  * @param {string} composeDirPath
  * @param {string} composeYaml
  * @param {string} dockerfileContent
  * @param {string} envContent
  * @param {{ servicesYaml: string; settingsYaml: string; bookmarksYaml: string; widgetsYaml?: string }} configFiles
  * @param {{ name: string; b64: string }[]} [icons]
+ * @param {{ rel: string; json: Record<string, unknown> }[]} [statsFiles]
  */
-export function buildInstallScript(composeDirPath, composeYaml, dockerfileContent, envContent, configFiles, icons = []) {
+export function buildInstallScript(composeDirPath, composeYaml, dockerfileContent, envContent, configFiles, icons = [], statsFiles = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -78,6 +98,7 @@ export function buildInstallScript(composeDirPath, composeYaml, dockerfileConten
     "systemctl enable --now docker",
     `mkdir -p '${dir}'`,
     ...configWrites,
+    ...writeStatsFileHerdocs(dir, statsFiles),
     ...buildIconWriteScriptLines(composeDirPath, icons),
     ...writeDockerfileHerdoc(dir, dockerfileContent),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
@@ -101,8 +122,9 @@ export function buildInstallScript(composeDirPath, composeYaml, dockerfileConten
  * @param {string} dockerfileContent
  * @param {{ skipUpgrade?: boolean }} [opts]
  * @param {{ name: string; b64: string }[]} [icons]
+ * @param {{ rel: string; json: Record<string, unknown> }[]} [statsFiles]
  */
-export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, dockerfileContent, opts = {}, icons = []) {
+export function buildMaintainScript(composeDirPath, envContent, configFiles, composeYaml, dockerfileContent, opts = {}, icons = [], statsFiles = []) {
   const dir = composeDirPath.replace(/'/g, `'\\''`);
   /** @type {string[]} */
   const configWrites = [
@@ -117,6 +139,7 @@ export function buildMaintainScript(composeDirPath, envContent, configFiles, com
     "set -euo pipefail",
     `mkdir -p '${dir}'`,
     ...configWrites,
+    ...writeStatsFileHerdocs(dir, statsFiles),
     ...buildIconWriteScriptLines(composeDirPath, icons),
     ...writeDockerfileHerdoc(dir, dockerfileContent),
     `cat > '${dir}/docker-compose.yml' <<'HDCOMPOSE'`,
@@ -168,7 +191,7 @@ export function readCtPrimaryIp(user, pveHost, vmid) {
  * @param {Record<string, unknown>} homepage
  * @param {Record<string, unknown>} install
  * @param {string} packageRoot
- * @param {{ widgetEnvLines?: string[] }} [opts]
+ * @param {{ widgetEnvLines?: string[]; statsFiles?: { rel: string; json: Record<string, unknown> }[] }} [opts]
  */
 export async function installHomepageInCt(user, pveHost, vmid, homepage, install, packageRoot, opts = {}) {
   errout.write(`[hdc] homepage install: Docker Compose in CT ${vmid} …\n`);
@@ -179,12 +202,20 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
   }
 
   const envContent = renderHomepageEnv(homepage, opts.widgetEnvLines ?? []);
-  const composeYaml = renderComposeYaml();
+  const composeYaml = renderComposeYaml(homepage);
   const dockerfileContent = renderDockerfile();
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
-  const inner = buildInstallScript(dir, composeYaml, dockerfileContent, envContent, configFiles, icons);
+  const inner = buildInstallScript(
+    dir,
+    composeYaml,
+    dockerfileContent,
+    envContent,
+    configFiles,
+    icons,
+    opts.statsFiles ?? [],
+  );
 
   const r = pctExec(user, pveHost, vmid, inner, { stdin: true });
   if (r.status !== 0) {
@@ -216,7 +247,7 @@ export async function installHomepageInCt(user, pveHost, vmid, homepage, install
  * @param {Record<string, unknown>} homepage
  * @param {Record<string, unknown>} install
  * @param {string} packageRoot
- * @param {{ skipUpgrade?: boolean; widgetEnvLines?: string[] }} [opts]
+ * @param {{ skipUpgrade?: boolean; widgetEnvLines?: string[]; statsFiles?: { rel: string; json: Record<string, unknown> }[] }} [opts]
  */
 export async function maintainHomepageInCt(user, pveHost, vmid, homepage, install, packageRoot, opts = {}) {
   errout.write(`[hdc] homepage maintain: refreshing stack in CT ${vmid} …\n`);
@@ -230,9 +261,18 @@ export async function maintainHomepageInCt(user, pveHost, vmid, homepage, instal
   const configFiles = loadHomepageConfigFiles(homepage, packageRoot);
   const icons = loadHomepageIcons(packageRoot);
   const dir = composeDir(install);
-  const composeYaml = renderComposeYaml();
+  const composeYaml = renderComposeYaml(homepage);
   const dockerfileContent = renderDockerfile();
-  const inner = buildMaintainScript(dir, envContent, configFiles, composeYaml, dockerfileContent, opts, icons);
+  const inner = buildMaintainScript(
+    dir,
+    envContent,
+    configFiles,
+    composeYaml,
+    dockerfileContent,
+    opts,
+    icons,
+    opts.statsFiles ?? [],
+  );
   const r = pctExec(user, pveHost, vmid, inner, { stdin: true, capture: true });
   if (r.status !== 0) {
     const detail = `${r.stderr}${r.stdout}`.trim();

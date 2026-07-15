@@ -23,7 +23,14 @@ import {
   readCtPrimaryIp,
   resolvePveSshForHost,
 } from "../lib/crowdsec-install.mjs";
+import { queryCollectionsInCt } from "../lib/crowdsec-collections.mjs";
+import { queryUnifiSyslogInCt } from "../lib/crowdsec-unifi-syslog.mjs";
+import {
+  queryBouncersInCt,
+  queryDecisionCountInCt,
+} from "../lib/crowdsec-unifi-bouncer-sync.mjs";
 import { loadClumpConfigFromClumpRoot, tryLoadClumpConfigFromClumpRoot } from "../../../lib/clump-run-config.mjs";
+import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clumpRoot = join(here, "..");
@@ -107,6 +114,10 @@ async function main() {
           const installed = crowdsecInstalled(ssh.user, ssh.host, vmid);
           const status = queryCrowdsecStatusInCt(ssh.user, ssh.host, vmid);
           const port = crowdsecLapiPort(cs);
+          const collections = queryCollectionsInCt(ssh.user, ssh.host, vmid, pctExec);
+          const unifi_syslog = queryUnifiSyslogInCt(ssh.user, ssh.host, vmid, pctExec);
+          const decisions = queryDecisionCountInCt(ssh.user, ssh.host, vmid);
+          const bouncers = queryBouncersInCt(ssh.user, ssh.host, vmid);
           liveResults.push({
             ok: true,
             system_id: d.systemId,
@@ -115,6 +126,10 @@ async function main() {
             installed,
             ip,
             lapi_url: ip ? `http://${ip}:${port}` : null,
+            collections,
+            unifi_syslog,
+            decisions,
+            bouncers,
             ...status,
           });
         } catch (e) {

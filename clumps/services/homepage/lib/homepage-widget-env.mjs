@@ -1,10 +1,13 @@
 import { stderr as errout } from "node:process";
 
 import { resolveHomepageAudiobookshelfWidgetEnv } from "./homepage-audiobookshelf-widget.mjs";
+import { resolveHomepageBindWidgetEnv } from "./homepage-bind-widget.mjs";
 import { resolveHomepageCrowdsecWidgetEnv } from "./homepage-crowdsec-widget.mjs";
+import { resolveHomepageDiskstationWidgetEnv } from "./homepage-diskstation-widget.mjs";
 import { resolveHomepageGlancesWidgetEnv } from "./homepage-glances-widget.mjs";
 import { resolveHomepageHomeassistantWidgetEnv } from "./homepage-homeassistant-widget.mjs";
 import { resolveHomepageImmichWidgetEnv } from "./homepage-immich-widget.mjs";
+import { resolveHomepageMailcowWidgetEnv } from "./homepage-mailcow-widget.mjs";
 import { resolveHomepagePiholeWidgetEnv } from "./homepage-pihole-widget.mjs";
 import { resolveHomepagePlexWidgetEnv } from "./homepage-plex-widget.mjs";
 import { resolveHomepageProxmoxWidgetEnv } from "./homepage-proxmox-widget.mjs";
@@ -29,7 +32,10 @@ import { resolveHomepageUptimeKumaWidgetEnv } from "./homepage-uptime-kuma-widge
  * @param {string} opts.uptimeKumaPackageRoot
  * @param {string} opts.crowdsecPackageRoot
  * @param {string} opts.unifiNetworkPackageRoot
- * @returns {Promise<{ lines: string[]; meta: Record<string, unknown> }>}
+ * @param {string} opts.synologyNasPackageRoot
+ * @param {string} opts.mailcowPackageRoot
+ * @param {string} opts.bindPackageRoot
+ * @returns {Promise<{ lines: string[]; meta: Record<string, unknown>; statsFiles: import("./homepage-bind-widget.mjs").HomepageBindStatsFile[] }>}
  */
 export async function resolveAllHomepageWidgetEnv(opts) {
   const {
@@ -48,6 +54,9 @@ export async function resolveAllHomepageWidgetEnv(opts) {
     uptimeKumaPackageRoot,
     crowdsecPackageRoot,
     unifiNetworkPackageRoot,
+    synologyNasPackageRoot,
+    mailcowPackageRoot,
+    bindPackageRoot,
   } = opts;
 
   errout.write("[hdc] homepage: resolving service widget env …\n");
@@ -56,6 +65,8 @@ export async function resolveAllHomepageWidgetEnv(opts) {
   const lines = [];
   /** @type {Record<string, unknown>} */
   const meta = {};
+  /** @type {import("./homepage-bind-widget.mjs").HomepageBindStatsFile[]} */
+  const statsFiles = [];
 
   const proxmox = await resolveHomepageProxmoxWidgetEnv({
     homepage,
@@ -176,7 +187,40 @@ export async function resolveAllHomepageWidgetEnv(opts) {
     };
   }
 
+  const diskstation = await resolveHomepageDiskstationWidgetEnv({
+    homepage,
+    synologyNasPackageRoot,
+    vaultAccess,
+    dryRun,
+  });
+  if (diskstation) {
+    lines.push(...diskstation.lines);
+    meta.diskstation_widget = { instances: diskstation.instances };
+  }
+
+  const mailcow = await resolveHomepageMailcowWidgetEnv({
+    homepage,
+    mailcowPackageRoot,
+    vaultAccess,
+    dryRun,
+  });
+  if (mailcow) {
+    lines.push(...mailcow.lines);
+    meta.mailcow_widget = { vault_key: mailcow.vault_key, url: mailcow.url };
+  }
+
+  const bind = await resolveHomepageBindWidgetEnv({
+    homepage,
+    bindPackageRoot,
+    dryRun,
+  });
+  if (bind) {
+    lines.push(...bind.lines);
+    statsFiles.push(...(bind.statsFiles ?? []));
+    meta.bind_widget = { zones_total: bind.zones_total, stats_files: bind.statsFiles?.length ?? 0 };
+  }
+
   errout.write(`[hdc] homepage: widget env ready (${lines.length} line(s)).\n`);
 
-  return { lines, meta };
+  return { lines, meta, statsFiles };
 }

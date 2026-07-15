@@ -101,6 +101,9 @@ Additional gethomepage service widgets resolve credentials at maintain time and 
 | `uptime_kuma_widget` | Uptime Kuma, Uptime Kuma (Public Edge) | `slug` (default status page); optional `instances[]` and `slugs{}` per deployment (e.g. LAN `a` + OCI `ext-a`) |
 | `crowdsec_widget` | CrowdSec | `HDC_HOMEPAGE_CROWDSEC_LAPI_PASSWORD`; optional `machine_id` |
 | `unifi_widget` | UniFi | `HDC_UNIFI_NETWORK_API_KEY` (shared with unifi-network); URL/site from unifi-network config |
+| `diskstation_widget` | NAS-1 DSM, NAS-2 DSM | `HDC_HOMEPAGE_SYNOLOGY_NAS_A_PASSWORD`, `HDC_HOMEPAGE_SYNOLOGY_NAS_B_PASSWORD`; DSM HTTP :5000; dedicated `homepage-stats` admin user (no 2FA) |
+| `mailcow_widget` | Mailcow | `HDC_MAILCOW_API_KEY` (shared with mailcow package); URL from `mailcow.api_url` |
+| `bind_widget` | BIND A, BIND B | Zone counts from bind config via `customapi` + maintain-pushed `stats/bind-*.json` (no secrets) |
 
 1. Enable the `*_widget` block in homepage `config.json`.
 2. Add matching `widget:` blocks in `homepage/services.yaml` with `{{HOMEPAGE_VAR_*}}` placeholders.

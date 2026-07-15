@@ -1,7 +1,8 @@
 import { loadManualSystemSidecar, primaryIpFromSystem } from "../../../lib/inventory-sidecar.mjs";
 import { createGuestSshExec } from "../../../lib/guest-ssh-exec.mjs";
-import { crowdsecBouncers, crowdsecLapiPort } from "./deployments.mjs";
+import { crowdsecFirewallBouncers, crowdsecLapiPort, crowdsecUnifiBouncers } from "./deployments.mjs";
 import { createBouncerKeyInCt } from "./crowdsec-install.mjs";
+import { syncUnifiCrowdsecBouncer } from "./crowdsec-unifi-bouncer-sync.mjs";
 
 /**
  * Sync CrowdSec **firewall** bouncers onto configured systems (typically nginx-waf).
@@ -25,15 +26,39 @@ export async function syncCrowdsecBouncers(opts) {
   if (!lapiIp) {
     return { ok: false, message: "unable to resolve CrowdSec CT IP for bouncer sync", results: [] };
   }
-  const bouncers = crowdsecBouncers(opts.crowdsec);
+  const bouncers = crowdsecFirewallBouncers(opts.crowdsec);
   if (!bouncers.length) {
-    return { ok: true, message: "no bouncers configured", results: [] };
+    /** @type {Record<string, unknown>[]} */
+    const uniResults = [];
+    for (const ub of crowdsecUnifiBouncers(opts.crowdsec)) {
+      const uni = await syncUnifiCrowdsecBouncer({
+        repoRoot: opts.repoRoot,
+        lapiUser: opts.lapiUser,
+        lapiHost: opts.lapiHost,
+        lapiVmid: opts.lapiVmid,
+        lapiIp,
+        crowdsec: opts.crowdsec,
+        bouncer: ub,
+        log,
+      });
+      uniResults.push(uni);
+    }
+    if (!uniResults.length) {
+      return { ok: true, message: "no bouncers configured", results: [] };
+    }
+    return {
+      ok: uniResults.every((r) => r.ok !== false),
+      message: "bouncer sync completed",
+      lapi_url: `http://${lapiIp}:${lapiPort}`,
+      results: uniResults,
+    };
   }
 
   /** @type {Record<string, unknown>[]} */
   const results = [];
   for (const b of bouncers) {
     const systemId = b.system_id;
+    if (!systemId) continue;
     const sidecar = loadManualSystemSidecar(opts.repoRoot, systemId);
     const ip = primaryIpFromSystem(sidecar);
     if (!ip) {
@@ -110,8 +135,23 @@ export async function syncCrowdsecBouncers(opts) {
       bouncer_type: "firewall",
     });
   }
+
+  for (const ub of crowdsecUnifiBouncers(opts.crowdsec)) {
+    const uni = await syncUnifiCrowdsecBouncer({
+      repoRoot: opts.repoRoot,
+      lapiUser: opts.lapiUser,
+      lapiHost: opts.lapiHost,
+      lapiVmid: opts.lapiVmid,
+      lapiIp,
+      crowdsec: opts.crowdsec,
+      bouncer: ub,
+      log,
+    });
+    results.push(uni);
+  }
+
   return {
-    ok: results.every((r) => r.ok),
+    ok: results.every((r) => r.ok !== false),
     message: "bouncer sync completed",
     lapi_url: `http://${lapiIp}:${lapiPort}`,
     results,

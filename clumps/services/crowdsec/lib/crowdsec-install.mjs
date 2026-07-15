@@ -4,6 +4,8 @@ import { pctExec } from "../../../lib/pve-pct-remote.mjs";
 import { waitForCt } from "../../ollama/lib/ollama-install.mjs";
 import { resolvePveSshForHost } from "../../pi-hole/lib/pi-hole-install.mjs";
 import { crowdsecLapiPort } from "./deployments.mjs";
+import { installCrowdsecCollectionsInCt } from "./crowdsec-collections.mjs";
+import { installUnifiSyslogInCt } from "./crowdsec-unifi-syslog.mjs";
 
 export { resolvePveSshForHost };
 
@@ -133,7 +135,7 @@ export function buildInstallScript(lapiPort, opts = {}) {
  * @param {string} pveHost
  * @param {number} vmid
  * @param {Record<string, unknown>} crowdsec
- * @param {{ upgrade?: boolean; enrollToken?: string }} [opts]
+ * @param {{ upgrade?: boolean; enrollToken?: string; skipCollections?: boolean; skipHubUpdate?: boolean }} [opts]
  */
 export async function installCrowdsecInCt(user, pveHost, vmid, crowdsec, opts = {}) {
   const label = opts.upgrade ? "upgrade" : "install";
@@ -157,8 +159,22 @@ export async function installCrowdsecInCt(user, pveHost, vmid, crowdsec, opts = 
       stderr: r.stderr?.slice(0, 800),
     };
   }
+
+  const collections = installCrowdsecCollectionsInCt(user, pveHost, vmid, pctExec, crowdsec, {
+    skip: opts.skipCollections === true,
+    hubUpdate: opts.skipHubUpdate !== true,
+  });
+  const unifiSyslog = installUnifiSyslogInCt(user, pveHost, vmid, pctExec, crowdsec);
+
+  const ok = collections.ok !== false && unifiSyslog.ok !== false;
   errout.write(`[hdc] crowdsec ${label}: completed on CT ${vmid}.\n`);
-  return { ok: true, method: label, message: label === "upgrade" ? "upgraded" : "installed" };
+  return {
+    ok,
+    method: label,
+    message: label === "upgrade" ? "upgraded" : "installed",
+    collections,
+    unifi_syslog: unifiSyslog,
+  };
 }
 
 /**
@@ -166,12 +182,14 @@ export async function installCrowdsecInCt(user, pveHost, vmid, crowdsec, opts = 
  * @param {string} pveHost
  * @param {number} vmid
  * @param {Record<string, unknown>} crowdsec
- * @param {{ enrollToken?: string }} [opts]
+ * @param {{ enrollToken?: string; skipUpgrade?: boolean; skipCollections?: boolean; skipHubUpdate?: boolean }} [opts]
  */
 export function maintainCrowdsecInCt(user, pveHost, vmid, crowdsec, opts = {}) {
   return installCrowdsecInCt(user, pveHost, vmid, crowdsec, {
-    upgrade: true,
+    upgrade: opts.skipUpgrade !== true,
     enrollToken: opts.enrollToken,
+    skipCollections: opts.skipCollections === true,
+    skipHubUpdate: opts.skipHubUpdate === true,
   });
 }
 

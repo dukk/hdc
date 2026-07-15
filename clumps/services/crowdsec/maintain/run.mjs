@@ -3,7 +3,7 @@
  * Maintain CrowdSec and optionally sync firewall bouncers.
  *
  * Usage: hdc run service crowdsec maintain -- [--instance a | --system-id crowdsec-a]
- *        hdc run service crowdsec maintain -- [--skip-upgrade] [--sync-bouncers] [--skip-clamav]
+ *        hdc run service crowdsec maintain -- [--skip-upgrade] [--skip-collections] [--sync-bouncers] [--skip-clamav]
  */
 import { basename, dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -71,8 +71,13 @@ async function maintainOne(deployment, flags, vaultAccess) {
   const pveSsh = resolvePveSshForHost(proxmoxRoot, hostId);
   const crowdsecCfg = isObject(crowdsec) ? crowdsec : {};
   const enroll = await resolveEnrollToken(vaultAccess, crowdsecCfg);
+  const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
+  const skipCollections = flagGet(flags, "skip-collections", "skip_collections") !== undefined;
   const result = await maintainCrowdsecInCt(pveSsh.user, pveSsh.host, vmid, crowdsecCfg, {
     enrollToken: enroll.token,
+    skipUpgrade,
+    skipCollections,
+    skipHubUpdate: skipUpgrade,
   });
   const log = provisionLogFromConsole(console);
   const exec = createConfigureExec("pct", {

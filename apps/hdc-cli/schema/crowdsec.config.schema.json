@@ -28,14 +28,48 @@
             "type": "object",
             "properties": {
               "lapi_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "public_url": { "type": "string" },
               "enroll_key_vault_key": { "type": "string" },
+              "hub_update": { "type": "boolean" },
+              "collections": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "auto_registration_allowed_ranges": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "unifi": {
+                "type": "object",
+                "properties": {
+                  "syslog": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "type": "boolean" },
+                      "listen_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "allowed_senders": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      },
+                      "cef_split": { "type": "boolean" }
+                    }
+                  }
+                }
+              },
               "bouncers": {
                 "type": "array",
                 "items": {
                   "type": "object",
-                  "required": ["system_id"],
                   "properties": {
-                    "system_id": { "type": "string" }
+                    "type": { "enum": ["firewall", "unifi"] },
+                    "enabled": { "type": ["boolean", "integer"] },
+                    "system_id": { "type": "string" },
+                    "group_name": { "type": "string", "minLength": 1 },
+                    "max_decisions": { "type": "integer", "minimum": 1 },
+                    "never_block_cidrs": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 }
+                    }
                   }
                 }
               }

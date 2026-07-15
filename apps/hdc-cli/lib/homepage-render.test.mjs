@@ -41,6 +41,16 @@ describe("homepage-render", () => {
     expect(env).not.toContain("NODE_TLS_REJECT_UNAUTHORIZED");
   });
 
+  it("renderComposeYaml mounts stats volume when bind_widget enabled", () => {
+    const yaml = renderComposeYaml({ bind_widget: { enabled: true } });
+    expect(yaml).toContain("./stats:/app/public/stats");
+  });
+
+  it("renderComposeYaml omits stats volume when bind_widget disabled", () => {
+    const yaml = renderComposeYaml({});
+    expect(yaml).not.toContain("./stats:/app/public/stats");
+  });
+
   it("proxmoxWidgetTlsInsecure defaults true when widget enabled", () => {
     expect(proxmoxWidgetTlsInsecure({ proxmox_widget: { enabled: true } })).toBe(true);
     expect(proxmoxWidgetTlsInsecure({ proxmox_widget: { enabled: false } })).toBe(false);

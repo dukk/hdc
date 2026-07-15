@@ -271,6 +271,7 @@ export async function ensureGuestLinuxBaseline(opts) {
     vaultAccess: opts.vaultAccess,
     proxmoxPackageRoot,
     repoRoot: effectiveRepoRoot,
+    systemId,
   });
   const wazuh_agent = await ensureWazuhAgent({
     exec: opts.exec,

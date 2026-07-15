@@ -1,4 +1,5 @@
 import { proxmoxWidgetEnabled } from "./homepage-proxmox-widget.mjs";
+import { bindWidgetEnabled } from "./homepage-bind-widget.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -327,7 +328,16 @@ USER node
 `;
 }
 
-export function renderComposeYaml() {
+export function renderComposeYaml(homepage = {}) {
+  /** @type {string[]} */
+  const volumes = [
+    "      - ./config:/app/config",
+    "      - ./icons:/app/public/icons",
+  ];
+  if (bindWidgetEnabled(/** @type {Record<string, unknown>} */ (homepage))) {
+    volumes.push("      - ./stats:/app/public/stats");
+  }
+
   return `services:
   homepage:
     build:
@@ -345,8 +355,7 @@ export function renderComposeYaml() {
     env_file:
       - .env
     volumes:
-      - ./config:/app/config
-      - ./icons:/app/public/icons
+${volumes.join("\n")}
     environment:
       HOMEPAGE_ALLOWED_HOSTS: \${HOMEPAGE_ALLOWED_HOSTS}
 

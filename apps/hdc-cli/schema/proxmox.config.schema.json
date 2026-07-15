@@ -420,7 +420,18 @@
           "properties": {
             "enabled": { "type": ["boolean", "integer"] },
             "lapi_url": { "type": "string", "minLength": 1 },
-            "enroll_key_vault_key": { "type": "string", "minLength": 1 }
+            "enroll_key_vault_key": { "type": "string", "minLength": 1 },
+            "collections": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "collections_by_service": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
           }
         },
         "wazuh": {

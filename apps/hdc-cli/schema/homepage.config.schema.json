@@ -183,6 +183,43 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "diskstation_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "DSM HTTP port for gethomepage diskstation widget (default 5000)."
+                  },
+                  "instances": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Synology instance letters (a, b); default both when omitted."
+                  },
+                  "usernames": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string", "minLength": 1 },
+                    "description": "Per-instance DSM username overrides (keys match instances[], e.g. a, b)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "mailcow_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] }
+                },
+                "additionalProperties": false
+              },
+              "bind_widget": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": ["boolean", "integer"] }
+                },
+                "additionalProperties": false
               }
             },
             "required": ["allowed_hosts", "config_files"]

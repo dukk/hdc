@@ -18,9 +18,28 @@
     "crowdsec": {
       "lapi_port": 8080,
       "enroll_key_vault_key": "HDC_CROWDSEC_ENROLL_KEY",
+      "hub_update": true,
+      "collections": [
+        "crowdsecurity/linux",
+        "crowdsecurity/unifi",
+        "crowdsecurity/whitelist-good-actors"
+      ],
+      "unifi": {
+        "syslog": {
+          "enabled": true,
+          "listen_port": 4242,
+          "allowed_senders": ["192.0.2.1/32"],
+          "cef_split": true
+        }
+      },
       "bouncers": [
-        { "system_id": "vm-nginx-waf-a" },
-        { "system_id": "vm-nginx-waf-b" }
+        { "type": "firewall", "system_id": "vm-nginx-waf-a" },
+        { "type": "firewall", "system_id": "vm-nginx-waf-b" },
+        {
+          "type": "unifi",
+          "group_name": "crowdsec-block",
+          "max_decisions": 15000
+        }
       ]
     },
     "wazuh": {

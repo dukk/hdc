@@ -83,4 +83,23 @@ describe("homepage-services-lint", () => {
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes("missing-icon.png"))).toBe(true);
   });
+
+  it("passes bind customapi tile when bind_widget enabled", () => {
+    const result = lintHomepageServicesYaml({
+      servicesYaml: `- Infrastructure:
+    - BIND A:
+        icon: isc-bind9.png
+        widget:
+          type: customapi
+          url: http://127.0.0.1:3000/stats/bind-a.json
+          mappings:
+            - field: zones_total
+              label: Zones
+              format: number
+`,
+      homepage: { bind_widget: { enabled: true } },
+      packageRoot,
+    });
+    expect(result.ok).toBe(true);
+  });
 });

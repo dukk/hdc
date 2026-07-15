@@ -88,6 +88,8 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
   let widgetEnvLines = [];
   /** @type {Record<string, unknown>} */
   let widgetMeta = {};
+  /** @type {import("../lib/homepage-bind-widget.mjs").HomepageBindStatsFile[]} */
+  let widgetStatsFiles = [];
   try {
     runHomepageServicesLint(homepageCfg, packageRoot);
     const widgetEnv = await resolveAllHomepageWidgetEnv({
@@ -100,6 +102,7 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
     });
     widgetEnvLines = widgetEnv.lines;
     widgetMeta = widgetEnv.meta;
+    widgetStatsFiles = widgetEnv.statsFiles ?? [];
   } catch (e) {
     return {
       ok: false,
@@ -112,6 +115,7 @@ async function maintainOne(deployment, flags, vaultAccess, cliDeps) {
   const result = await maintainHomepageInCt(pveSsh.user, pveSsh.host, vmid, homepageCfg, installCfg, packageRoot, {
     skipUpgrade,
     widgetEnvLines,
+    statsFiles: widgetStatsFiles,
   });
 
   const log = provisionLogFromConsole(console);

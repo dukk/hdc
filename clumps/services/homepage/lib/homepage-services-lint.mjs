@@ -107,6 +107,8 @@ export function lintHomepageServicesYaml(opts) {
         errors.push(
           `${svc.name}: widget type ${JSON.stringify(widgetType)} present but homepage.${entry.configKey} is not enabled`,
         );
+      } else if (!entry.placeholders.length) {
+        // customapi BIND widgets use static localhost stats URLs — no env placeholders
       } else if (!rawContainsPlaceholders(svc.raw, entry.placeholders)) {
         errors.push(
           `${svc.name}: widget missing expected env placeholders (${entry.placeholders.join(", ")})`,

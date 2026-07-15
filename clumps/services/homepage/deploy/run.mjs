@@ -164,7 +164,8 @@ async function deployOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname =
       (typeof lxc.hostname === "string" && lxc.hostname.trim()) ||
       lxcHostnameFromSystemId(systemId) ||
@@ -322,6 +323,8 @@ async function deployOne(deployment, flags, log, runOpts) {
 
   /** @type {string[]} */
   let widgetEnvLines = [];
+  /** @type {import("../lib/homepage-bind-widget.mjs").HomepageBindStatsFile[]} */
+  let widgetStatsFiles = [];
   try {
     runHomepageServicesLint(homepageCfg, packageRoot);
     if (runOpts.vaultAccess) {
@@ -334,6 +337,7 @@ async function deployOne(deployment, flags, log, runOpts) {
         ...widgetRoots,
       });
       widgetEnvLines = widgetEnv.lines;
+      widgetStatsFiles = widgetEnv.statsFiles ?? [];
     }
   } catch (e) {
     return {
@@ -353,7 +357,7 @@ async function deployOne(deployment, flags, log, runOpts) {
       homepageCfg,
       installCfg,
       packageRoot,
-      { widgetEnvLines },
+      { widgetEnvLines, statsFiles: widgetStatsFiles },
     );
   } else {
     installResult = { ok: true, method: "skipped", message: "skipped" };

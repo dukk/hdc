@@ -2,11 +2,36 @@ import { flagGet } from "./parse-argv-flags.mjs";
 import { waitForAptLock } from "./apt-lock-wait.mjs";
 import {
   guestAgentBlockEnabled,
+  guestAgentCollectionsForServices,
   guestAgentStringField,
   guestAgentVaultKey,
   loadGuestAgentsConfig,
   resolveProxmoxPackageRoot,
 } from "./guest-agents-config.mjs";
+import { loadManualSystemSidecar } from "./inventory-sidecar.mjs";
+import { buildCollectionsInstallScript } from "../services/crowdsec/lib/crowdsec-collections.mjs";
+
+/**
+ * @param {string[]} collections
+ */
+export function crowdsecAgentCollectionsCommand(collections) {
+  if (!collections.length) return "";
+  return buildCollectionsInstallScript(collections, { hubUpdate: true });
+}
+
+/**
+ * Resolve service ids from inventory sidecar for collection extras.
+ * @param {string} repoRoot
+ * @param {string} [systemId]
+ */
+function serviceIdsForSystem(repoRoot, systemId) {
+  if (!systemId) return [];
+  const sidecar = loadManualSystemSidecar(repoRoot, systemId);
+  if (!sidecar || !Array.isArray(sidecar.services)) return [];
+  return sidecar.services
+    .map((s) => (s && typeof s === "object" && typeof s.id === "string" ? s.id.trim() : ""))
+    .filter(Boolean);
+}
 
 /**
  * @param {Record<string, string>} [flags]
@@ -76,6 +101,7 @@ export function crowdsecAgentEnrollCommand(lapiUrl, enrollKey) {
  * @param {ReturnType<import("./package-vault-access.mjs").createPackageVaultAccess>} [opts.vaultAccess]
  * @param {string} [opts.proxmoxPackageRoot]
  * @param {string} [opts.repoRoot]
+ * @param {string} [opts.systemId]
  */
 export async function ensureCrowdsecAgent(opts) {
   if (crowdsecAgentSkippedByFlags(opts.flags)) {
@@ -127,11 +153,26 @@ export async function ensureCrowdsecAgent(opts) {
       const detail = `${r.stderr}${r.stdout}`.trim() || `exit ${r.status}`;
       throw new Error(detail);
     }
+
+    const effectiveRepoRoot = opts.repoRoot ?? "";
+    const serviceIds = serviceIdsForSystem(effectiveRepoRoot, opts.systemId);
+    const collections = guestAgentCollectionsForServices(block, serviceIds);
+    const collCmd = crowdsecAgentCollectionsCommand(collections);
+    if (collCmd) {
+      opts.log.info(`${opts.exec.label}: installing CrowdSec collections (${collections.length})`);
+      const collRes = opts.exec.run(collCmd, { capture: true });
+      if (collRes.status !== 0) {
+        const detail = `${collRes.stderr}${collRes.stdout}`.trim() || `exit ${collRes.status}`;
+        throw new Error(`collections install failed: ${detail}`);
+      }
+    }
+
     return {
       ok: true,
       skipped: false,
       message: already ? "agent ensured" : "agent installed",
       lapi_url: lapiUrl,
+      collections,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

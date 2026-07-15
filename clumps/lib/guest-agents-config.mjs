@@ -83,6 +83,39 @@ export function resolveProxmoxPackageRoot(proxmoxPackageRoot, repoRoot) {
 }
 
 /**
+ * @param {unknown} block
+ * @returns {string[]}
+ */
+export function guestAgentCollections(block) {
+  if (!isObject(block)) return [];
+  const raw = block.collections;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim());
+}
+
+/**
+ * @param {unknown} block
+ * @param {string[]} serviceIds from inventory system sidecar services[].id
+ * @returns {string[]}
+ */
+export function guestAgentCollectionsForServices(block, serviceIds) {
+  const base = guestAgentCollections(block);
+  if (!isObject(block)) return base;
+  const byService = block.collections_by_service;
+  if (!isObject(byService)) return base;
+  const extra = [];
+  for (const sid of serviceIds) {
+    const list = byService[sid];
+    if (Array.isArray(list)) {
+      for (const name of list) {
+        if (typeof name === "string" && name.trim()) extra.push(name.trim());
+      }
+    }
+  }
+  return [...new Set([...base, ...extra])];
+}
+
+/**
  * @param {string | undefined} systemId
  */
 export function isNagiosGuestSystem(systemId) {

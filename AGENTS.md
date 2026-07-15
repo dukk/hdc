@@ -588,19 +588,20 @@ Example: `node apps/hdc-cli/cli.mjs run service globalping deploy -- --instance 
 
 - **Config:** [`clumps/services/crowdsec/config.json`](clumps/services/crowdsec/config.json) (copy from [`config.example.json`](clumps/services/crowdsec/config.example.json)).
 - **Inventory:** [`inventory/manual/systems/crowdsec-a.json`](inventory/manual/systems/crowdsec-a.json); service sidecar [`inventory/manual/services/crowdsec.json`](inventory/manual/services/crowdsec.json).
-- **Proxmox:** set `provision.guest_agents.crowdsec.lapi_url` to the CT IP + `crowdsec.lapi_port`; vault `HDC_CROWDSEC_ENROLL_KEY`.
+- **Proxmox:** `provision.guest_agents.crowdsec` (`lapi_url`, optional `collections[]`, `collections_by_service`); vault `HDC_CROWDSEC_ENROLL_KEY`.
+- **UniFi:** remote syslog to LAPI CT (`crowdsec.unifi.syslog`); API bouncer sync to `crowdsec-block` group via `unifi-network` credentials; optional native UDM bouncer — [`docs/manually-deployed/crowdsec-unifi-bouncer.md`](docs/manually-deployed/crowdsec-unifi-bouncer.md).
 - **Schema:** [`apps/hdc-cli/schema/crowdsec.config.schema.json`](apps/hdc-cli/schema/crowdsec.config.schema.json).
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC + CrowdSec LAPI (`deployments[]`; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
-| `maintain` | Refresh collections; `--sync-bouncers` pushes nginx bouncer to `crowdsec.bouncers[]` systems |
-| `query` | Config summary; `--live` for LAPI health |
+| `deploy` | LXC + CrowdSec LAPI + collections + UniFi rsyslog (`deployments[]`; `--instance a`; `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-apply LAPI; hub/collections refresh; UniFi syslog; `--sync-bouncers` for firewall (nginx-waf) and UniFi address-group bouncers; `--skip-upgrade`, `--skip-collections` |
+| `query` | Config summary; `--live` for collections, syslog stats, decision counts, registered bouncers |
 | `teardown` | Destroy LXC (`--dry-run`, `--yes`, `--instance`) |
 
-Vault: `HDC_CROWDSEC_ENROLL_KEY` (agent enrollment); `HDC_CROWDSEC_BOUNCER_KEY` (nginx bouncer).
+Vault: `HDC_CROWDSEC_ENROLL_KEY` (agent enrollment). UniFi API sync uses `HDC_UNIFI_NETWORK_API_KEY` (shared with **unifi-network**). Bouncer keys for firewall nodes are minted per sync via `cscli bouncers add`.
 
-Example: `node apps/hdc-cli/cli.mjs run service crowdsec deploy -- --instance a`
+Example: `node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-bouncers`
 
 ## Wazuh in this repo
 

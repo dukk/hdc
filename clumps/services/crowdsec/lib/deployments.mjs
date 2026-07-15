@@ -137,13 +137,68 @@ export function crowdsecEnrollKeyVaultKey(crowdsec) {
 }
 
 /**
+ * @typedef {{ type: 'firewall' | 'unifi'; system_id?: string; group_name?: string; max_decisions?: number; enabled?: boolean; never_block_cidrs?: string[] }} CrowdsecBouncerEntry
+ */
+
+/**
  * @param {Record<string, unknown>} crowdsec
+ * @returns {CrowdsecBouncerEntry[]}
  */
 export function crowdsecBouncers(crowdsec) {
   const raw = Array.isArray(crowdsec.bouncers) ? crowdsec.bouncers : [];
   return raw
-    .filter((row) => isObject(row) && typeof row.system_id === "string" && row.system_id.trim())
-    .map((row) => ({ system_id: String(row.system_id).trim() }));
+    .filter((row) => isObject(row))
+    .map((row) => {
+      const typeRaw = typeof row.type === "string" ? row.type.trim().toLowerCase() : "firewall";
+      const type = typeRaw === "unifi" ? "unifi" : "firewall";
+      /** @type {CrowdsecBouncerEntry} */
+      const entry = { type };
+      if (typeof row.system_id === "string" && row.system_id.trim()) {
+        entry.system_id = row.system_id.trim();
+      }
+      if (typeof row.group_name === "string" && row.group_name.trim()) {
+        entry.group_name = row.group_name.trim();
+      }
+      if (typeof row.max_decisions === "number") {
+        entry.max_decisions = row.max_decisions;
+      }
+      if (row.enabled === false || row.enabled === 0) {
+        entry.enabled = false;
+      }
+      if (Array.isArray(row.never_block_cidrs)) {
+        entry.never_block_cidrs = row.never_block_cidrs
+          .filter((v) => typeof v === "string" && v.trim())
+          .map((v) => v.trim());
+      }
+      return entry;
+    })
+    .filter((b) => {
+      if (b.enabled === false) return false;
+      if (b.type === "firewall") return Boolean(b.system_id);
+      return true;
+    });
+}
+
+/**
+ * @param {Record<string, unknown>} crowdsec
+ */
+export function crowdsecFirewallBouncers(crowdsec) {
+  return crowdsecBouncers(crowdsec).filter((b) => b.type === "firewall");
+}
+
+/**
+ * @param {Record<string, unknown>} crowdsec
+ */
+export function crowdsecUnifiBouncers(crowdsec) {
+  return crowdsecBouncers(crowdsec).filter((b) => b.type === "unifi");
+}
+
+/**
+ * @param {Record<string, unknown>} crowdsec
+ */
+export function crowdsecCollectionsFromConfig(crowdsec) {
+  const raw = Array.isArray(crowdsec.collections) ? crowdsec.collections : [];
+  return raw.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim());
 }
 
 /**

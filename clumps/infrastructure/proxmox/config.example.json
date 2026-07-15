@@ -212,7 +212,11 @@
       "crowdsec": {
         "enabled": true,
         "lapi_url": "http://192.0.2.50:8080",
-        "enroll_key_vault_key": "HDC_CROWDSEC_ENROLL_KEY"
+        "enroll_key_vault_key": "HDC_CROWDSEC_ENROLL_KEY",
+        "collections": ["crowdsecurity/linux", "crowdsecurity/sshd"],
+        "collections_by_service": {
+          "nginx-waf": ["crowdsecurity/nginx"]
+        }
       },
       "wazuh": {
         "enabled": true,

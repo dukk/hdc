@@ -71,7 +71,13 @@
       "unifi_widget": {
         "enabled": true,
         "api_key_vault_key": "HDC_UNIFI_NETWORK_API_KEY"
-      }
+      },
+      "diskstation_widget": {
+        "enabled": true,
+        "instances": ["a", "b"]
+      },
+      "mailcow_widget": { "enabled": true },
+      "bind_widget": { "enabled": true }
     },
     "install": {
       "enabled": true,
