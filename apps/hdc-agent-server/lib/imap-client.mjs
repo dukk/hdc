@@ -11,8 +11,9 @@ import tls from "node:tls";
  * @param {string} opts.user
  * @param {string} opts.password
  * @param {boolean} [opts.rejectUnauthorized]
+ * @param {string[]} [opts.mailboxes] Folders to scan (default INBOX).
  * @param {number} [opts.timeoutMs]
- * @returns {Promise<{ uid: number, raw: string }[]>}
+ * @returns {Promise<{ uid: number, mailbox: string, raw: string }[]>}
  */
 export async function fetchUnseenMessages(opts) {
   const host = String(opts.host ?? "").trim();
@@ -22,26 +23,38 @@ export async function fetchUnseenMessages(opts) {
   if (!host || !user || !password) {
     throw new Error("imap host, user, and password are required");
   }
+  const mailboxes = Array.isArray(opts.mailboxes) && opts.mailboxes.length
+    ? opts.mailboxes.map((m) => String(m).trim()).filter(Boolean)
+    : ["INBOX"];
 
   const socket = await connectTls({
     host,
     port,
-    rejectUnauthorized: opts.rejectUnauthorized !== false,
+    rejectUnauthorized: opts.rejectUnauthorized === true,
     timeoutMs: opts.timeoutMs ?? 60_000,
   });
 
   try {
     await readUntagged(socket); // greeting
     await command(socket, "A1", `LOGIN ${imapQuote(user)} ${imapQuote(password)}`);
-    await command(socket, "A2", "SELECT INBOX");
-    const search = await command(socket, "A3", "UID SEARCH UNSEEN");
-    const uids = parseSearchUids(search);
-    /** @type {{ uid: number, raw: string }[]} */
+    /** @type {{ uid: number, mailbox: string, raw: string }[]} */
     const out = [];
-    for (const uid of uids) {
-      const fetched = await command(socket, `F${uid}`, `UID FETCH ${uid} (RFC822)`);
-      const raw = extractRfc822(fetched);
-      if (raw) out.push({ uid, raw });
+    let seq = 2;
+    for (const mailbox of mailboxes) {
+      const tagSelect = `A${seq++}`;
+      try {
+        await command(socket, tagSelect, `SELECT ${imapQuote(mailbox)}`);
+      } catch {
+        continue;
+      }
+      const tagSearch = `A${seq++}`;
+      const search = await command(socket, tagSearch, "UID SEARCH UNSEEN");
+      const uids = parseSearchUids(search);
+      for (const uid of uids) {
+        const fetched = await command(socket, `F${uid}`, `UID FETCH ${uid} (RFC822)`);
+        const raw = extractRfc822(fetched);
+        if (raw) out.push({ uid, mailbox, raw });
+      }
     }
     await command(socket, "A9", "LOGOUT").catch(() => {});
     return out;

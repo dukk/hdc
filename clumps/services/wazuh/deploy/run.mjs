@@ -30,6 +30,7 @@ import { createConfigureExec } from "../../postfix-relay/lib/postfix-relay-confi
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
 import { findClusterGuest } from "../lib/guest-exists.mjs";
 import { wazuhManagerAlertsSkippedByFlags } from "../../../lib/wazuh-manager-alerts.mjs";
+import { wazuhAlertIgnoreSkippedByFlags } from "../lib/wazuh-alert-ignore.mjs";
 import {
   installWazuhInCt,
   installWazuhOnHost,
@@ -89,7 +90,7 @@ function existingGuestPolicy(flags) {
 /**
  * @param {ReturnType<typeof resolveWazuhDeployments>[number]} deployment
  * @param {Record<string, string>} flags
- * @param {{ apiPassword: string; agentPassword: string; mailSettings: import("../lib/wazuh-mail-config.mjs").WazuhMailSettings | null; skipMail?: boolean }} runOpts
+ * @param {{ apiPassword: string; agentPassword: string; mailSettings: import("../lib/wazuh-mail-config.mjs").WazuhMailSettings | null; skipMail?: boolean; skipAlertIgnore?: boolean }} runOpts
  */
 async function runConfigure(deployment, flags, runOpts) {
   const { systemId, mode, wazuh, install, configure } = deployment;
@@ -98,6 +99,11 @@ async function runConfigure(deployment, flags, runOpts) {
   if (!shouldInstall(installCfg)) {
     return { ok: true, skipped: true, message: "install disabled" };
   }
+  const installOpts = {
+    mailSettings: runOpts.mailSettings,
+    skipMail: runOpts.skipMail,
+    skipAlertIgnore: runOpts.skipAlertIgnore,
+  };
   if (mode === "proxmox-lxc") {
     const px = isObject(deployment.proxmox) ? deployment.proxmox : {};
     const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
@@ -112,7 +118,7 @@ async function runConfigure(deployment, flags, runOpts) {
       installCfg,
       runOpts.apiPassword,
       runOpts.agentPassword,
-      { mailSettings: runOpts.mailSettings, skipMail: runOpts.skipMail },
+      installOpts,
     );
   }
   const cfg = isObject(configure) ? configure : {};
@@ -121,10 +127,7 @@ async function runConfigure(deployment, flags, runOpts) {
   const host = typeof ssh.host === "string" && ssh.host.trim() ? ssh.host.trim() : "";
   if (!host) throw new Error(`${systemId}: configure.ssh.host required`);
   const exec = createConfigureExec("ssh", { user, host });
-  return installWazuhOnHost(exec, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword, {
-    mailSettings: runOpts.mailSettings,
-    skipMail: runOpts.skipMail,
-  });
+  return installWazuhOnHost(exec, wazuhCfg, installCfg, runOpts.apiPassword, runOpts.agentPassword, installOpts);
 }
 
 /**
@@ -166,7 +169,8 @@ async function deployLxcOne(deployment, flags, log, runOpts) {
       apiBase: auth.host.apiBase,
       pveNode: auth.host.pveNode,
       authorization: auth.authorization,
-      rejectUnauthorized: auth.rejectUnauthorized,    });
+      rejectUnauthorized: auth.rejectUnauthorized,
+    });
     const hostname = (typeof lxc.hostname === "string" && lxc.hostname.trim()) || lxcHostnameFromSystemId(systemId) || "wazuh";
     const memoryMb = typeof lxc.memory_mb === "number" ? lxc.memory_mb : Number(lxc.memory_mb);
     const cores = typeof lxc.cores === "number" ? lxc.cores : Number(lxc.cores);
@@ -248,7 +252,7 @@ async function deployLxcOne(deployment, flags, log, runOpts) {
         isObject(install) ? install : {},
         runOpts.apiPassword,
         runOpts.agentPassword,
-        { mailSettings: runOpts.mailSettings, skipMail: runOpts.skipMail },
+        { mailSettings: runOpts.mailSettings, skipMail: runOpts.skipMail, skipAlertIgnore: runOpts.skipAlertIgnore },
       )
     : { ok: true, method: "skipped", message: "skipped" };
   if (!installResult.ok) return { ok: false, system_id: systemId, host_id: hostId, mode, result: provisionResult, install: installResult };
@@ -498,6 +502,7 @@ async function main() {
   }
 
   const skipMail = wazuhManagerAlertsSkippedByFlags(flags);
+  const skipAlertIgnore = wazuhAlertIgnoreSkippedByFlags(flags);
   const mailSettings = skipMail ? null : resolveWazuhMailConfig(cfg);
 
   const log = provisionLogFromConsole(console);
@@ -513,6 +518,7 @@ async function main() {
           agentPassword,
           mailSettings,
           skipMail,
+          skipAlertIgnore,
         }),
       );
     } catch (e) {

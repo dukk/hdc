@@ -229,12 +229,17 @@ export async function processManagerMailbox(opts) {
 
   let messages;
   try {
+    const folders = Array.isArray(cfg.folders) && cfg.folders.length
+      ? cfg.folders.map((f) => String(f).trim()).filter(Boolean)
+      : ["INBOX", "Junk"];
     messages = await fetchUnseenMessages({
       host,
       port,
       user,
       password,
-      rejectUnauthorized: cfg.tls_reject_unauthorized !== false,
+      // Mailcow LAN TLS is typically self-signed; opt in to strict verify.
+      rejectUnauthorized: cfg.tls_reject_unauthorized === true,
+      mailboxes: folders,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

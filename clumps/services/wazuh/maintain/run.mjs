@@ -2,7 +2,7 @@
 /**
  * Maintain Wazuh: refresh docker stack and guest baseline.
  *
- * Usage: hdc run service wazuh maintain -- [--instance a | --system-id vm-wazuh-a] [--skip-upgrade] [--skip-clamav] [--skip-wazuh-mail] [--skip-dashboard-monitors]
+ * Usage: hdc run service wazuh maintain -- [--instance a | --system-id vm-wazuh-a] [--skip-upgrade] [--skip-clamav] [--skip-wazuh-mail] [--skip-dashboard-monitors] [--skip-alert-ignore]
  */
 import { resolveGuestSshUser } from "../../../lib/guest-ssh-resolve.mjs";
 import { basename, dirname, join } from "node:path";
@@ -19,6 +19,10 @@ import { guestBaselineResultFields } from "../../../lib/guest-baseline-report.mj
 import { resolveWazuhDeployments, wazuhApiPasswordVaultKey, wazuhAgentPasswordVaultKey } from "../lib/deployments.mjs";
 import { wazuhManagerAlertsSkippedByFlags } from "../../../lib/wazuh-manager-alerts.mjs";
 import { wazuhDashboardMonitorsSkippedByFlags } from "../lib/wazuh-dashboard-monitors.mjs";
+import {
+  resolveWazuhAlertIgnore,
+  wazuhAlertIgnoreSkippedByFlags,
+} from "../lib/wazuh-alert-ignore.mjs";
 import { maintainWazuhInCt, maintainWazuhOnHost, resolvePveSshForHost } from "../lib/wazuh-install.mjs";
 import { resolveWazuhMailConfig } from "../lib/wazuh-mail-config.mjs";
 import { createWazuhVaultAccess } from "../lib/vault-deps.mjs";
@@ -63,15 +67,19 @@ async function maintainOne(deployment, flags, vaultAccess, passwords, mailSettin
 
   const skipUpgrade = flagGet(flags, "skip-upgrade", "skip_upgrade") !== undefined;
   const skipMail = wazuhManagerAlertsSkippedByFlags(flags);
+  const skipAlertIgnore = wazuhAlertIgnoreSkippedByFlags(flags);
   const setupDashboardMonitors =
     !skipMail &&
     !wazuhDashboardMonitorsSkippedByFlags(flags) &&
     Boolean(mailSettings?.notifications?.enabled);
   const wazuhCfg = isObject(wazuh) ? wazuh : {};
   const installCfg = isObject(install) ? install : {};
+  const alertIgnore = skipAlertIgnore ? null : resolveWazuhAlertIgnore(wazuhCfg);
   const maintainOpts = {
     skipUpgrade,
     skipMail,
+    skipAlertIgnore,
+    alertIgnore,
     mailSettings: skipMail ? null : mailSettings,
     setupDashboardMonitors,
   };

@@ -58,6 +58,8 @@ Two paths:
 
 Tune noise with `defaults.mail.alert_level` and `max_per_hour` in [`clumps/services/wazuh/config.json`](../../clumps/services/wazuh/config.example.json).
 
+To silence false positives from local/external monitors (Homepage, Uptime Kuma, Globalping, …), set `defaults.wazuh.alert_ignore.srcips[]` to those probe IPs. Maintain writes a CDB list + `local_rules.xml` that mutes `web` / `web_scan` / `attack` / `ids` / `modsecurity` / `nginx` alerts from those sources (level 0). Skip with `--skip-alert-ignore`.
+
 ## Troubleshooting
 
 | Symptom | Fix |

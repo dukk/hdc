@@ -44,6 +44,8 @@
         "port": 993,
         "user": "manager@hdc.example.invalid",
         "password_vault_key": "HDC_MAILCOW_MAILBOX_MANAGER_HDC_EXAMPLE_INVALID_PASSWORD",
+        "tls_reject_unauthorized": false,
+        "folders": ["INBOX", "Junk"],
         "trusted_senders": ["ops@example.invalid"],
         "wazuh_alert_level_min": 10,
         "block_days": 30
