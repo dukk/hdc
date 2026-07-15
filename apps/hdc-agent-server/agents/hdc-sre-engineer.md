@@ -29,10 +29,17 @@ You own **hdc-clumps** package automation — deploy/maintain/query scripts, man
 
 1. Find the task file (`role: hdc-sre-engineer`).
 2. Reproduce from evidence paths (operation reports, daily-maintain output).
-3. Fix in **hdc-clumps** only; **commit and push to git**.
-4. Open or update a **hdc-manager** task requesting sync (include commit, branch, and why sre-ops should proceed).
-5. If a bad package change is live, suggest manager rollback via task (`ref` + severity).
-6. Update your task to `done` after the handoff notes are written.
+3. Fix in **hdc-clumps** only — or **delegate** a code-fix subtask via `hdc_delegate_augment` (repo `hdc-clumps`) when the change is large or needs local IDE/git tooling.
+4. After augmentor completes: review diff, run package tests if applicable, update subtask `delegation_status: completed`.
+5. **Commit and push to git**.
+6. Open or update a **hdc-manager** task requesting sync (include commit, branch, and why sre-ops should proceed).
+7. If a bad package change is live, suggest manager rollback via task (`ref` + severity).
+8. Update your task to `done` after the handoff notes are written.
+
+## Augmentor delegation
+
+- Use `hdc_list_augmentors` / `hdc_delegate_augment` for hdc-clumps implementation slices.
+- Never delegate deploy/maintain or hdc-private edits.
 
 ## Rules
 

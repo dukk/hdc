@@ -2,8 +2,10 @@ import { loadRolePrompt, stripFrontmatter } from "./role-prompt.mjs";
 import { loadAutomationRules, loadSkillsForRole } from "./skill-load.mjs";
 import {
   handleHdcClumpsSync,
+  handleHdcDelegateAugment,
   handleHdcHelp,
   handleHdcList,
+  handleHdcListAugmentors,
   handleHdcMaintainDaily,
   handleHdcNotifyDiscord,
   handleHdcRun,
@@ -17,6 +19,8 @@ const TOOL_HANDLERS = {
   hdc_run: handleHdcRun,
   hdc_clumps_sync: handleHdcClumpsSync,
   hdc_notify_discord: handleHdcNotifyDiscord,
+  hdc_list_augmentors: handleHdcListAugmentors,
+  hdc_delegate_augment: handleHdcDelegateAugment,
 };
 
 /**
@@ -118,6 +122,42 @@ function openAiToolsForRole(role) {
             title: { type: "string" },
             message: { type: "string" },
             silent: { type: "boolean" },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_list_augmentors")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_list_augmentors",
+        description: "List LiteLLM-registered augmentor agents available for subtask delegation",
+        parameters: {
+          type: "object",
+          properties: {
+            repo: { type: "string", enum: ["hdc", "hdc-clumps"] },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_delegate_augment")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_delegate_augment",
+        description:
+          "Delegate a code-fix subtask to an external augmentor (Cursor/Claude) via LiteLLM A2A",
+        parameters: {
+          type: "object",
+          required: ["parent_task_id", "prompt"],
+          properties: {
+            parent_task_id: { type: "string" },
+            prompt: { type: "string" },
+            repo: { type: "string", enum: ["hdc", "hdc-clumps"] },
+            augmentor_name: { type: "string" },
+            wait: { type: "boolean" },
           },
         },
       },

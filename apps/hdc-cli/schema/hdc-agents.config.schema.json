@@ -53,6 +53,35 @@
                   }
                 }
               },
+              "augmentation": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "sidecars": {
+                    "type": "array",
+                    "items": { "type": "string", "enum": ["cursor-cloud-bridge"] }
+                  },
+                  "cursor_cloud": {
+                    "type": "object",
+                    "properties": {
+                      "bridge_name": { "type": "string" },
+                      "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "repos": {
+                        "type": "array",
+                        "items": { "type": "string", "enum": ["hdc", "hdc-clumps"] }
+                      },
+                      "delegatable_by": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": ["hdc-engineer", "hdc-sre-engineer"]
+                        }
+                      },
+                      "repository_url": { "type": "string", "format": "uri" }
+                    }
+                  }
+                }
+              },
               "notifications": {
                 "type": "object",
                 "properties": {

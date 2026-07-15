@@ -27,8 +27,16 @@ You own the **hdc platform** — not the live lab or package scripts in hdc-clum
 
 1. Find the task file (`role: hdc-engineer`).
 2. Reproduce from evidence paths.
-3. Fix in **hdc** (`apps/hdc-cli/`, schemas, agent-server) with tests.
-4. Update task to `done` and note handoff.
+3. Fix in **hdc** (`apps/hdc-cli/`, schemas, agent-server) with tests — or **delegate** a code-fix subtask to a LiteLLM-registered augmentor (`hdc_list_augmentors`, `hdc_delegate_augment`) when the change is large or needs local IDE/git tooling.
+4. After augmentor completes: review diff, run `npm test`, update subtask `delegation_status: completed`.
+5. Update task to `done` and note handoff.
+
+## Augmentor delegation
+
+- Use `hdc_list_augmentors` to discover Cursor Cloud / CLI / Claude Code bridges registered in `litellm.a2a_agents[]`.
+- Use `hdc_delegate_augment` with `parent_task_id` + bounded `prompt` for implementation slices (repo `hdc` only).
+- You remain orchestrator: diagnosis, task files, tests, and handoff stay on the fleet agent.
+- Never delegate deploy/maintain or hdc-private edits.
 
 ## Rules
 

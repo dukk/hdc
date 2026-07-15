@@ -12,6 +12,8 @@ import {
   handleHdcList,
   handleHdcMaintainDaily,
   handleHdcClumpsSync,
+  handleHdcDelegateAugment,
+  handleHdcListAugmentors,
   handleHdcNotifyDiscord,
   handleHdcRun,
 } from "./lib/tools.mjs";
@@ -134,6 +136,32 @@ if (toolAllowed("hdc_notify_discord")) {
         .describe("operations/tasks/<id> stem; required when decision is true"),
     },
     async (args) => handleHdcNotifyDiscord(args),
+  );
+}
+
+if (toolAllowed("hdc_list_augmentors")) {
+  server.tool(
+    "hdc_list_augmentors",
+    "List LiteLLM-registered augmentor agents available for engineer subtask delegation.",
+    {
+      repo: z.enum(["hdc", "hdc-clumps"]).optional().describe("Repository scope to filter augmentors"),
+    },
+    async (args) => handleHdcListAugmentors(args),
+  );
+}
+
+if (toolAllowed("hdc_delegate_augment")) {
+  server.tool(
+    "hdc_delegate_augment",
+    "Delegate a code-fix subtask to an external augmentor (Cursor Cloud/CLI, Claude Code) via LiteLLM A2A.",
+    {
+      parent_task_id: z.string().describe("Parent operations/tasks/<id> stem"),
+      prompt: z.string().describe("Bounded subtask instructions for the augmentor"),
+      repo: z.enum(["hdc", "hdc-clumps"]).optional().describe("Repository the augmentor may edit"),
+      augmentor_name: z.string().optional().describe("LiteLLM a2a_agents[].name (auto-pick when omitted)"),
+      wait: z.boolean().optional().describe("Wait for augmentor completion (v1: async only)"),
+    },
+    async (args) => handleHdcDelegateAugment(args),
   );
 }
 

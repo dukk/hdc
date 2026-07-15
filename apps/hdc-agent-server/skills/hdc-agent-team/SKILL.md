@@ -41,6 +41,8 @@ Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT`.
 
 Each task is `operations/tasks/<id>.md` with YAML frontmatter: `id`, `role`, `priority`, `status`, `title`, `created_at`, `updated_at`, `needs_decision`, `evidence`, `suggested_commands`.
 
+Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation_status` (`pending` | `in_progress` | `completed` | `failed`), `augmentor_run_id`. Subtask ids: `<parent-id>--aug-<slug>-<hash>`.
+
 **Status:** `pending` | `approved` | `in_progress` | `blocked` | `done`
 
 **Priority:** `critical` | `high` | `medium` | `low`
@@ -81,6 +83,15 @@ Each task is `operations/tasks/<id>.md` with YAML frontmatter: `id`, `role`, `pr
 Primary: **hdc-agent-server** containers (LiteLLM tool loop + hdc-mcp-server). Scripted dispatcher scans for work; the model runs only when there is actionable work or novel digests.
 
 Primary runtime: hdc-agent-server containers on hdc-agents-a; Tasks UI via hdc-web-server.
+
+## Engineer augmentor delegation
+
+Fleet **hdc-engineer** / **hdc-sre-engineer** may delegate code-fix **subtasks** to external augmentors (Cursor Cloud on fleet, Cursor CLI / Claude Code on operator workstation) when registered in LiteLLM `a2a_agents[]`:
+
+- `hdc_list_augmentors` — discover augmentors for `repo: hdc` or `hdc-clumps`
+- `hdc_delegate_augment` — create subtask + A2A `message/send` via LiteLLM gateway
+
+Parent engineer keeps task ownership; augmentors edit only their declared repo. See `docs/manually-deployed/hdc-augment-bridge.md`.
 
 ## Deprecated
 

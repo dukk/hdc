@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 /** @typedef {"pending"|"approved"|"in_progress"|"blocked"|"done"} TaskStatus */
 /** @typedef {"critical"|"high"|"medium"|"low"} TaskPriority */
-/** @typedef {"hdc-manager"|"hdc-sre-ops"|"hdc-sre-engineer"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-engineer"} TaskRole */
+/** @typedef {"pending"|"in_progress"|"completed"|"failed"} DelegationStatus */
 
 export const TASK_STATUSES = /** @type {const} */ ([
   "pending",
@@ -31,6 +31,15 @@ export const TASK_ROLES = /** @type {const} */ ([
   "hdc-research",
   "hdc-engineer",
 ]);
+
+export const DELEGATION_STATUSES = /** @type {const} */ ([
+  "pending",
+  "in_progress",
+  "completed",
+  "failed",
+]);
+
+/** @typedef {"hdc-manager"|"hdc-sre-ops"|"hdc-sre-engineer"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-engineer"} TaskRole */
 
 export const TASKS_DIR = "operations/tasks";
 export const TASK_REPORT_REL = "operations/task-report.md";
@@ -192,6 +201,26 @@ export function validateTaskFrontmatter(meta, body = "") {
       typeof meta.blocked_reason === "string" && meta.blocked_reason.trim()
         ? meta.blocked_reason.trim()
         : undefined,
+    parent_task_id:
+      typeof meta.parent_task_id === "string" && meta.parent_task_id.trim()
+        ? meta.parent_task_id.trim()
+        : undefined,
+    delegated_to:
+      typeof meta.delegated_to === "string" && meta.delegated_to.trim()
+        ? meta.delegated_to.trim()
+        : undefined,
+    delegation_status: (() => {
+      const raw = typeof meta.delegation_status === "string" ? meta.delegation_status.trim() : "";
+      if (!raw) return undefined;
+      if (!DELEGATION_STATUSES.includes(/** @type {DelegationStatus} */ (raw))) {
+        throw new Error(`task frontmatter: invalid delegation_status ${JSON.stringify(raw)}`);
+      }
+      return /** @type {DelegationStatus} */ (raw);
+    })(),
+    augmentor_run_id:
+      typeof meta.augmentor_run_id === "string" && meta.augmentor_run_id.trim()
+        ? meta.augmentor_run_id.trim()
+        : undefined,
     run_log:
       typeof meta.run_log === "string" && meta.run_log.trim() ? meta.run_log.trim() : undefined,
     body: String(body ?? "").trim(),
@@ -216,6 +245,10 @@ export function serializeTask(task) {
   if (task.approved_at) lines.push(`approved_at: ${task.approved_at}`);
   if (task.completed_at) lines.push(`completed_at: ${task.completed_at}`);
   if (task.blocked_reason) lines.push(`blocked_reason: ${JSON.stringify(task.blocked_reason)}`);
+  if (task.parent_task_id) lines.push(`parent_task_id: ${task.parent_task_id}`);
+  if (task.delegated_to) lines.push(`delegated_to: ${task.delegated_to}`);
+  if (task.delegation_status) lines.push(`delegation_status: ${task.delegation_status}`);
+  if (task.augmentor_run_id) lines.push(`augmentor_run_id: ${task.augmentor_run_id}`);
   if (task.run_log) lines.push(`run_log: ${task.run_log}`);
   if (task.evidence.length) {
     lines.push("evidence:");

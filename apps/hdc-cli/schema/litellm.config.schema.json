@@ -109,6 +109,41 @@
                     "card_name": {
                       "type": "string",
                       "description": "Display name on agent_card_params (defaults to name)"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["fleet", "augmentor"],
+                      "description": "fleet = hdc container agent; augmentor = external IDE/cloud bridge"
+                    },
+                    "runtime": {
+                      "type": "string",
+                      "enum": ["cursor-cloud", "cursor-cli", "claude-code", "custom"],
+                      "description": "Augmentor backend runtime (omit for fleet agents)"
+                    },
+                    "repos": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["hdc", "hdc-clumps"]
+                      },
+                      "description": "Repositories an augmentor may edit"
+                    },
+                    "delegatable_by": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "hdc-engineer",
+                          "hdc-sre-engineer",
+                          "hdc-manager"
+                        ]
+                      },
+                      "description": "Fleet roles allowed to delegate subtasks to this augmentor"
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "When false, augmentor is registered but not offered for delegation"
                     }
                   }
                 }

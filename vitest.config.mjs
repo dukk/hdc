@@ -62,6 +62,8 @@ export default defineConfig({
 
       "apps/hdc-agent-server/**/*.test.mjs",
 
+      "apps/hdc-augment-bridge/**/*.test.mjs",
+
       "apps/hdc-web-server/**/*.test.mjs",
 
     ],

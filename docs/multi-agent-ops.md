@@ -278,6 +278,12 @@ backup-verification runbook; implement `docs lint`; review delegation policy to 
 the autonomous-maintain envelope as trust builds. Tasks UI remains hdc-web-server
 on the hdc-agents guest.
 
+**Engineer augmentors (implemented):** `hdc-engineer` / `hdc-sre-engineer` delegate
+code-fix subtasks to LiteLLM-registered augmentors (`litellm.a2a_agents[]` with
+`kind: augmentor`) via `hdc_delegate_augment`. Cursor Cloud runs as a fleet sidecar;
+Cursor CLI / Claude Code bridges run on the operator workstation. See
+[`docs/manually-deployed/hdc-augment-bridge.md`](manually-deployed/hdc-augment-bridge.md).
+
 ## Non-goals
 
 - Replacing deterministic automation (`maintain daily`, `run-daily.mjs`) with LLM

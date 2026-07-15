@@ -53,6 +53,10 @@ describe("hdc-mcp-server policy", () => {
       /not allowed/,
     );
     expect(() => assertToolAllowedForRole("hdc_list", "hdc-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-manager")).toThrow(
+      /not allowed/,
+    );
   });
 
   it("allows hdc_clumps_sync for manager only", () => {

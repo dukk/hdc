@@ -22,6 +22,8 @@ import {
   normalizeTier,
   resolveAgentRole,
 } from "./policy.mjs";
+import { delegateAugmentSubtask } from "../../hdc-agent-server/lib/delegate-augment.mjs";
+import { listAugmentorsForRole } from "../../hdc-agent-server/lib/litellm-a2a.mjs";
 
 /**
  * Resolve auth (API key preferred) and pin HDC_AGENT_ROLE for this call.
@@ -341,6 +343,91 @@ export async function handleHdcClumpsSync(args = {}) {
       log: capture.logLines,
       errors: capture.errorLines,
     });
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+const REPO_BY_ENGINEER_ROLE = {
+  "hdc-engineer": "hdc",
+  "hdc-sre-engineer": "hdc-clumps",
+};
+
+/**
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcListAugmentors(args = {}) {
+  try {
+    const role = applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_list_augmentors", role);
+    const { deps, root } = createHdcMcpContext();
+    const privateRoot =
+      (args.private_root != null ? String(args.private_root) : "") ||
+      hdcPrivateRoot(root, deps.env) ||
+      "";
+    const repo =
+      typeof args.repo === "string" && args.repo.trim()
+        ? args.repo.trim()
+        : REPO_BY_ENGINEER_ROLE[/** @type {keyof typeof REPO_BY_ENGINEER_ROLE} */ (role)] || "";
+    if (!repo) {
+      throw new Error("repo is required (or use hdc-engineer / hdc-sre-engineer role)");
+    }
+    const augmentors = await listAugmentorsForRole({
+      privateRoot,
+      delegatorRole: role,
+      repo,
+      baseUrl: deps.env.HDC_LITELLM_BASE_URL,
+      apiKey:
+        deps.env.HDC_AGENT_LITELLM_KEY ||
+        deps.env[`HDC_AGENT_LITELLM_KEY_${role.replace(/-/g, "_").toUpperCase()}`] ||
+        deps.env.HDC_LITELLM_MASTER_KEY,
+    });
+    return toolTextResult({ ok: true, repo, role, augmentors });
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcDelegateAugment(args = {}) {
+  try {
+    const role = applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_delegate_augment", role);
+    const { deps, root } = createHdcMcpContext();
+    const privateRoot =
+      (args.private_root != null ? String(args.private_root) : "") ||
+      hdcPrivateRoot(root, deps.env) ||
+      "";
+    const parentTaskId = String(args.parent_task_id ?? args.parentTaskId ?? "").trim();
+    if (!parentTaskId) throw new Error("parent_task_id is required");
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+    const repo =
+      typeof args.repo === "string" && args.repo.trim()
+        ? args.repo.trim()
+        : REPO_BY_ENGINEER_ROLE[/** @type {keyof typeof REPO_BY_ENGINEER_ROLE} */ (role)] || "";
+    const result = await delegateAugmentSubtask({
+      privateRoot,
+      delegatorRole: role,
+      parentTaskId,
+      repo,
+      prompt,
+      augmentorName:
+        typeof args.augmentor_name === "string"
+          ? args.augmentor_name
+          : typeof args.augmentorName === "string"
+            ? args.augmentorName
+            : undefined,
+      wait: args.wait === true,
+      litellmBaseUrl: deps.env.HDC_LITELLM_BASE_URL,
+      litellmApiKey:
+        deps.env.HDC_AGENT_LITELLM_KEY ||
+        deps.env[`HDC_AGENT_LITELLM_KEY_${role.replace(/-/g, "_").toUpperCase()}`] ||
+        deps.env.HDC_LITELLM_MASTER_KEY,
+    });
+    return toolTextResult(result);
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
   }
