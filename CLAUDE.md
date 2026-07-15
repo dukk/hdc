@@ -37,13 +37,14 @@ whenever the matching files are actually in play.
 ## Skills
 
 Fleet agent skills are canonical under [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
-IDE helpers (`hdc-service-deploy`, `proxmox-resource-planning`) remain under `.cursor/skills/`.
+IDE helpers (`hdc-service-deploy`, `hdc-pull-private`, `proxmox-resource-planning`) remain under `.cursor/skills/`.
 Claude Code thin pointers under `.claude/skills/` either target the fleet skill or the Cursor IDE skill.
 
 | Skill | Use when |
 |-------|----------|
 | `hdc-ops` | Running hdc CLI operations: list, deploy, maintain, query |
 | `hdc-service-deploy` | Deploying a new service package end-to-end (plan → approve → deploy) |
+| `hdc-pull-private` | Pull guest-authoritative operations/ from hdc-agents into local hdc-private |
 | `proxmox-resource-planning` | Sizing a new Proxmox VM/CT and checking cluster headroom |
 | `hdc-manager` | Task triage, escalation, and delegation workflows |
 | `hdc-monitor` | Monitoring runbook (uptime-kuma, proxmox query, digests) |
