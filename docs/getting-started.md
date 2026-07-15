@@ -11,13 +11,31 @@ services — asking you to approve anything risky.
 > New to the moving parts? Skim [ARCHITECTURE.md](../ARCHITECTURE.md) first (10 minutes) —
 > it explains clumps, the three repos, the agents, and the topology with diagrams.
 
+> ### 💡 Recommended: let a coding agent drive the whole thing
+>
+> **Until your agent fleet is up, use a coding agent — [Claude Code](https://claude.com/claude-code)
+> or [Cursor](https://cursor.com) — to do the deployment for you.** Open the `hdc` repo in
+> it and it already understands the project: the repo ships `CLAUDE.md`, `.cursor/rules/`,
+> and skills (`hdc-ops`, `hdc-service-deploy`, `proxmox-resource-planning`) that teach the
+> agent the CLI, the clump layout, and the safety rules.
+>
+> So instead of running every command by hand, you can just say things like *"register my
+> Proxmox cluster and deploy LiteLLM with Ollama"* — the coding agent runs the `hdc`
+> commands, reads the errors, and **tweaks the clump `config.json` for your environment**
+> as it goes. This is the fastest way through Steps 3–4, where most of the environment-
+> specific fiddling lives. Once the fleet (`hdc-agents`) is running, the fleet's own agents
+> take over ongoing deploys and maintenance; the coding agent is your bootstrap crew.
+>
+> The manual commands below are still the source of truth — read them so you know what the
+> agent is doing, and reach for them whenever you want to drive it yourself.
+
 ---
 
 ## Before you start — what you need
 
 | Thing | Why | Notes |
 | --- | --- | --- |
-| A **control machine** | Runs the `hdc` CLI | Any Linux/macOS/Windows box with **Node.js 18+**. No `npm install` needed for the CLI. |
+| A **control machine** | Runs the `hdc` CLI + your coding agent | Any Linux/macOS/Windows box with **Node.js 18+** and a GitHub token (`read:packages`) to install the CLI. |
 | A **deployment target** | Where services run | **Proxmox** is recommended and first-class. Cloud works too (OCI/GCP/Azure/AWS) via compute packages — see Step 1. |
 | A **model source** | The agents need an LLM | Either a local GPU box running **Ollama**, or an **OpenRouter** API key. This is the one dependency the agents can't run without. |
 | A **notify + approve channel** | How agents reach you | Pick one to start: **Discord** (easiest, supports Approve/Deny buttons), email, or the built-in web UI. |
@@ -48,34 +66,49 @@ For sizing VMs/containers and checking cluster headroom, see
 
 ---
 
-## Step 2 — Install the CLI and create your private repo
+## Step 2 — Install the CLI and create your site repo
 
-HDC uses [three repositories](three-repos.md); you only clone one and create one:
+The simplest path is a **single private repo** that holds your site data and pulls the CLI
+in as an npm package (`@dukk/hdc-cli`) — no need to clone the full platform git tree on
+every workstation. Start from the workspace template:
 
 ```bash
-# 1. Clone the platform (the CLI lives here)
-git clone https://github.com/dukk/hdc.git && cd hdc
+# 1. Copy the operator-workspace template into your own private git repo
+cp -r templates/hdc-private-workspace ~/my-hdc-site   # or download the template
+cd ~/my-hdc-site && git init
 
-# 2. Create your private site repo beside it (holds YOUR config + secrets refs)
-mkdir ../hdc-private && (cd ../hdc-private && git init)
+# 2. Authenticate to GitHub Packages (a PAT with read:packages)
+cp .npmrc.example .npmrc
+export GITHUB_TOKEN=ghp_…          # keep the token in the env, not committed
 
-# 3. Point the CLI at it, and initialize the secret vault
-cp .env.example .env          # set HDC_PRIVATE_ROOT=../hdc-private (and vault passphrase)
-hdc secrets set HDC_EXAMPLE   # creates ~/.hdc/vault.enc on first use
+# 3. Install the CLI package, then point config + vault at this repo
+npm install                        # installs @dukk/hdc-cli → `npx hdc`
+cp .env.example .env               # ensure HDC_PRIVATE_ROOT=.  (this repo is your site)
+npx hdc secrets set HDC_EXAMPLE    # creates ~/.hdc/vault.enc on first use
 
 # 4. Bootstrap package code (the "clumps") into the local cache
-hdc clumps init
-hdc clumps list               # confirm packages resolved
+npx hdc clumps init
+npx hdc list                       # confirm packages resolved
 ```
+
+That's it — run everything with `npx hdc <command>` from this one repo. (Prefer the
+classic three-git-repo layout? Clone [hdc](https://github.com/dukk/hdc), create an
+`hdc-private` sibling, and run `./hdc` / `hdc.cmd` instead — see
+[Three repositories](three-repos.md).)
 
 Key rules that keep you safe:
 
-- **Secrets live only in the vault** (`~/.hdc/vault.enc`). Config and inventory reference
-  secrets by **env-var name** — never paste values into JSON or git.
-- **Live config + inventory live in hdc-private**, never in the public repo. Seed starter
-  configs with `node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs`.
+- **Secrets live only in the vault.** To start, that's the local encrypted file
+  (`~/.hdc/vault.enc`). Config and inventory reference secrets by **env-var name** — never
+  paste values into JSON or git. *(Once you can host services, transition this vault to
+  Vaultwarden — see Step 3.)*
+- **Your live config + inventory stay in this private repo**, never in a public tree. Seed
+  starter configs with `npx hdc`'s import flags or the bootstrap script.
 
-Details: [Three repositories](three-repos.md) · [README](../README.md#private-operator-data-hdc-private).
+Details: [npm workspace](npm-workspace.md) · [Three repositories](three-repos.md).
+
+> The steps below write commands as `hdc …`. In the npm workspace, run them as
+> `npx hdc …` — or just let your coding agent run them for you.
 
 ---
 
@@ -97,10 +130,38 @@ your services will lean on — you can do these now by hand, or ask the agents t
 
 - **DNS** (`bind`) and **reverse proxy + WAF** (`nginx-waf`) for clean hostnames and TLS
 - **UniFi** (`unifi-network`) if HDC should manage VLANs/firewall rules
-- **Secrets/identity** (`vaultwarden`, `keycloak`) if you want SSO and a password manager
+- **Identity** (`keycloak`) if you want SSO for the web UIs
 
 Each package has a `config.example.json` and a per-package doc — run `hdc list` to see
 them, and see the [hdc-clumps README](../../hdc-clumps/README.md) for details.
+
+> This is where per-environment tweaking of clumps happens (node names, storage, bridges,
+> IPs, ports). It's exactly the fiddly work a coding agent is good at — point Claude Code
+> or Cursor at the clump's `config.json` and `config.example.json` and let it adapt the
+> package to your setup, then run the deploy and fix any script errors it hits.
+
+### Recommended: move secrets to Vaultwarden
+
+The local `~/.hdc/vault.enc` file is perfect for bootstrapping, but it lives on one
+machine. Once you have a host to run services on, deploy **Vaultwarden** (a
+Bitwarden-compatible server) and transition the vault to it — so secrets are shared across
+your workstation and the agent fleet, versioned, and accessible from anywhere.
+
+```bash
+hdc run service vaultwarden deploy          # stand up the server
+# In .env: HDC_SECRET_BACKEND=auto, HDC_VAULTWARDEN_URL/EMAIL/COLLECTION_ID (see linked doc)
+hdc secrets unlock                          # log in via the Bitwarden CLI (bw)
+hdc secrets push -- --dry-run               # preview the migration
+hdc secrets push -- --force                 # copy local secrets into the HDC collection
+hdc secrets sync-uris                       # attach service URLs to each item
+```
+
+`HDC_SECRET_BACKEND=auto` uses Vaultwarden when reachable and falls back to the local file
+otherwise; a few **bootstrap keys** (like the Vaultwarden master password) stay local by
+design. The agent fleet's scheduled host reads secrets from Vaultwarden
+(`HDC_SECRET_BACKEND=vaultwarden`), so doing this before Step 4 means the fleet inherits
+your secrets automatically. Full setup, ID resolution, and troubleshooting:
+[Bitwarden CLI for hdc secrets](manually-deployed/bitwarden-cli.md).
 
 ---
 
