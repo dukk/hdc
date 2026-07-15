@@ -140,8 +140,10 @@ export function renderComposeYaml(hdcAgents, install, opts = {}) {
     const mcpKeyEnv = `HDC_MCP_API_KEY_${role.replace(/-/g, "_").toUpperCase()}`;
     lines.push(`      HDC_MCP_API_KEY: \${${mcpKeyEnv}:-}`);
     lines.push(`      HDC_MCP_REQUIRE_API_KEY: "1"`);
+    lines.push(`      HDC_AGENTS_META_ROOT: /opt/hdc-agents-meta`);
     lines.push(`    volumes:`);
     lines.push(`      - /opt/hdc-private:/opt/hdc-private:${opsMode}`);
+    lines.push(`      - /opt/hdc-agents-meta:/opt/hdc-agents-meta:ro`);
     if (role === "hdc-engineer") {
       lines.push(`      - /opt/hdc-src:/opt/hdc:rw`);
     }

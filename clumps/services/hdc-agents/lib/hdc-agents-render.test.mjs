@@ -23,6 +23,8 @@ describe("hdc-agents-render", () => {
     expect(yaml).toContain("env_file:");
     expect(yaml).toContain("/opt/hdc-agents/.env");
     expect(yaml).toContain("HDC_WEB_META_ROOT: /opt/hdc-agents-meta");
+    expect(yaml).toContain("/opt/hdc-agents-meta:/opt/hdc-agents-meta:ro");
+    expect(yaml).toContain("HDC_AGENTS_META_ROOT: /opt/hdc-agents-meta");
     expect(yaml).toContain("HDC_WEB_OIDC_ISSUER");
     expect(yaml).toContain("HDC_WEB_OIDC_CLIENT_SECRET");
     expect(yaml).not.toContain("HDC_WEB_UI_PASSWORD");
