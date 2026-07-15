@@ -192,6 +192,10 @@ export async function prepareAgentsGuestSecrets(opts) {
         : "manager@hdc.dukk.org",
     password_env: "HDC_MANAGER_MAILBOX_PASSWORD",
     password_vault_key: mailboxPassKey,
+    tls_reject_unauthorized: mailbox.tls_reject_unauthorized === true,
+    folders: Array.isArray(mailbox.folders) && mailbox.folders.length
+      ? mailbox.folders.map((f) => String(f).trim()).filter(Boolean)
+      : ["INBOX", "Junk"],
     trusted_senders: Array.isArray(mailbox.trusted_senders)
       ? mailbox.trusted_senders
       : ["dukk@dukk.org"],
