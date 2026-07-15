@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { manualSidecarRel } from "../inventory-paths.mjs";
+import { manualSidecarLegacyRels, manualSidecarRel } from "../inventory-paths.mjs";
 import { resolveSystemById } from "../inventory-resolve.mjs";
 import { readResolvedRepoJson, resolveRepoFile } from "../private-repo.mjs";
 
@@ -37,10 +37,14 @@ export function loadManualSystemSidecar(root, systemId) {
  * @returns {Record<string, unknown> | null}
  */
 export function loadManualServiceSidecar(root, serviceId) {
-  return (
-    loadManualSidecarAtRel(root, manualSidecarRel("services", serviceId)) ??
-    loadManualSidecarAtRel(root, `inventory/manual/services/${serviceId}.json`)
-  );
+  for (const rel of [
+    manualSidecarRel("services", serviceId),
+    ...manualSidecarLegacyRels("services", serviceId),
+  ]) {
+    const data = loadManualSidecarAtRel(root, rel);
+    if (data) return data;
+  }
+  return null;
 }
 
 /**

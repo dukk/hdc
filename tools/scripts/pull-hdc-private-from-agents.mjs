@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { repoRoot } from "../../apps/hdc-cli/paths.mjs";
+import { manualSidecarLegacyRels, manualSidecarRel } from "../../apps/hdc-cli/lib/inventory-paths.mjs";
 import { hdcPrivateRoot, resolveRepoFile } from "../../apps/hdc-cli/lib/private-repo.mjs";
 import { loadClumpConfigFromClumpRoot } from "hdc/package/clump-run-config.mjs";
 import { resolveHdcAgentsDeployments } from "hdc/clump/services/hdc-agents/lib/deployments.mjs";
@@ -227,8 +228,13 @@ function resolveGuestHost(publicRoot, flags) {
     }
   }
 
-  const inv = resolveRepoFile(publicRoot, `operations/manual/systems/${systemId}.json`);
-  if (inv.found) {
+  const sidecarRels = [
+    manualSidecarRel("systems", systemId),
+    ...manualSidecarLegacyRels("systems", systemId),
+  ];
+  for (const rel of sidecarRels) {
+    const inv = resolveRepoFile(publicRoot, rel);
+    if (!inv.found) continue;
     const doc = JSON.parse(readFileSync(inv.path, "utf8"));
     const nodes = doc?.access?.nodes;
     if (Array.isArray(nodes) && nodes.length > 0) {

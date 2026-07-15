@@ -20,6 +20,12 @@ import {
 import { discoverManifests, manifestId } from "../manifests.mjs";
 import { clumpsDir, repoRoot } from "../paths.mjs";
 import { loadClumpConfigFromClumpRoot } from "./clump-config.mjs";
+import {
+  MANUAL_SYSTEMS,
+  manualCategoryLegacyRels,
+  manualSidecarLegacyRels,
+  manualSidecarRel,
+} from "./inventory-paths.mjs";
 import { readResolvedRepoJson, resolveRepoFile } from "./private-repo.mjs";
 
 const PLACEHOLDER_HOST_RE =
@@ -438,7 +444,13 @@ function expandWithNginxAliases(urls, nginxIndex) {
 
 function loadSystemIpMap(publicRoot, env = process.env) {
   const out = new Map();
-  const invDir = resolveRepoFile(publicRoot, "operations/manual/systems", env);
+  let invDir = resolveRepoFile(publicRoot, MANUAL_SYSTEMS, env);
+  if (!invDir.found) {
+    for (const legacy of manualCategoryLegacyRels("systems")) {
+      invDir = resolveRepoFile(publicRoot, legacy, env);
+      if (invDir.found) break;
+    }
+  }
   if (!invDir.found) return out;
   let names;
   try {
@@ -447,8 +459,13 @@ function loadSystemIpMap(publicRoot, env = process.env) {
     return out;
   }
   for (const name of names) {
-    const resolved = resolveRepoFile(publicRoot, `operations/manual/systems/${name}`, env);
-    if (!resolved.found) continue;
+    const id = name.replace(/\.json$/, "");
+    let resolved = null;
+    for (const rel of [manualSidecarRel("systems", id), ...manualSidecarLegacyRels("systems", id)]) {
+      resolved = resolveRepoFile(publicRoot, rel, env);
+      if (resolved.found) break;
+    }
+    if (!resolved?.found) continue;
     try {
       const data = readResolvedRepoJson(resolved);
       const id = typeof data.id === "string" ? data.id : name.replace(/\.json$/, "");

@@ -11,9 +11,11 @@ clumps/**/*.json
 !clumps/**/manifest.json
 !clumps/services/bind/zones/*.json
 
+operations/inventory/**/*.json
+!operations/inventory/systems/_example.json
+operations/automated/
+
 inventory/manual/**/*.json
-!inventory/manual/systems/_example.json
-inventory/automated/
 
 *.pem
 *.key

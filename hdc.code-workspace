@@ -7,6 +7,9 @@
 		{
 			"name": "hdc-private",
 			"path": "../hdc-private"
+		},
+		{
+			"path": "../hdc-clumps"
 		}
 	],
 	"settings": {

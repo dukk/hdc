@@ -1,7 +1,12 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { manualCategoryRel } from "../../hdc-cli/lib/inventory-paths.mjs";
+import {
+  manualCategoryLegacyRels,
+  manualCategoryRel,
+  manualSidecarLegacyRels,
+  manualSidecarRel,
+} from "../../hdc-cli/lib/inventory-paths.mjs";
 import { resolveRepoFile } from "../../hdc-cli/lib/private-repo.mjs";
 import { primaryIpFromSystem } from "../../hdc-cli/lib/package/inventory-sidecar.mjs";
 
@@ -13,18 +18,23 @@ const VALID_CATEGORIES = new Set(["systems", "services", "networks", "targets"])
  */
 function listCategoryIds(publicRoot, category) {
   const relDir = manualCategoryRel(category);
-  const legacyDir = `inventory/manual/${category}`;
   const resolved = resolveRepoFile(publicRoot, relDir);
-  const legacy = resolveRepoFile(publicRoot, legacyDir);
-  const dir = resolved.found ? join(publicRoot, resolved.rel).replace(/\\/g, "/") : null;
-  const privateRoot = resolved.privateRoot;
-  const absDir = resolved.found
-    ? resolved.path.replace(/[/\\][^/\\]+$/, "")
-    : legacy.found
-      ? legacy.path.replace(/[/\\][^/\\]+$/, "")
-      : privateRoot
-        ? join(privateRoot, relDir)
-        : join(publicRoot, relDir);
+  let absDir = null;
+  if (resolved.found) {
+    absDir = resolved.path.replace(/[/\\][^/\\]+$/, "");
+  } else {
+    for (const legacyRel of manualCategoryLegacyRels(category)) {
+      const legacy = resolveRepoFile(publicRoot, legacyRel);
+      if (legacy.found) {
+        absDir = legacy.path.replace(/[/\\][^/\\]+$/, "");
+        break;
+      }
+    }
+  }
+  if (!absDir) {
+    const privateRoot = resolved.privateRoot;
+    absDir = privateRoot ? join(privateRoot, relDir) : join(publicRoot, relDir);
+  }
   if (!existsSync(absDir)) return [];
   return readdirSync(absDir)
     .filter((f) => f.endsWith(".json") && !f.startsWith("_"))
@@ -84,11 +94,18 @@ export function getInventoryRecord(publicRoot, _privateRoot, category, id) {
     return { error: "invalid id" };
   }
 
-  const rel = `${manualCategoryRel(category)}/${safeId}.json`;
-  const legacyRel = `inventory/manual/${category}/${safeId}.json`;
-  const resolved = resolveRepoFile(publicRoot, rel);
-  const legacy = resolveRepoFile(publicRoot, legacyRel);
-  const pick = resolved.found ? resolved : legacy.found ? legacy : null;
+  const candidates = [
+    manualSidecarRel(category, safeId),
+    ...manualSidecarLegacyRels(category, safeId),
+  ];
+  let pick = null;
+  for (const rel of candidates) {
+    const resolved = resolveRepoFile(publicRoot, rel);
+    if (resolved.found) {
+      pick = resolved;
+      break;
+    }
+  }
   if (!pick) return { error: "not found" };
 
   try {

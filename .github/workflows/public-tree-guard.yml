@@ -37,7 +37,7 @@ jobs:
       - name: Block operations inventory except example
         run: |
           set -euo pipefail
-          bad=$(git ls-files 'operations/**' 'inventory/**' | grep -v 'operations/manual/systems/_example.json' || true)
+          bad=$(git ls-files 'operations/**' 'inventory/**' | grep -v 'operations/inventory/systems/_example.json' || true)
           if [ -n "$bad" ]; then
             echo "Inventory files are not allowed in the public tree:"
             echo "$bad"

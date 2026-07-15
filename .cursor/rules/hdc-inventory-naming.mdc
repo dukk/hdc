@@ -5,7 +5,7 @@ alwaysApply: true
 
 # HDC inventory naming (systems)
 
-Applies to **`kind: "system"`** `id` values in manual and automated inventory (`operations/manual/systems/*.json`, `operations/automated/systems/*.json`). The `id` must match the filename stem (`<id>.json`).
+Applies to **`kind: "system"`** `id` values in manual and automated inventory (`operations/inventory/systems/*.json`, `operations/automated/systems/*.json`). The `id` must match the filename stem (`<id>.json`).
 
 ## Class prefix in the id
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Migrate hdc-private inventory/manual → operations/manual (and automated).
+ * Migrate hdc-private inventory/manual → operations/inventory (and automated).
+ * Legacy steps: inventory/manual → operations/manual, then operations/manual → operations/inventory.
  */
 import { existsSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -15,6 +16,7 @@ const dryRun = process.argv.includes("--dry-run");
 const moves = [
   ["inventory/manual", "operations/manual"],
   ["inventory/automated", "operations/automated"],
+  ["operations/manual", "operations/inventory"],
 ];
 
 for (const [from, to] of moves) {

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import {
   automatedSystemRel,
-  LEGACY_MANUAL_SYSTEMS,
+  manualSidecarLegacyRels,
   manualSidecarRel,
 } from "./inventory-paths.mjs";
 import { resolveRepoFile } from "./private-repo.mjs";
@@ -44,10 +44,20 @@ function readJsonIfExists(publicRoot, rel, env) {
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {Record<string, unknown> | null}
  */
+function readFirstJson(publicRoot, rels, env) {
+  for (const rel of rels) {
+    const data = readJsonIfExists(publicRoot, rel, env);
+    if (data) return data;
+  }
+  return null;
+}
+
 export function resolveSystemById(publicRoot, systemId, env = process.env) {
-  const manual =
-    readJsonIfExists(publicRoot, manualSidecarRel("systems", systemId), env) ??
-    readJsonIfExists(publicRoot, `${LEGACY_MANUAL_SYSTEMS}/${systemId}.json`, env);
+  const manual = readFirstJson(
+    publicRoot,
+    [manualSidecarRel("systems", systemId), ...manualSidecarLegacyRels("systems", systemId)],
+    env,
+  );
   const automated = readJsonIfExists(publicRoot, automatedSystemRel(systemId), env);
   if (!manual && !automated) return null;
   if (!manual) return automated;
@@ -61,8 +71,9 @@ export function resolveSystemById(publicRoot, systemId, env = process.env) {
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function resolveServiceById(publicRoot, serviceId, env = process.env) {
-  return (
-    readJsonIfExists(publicRoot, manualSidecarRel("services", serviceId), env) ??
-    readJsonIfExists(publicRoot, `inventory/manual/services/${serviceId}.json`, env)
+  return readFirstJson(
+    publicRoot,
+    [manualSidecarRel("services", serviceId), ...manualSidecarLegacyRels("services", serviceId)],
+    env,
   );
 }
