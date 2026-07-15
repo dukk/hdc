@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * HDC CLI — single entry (Node 18+, runtime has no npm deps; devDependencies supply tests).
- * Usage: node apps/hdc-cli/cli.mjs <command> [args] — help text uses the same prefix you used (see HDC_CLI_INVOCATION / hdc wrappers).
+ * Usage: hdc <command> [args] — help text uses `hdc` (see HDC_CLI_INVOCATION / hdc wrappers).
  */
 import { register } from "node:module";
 import { dirname, join } from "node:path";

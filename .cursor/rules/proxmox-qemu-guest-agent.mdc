@@ -26,7 +26,7 @@ Applies to **QEMU/KVM VMs** (`vm-*` inventory ids, `proxmox-qemu` deploy mode). 
 ## Verification
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- verify-templates
+hdc run infrastructure proxmox maintain -- verify-templates
 ```
 
 Check the maintain report **QEMU guest agent** section; running workload VMs should show `agent ok`, not `not_responding`.

@@ -71,7 +71,7 @@ export function createMemoryCliDeps(opts) {
     defaultVaultPath: opts.defaultVaultPath ?? (() => join(opts.root, ".vault.enc")),
     readStdinUtf8: opts.readStdinUtf8 ?? (() => ""),
     readLineQuestion: opts.readLineQuestion ?? (async (_q, _opts) => ""),
-    cliInvocationForHelp: opts.cliInvocationForHelp ?? (() => "node apps/hdc-cli/cli.mjs"),
+    cliInvocationForHelp: opts.cliInvocationForHelp ?? (() => "hdc"),
     stdoutWrite:
       opts.stdoutWrite ??
       ((s) => {

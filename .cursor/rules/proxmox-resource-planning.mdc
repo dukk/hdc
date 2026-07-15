@@ -8,6 +8,6 @@ alwaysApply: false
 
 - **Source of truth**: Treat `inventory/manual/{systems,networks,services,targets}/**/*.json` (and matching `.md`) plus `inventory/automated/systems.json` and user-provided live metrics as authoritative. Do not invent hostnames, IPs, bridges, VLANs, pool names, or cluster capacity.
 - **Full workflow**: When planning or deploying a new VM or container on Proxmox, read and follow [`.cursor/skills/proxmox-resource-planning/SKILL.md`](../skills/proxmox-resource-planning/SKILL.md).
-- **After capacity or topology changes**: Update the relevant sidecar `hardware` / `notes` / `access` fields, then run `node apps/hdc-cli/cli.mjs docs lint` (see project automation rule).
-- **Ops commands**: Use `node apps/hdc-cli/cli.mjs` / `hdc.cmd` per the hdc-ops skill; never put secrets in sidecars or chat (env var names only).
+- **After capacity or topology changes**: Update the relevant sidecar `hardware` / `notes` / `access` fields, then run `hdc docs lint` (see project automation rule).
+- **Ops commands**: Use `hdc` per the hdc-ops skill; never put secrets in sidecars or chat (env var names only).
 - **QEMU VMs**: Plan for `agent=1` in VM config and `qemu-guest-agent` in the guest OS (deploy installs when SSH is available; maintain reports health). LXC guests do not use the QEMU guest agent.

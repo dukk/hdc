@@ -297,7 +297,7 @@ export function defaultNextSteps(ctx) {
   const lines = [];
 
   if (verb === "deploy") {
-    lines.push(`Run \`node apps/hdc-cli/cli.mjs run ${pkg} query\` to verify the deployment.`);
+    lines.push(`Run \`hdc run ${pkg} query\` to verify the deployment.`);
     const results = resultsFromPayload(ctx);
     for (const r of results) {
       const sid = systemIdFromResult(r);
@@ -315,7 +315,7 @@ export function defaultNextSteps(ctx) {
     }
     lines.push("Run inventory validation when sidecars change (schema under `apps/hdc-cli/schema/`).");
   } else if (verb === "maintain") {
-    lines.push(`Run \`node apps/hdc-cli/cli.mjs run ${pkg} query\` to confirm service health.`);
+    lines.push(`Run \`hdc run ${pkg} query\` to confirm service health.`);
     lines.push(`Re-run maintain on a schedule or after config changes: \`hdc run ${pkg} maintain\`.`);
   } else if (verb === "teardown") {
     lines.push("Confirm guests/containers are removed in Proxmox or Docker.");

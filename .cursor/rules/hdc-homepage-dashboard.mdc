@@ -32,7 +32,7 @@ Proxmox and Pi-hole follow the same pattern; see README sections.
 ## Lint before maintain
 
 ```bash
-node apps/hdc-cli/cli.mjs run service homepage query -- --lint
+hdc run service homepage query -- --lint
 ```
 
 `homepage maintain` runs the same lint and fails on errors (missing icon, enabled widget without YAML block, orphan widget, missing vendored `/icons/` file).

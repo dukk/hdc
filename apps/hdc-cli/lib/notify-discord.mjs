@@ -149,7 +149,7 @@ async function main() {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes(resolvedWebhookKey) || msg.includes("interactive")) {
       stderr.write(
-        `notify-discord: set ${resolvedWebhookKey} in vault (node apps/hdc-cli/cli.mjs secrets set ${resolvedWebhookKey})\n`,
+        `notify-discord: set ${resolvedWebhookKey} in vault (hdc secrets set ${resolvedWebhookKey})\n`,
       );
     }
     throw e;

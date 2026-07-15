@@ -55,7 +55,7 @@ export function renderPackageEnvExample(pkg, mappedKeys) {
   const lines = [
     `# Copy to ${pkg.rel}/.env in hdc-private (or hdc root; never commit).`,
     `# ${pkg.title} — values optional unless manifest env_required is set.`,
-    `# Prefer vault: node apps/hdc-cli/cli.mjs secrets set <KEY>`,
+    `# Prefer vault: hdc secrets set <KEY>`,
     "",
   ];
   if (keys.length) {

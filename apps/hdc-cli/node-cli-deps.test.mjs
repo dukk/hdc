@@ -12,17 +12,28 @@ describe("createNodeCliDeps", () => {
     expect(typeof d.defaultVaultPath()).toBe("string");
     expect(typeof d.cliInvocationForHelp()).toBe("string");
     expect(d.cliInvocationForHelp().length).toBeGreaterThan(3);
-    expect(d.cliInvocationForHelp()).toMatch(/^node\s+\S/);
+    expect(d.cliInvocationForHelp()).toBe("hdc");
     expect(typeof d.stdoutWrite).toBe("function");
     expect(typeof d.hostProbe()).toBe("object");
     expect(typeof d.hostProbe().hostname).toBe("string");
   });
 
-  it("computeCliInvocationForHelp respects HDC_CLI_INVOCATION", () => {
+  it("computeCliInvocationForHelp normalizes HDC_CLI_INVOCATION wrappers to hdc", () => {
     const prev = process.env.HDC_CLI_INVOCATION;
     process.env.HDC_CLI_INVOCATION = "./hdc";
     try {
-      expect(computeCliInvocationForHelp()).toBe("./hdc");
+      expect(computeCliInvocationForHelp()).toBe("hdc");
+    } finally {
+      if (prev === undefined) delete process.env.HDC_CLI_INVOCATION;
+      else process.env.HDC_CLI_INVOCATION = prev;
+    }
+  });
+
+  it("computeCliInvocationForHelp normalizes hdc.cmd to hdc", () => {
+    const prev = process.env.HDC_CLI_INVOCATION;
+    process.env.HDC_CLI_INVOCATION = "hdc.cmd";
+    try {
+      expect(computeCliInvocationForHelp()).toBe("hdc");
     } finally {
       if (prev === undefined) delete process.env.HDC_CLI_INVOCATION;
       else process.env.HDC_CLI_INVOCATION = prev;
