@@ -46,7 +46,8 @@ export function loadSkillMarkdown(hdcRoot, skillId) {
  * @param {string} role
  */
 export function loadSkillsForRole(hdcRoot, role) {
-  const ids = ROLE_SKILL_IDS[role] ?? ["hdc-agent-team"];
+  const normalized = role === "hdc-sre" ? "hdc-sre-ops" : role;
+  const ids = ROLE_SKILL_IDS[normalized] ?? ["hdc-agent-team"];
   /** @type {string[]} */
   const parts = [];
   for (const id of ids) {
