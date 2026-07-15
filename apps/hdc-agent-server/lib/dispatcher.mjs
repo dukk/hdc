@@ -12,10 +12,10 @@ import { spawnSync } from "node:child_process";
 
 import { listTasks, writeTaskReport } from "./operations-fs.mjs";
 import { listQueuedTopics } from "./research-topics.mjs";
-import { notifyDiscordDecision } from "./notify-agents-discord.mjs";
+import { notifyManagerDecision } from "./notify-manager.mjs";
 import { processManagerMailbox } from "./manager-mailbox.mjs";
 
-export { notifyDiscordDecision };
+export { notifyManagerDecision };
 
 /**
  * @param {string} hdcRoot
@@ -120,6 +120,7 @@ export function newestMtimeMs(dir, nameRe) {
  *   invoked_llm: boolean,
  *   work: DispatcherWorkItem[],
  *   report_path?: string,
+ *   notified?: string[],
  *   discord_notified?: string[],
  *   idle_reason?: string,
  * }} DispatcherResult
@@ -284,9 +285,12 @@ async function dispatchManager(opts) {
 
   const state = loadDispatcherState(opts.privateRoot);
   /** @type {string[]} */
-  const notified = Array.isArray(state.discord_notified_ids)
+  const legacyNotified = Array.isArray(state.discord_notified_ids)
     ? /** @type {string[]} */ (state.discord_notified_ids)
     : [];
+  const notified = Array.isArray(state.notified_task_ids)
+    ? /** @type {string[]} */ (state.notified_task_ids)
+    : legacyNotified;
   const notifiedSet = new Set(notified);
   /** @type {string[]} */
   const newlyNotified = [];
@@ -295,7 +299,7 @@ async function dispatchManager(opts) {
     if (!t.needs_decision || t.status === "done") continue;
     if (notifiedSet.has(t.id)) continue;
     const msg = `Task ${t.id}: ${t.title}. Needs operator decision.`;
-    const r = notifyDiscordDecision(
+    const r = notifyManagerDecision(
       opts.hdcRoot,
       opts.privateRoot,
       "HDC decision needed",
@@ -305,9 +309,9 @@ async function dispatchManager(opts) {
     if (r.ok) {
       newlyNotified.push(t.id);
       notifiedSet.add(t.id);
-      opts.log(`[dispatcher] discord notified for ${t.id}`);
+      opts.log(`[dispatcher] notified for ${t.id}`);
     } else {
-      opts.log(`[dispatcher] discord notify failed for ${t.id}: ${r.error || r.stderr || r.status}`);
+      opts.log(`[dispatcher] notify failed for ${t.id}: ${r.error || r.stderr || r.status}`);
     }
   }
 
@@ -336,7 +340,7 @@ async function dispatchManager(opts) {
       local: true,
       prompt:
         "Scripted dispatcher found new digests or failure reports. Triage: update tasks, " +
-        "prioritize, regenerate task-report.md, escalate needs_decision via Discord if still needed. " +
+        "prioritize, regenerate task-report.md, escalate needs_decision via configured notification routes if still needed. " +
         "Do not run deploy/prune without approved tasks.",
     });
   }
@@ -364,7 +368,8 @@ async function dispatchManager(opts) {
     }
   }
 
-  state.discord_notified_ids = [...notifiedSet];
+  state.notified_task_ids = [...notifiedSet];
+  delete state.discord_notified_ids;
   state.manager_last_report_mtime = Math.max(lastReport, newestReport);
   state.manager_last_failure_mtime = Math.max(lastFailure, newestFailureSignal);
   state.manager_last_run_ms = opts.nowMs;
@@ -396,6 +401,7 @@ async function dispatchManager(opts) {
       invoked_llm: false,
       work: [],
       report_path: reportPath,
+      notified: newlyNotified,
       discord_notified: newlyNotified,
       idle_reason: "no new reports and no runnable tasks",
     };

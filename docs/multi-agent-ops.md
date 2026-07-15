@@ -13,9 +13,9 @@ Key architectural decisions:
 - **LiteLLM is the A2A registry and gateway.** Agents publish cards to `litellm`;
   the standalone `a2a-registry` clump is deprecated.
 - **Each agent runs as its own Docker container** via `clumps/services/hdc-agents`.
-- **Scripted dispatcher first:** schedule ticks refresh task reports, Discord-notify
-  decisions, probe hdc queries, and A2A-delegate approved work — the model runs
-  only when probes/digests change or triage is required.
+- **Scripted dispatcher first:** schedule ticks refresh task reports, notify manager
+  events per `notifications.routes`, probe hdc queries, and A2A-delegate approved
+  work — the model runs only when probes/digests change or triage is required.
 - **Tasks / jobs UI:** hdc-web-server on hdc-agents-a `:9120` (no separate hdc-runner guest).
 
 ## Problems to solve
@@ -94,7 +94,7 @@ Handoffs: clump script failure → `hdc-sre-engineer`; CLI failure → `hdc-engi
 
 | Agent | Lifecycle role | Access | Trigger |
 | --- | --- | --- | --- |
-| `hdc-manager` | Orchestrate | Task files, Discord, A2A delegation | Hourly triage loop + A2A + on demand |
+| `hdc-manager` | Orchestrate | Task files, per-route notifications, A2A delegation | Hourly triage loop + A2A + on demand |
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
 | `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; read-only `query` | Failure reports, package scaffolds |
@@ -216,13 +216,15 @@ runtimes must honor:
   non-read action. Task state stays guest-authoritative in hdc-private.
 - **Digests** to `operations/reports/{role}-{timestamp}.md`; **proposals** to
   `operations/proposals/{security,network}/`.
-- **Escalation**: `needs_decision: true` → Manager notifies Discord
-  (`notify-discord.mjs --decision --task-id …`). When the hdc-ops Discord app is
-  configured (`application_id`, `public_key`, bot token, `channel_id`), the
-  message includes **Approve** / **Deny** buttons handled by hdc-web-server
-  `POST /api/discord/interactions` (same task file status as the UI). Otherwise
-  plain webhook text. Failures email via postfix-relay; approvals also via web
-  UI Tasks tab, `PATCH /api/tasks/:id`, or A2A.
+- **Escalation**: `needs_decision: true` → Manager dispatcher notifies per
+  `notifications.routes.needs_decision` (default Discord via `notify.mjs`; also
+  email, Slack, Teams, Telegram — see `docs/manually-deployed/manager-notifications.md`).
+  Discord may include **Approve** / **Deny** buttons when the hdc-ops app is
+  configured (`application_id`, `public_key`, bot token, `channel_id`), handled by
+  hdc-web-server `POST /api/discord/interactions`. Email decisions use mailbox
+  reply subjects `APPROVE <task-id>` / `REJECT <task-id>`. Scheduled job failures
+  email via postfix-relay; approvals also via web UI Tasks tab, `PATCH /api/tasks/:id`,
+  or A2A.
 - **Safety rails** (all agents, all runtimes):
   - Destructive verbs only with task `status: approved`.
   - Per-role hdc-mcp allowlists inside containers; read-only roles cannot invoke

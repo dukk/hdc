@@ -13,7 +13,12 @@ import {
 } from "./operations-fs.mjs";
 import { appendSuggestion } from "./research-topics.mjs";
 import { fetchUnseenMessages } from "./imap-client.mjs";
-import { notifyDiscordSilent, notifyDiscordDecision } from "./notify-agents-discord.mjs";
+import {
+  notifyManagerEvent,
+  ROUTE_MAILBOX_RECEIVED,
+  ROUTE_MAILBOX_SPOOF,
+  ROUTE_MAILBOX_TASK_UPDATE,
+} from "./notify-manager.mjs";
 import {
   DEFAULT_NEVER_BLOCK_CIDRS,
   isInternalIp,
@@ -270,11 +275,15 @@ export async function processManagerMailbox(opts) {
     const key = stableMailKey(parsed.messageId, msg.raw);
     if (processed.has(key)) continue;
 
-    notifyDiscordSilent(
+    notifyManagerEvent(
       opts.hdcRoot,
       opts.privateRoot,
-      "HDC mail received",
-      `From: ${parsed.from}\nSubject: ${parsed.subject}\nUID: ${msg.uid}`,
+      ROUTE_MAILBOX_RECEIVED,
+      {
+        title: "HDC mail received",
+        message: `From: ${parsed.from}\nSubject: ${parsed.subject}\nUID: ${msg.uid}`,
+        silent: true,
+      },
     );
 
     const kind = classifyMail(parsed.subject, parsed.body, parsed.from);
@@ -335,13 +344,13 @@ async function handleDecision(opts) {
   const authOk = isAuthenticatedFrom(parsed.authResults, fromEmail);
   if (!authOk) {
     log(`[mailbox] SPOOF alert: trusted From ${fromEmail} without SPF/DKIM/DMARC pass`);
-    notifyDiscordDecision(
-      hdcRoot,
-      privateRoot,
-      "HDC email spoof alert",
-      `Claimed From ${fromEmail} sent decision for task ${kind.taskId} but Authentication-Results failed.\nSubject: ${parsed.subject}`,
-      kind.taskId,
-    );
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_SPOOF, {
+      title: "HDC email spoof alert",
+      message: `Claimed From ${fromEmail} sent decision for task ${kind.taskId} but Authentication-Results failed.\nSubject: ${parsed.subject}`,
+      decision: true,
+      taskId: kind.taskId,
+      silent: false,
+    });
     return;
   }
   try {
@@ -352,24 +361,22 @@ async function handleDecision(opts) {
   }
   if (kind.approve) {
     updateTaskStatus(privateRoot, kind.taskId, { status: "approved", needs_decision: false });
-    notifyDiscordSilent(
-      hdcRoot,
-      privateRoot,
-      "HDC task approved (email)",
-      `Task ${kind.taskId} approved by ${fromEmail}`,
-    );
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task approved (email)",
+      message: `Task ${kind.taskId} approved by ${fromEmail}`,
+      silent: true,
+    });
   } else {
     updateTaskStatus(privateRoot, kind.taskId, {
       status: "blocked",
       needs_decision: false,
       blocked_reason: `Rejected by email from ${fromEmail}`,
     });
-    notifyDiscordSilent(
-      hdcRoot,
-      privateRoot,
-      "HDC task rejected (email)",
-      `Task ${kind.taskId} rejected by ${fromEmail}`,
-    );
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task rejected (email)",
+      message: `Task ${kind.taskId} rejected by ${fromEmail}`,
+      silent: true,
+    });
   }
 }
 
@@ -390,7 +397,11 @@ function handleWazuh(opts) {
       body: `Inbound Wazuh mail (level ${level}). Source IP: ${kind.srcIp ?? "(unknown)"}.\n`,
       evidence: ["manager mailbox"],
     });
-    notifyDiscordSilent(hdcRoot, privateRoot, "HDC task created", `Wazuh alert task (level ${level})`);
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task created",
+      message: `Wazuh alert task (level ${level})`,
+      silent: true,
+    });
     return;
   }
   const ip = kind.srcIp;
@@ -417,7 +428,11 @@ function handleWazuh(opts) {
       priority: "critical",
       updated_at: new Date().toISOString(),
     });
-    notifyDiscordSilent(hdcRoot, privateRoot, "HDC task updated", `Refresh block task ${id}`);
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task updated",
+      message: `Refresh block task ${id}`,
+      silent: true,
+    });
     return;
   }
   createTask(privateRoot, {
@@ -434,12 +449,11 @@ function handleWazuh(opts) {
       `Block external source IP in UniFi for ${blockDays} days. Do not block internal CIDRs.\n\n` +
       `Suggested:\n\`\`\`\n${cmd}\n\`\`\`\n`,
   });
-  notifyDiscordSilent(
-    hdcRoot,
-    privateRoot,
-    "HDC task created",
-    `Wazuh→UniFi block task ${id} assigned to hdc-security-expert`,
-  );
+  notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+    title: "HDC task created",
+    message: `Wazuh→UniFi block task ${id} assigned to hdc-security-expert`,
+    silent: true,
+  });
   log(`[mailbox] created/approved block task ${id}`);
 }
 
@@ -464,7 +478,11 @@ function handleResearchSuggestion(opts) {
   const existing = listTasks(privateRoot, { includeDone: true }).find((t) => t.id === id);
   if (existing) {
     updateTaskStatus(privateRoot, id, { status: existing.status });
-    notifyDiscordSilent(hdcRoot, privateRoot, "HDC task updated", `Research suggestion ${id} touched`);
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task updated",
+      message: `Research suggestion ${id} touched`,
+      silent: true,
+    });
     log(`[mailbox] research suggestion task exists: ${id}`);
     return;
   }
@@ -482,7 +500,11 @@ function handleResearchSuggestion(opts) {
       `and promote to operations/research/topics/<id>.md with status queued when ready.\n\n` +
       `${String(kind.body).slice(0, 4000)}\n`,
   });
-  notifyDiscordSilent(hdcRoot, privateRoot, "HDC task created", `Research suggestion: ${id}`);
+  notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+    title: "HDC task created",
+    message: `Research suggestion: ${id}`,
+    silent: true,
+  });
   log(`[mailbox] created research triage task ${id}`);
 }
 
@@ -496,7 +518,11 @@ function handleGeneral(opts) {
   const existing = listTasks(privateRoot, { includeDone: true }).find((t) => t.id === id);
   if (existing) {
     updateTaskStatus(privateRoot, id, { status: existing.status });
-    notifyDiscordSilent(hdcRoot, privateRoot, "HDC task updated", `Mail task ${id} touched`);
+    notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+      title: "HDC task updated",
+      message: `Mail task ${id} touched`,
+      silent: true,
+    });
     return;
   }
   createTask(privateRoot, {
@@ -508,5 +534,9 @@ function handleGeneral(opts) {
     evidence: ["manager mailbox", messageKey],
     body: `From: ${kind.fromEmail}\n\n${String(kind.body).slice(0, 4000)}\n`,
   });
-  notifyDiscordSilent(hdcRoot, privateRoot, "HDC task created", `From mail: ${id}`);
+  notifyManagerEvent(hdcRoot, privateRoot, ROUTE_MAILBOX_TASK_UPDATE, {
+    title: "HDC task created",
+    message: `From mail: ${id}`,
+    silent: true,
+  });
 }

@@ -7,7 +7,7 @@
 ## Scripted (no LLM)
 
 1. List `operations/tasks/*.md`; regenerate `operations/task-report.md`.
-2. Discord-notify tasks with `needs_decision: true` not yet flagged in the notify watermark.
+2. Notify tasks with `needs_decision: true` per `notifications.routes` (watermark `notified_task_ids`).
 3. Build worker prompts for `approved` tasks and query-only auto-run pending tasks.
 
 ## LLM (only if needed)

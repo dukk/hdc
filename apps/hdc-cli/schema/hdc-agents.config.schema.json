@@ -44,6 +44,49 @@
                     "enabled": { "type": "boolean" }
                   }
                 }
+              },
+              "notifications": {
+                "type": "object",
+                "properties": {
+                  "channels": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "email": { "type": "object", "additionalProperties": true },
+                      "discord": { "type": "object", "additionalProperties": true },
+                      "slack": { "type": "object", "additionalProperties": true },
+                      "teams": { "type": "object", "additionalProperties": true },
+                      "telegram": { "type": "object", "additionalProperties": true }
+                    }
+                  },
+                  "routes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "enum": ["discord", "email", "slack", "teams", "telegram"]
+                      }
+                    },
+                    "properties": {
+                      "needs_decision": {
+                        "type": "array",
+                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                      },
+                      "mailbox_received": {
+                        "type": "array",
+                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                      },
+                      "mailbox_spoof": {
+                        "type": "array",
+                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                      },
+                      "mailbox_task_update": {
+                        "type": "array",
+                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                      }
+                    }
+                  }
+                }
               }
             }
           },

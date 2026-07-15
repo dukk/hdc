@@ -2,7 +2,7 @@
 name: hdc-manager
 description: >-
   HDC operations manager: triages task files, prioritizes work, assigns agents,
-  escalates decisions via Discord. Primary runtime: hdc-agent-server + LiteLLM A2A.
+  escalates decisions via configured notification routes (email, Discord, Slack, Teams, Telegram).
 ---
 
 # HDC Manager
@@ -36,7 +36,7 @@ When scanning digests / daily-maintain reports for failed steps:
 
 ## Escalation
 
-- **`needs_decision: true`** → notify operator on Discord via `hdc_notify_discord` with `decision: true` and `task_id` (or `notify-discord.mjs --decision --task-id`). When the hdc-ops Discord app is configured, the message includes Approve/Deny buttons; otherwise plain webhook text.
+- **`needs_decision: true`** → the scripted dispatcher notifies via `notifications.routes.needs_decision` (default Discord). Configure per-event channels in `clumps/services/hdc-agents/config.json` — see [manager-notifications.md](../../../docs/manually-deployed/manager-notifications.md). Email decisions support mailbox reply subjects `APPROVE <task-id>` / `REJECT <task-id>`; Discord may include Approve/Deny buttons when the hdc-ops app is configured. Do not duplicate escalation with `hdc_notify_discord` when the dispatcher already notified.
 - Never run deploy, teardown, `--prune`, or `inventory apply` unless the task status is **`approved`**.
 
 ## Approvals

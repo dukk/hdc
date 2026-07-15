@@ -1,8 +1,8 @@
 ---
 name: hdc-manager
 description: >-
-  HDC manager escalation and triage: task files, Discord for decisions, email context
-  for failures, delegation to specialist agents.
+  HDC manager escalation and triage: task files, per-route notifications (email/Discord/Slack/Teams/Telegram),
+  delegation to specialist agents.
 ---
 
 # HDC manager skill
@@ -25,10 +25,10 @@ description: >-
 
 | Situation | Action |
 | --- | --- |
-| `needs_decision: true` | Discord via `hdc_notify_discord` (`decision` + `task_id` for Approve/Deny buttons when hdc-ops app configured) |
+| `needs_decision: true` | Scripted dispatcher → `notifications.routes.needs_decision` (email, Discord, Slack, Teams, or Telegram). See [manager-notifications.md](../../../../docs/manually-deployed/manager-notifications.md) |
 | Scheduled job failed | Summarize in triage digest |
-| Public down > 15m | Discord + task priority `high` |
-| Cert expiry < 7d | Discord + assign SRE task |
+| Public down > 15m | High-priority task + route per `notifications.routes` (default Discord) |
+| Cert expiry < 7d | High-priority task + route per `notifications.routes` (default Discord) |
 | Approved task ready | Delegate via LiteLLM A2A `message/send` |
 
 ## Approval workflow

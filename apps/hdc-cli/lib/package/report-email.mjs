@@ -98,6 +98,49 @@ export function sendReportEmail(opts) {
 }
 
 /**
+ * Send a plain-text/markdown notification email via local sendmail.
+ *
+ * @param {object} opts
+ * @param {string} opts.to
+ * @param {string} [opts.from]
+ * @param {string} opts.subject
+ * @param {string} opts.markdown
+ * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {typeof spawnSync} [opts.spawnSyncFn]
+ * @returns {{ ok: boolean; message: string }}
+ */
+export function sendPlainEmail(opts) {
+  const defaults = loadMailRelayAppSettings({ env: opts.env });
+  const from =
+    typeof opts.from === "string" && opts.from.trim() ? opts.from.trim() : defaults.from;
+  const to = String(opts.to ?? "").trim();
+  const subject = String(opts.subject ?? "").trim() || "HDC notification";
+  const markdown = String(opts.markdown ?? "");
+  if (!to) return { ok: false, message: "recipient (to) required" };
+  if (!from) return { ok: false, message: "sender (from) required" };
+
+  let mime;
+  try {
+    mime = buildReportMimeMessage({ to, from, subject, markdown });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, message: msg };
+  }
+
+  const spawnFn = opts.spawnSyncFn ?? spawnSync;
+  const r = spawnFn("sendmail", ["-t", "-oi"], {
+    input: mime,
+    encoding: "utf8",
+    env: opts.env ?? process.env,
+  });
+  if (r.status !== 0) {
+    const detail = `${r.stderr ?? ""}${r.stdout ?? ""}`.trim() || `exit ${r.status}`;
+    return { ok: false, message: `sendmail failed: ${detail}` };
+  }
+  return { ok: true, message: `sent to ${to}` };
+}
+
+/**
  * Parse last operation report path from hdc stderr output.
  *
  * @param {string} stderr
