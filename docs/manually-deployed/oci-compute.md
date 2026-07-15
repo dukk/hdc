@@ -14,7 +14,7 @@ HDC package `oci-compute` provisions **Oracle Cloud Infrastructure** networking 
    - `HDC_OCI_USER_OCID`
    - `HDC_OCI_FINGERPRINT`
    - `HDC_OCI_REGION`
-4. Vault: `node apps/hdc-cli/cli.mjs secrets set HDC_OCI_API_PRIVATE_KEY`
+4. Vault: `hdc secrets set HDC_OCI_API_PRIVATE_KEY`
 5. hdc-private `clumps/infrastructure/oci-compute/config.json` (copy from `config.example.json` in the public repo).
 
 ## Image OCIDs
@@ -34,12 +34,12 @@ Deploy uses fallback price tables when live OCI pricing APIs are not queried. Es
 ## Commands
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute query --
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute query -- --live
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --resource a
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute maintain -- --prune
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute teardown -- --all --yes
+hdc run infrastructure oci-compute query --
+hdc run infrastructure oci-compute query -- --live
+hdc run infrastructure oci-compute deploy -- --dry-run
+hdc run infrastructure oci-compute deploy -- --resource a
+hdc run infrastructure oci-compute maintain -- --prune
+hdc run infrastructure oci-compute teardown -- --all --yes
 ```
 
 ## Inventory

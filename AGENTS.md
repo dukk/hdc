@@ -11,10 +11,7 @@ Automation and documentation for a manually deployed home data center. Agents op
 ## Quick start
 
 - **Node.js 18+** — the CLI uses built-in modules only; no `npm install` is required to run hdc.
-- **Invoke hdc** (repo root):
-  - Windows: `hdc.cmd <command>`
-  - Cross-platform: `node apps/hdc-cli/cli.mjs <command>`
-  - macOS/Linux (after `chmod +x hdc`): `./hdc <command>`
+- **Invoke hdc** (repo root): `hdc <command>` (`hdc.cmd` on Windows, `./hdc` on Unix after `chmod +x hdc`).
 - **Secrets:** copy [`.env.example`](.env.example) to `.env` (gitignored) for **global** CLI settings (vault passphrase, secret backend, `HDC_PRIVATE_ROOT`, ops Discord, guest baseline). Package-specific env vars live in `clumps/<tier>/<id>/.env` (see each package `.env.example`; prefer hdc-private). The root `.env.example` indexes all 96 packages; run `node apps/hdc-cli/scripts/ensure-clump-env-examples.mjs --write` after adding a clump to scaffold its `.env.example`. Merge order: hdc public then hdc-private for each path. `hdc run` loads only global + the target clump (and `env_includes`, auto-proxmox when config uses Proxmox). Migrate a monolithic root `.env` with `node apps/hdc-cli/scripts/migrate-root-env.mjs --dry-run`. API keys and passwords prefer the encrypted vault at `~/.hdc/vault.enc` (see `secrets` commands below). Auth fields in inventory reference **env var names only**, never values.
 - **hdc-private:** Clone the private repo beside hdc (`../hdc-private`) or set `HDC_PRIVATE_ROOT`. Clump `config.json` and inventory JSON use the same paths; hdc checks the public repo first, then hdc-private. Seed clump configs from examples: `node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs` (skips existing files; `--force` to overwrite). On supported infrastructure packages, `query --import --yes` (or package-specific import flags such as Cloudflare `--import-zones`) auto-seeds missing `config.json` from `config.example.json` in hdc-private before importing live API data. Shared loaders: [`apps/hdc-cli/lib/private-repo.mjs`](apps/hdc-cli/lib/private-repo.mjs), [`apps/hdc-cli/lib/clump-config.mjs`](apps/hdc-cli/lib/clump-config.mjs).
 - **hdc-clumps:** Package scripts live in the sibling [**hdc-clumps**](https://github.com/dukk/hdc-clumps) repo (or `~/.hdc/clump-repos/` after `hdc clumps init`). Manifest discovery reads [`.hdc/clumps-repos.json`](.hdc/clumps-repos.json); override with `HDC_CLUMPS_ROOT` for a local checkout.
@@ -75,18 +72,18 @@ Commands from [`apps/hdc-cli/lib/cli-app.mjs`](apps/hdc-cli/lib/cli-app.mjs):
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs list
-node apps/hdc-cli/cli.mjs run infrastructure proxmox query
-node apps/hdc-cli/cli.mjs run service vaultwarden health
-node apps/hdc-cli/cli.mjs run service pi-hole deploy -- --help
-node apps/hdc-cli/cli.mjs help run infrastructure proxmox maintain
-node apps/hdc-cli/cli.mjs maintain daily --dry-run
+hdc list
+hdc run infrastructure proxmox query
+hdc run service vaultwarden health
+hdc run service pi-hole deploy -- --help
+hdc help run infrastructure proxmox maintain
+hdc maintain daily --dry-run
 ```
 
 **Health:** `hdc run <tier> <clump> health` runs layered connectivity checks (DNS → public URL → nginx-waf LAN IP+Host → direct guest IP → in-guest docker/systemd). Exit `0` when healthy or degraded (origin up, edge down); `1` when down/unknown. JSON on stdout.
 ## Daily maintain
 
-`node apps/hdc-cli/cli.mjs maintain daily` runs a curated, **non-destructive** recipe across every package that has a resolved `config.json` (hdc-private or public). It skips prune operations, rolling restarts, and reboots; applies routine updates (Docker pull, guest apt, DSM packages) unless `--skip-upgrades` is set; runs **query only** on home clients (`windows`, `client-ubuntu`, `raspberrypi`).
+`hdc maintain daily` runs a curated, **non-destructive** recipe across every package that has a resolved `config.json` (hdc-private or public). It skips prune operations, rolling restarts, and reboots; applies routine updates (Docker pull, guest apt, DSM packages) unless `--skip-upgrades` is set; runs **query only** on home clients (`windows`, `client-ubuntu`, `raspberrypi`).
 
 - Recipe: [`apps/hdc-cli/lib/daily-maintain-recipe.mjs`](apps/hdc-cli/lib/daily-maintain-recipe.mjs)
 - Orchestrator: [`apps/hdc-cli/lib/daily-maintain.mjs`](apps/hdc-cli/lib/daily-maintain.mjs)
@@ -106,8 +103,8 @@ hdc.cmd maintain daily
 Filter examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs maintain daily -- --only infrastructure/proxmox
-node apps/hdc-cli/cli.mjs maintain daily -- --skip service/trivy --skip-upgrades
+hdc maintain daily -- --only infrastructure/proxmox
+hdc maintain daily -- --skip service/trivy --skip-upgrades
 ```
 
 **Not implemented in the CLI today:** `docs lint`, `docs sync`, and `inventory apply` appear in [README.md](README.md) and some `.cursor/rules/` files — treat as planned workflow until wired in `cli-app.mjs`. Validate inventory JSON against schemas under [`apps/hdc-cli/schema/`](apps/hdc-cli/schema/) instead.
@@ -170,14 +167,14 @@ Linux **Proxmox guest** `maintain` scripts apply a shared baseline via [`clumps/
 
 **Guest SSH:** QEMU configure paths default to user `hdc` ([`clumps/lib/guest-ssh-resolve.mjs`](clumps/lib/guest-ssh-resolve.mjs)); override with `configure.ssh.user` or `HDC_GUEST_SSH_USER`. [`clumps/lib/guest-ssh-exec.mjs`](clumps/lib/guest-ssh-exec.mjs) probes `hdc` then falls back to `root` during migration and wraps non-root commands with `sudo -n`.
 
-Hypervisor bootstrap hosts still use `node apps/hdc-cli/cli.mjs users bootstrap-hdc` ([`apps/hdc-cli/lib/users-bootstrap-hdc.mjs`](apps/hdc-cli/lib/users-bootstrap-hdc.mjs)) — same vault key pattern and shared bash helpers.
+Hypervisor bootstrap hosts still use `hdc users bootstrap-hdc` ([`apps/hdc-cli/lib/users-bootstrap-hdc.mjs`](apps/hdc-cli/lib/users-bootstrap-hdc.mjs)) — same vault key pattern and shared bash helpers.
 
 Maintain JSON payloads should include `hdc_user`, `admin_user`, `clamav`, `clamav_scan_schedule`, `unattended_upgrades`, `crowdsec_agent`, `wazuh_agent`, `mail_relay` (when applicable), and `root_login_disabled` per instance via [`guestBaselineResultFields`](clumps/lib/guest-baseline-report.mjs). **Maintain operation reports** add a **Guest baseline** section automatically when those fields are present.
 
 - **Out of scope (guest baseline):** Proxmox hypervisors (mail relay via `proxmox maintain`), Synology NAS (`synology-nas`), home clients (mail relay via `client-* maintain`), `ubuntu maintain` (bootstrap `hdc` only), **Home Assistant** (HAOS), and **Windows** guests. **Nagios** LXC guests get the local admin user only (skips ClamAV, scan schedule, CrowdSec/Wazuh agents).
 - **Stub services** (`minecraft`, `jenkins`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
 
-Example: set `HDC_ADMIN_USER` in `.env`, then `node apps/hdc-cli/cli.mjs run service postgresql maintain --`
+Example: set `HDC_ADMIN_USER` in `.env`, then `hdc run service postgresql maintain --`
 
 ## Asterisk in this repo
 
@@ -195,7 +192,7 @@ Example: set `HDC_ADMIN_USER` in `.env`, then `node apps/hdc-cli/cli.mjs run ser
 
 Set `asterisk.twilio.termination_domain` from Twilio Elastic SIP Trunk; vault `HDC_TWILIO_SIP_USERNAME` / `HDC_TWILIO_SIP_PASSWORD`. Configure `asterisk.nat.external_*` to your WAN IP when behind NAT. Forward SIP (5060) and RTP (10000–20000) on the edge firewall — not via nginx-waf. Default outbound prefix: `9` + E.164.
 
-Example: `node apps/hdc-cli/cli.mjs run service asterisk deploy -- --instance a`
+Example: `hdc run service asterisk deploy -- --instance a`
 
 ## Pi-hole in this repo
 
@@ -234,9 +231,9 @@ Complete first-run admin setup in the web UI after deploy (OCI: SSH port-forward
 Example:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service uptime-kuma query -- --import-from-homepage --yes
-node apps/hdc-cli/cli.mjs run service uptime-kuma maintain -- --instance ext-a
-node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --resource uptime-kuma-ext-a --dry-run
+hdc run service uptime-kuma query -- --import-from-homepage --yes
+hdc run service uptime-kuma maintain -- --instance ext-a
+hdc run infrastructure oci-compute deploy -- --resource uptime-kuma-ext-a --dry-run
 ```
 
 ## SolidTime in this repo
@@ -254,7 +251,7 @@ node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --resource up
 
 Vault: `HDC_SOLIDTIME_DB_PASSWORD` (optional — auto-generated on first deploy if missing). Register the first account via the web UI after deploy.
 
-Example: `node apps/hdc-cli/cli.mjs run service solidtime deploy --`
+Example: `hdc run service solidtime deploy --`
 
 ## BIND DNS in this repo
 
@@ -270,7 +267,7 @@ Example: `node apps/hdc-cli/cli.mjs run service solidtime deploy --`
 
 TSIG: deploy auto-generates `bind.tsig_secret` in `config.json` and syncs vault `HDC_BIND_TSIG_KEY` when missing; `--regenerate-tsig` to rotate.
 
-Example: `node apps/hdc-cli/cli.mjs run service bind deploy -- --destroy-existing`
+Example: `hdc run service bind deploy -- --destroy-existing`
 
 ## PostgreSQL in this repo
 
@@ -286,7 +283,7 @@ Example: `node apps/hdc-cli/cli.mjs run service bind deploy -- --destroy-existin
 
 Vault: `HDC_POSTGRESQL_SUPERUSER_PASSWORD` (required; optional per-instance `HDC_POSTGRESQL_SUPERUSER_PASSWORD_A`, …); `HDC_POSTGRESQL_REPLICATION_PASSWORD` when any deployment has `role: standby`.
 
-Example: `node apps/hdc-cli/cli.mjs run service postgresql deploy -- --instance a`
+Example: `hdc run service postgresql deploy -- --instance a`
 
 ## step-ca in this repo
 
@@ -301,7 +298,7 @@ Example: `node apps/hdc-cli/cli.mjs run service postgresql deploy -- --instance 
 
 Vault: `HDC_STEP_CA_PASSWORD` (required; optional per-instance `HDC_STEP_CA_PASSWORD_A`). Distribute `/etc/step-ca/certs/root_ca.crt` to clients manually after deploy.
 
-Example: `node apps/hdc-cli/cli.mjs run service step-ca deploy --`
+Example: `hdc run service step-ca deploy --`
 
 ## Cassandra in this repo
 
@@ -317,7 +314,7 @@ Example: `node apps/hdc-cli/cli.mjs run service step-ca deploy --`
 
 Vault: `HDC_CASSANDRA_SUPERUSER_PASSWORD` (required when `cassandra.authenticator` is `PasswordAuthenticator`).
 
-Example: `node apps/hdc-cli/cli.mjs run service cassandra deploy -- --destroy-existing`
+Example: `hdc run service cassandra deploy -- --destroy-existing`
 
 ## Redis Cluster in this repo
 
@@ -333,7 +330,7 @@ Example: `node apps/hdc-cli/cli.mjs run service cassandra deploy -- --destroy-ex
 
 Vault: `HDC_REDIS_PASSWORD` (required for deploy/maintain/query).
 
-Example: `node apps/hdc-cli/cli.mjs run service redis deploy --`
+Example: `hdc run service redis deploy --`
 
 ## Valkey Cluster in this repo
 
@@ -349,7 +346,7 @@ Example: `node apps/hdc-cli/cli.mjs run service redis deploy --`
 
 Vault: `HDC_VALKEY_PASSWORD` (required for deploy/maintain/query). Guests need Ubuntu 24.04+ (or another release with `valkey` in default apt).
 
-Example: `node apps/hdc-cli/cli.mjs run service valkey deploy --`
+Example: `hdc run service valkey deploy --`
 
 ## Nginx WAF in this repo
 
@@ -369,7 +366,7 @@ Example: `node apps/hdc-cli/cli.mjs run service valkey deploy --`
 
 Vault: `HDC_NGINX_WAF_LETS_ENCRYPT_EMAIL` (required for Let's Encrypt deploy; legacy `HDC_NGINX_WAF_LE_EMAIL` still read with deprecation warning); `HDC_BIND_TSIG_KEY` when ACME uses **dns-01** (explicit challenge or http-01 fallback for names in `acme.dns.zone` only — Cloudflare DNS zones such as `brand-a.example` / `brand-b.example` use http-01 via proxy).
 
-Example: `node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --group edge`
+Example: `hdc run service nginx-waf maintain -- --group edge`
 
 ## Nginx web hosting in this repo
 
@@ -385,7 +382,7 @@ Example: `node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --group ed
 
 Vault: `HDC_NGINX_LE_EMAIL` (required for deploy); `HDC_BIND_TSIG_KEY` when `letsencrypt.challenge` is `dns-01`.
 
-Example: `node apps/hdc-cli/cli.mjs run service nginx deploy -- --instance a`
+Example: `hdc run service nginx deploy -- --instance a`
 
 ## Splunk in this repo
 
@@ -403,7 +400,7 @@ Set `splunk.version` and `splunk.build` in config (build id from Splunk download
 
 Vault: `HDC_SPLUNK_ADMIN_PASSWORD` (required for deploy).
 
-Example: `node apps/hdc-cli/cli.mjs run service splunk deploy -- --destroy-existing`
+Example: `hdc run service splunk deploy -- --destroy-existing`
 
 ## Kafka in this repo
 
@@ -419,7 +416,7 @@ Example: `node apps/hdc-cli/cli.mjs run service splunk deploy -- --destroy-exist
 
 Set `kafka.cluster_id` in config (UUID from `kafka-storage.sh random-uuid`). No vault secrets for v1 (PLAINTEXT listeners).
 
-Example: `node apps/hdc-cli/cli.mjs run service kafka deploy --`
+Example: `hdc run service kafka deploy --`
 
 ## Ollama in this repo
 
@@ -441,9 +438,9 @@ Set desired models under `defaults.ollama.models[]` and/or per `deployments[]` e
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service ollama deploy -- --instance a --destroy-existing
-node apps/hdc-cli/cli.mjs run service ollama maintain -- --prune --dry-run
-node apps/hdc-cli/cli.mjs run service ollama query -- --live
+hdc run service ollama deploy -- --instance a --destroy-existing
+hdc run service ollama maintain -- --prune --dry-run
+hdc run service ollama query -- --live
 ```
 
 ## vLLM in this repo
@@ -461,7 +458,7 @@ node apps/hdc-cli/cli.mjs run service ollama query -- --live
 
 Vault: `HDC_HF_TOKEN` (Hugging Face hub; required for gated models such as Gemma). Consumers should use **LiteLLM** (`openai` backends), not vLLM directly. QEMU guests need `cpu: host` (deploy sets this) so AVX is visible to the container. On thin-pool-full template nodes, clone with `storage: local-lvm-data` and optional `migrate_target_storage` for the destination node.
 
-Example: `node apps/hdc-cli/cli.mjs run service vllm deploy -- --instance a`
+Example: `hdc run service vllm deploy -- --instance a`
 
 ## Scanopy in this repo
 
@@ -478,7 +475,7 @@ Example: `node apps/hdc-cli/cli.mjs run service vllm deploy -- --instance a`
 
 Vault: `HDC_SCANOPY_POSTGRES_PASSWORD` (Postgres password for the compose stack).
 
-Example: `node apps/hdc-cli/cli.mjs run service scanopy deploy --`
+Example: `hdc run service scanopy deploy --`
 
 ## YaCy in this repo
 
@@ -495,7 +492,7 @@ Example: `node apps/hdc-cli/cli.mjs run service scanopy deploy --`
 
 Vault: `HDC_YACY_ADMIN_PASSWORD` (required for deploy/maintain unless `--skip-admin-password`). Default YaCy UI login is `admin` with this password after deploy.
 
-Example: `node apps/hdc-cli/cli.mjs run service yacy deploy --`
+Example: `hdc run service yacy deploy --`
 
 ## SearXNG in this repo
 
@@ -512,7 +509,7 @@ Example: `node apps/hdc-cli/cli.mjs run service yacy deploy --`
 
 Vault: `HDC_SEARXNG_SECRET` (auto-generated on first deploy if missing). Internal LAN: browse `http://<ct-ip>:8080` (set `searxng.public_url` only when exposing via reverse proxy).
 
-Example: `node apps/hdc-cli/cli.mjs run service searxng deploy --`
+Example: `hdc run service searxng deploy --`
 
 ## Immich in this repo
 
@@ -530,11 +527,11 @@ Example: `node apps/hdc-cli/cli.mjs run service searxng deploy --`
 
 Set `immich.public_url` (e.g. `https://immich.example.invalid`) for `IMMICH_SERVER_URL` in `.env` and `server.externalDomain` on admin sync. **`immich.mail.enabled`:** maps internal postfix-relay SMTP into `notifications.smtp` (`postfix-relay.home.example.invalid:25`, no auth). **`immich.system_config`:** full sanitized admin config from `query --import`; maintain deep-merges over live before PUT. Synology: `upload_location` / `db_data_location` under `/volume1/docker/immich/`. Proxmox: optional `data_disk_gb`; pin `proxmox.qemu.vmid`, `ip`, `configure.ssh.host`.
 
-**HTTPS:** nginx-waf `sites[]` upstream `http://<nas-ip>:2283`; Cloudflare A `immich` → WAF WAN IP. Prerequisite: `node apps/hdc-cli/cli.mjs run infrastructure synology-nas maintain -- --instance a`.
+**HTTPS:** nginx-waf `sites[]` upstream `http://<nas-ip>:2283`; Cloudflare A `immich` → WAF WAN IP. Prerequisite: `hdc run infrastructure synology-nas maintain -- --instance a`.
 
 Vault: `HDC_IMMICH_DB_PASSWORD` (required for deploy/maintain); `HDC_IMMICH_API_KEY` (admin API: `systemConfig.read` + `systemConfig.update` in Immich UI).
 
-Example: `node apps/hdc-cli/cli.mjs run service immich query -- --system-id vm-immich-a --import --yes`
+Example: `hdc run service immich query -- --system-id vm-immich-a --import --yes`
 
 ## Plex in this repo
 
@@ -552,7 +549,7 @@ Example: `node apps/hdc-cli/cli.mjs run service immich query -- --system-id vm-i
 
 First install remains manual in DSM (Package Center or `.spk` from Plex.tv). LAN UI: `http://192.0.2.9:32400/web`. No vault secrets for v1.
 
-Example: `node apps/hdc-cli/cli.mjs run service plex query -- --live`
+Example: `hdc run service plex query -- --live`
 
 ## Gatus in this repo
 
@@ -569,7 +566,7 @@ Example: `node apps/hdc-cli/cli.mjs run service plex query -- --live`
 
 Set `gatus.version` (e.g. `v5.36.0`) and `gatus.endpoints[]` in config. Alerting secrets may use `${ENV}` in `config_yaml_extra` (store values in vault; no `env_required` for v1).
 
-Example: `node apps/hdc-cli/cli.mjs run service gatus deploy --`
+Example: `hdc run service gatus deploy --`
 
 ## Globalping in this repo
 
@@ -586,7 +583,7 @@ Example: `node apps/hdc-cli/cli.mjs run service gatus deploy --`
 
 Monitoring IP range: see **Monitoring** group in `hdc-private/operations/ip-allocations.md`. Vault: `HDC_GLOBALPING_ADOPTION_TOKEN` (Globalping dashboard adoption token → `GP_ADOPTION_TOKEN`). No nginx-waf — outbound probe only. Confirm adoption at https://dash.globalping.io/probes after deploy.
 
-Example: `node apps/hdc-cli/cli.mjs run service globalping deploy -- --instance a`
+Example: `hdc run service globalping deploy -- --instance a`
 
 ## CrowdSec in this repo
 
@@ -605,7 +602,7 @@ Example: `node apps/hdc-cli/cli.mjs run service globalping deploy -- --instance 
 
 Vault: `HDC_CROWDSEC_ENROLL_KEY` (agent enrollment). UniFi API sync uses `HDC_UNIFI_NETWORK_API_KEY` (shared with **unifi-network**). Bouncer keys for firewall nodes are minted per sync via `cscli bouncers add`.
 
-Example: `node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-bouncers`
+Example: `hdc run service crowdsec maintain -- --sync-bouncers`
 
 ## Wazuh in this repo
 
@@ -624,7 +621,7 @@ Example: `node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-boun
 
 Vault: `HDC_WAZUH_API_PASSWORD`, `HDC_WAZUH_AGENT_PASSWORD`.
 
-Example: `node apps/hdc-cli/cli.mjs run service wazuh deploy -- --instance a`
+Example: `hdc run service wazuh deploy -- --instance a`
 
 ## Trivy in this repo
 
@@ -641,7 +638,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wazuh deploy -- --instance a`
 
 No vault secrets for v1.
 
-Example: `node apps/hdc-cli/cli.mjs run service trivy maintain --`
+Example: `hdc run service trivy maintain --`
 
 ## WireGuard in this repo
 
@@ -658,7 +655,7 @@ Example: `node apps/hdc-cli/cli.mjs run service trivy maintain --`
 
 Vault: `HDC_WIREGUARD_PRIVATE_KEY`; per-peer `HDC_WIREGUARD_PEER_*` keys from config. Publish UniFi UDP forward for `listen_port` (default 51820).
 
-Example: `node apps/hdc-cli/cli.mjs run service wireguard deploy --`
+Example: `hdc run service wireguard deploy --`
 
 ## Keycloak in this repo
 
@@ -676,7 +673,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wireguard deploy --`
 
 Vault: `HDC_KEYCLOAK_ADMIN_PASSWORD`; `HDC_KEYCLOAK_DB_PASSWORD` (bundled or external); per-user `password_vault_key` (e.g. `HDC_KEYCLOAK_USER_HDC_ALICE_PASSWORD`); confidential clients use `secret_vault_key` (e.g. `HDC_WEB_OIDC_CLIENT_SECRET`); Microsoft (and other) IdPs use `client_id` + `client_secret_vault_key` (e.g. `HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET` — create the Entra secret manually; see the **azure** package). Realm `mail.enabled` maps SMTP to postfix-relay `client_defaults` (no auth). Declare OIDC clients under `realms[].clients[]` and brokers under `realms[].identity_providers[]` (reconciled on maintain). Set `keycloak.external_url` for the public HTTPS hostname.
 
-Example: `node apps/hdc-cli/cli.mjs run service keycloak deploy --`
+Example: `hdc run service keycloak deploy --`
 
 ## Greenbone in this repo
 
@@ -693,7 +690,7 @@ Example: `node apps/hdc-cli/cli.mjs run service keycloak deploy --`
 
 Vault: `HDC_GREENBONE_ADMIN_PASSWORD`. First bootstrap may take a long time for NVT feed sync.
 
-Example: `node apps/hdc-cli/cli.mjs run service greenbone deploy --`
+Example: `hdc run service greenbone deploy --`
 
 ## Nagios in this repo
 
@@ -709,7 +706,7 @@ Example: `node apps/hdc-cli/cli.mjs run service greenbone deploy --`
 | `maintain` | Regenerate from BIND and push to instances |
 | `query` | Deployment summary + BIND host counts; `--live` for systemd/config per CT |
 
-Example: `node apps/hdc-cli/cli.mjs run service nagios deploy -- --instance a`
+Example: `hdc run service nagios deploy -- --instance a`
 
 ## Hermes Agent in this repo
 
@@ -728,7 +725,7 @@ Set `hermes.ollama_backends[]` to local Ollama HTTP APIs and `hermes.model.defau
 
 Vault: prefer `HDC_HERMES_OPENROUTER_API_KEY`; falls back to `HDC_OPENROUTER_API_KEY`. `HDC_HERMES_DASHBOARD_PASSWORD` required; `HDC_HERMES_DISCORD_BOT_TOKEN` when Discord is enabled; `HDC_HERMES_DASHBOARD_AUTH_SECRET` auto-generated if missing.
 
-Example: `node apps/hdc-cli/cli.mjs run service hermes deploy -- --instance a`
+Example: `hdc run service hermes deploy -- --instance a`
 
 ## HDC Agents fleet in this repo
 
@@ -750,7 +747,7 @@ Set `hdc_agents.schedules[]` with `cron`, `cli`, `cli_args`, and optional per-jo
 
 Vault: per-role `HDC_AGENT_LITELLM_KEY_HDC_*`. Web UI: Keycloak SSO (`hdc_agents.oidc` + vault `HDC_WEB_OIDC_CLIENT_SECRET` from keycloak maintain) plus `HDC_WEB_UI_SESSION_SECRET` / `HDC_WEB_API_TOKEN`. Register agents on LiteLLM via `litellm.a2a_agents[]`. Deploy awaits [`plan.md`](../hdc-private/clumps/services/hdc-agents/plan.md) approval.
 
-Example: `node apps/hdc-cli/cli.mjs run service hdc-agents deploy -- --instance a`
+Example: `hdc run service hdc-agents deploy -- --instance a`
 
 ## Open WebUI in this repo
 
@@ -767,7 +764,7 @@ Example: `node apps/hdc-cli/cli.mjs run service hdc-agents deploy -- --instance 
 
 Vault: `HDC_OPEN_WEBUI_SECRET_KEY` (required for deploy/maintain); per `openai_backends[].api_key_vault_key` (e.g. `HDC_LITELLM_MASTER_KEY`). Set `ollama_backends[].url` to reachable Ollama APIs (e.g. `http://192.0.2.25:11434` for `vm-ollama-a`); does not bundle Ollama — use the `ollama` package for inference hosts. Optional LiteLLM: `openai_backends[].url` like `http://192.0.2.116:4000/v1`.
 
-Example: `node apps/hdc-cli/cli.mjs run service open-webui deploy --`
+Example: `hdc run service open-webui deploy --`
 
 ## Vaultwarden in this repo
 
@@ -786,7 +783,7 @@ Vault: `HDC_VAULTWARDEN_ADMIN_TOKEN` (required for deploy/maintain; stays in **l
 
 **hdc secret backend:** When `HDC_VAULTWARDEN_URL` and `HDC_VAULTWARDEN_EMAIL` (or personal API key `HDC_VAULTWARDEN_KEY_CLIENT_ID` + `HDC_VAULTWARDEN_KEY_CLIENT_SECRET`) are set, `HDC_SECRET_BACKEND=auto` (default) routes `getSecret` / `secrets set` through **Bitwarden CLI (`bw`)** against Vaultwarden. Login items live in the **HDC organization** (`HDC_VAULTWARDEN_ORGANIZATION_ID` or name `HDC`) and **collection** (`HDC_VAULTWARDEN_COLLECTION_ID`); item names match env keys (`HDC_PROXMOX_API_TOKEN`, …). **Website URLs** on login items are derived from clump configs (`secrets sync-uris`; also set on `secrets push` / `secrets set` when a URL is known). Bootstrap keys stay local only: `HDC_VAULTWARDEN_MASTER_PASSWORD`, `HDC_VAULTWARDEN_ADMIN_TOKEN`, `HDC_VAULTWARDEN_KEY_CLIENT_ID`, `HDC_VAULTWARDEN_KEY_CLIENT_SECRET`. Bulk migrate: `secrets push --force`. Unlock: masked master-password prompt, or `secrets unlock`. See [`docs/manually-deployed/bitwarden-cli.md`](docs/manually-deployed/bitwarden-cli.md).
 
-Example: `node apps/hdc-cli/cli.mjs run service vaultwarden deploy -- --instance a`
+Example: `hdc run service vaultwarden deploy -- --instance a`
 
 ## Mailcow in this repo
 
@@ -807,7 +804,7 @@ Set `mailcow.hostname` (MAILCOW_HOSTNAME FQDN), optional `mailcow.api_url` (defa
 
 Vault: `HDC_MAILCOW_DBPASS`, `HDC_MAILCOW_DBROOT`, `HDC_MAILCOW_REDISPASS` (auto-generated on first deploy if missing); `HDC_MAILCOW_API_KEY` (create in Mailcow admin after deploy; required for API reconciliation); per-mailbox `password_vault_key` values (auto-generated on first maintain when missing).
 
-Example: `node apps/hdc-cli/cli.mjs run service mailcow deploy -- --instance a --destroy-existing`
+Example: `hdc run service mailcow deploy -- --instance a --destroy-existing`
 
 ## Wallos in this repo
 
@@ -824,7 +821,7 @@ Example: `node apps/hdc-cli/cli.mjs run service mailcow deploy -- --instance a -
 
 No vault secrets for v1 — complete first-run admin setup in the web UI after deploy. `wallos.public_url` is optional (set when adding nginx-waf later). Data persists under `/opt/wallos/db` and `/opt/wallos/logos` on the CT.
 
-Example: `node apps/hdc-cli/cli.mjs run service wallos deploy -- --instance a`
+Example: `hdc run service wallos deploy -- --instance a`
 
 ## Memos in this repo
 
@@ -841,7 +838,7 @@ Example: `node apps/hdc-cli/cli.mjs run service wallos deploy -- --instance a`
 
 No vault secrets for v1 — create the first account in the Memos web UI after deploy. `memos.public_url` is optional (set when adding nginx-waf later). Data persists under `/opt/memos/data` on the CT.
 
-Example: `node apps/hdc-cli/cli.mjs run service memos deploy -- --instance a`
+Example: `hdc run service memos deploy -- --instance a`
 
 ## MeshCentral in this repo
 
@@ -861,10 +858,10 @@ Set `meshcentral.public_url` (`https://…`) for TLS offload behind nginx-waf. V
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service meshcentral deploy -- --instance a
-node apps/hdc-cli/cli.mjs run service meshcentral query -- --live
-node apps/hdc-cli/cli.mjs run service meshcentral query -- --import --yes
-node apps/hdc-cli/cli.mjs run service meshcentral maintain -- --device lan-1 --power wake
+hdc run service meshcentral deploy -- --instance a
+hdc run service meshcentral query -- --live
+hdc run service meshcentral query -- --import --yes
+hdc run service meshcentral maintain -- --device lan-1 --power wake
 ```
 
 ## Rackula in this repo
@@ -882,7 +879,7 @@ node apps/hdc-cli/cli.mjs run service meshcentral maintain -- --device lan-1 --p
 
 Optional vault `HDC_RACKULA_API_WRITE_TOKEN` when `rackula.api_write_token_enabled` is true (API PUT/DELETE protection). LAN UI: `http://<ct-ip>:8080`. Layouts persist under `/opt/rackula/data` (UID 1001).
 
-Example: `node apps/hdc-cli/cli.mjs run service rackula deploy -- --instance a`
+Example: `hdc run service rackula deploy -- --instance a`
 
 ## OpenSpeedTest in this repo
 
@@ -899,7 +896,7 @@ Example: `node apps/hdc-cli/cli.mjs run service rackula deploy -- --instance a`
 
 No vault secrets for v1. LAN UI: `http://<ct-ip>:3000`. Optional `openspeedtest.public_url` when adding nginx-waf later.
 
-Example: `node apps/hdc-cli/cli.mjs run service openspeedtest deploy -- --instance a`
+Example: `hdc run service openspeedtest deploy -- --instance a`
 
 ## A2A Registry in this repo
 
@@ -925,7 +922,7 @@ Use **litellm** `a2a_agents[]` and [docs/multi-agent-ops.md](docs/multi-agent-op
 
 No vault secrets for v1. LAN UI: `http://<ct-ip>:8080`. Optional `it_tools.public_url` when adding nginx-waf later.
 
-Example: `node apps/hdc-cli/cli.mjs run service it-tools deploy -- --instance a`
+Example: `hdc run service it-tools deploy -- --instance a`
 
 ## OmniTools in this repo
 
@@ -942,7 +939,7 @@ Example: `node apps/hdc-cli/cli.mjs run service it-tools deploy -- --instance a`
 
 No vault secrets for v1. LAN UI: `http://<ct-ip>:8080`. Optional `omni_tools.public_url` when adding nginx-waf later.
 
-Example: `node apps/hdc-cli/cli.mjs run service omni-tools deploy -- --instance a`
+Example: `hdc run service omni-tools deploy -- --instance a`
 
 ## Stirling PDF in this repo
 
@@ -959,7 +956,7 @@ Example: `node apps/hdc-cli/cli.mjs run service omni-tools deploy -- --instance 
 
 Vault: `HDC_STIRLING_PDF_ADMIN_PASSWORD` (initial admin login when `stirling_pdf.security.enable_login` is true). LAN UI: `http://<ct-ip>:8080`. Optional `stirling_pdf.public_url` when adding nginx-waf later (raise `client_max_body_size` for large PDF uploads).
 
-Example: `node apps/hdc-cli/cli.mjs run service stirling-pdf deploy -- --instance a`
+Example: `hdc run service stirling-pdf deploy -- --instance a`
 
 ## n8n in this repo
 
@@ -976,7 +973,7 @@ Example: `node apps/hdc-cli/cli.mjs run service stirling-pdf deploy -- --instanc
 
 Set `n8n.public_url` (`https://…`) when using nginx-waf for webhooks and UI; omit for HTTP on the CT IP only. Vault: `HDC_N8N_ENCRYPTION_KEY` (required for credential encryption; auto-generated on first deploy if missing). After deploy, add BIND A record and nginx-waf `sites[]` upstream to `http://<ct-ip>:5678` when using a public hostname.
 
-Example: `node apps/hdc-cli/cli.mjs run service n8n deploy -- --instance a`
+Example: `hdc run service n8n deploy -- --instance a`
 
 ## Listmonk in this repo
 
@@ -993,7 +990,7 @@ Example: `node apps/hdc-cli/cli.mjs run service n8n deploy -- --instance a`
 
 Set `listmonk.public_url` (`https://…`) when using nginx-waf; omit for HTTP on the CT IP only. Vault: `HDC_LISTMONK_ADMIN_PASSWORD` (required before deploy; creates super-admin on first `compose up`); `HDC_LISTMONK_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `listmonk.mail.enabled` maps internal postfix-relay to `LISTMONK_smtp__main__*` env vars; otherwise configure SMTP in the Listmonk UI. After deploy, add BIND A record and nginx-waf `sites[]` upstream to `http://<ct-ip>:9000` when using a public hostname.
 
-Example: `node apps/hdc-cli/cli.mjs run service listmonk deploy -- --instance a`
+Example: `hdc run service listmonk deploy -- --instance a`
 
 ## Shlink in this repo
 
@@ -1010,7 +1007,7 @@ Example: `node apps/hdc-cli/cli.mjs run service listmonk deploy -- --instance a`
 
 Set `shlink.default_domain` and `shlink.public_url` (`https://…`) when using nginx-waf for short links and the REST API; set `shlink.web_client.public_url` for the admin UI. Vault: `HDC_SHLINK_DB_PASSWORD` and `HDC_SHLINK_INITIAL_API_KEY` (auto-generated on first deploy if missing); optional `HDC_SHLINK_GEOLITE_LICENSE_KEY` for visit geolocation. After deploy, add BIND A records and nginx-waf `sites[]` upstreams to `http://<ct-ip>:8080` (short/API) and `http://<ct-ip>:8081` (web client).
 
-Example: `node apps/hdc-cli/cli.mjs run service shlink deploy -- --instance a`
+Example: `hdc run service shlink deploy -- --instance a`
 
 ## Vikunja in this repo
 
@@ -1027,7 +1024,7 @@ Example: `node apps/hdc-cli/cli.mjs run service shlink deploy -- --instance a`
 
 Set `vikunja.public_url` (`https://…/` with trailing slash) when using nginx-waf. Vault: `HDC_VIKUNJA_JWT_SECRET` and `HDC_VIKUNJA_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `vikunja.mail.enabled` maps internal postfix-relay to `VIKUNJA_MAILER_*` env vars. Register the first account in the Vikunja UI after deploy. nginx-waf upstream: `http://<ct-ip>:3456` with WebSockets enabled.
 
-Example: `node apps/hdc-cli/cli.mjs run service vikunja deploy -- --instance a`
+Example: `hdc run service vikunja deploy -- --instance a`
 
 ## Paperless-ngx in this repo
 
@@ -1044,7 +1041,7 @@ Example: `node apps/hdc-cli/cli.mjs run service vikunja deploy -- --instance a`
 
 Set `paperless_ngx.public_url` (`https://…`) when using nginx-waf. Vault: `HDC_PAPERLESS_SECRET_KEY` and `HDC_PAPERLESS_DB_PASSWORD` (auto-generated on first deploy if missing). Optional `paperless_ngx.admin.enabled` + `HDC_PAPERLESS_ADMIN_PASSWORD` for first-boot superuser. Drop files in `/opt/paperless-ngx/consume` for automatic import. nginx-waf upstream: `http://<ct-ip>:8000` (consider larger `client_max_body_size` for uploads).
 
-Example: `node apps/hdc-cli/cli.mjs run service paperless-ngx deploy -- --instance a`
+Example: `hdc run service paperless-ngx deploy -- --instance a`
 
 ## Paperclip in this repo
 
@@ -1061,7 +1058,7 @@ Example: `node apps/hdc-cli/cli.mjs run service paperless-ngx deploy -- --instan
 
 Default deployment mode is **authenticated/private** (login required on LAN). Optional `paperclip.public_url` when adding nginx-waf later. Vault: `HDC_PAPERCLIP_BETTER_AUTH_SECRET` and `HDC_PAPERCLIP_DB_PASSWORD` (auto-generated on first deploy if missing); `HDC_PAPERCLIP_API_KEY` for company bootstrap. **HDC skills** under [`clumps/services/paperclip/skills/`](clumps/services/paperclip/skills/) target **hdc-web-server** / the **hdc-agents** fleet (`HDC_WEB_API_TOKEN`). After deploy, open the LAN URL and **Claim this instance** in the browser for first admin (CLI fallback: `paperclipai auth bootstrap-ceo` in the server container). Pin `paperclip.image_tag` to a [GitHub release tag](https://github.com/paperclipai/paperclip/releases).
 
-Example: `node apps/hdc-cli/cli.mjs run service paperclip deploy -- --instance a`
+Example: `hdc run service paperclip deploy -- --instance a`
 
 ## Home Assistant in this repo
 
@@ -1078,7 +1075,7 @@ Example: `node apps/hdc-cli/cli.mjs run service paperclip deploy -- --instance a
 
 Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override). No vault secrets for v1.
 
-Example: `node apps/hdc-cli/cli.mjs run service homeassistant deploy -- --instance a --destroy-existing`
+Example: `hdc run service homeassistant deploy -- --instance a --destroy-existing`
 
 ## Kali desktop in this repo
 
@@ -1098,8 +1095,8 @@ Hypervisor prerequisites for template build: `libguestfs-tools`, `p7zip-full`. V
 Example:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service kali-desktop deploy -- --instance a --build-template
-node apps/hdc-cli/cli.mjs run service kali-desktop deploy -- --instance a
+hdc run service kali-desktop deploy -- --instance a --build-template
+hdc run service kali-desktop deploy -- --instance a
 ```
 
 ## Windows desktop in this repo
@@ -1120,8 +1117,8 @@ Vault: `HDC_WINDOWS_DESKTOP_ADMIN_PASSWORD` (required). Windows + virtio-win ISO
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service windows-desktop deploy -- --build-template --destroy-existing --wait-install
-node apps/hdc-cli/cli.mjs run service windows-desktop deploy -- --instance a --wait-install
+hdc run service windows-desktop deploy -- --build-template --destroy-existing --wait-install
+hdc run service windows-desktop deploy -- --instance a --wait-install
 ```
 
 ## Nextcloud in this repo
@@ -1139,7 +1136,7 @@ node apps/hdc-cli/cli.mjs run service windows-desktop deploy -- --instance a --w
 
 No vault secrets for v1. After deploy, open `https://<ct-ip>:8080` (use IP, not domain, per AIO HSTS guidance) and complete the AIO wizard. For nginx-waf, set `nextcloud.aio.reverse_proxy.enabled` and follow [AIO reverse-proxy docs](https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md).
 
-Example: `node apps/hdc-cli/cli.mjs run nextcloud deploy --`
+Example: `hdc run nextcloud deploy --`
 
 ## Postiz in this repo
 
@@ -1156,7 +1153,7 @@ Example: `node apps/hdc-cli/cli.mjs run nextcloud deploy --`
 
 Vault: `HDC_POSTIZ_DB_PASSWORD`, `HDC_POSTIZ_JWT_SECRET` (auto-generated on first deploy if missing). Set `postiz.public_url` before deploy when using a stable HTTPS URL; otherwise deploy uses CT IP and `maintain --rebuild` after nginx-waf. Community helper script is marked in development — pin `postiz.version` after validation.
 
-Example: `node apps/hdc-cli/cli.mjs run service postiz deploy --`
+Example: `hdc run service postiz deploy --`
 
 ## LMS (LM Studio) in this repo
 
@@ -1175,7 +1172,7 @@ Set `lms.load_on_start` to pin a model at boot. Optional `install.gpu` + `hostpc
 
 No vault secrets for v1.
 
-Example: `node apps/hdc-cli/cli.mjs run service lms deploy -- --instance a`
+Example: `hdc run service lms deploy -- --instance a`
 
 ## Llama.cpp in this repo
 
@@ -1194,7 +1191,7 @@ Example: `node apps/hdc-cli/cli.mjs run service lms deploy -- --instance a`
 
 Set `server.model` or `server.hf_model` in config to enable and start the unit at deploy; otherwise install leaves the service disabled until a model is configured.
 
-Example: `node apps/hdc-cli/cli.mjs run service llama-cpp deploy -- --instance a --destroy-existing`
+Example: `hdc run service llama-cpp deploy -- --instance a --destroy-existing`
 
 ## Home clients in this repo
 
@@ -1222,8 +1219,8 @@ Vault: `HDC_WINRM_USER_PASSWORD` (shared WinRM password); optional per-host `HDC
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run client windows query --
-node apps/hdc-cli/cli.mjs run client client-ubuntu maintain -- --reboot --host-id ws-example
+hdc run client windows query --
+hdc run client client-ubuntu maintain -- --reboot --host-id ws-example
 ```
 
 ## Proxmox in this repo
@@ -1247,8 +1244,8 @@ Bootstrap the local `hdc` user on Ubuntu/bootstrap hosts with `run infrastructur
 **Guest root disk expansion (opt-in):** Pass `--expand-guest-rootfs` on `proxmox maintain` to probe `/` on running Linux LXC/QEMU guests and expand root disks in 8 GiB steps until used space is below 50% (defaults from `provision.guest_rootdisk` in config). Skips Windows/HAOS name patterns and guests without a working probe (LXC `pct exec`, QEMU guest agent, or inventory SSH). Optional `--guest-rootfs-threshold`, `--guest-rootfs-increment-gb`, `--dry-run`. Does not update per-service `rootfs_gb` in clump configs.
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- --expand-guest-rootfs --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure proxmox maintain -- --expand-guest-rootfs
+hdc run infrastructure proxmox maintain -- --expand-guest-rootfs --dry-run
+hdc run infrastructure proxmox maintain -- --expand-guest-rootfs
 ```
 
 **QEMU first-boot SSH wait:** Ubuntu cloud templates use `serial0: socket` / `vga: serial0`; clones can hang at the serial console on first boot. Deploy and maintain use [`qemu-guest-ssh-wait.mjs`](clumps/lib/qemu-guest-ssh-wait.mjs): optional settle delay, short SSH probe, then Proxmox API reboot if the probe fails. Tune `provision.qemu.first_boot` in proxmox config; flags: `--skip-first-boot-reboot`, `--first-boot-reboot`.
@@ -1276,11 +1273,11 @@ Env (Entra): `HDC_AZURE_ENTRA_TENANT_ID`, `HDC_AZURE_ENTRA_<APP>_APPLICATION_ID`
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section all
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section entra
+hdc run infrastructure azure query -- --section all
+hdc run infrastructure azure query -- --section entra --import --yes
+hdc run infrastructure azure deploy -- --section entra --dry-run
+hdc run infrastructure azure deploy -- --section compute --instance a --dry-run
+hdc run infrastructure azure maintain -- --section entra
 ```
 
 ## GCP compute in this repo
@@ -1298,7 +1295,7 @@ node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section entra
 
 Env: `HDC_GCP_COMPUTE_PROJECT_ID`. Vault: `HDC_GCP_COMPUTE_SERVICE_ACCOUNT_JSON`. Modes: `gcp-vm`, `gcp-cloud-run`. HostProvisioner: [`gcp-compute-host-provisioner.mjs`](clumps/infrastructure/gcp-compute/lib/gcp-compute-host-provisioner.mjs).
 
-Example: `node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run`
+Example: `hdc run infrastructure gcp-compute deploy -- --instance a --dry-run`
 
 ## Oracle Cloud compute in this repo
 
@@ -1315,7 +1312,7 @@ Example: `node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --i
 
 Env: `HDC_OCI_TENANCY_OCID`, `HDC_OCI_USER_OCID`, `HDC_OCI_FINGERPRINT`, `HDC_OCI_REGION`. Vault: `HDC_OCI_API_PRIVATE_KEY`. HostProvisioner: [`oci-compute-host-provisioner.mjs`](clumps/infrastructure/oci-compute/lib/oci-compute-host-provisioner.mjs) (`oci-vm`, `oci-container` modes).
 
-Example: `node apps/hdc-cli/cli.mjs run infrastructure oci-compute deploy -- --dry-run`
+Example: `hdc run infrastructure oci-compute deploy -- --dry-run`
 
 ## AWS infrastructure in this repo
 
@@ -1337,10 +1334,10 @@ Service packages may use `aws-ec2` / `aws-ecs` deploy modes (pilot: **scanopy**)
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure aws query --
-node apps/hdc-cli/cli.mjs run infrastructure aws deploy -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure aws deploy -- --yes
-node apps/hdc-cli/cli.mjs run infrastructure aws maintain --
+hdc run infrastructure aws query --
+hdc run infrastructure aws deploy -- --dry-run
+hdc run infrastructure aws deploy -- --yes
+hdc run infrastructure aws maintain --
 ```
 
 ## GCP OAuth (Google Auth Platform) in this repo
@@ -1359,9 +1356,9 @@ Vault: per-app `HDC_GCP_OAUTH_<APP>_CLIENT_ID` and `HDC_GCP_OAUTH_<APP>_CLIENT_S
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure gcp-oauth maintain -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure gcp-oauth maintain -- --import ./client_secret.json
-node apps/hdc-cli/cli.mjs run infrastructure gcp-oauth query -- --import ./client_secret.json --require-vault
+hdc run infrastructure gcp-oauth maintain -- --dry-run
+hdc run infrastructure gcp-oauth maintain -- --import ./client_secret.json
+hdc run infrastructure gcp-oauth query -- --import ./client_secret.json --require-vault
 ```
 
 ## Cloudflare in this repo
@@ -1384,10 +1381,10 @@ Per-zone opt-in: include `page_rules`, `email_routing_rules`, or `email_routing.
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare query --
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare query -- --import-page-rules --yes
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone example.invalid --prune
+hdc run infrastructure cloudflare query --
+hdc run infrastructure cloudflare query -- --import-page-rules --yes
+hdc run infrastructure cloudflare maintain -- --dry-run
+hdc run infrastructure cloudflare maintain -- --zone example.invalid --prune
 ```
 
 ## Cloudflare Workers and Pages in this repo
@@ -1407,7 +1404,7 @@ Token: `HDC_CLOUDFLARE_API_TOKEN` (shared with DNS package). Account id: `HDC_CL
 
 Project source lives under hdc-private `clumps/infrastructure/cloudflare-workers/workers/<id>/` and `pages/<id>/`.
 
-Example: `node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer`
+Example: `hdc run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer`
 
 ## Synology NAS in this repo
 
@@ -1431,8 +1428,8 @@ Flags: `--instance a|b`, `--system-id nas-a`, `--skip-dsm-upgrade`, `--skip-pack
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure synology-nas query --
-node apps/hdc-cli/cli.mjs run infrastructure synology-nas maintain --
+hdc run infrastructure synology-nas query --
+hdc run infrastructure synology-nas maintain --
 ```
 
 ## SMTP2GO in this repo
@@ -1459,11 +1456,11 @@ Vault: `HDC_SMTP2GO_API_KEY` (API). Postfix relay SMTP user/password remain in *
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query --
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain --
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --prune
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list
+hdc run infrastructure smtp2go query --
+hdc run infrastructure smtp2go query -- --import --yes
+hdc run infrastructure smtp2go maintain --
+hdc run infrastructure smtp2go maintain -- --prune
+hdc run infrastructure smtp2go maintain -- --skip-ip-allow-list
 ```
 
 ## OpenRouter in this repo
@@ -1484,10 +1481,10 @@ Vault: `HDC_OPENROUTER_MANAGEMENT_API_KEY` (Management API). Consumers use separ
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query --
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain --
-node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
+hdc run infrastructure openrouter query --
+hdc run infrastructure openrouter query -- --import --yes
+hdc run infrastructure openrouter maintain --
+hdc run infrastructure openrouter maintain -- --key-id hermes --dry-run
 ```
 
 ## Discord in this repo
@@ -1508,9 +1505,9 @@ Vault: per-app `bot_token_vault_key` (e.g. `HDC_HERMES_DISCORD_BOT_TOKEN` for He
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure discord query --
-node apps/hdc-cli/cli.mjs run infrastructure discord query -- --import --yes --require-vault
-node apps/hdc-cli/cli.mjs run infrastructure discord maintain -- --app hermes --dry-run
+hdc run infrastructure discord query --
+hdc run infrastructure discord query -- --import --yes --require-vault
+hdc run infrastructure discord maintain -- --app hermes --dry-run
 ```
 
 ## Twilio in this repo
@@ -1530,8 +1527,8 @@ Vault: `HDC_TWILIO_ACCOUNT_SID`, `HDC_TWILIO_AUTH_TOKEN` (API). Asterisk SIP Cre
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure twilio query --
-node apps/hdc-cli/cli.mjs run infrastructure twilio query -- --import --yes
+hdc run infrastructure twilio query --
+hdc run infrastructure twilio query -- --import --yes
 ```
 
 ## UptimeRobot in this repo
@@ -1552,9 +1549,9 @@ Vault: `HDC_UPTIMEROBOT_API_KEY` (Main API key from Integrations & API → API).
 Examples:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure uptimerobot query --
-node apps/hdc-cli/cli.mjs run infrastructure uptimerobot query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure uptimerobot maintain --
+hdc run infrastructure uptimerobot query --
+hdc run infrastructure uptimerobot query -- --import --yes
+hdc run infrastructure uptimerobot maintain --
 ```
 
 ## External reference: Proxmox VE Helper-Scripts
@@ -1572,7 +1569,7 @@ Use this collection as a **reference** when:
 ## Secrets and safety
 
 - Never commit `.env`, vault files, or secret values in chat, sidecars, or markdown.
-- Store secrets via `node apps/hdc-cli/cli.mjs secrets set <ENV_NAME>` (Vaultwarden when configured, else local `~/.hdc/vault.enc`); document only env var **names** in JSON `auth` fields.
+- Store secrets via `hdc secrets set <ENV_NAME>` (Vaultwarden when configured, else local `~/.hdc/vault.enc`); document only env var **names** in JSON `auth` fields.
 - **Backends:** `HDC_SECRET_BACKEND` = `local` | `vaultwarden` | `auto` (default). Vaultwarden mode requires [Bitwarden CLI](docs/manually-deployed/bitwarden-cli.md), `HDC_VAULTWARDEN_URL`, and `HDC_VAULTWARDEN_EMAIL` or API key pair (`HDC_VAULTWARDEN_KEY_CLIENT_ID` + `HDC_VAULTWARDEN_KEY_CLIENT_SECRET`) in `.env`.
 - See [`.env.example`](.env.example) for Proxmox, Nagios, Postfix relay, vault, and Vaultwarden backend variables.
 
@@ -1626,7 +1623,7 @@ Examples:
 ```bash
 node apps/hdc-mcp-server/server.mjs
 node apps/hdc-agent-server/bin/run-daily.mjs --dry-run
-node apps/hdc-cli/cli.mjs run service hdc-agents maintain --
+hdc run service hdc-agents maintain --
 ```
 
 ## Deeper context (pointers)

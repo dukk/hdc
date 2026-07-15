@@ -143,7 +143,7 @@ describe("dispatcher", () => {
         status: "approved",
         priority: "high",
         title: "Fix immich",
-        suggested_commands: ["node apps/hdc-cli/cli.mjs run service immich query -- --live"],
+        suggested_commands: ["hdc run service immich query -- --live"],
       });
       const r = await runDispatcher({
         role: "hdc-manager",
@@ -176,14 +176,14 @@ describe("dispatcher", () => {
       canAutoRunTask({
         status: "pending",
         needs_decision: false,
-        suggested_commands: ["node apps/hdc-cli/cli.mjs run service x query"],
+        suggested_commands: ["hdc run service x query"],
       }),
     ).toBe(true);
     expect(
       canAutoRunTask({
         status: "pending",
         needs_decision: true,
-        suggested_commands: ["node apps/hdc-cli/cli.mjs run service x query"],
+        suggested_commands: ["hdc run service x query"],
       }),
     ).toBe(false);
   });

@@ -13,13 +13,13 @@ Provision the **Home Data Center** Paperclip company with HDC skills and agents 
 ## 1. Push hdc-agents (web + fleet)
 
 ```bash
-node apps/hdc-cli/cli.mjs run service hdc-agents maintain --
+hdc run service hdc-agents maintain --
 ```
 
 ## 2. Bootstrap company
 
 ```bash
-node apps/hdc-cli/cli.mjs run service paperclip query -- --bootstrap-company --yes
+hdc run service paperclip query -- --bootstrap-company --yes
 ```
 
 ## 3. Agents (example)

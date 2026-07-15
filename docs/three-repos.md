@@ -111,17 +111,17 @@ cp .env.example .env
 node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs
 
 # Pull upstream package code into ~/.hdc/clump-repos/ (no hdc-clumps clone required):
-node apps/hdc-cli/cli.mjs clumps init
-node apps/hdc-cli/cli.mjs clumps sync
+hdc clumps init
+hdc clumps sync
 
 # Initialize secrets on the operator machine:
-node apps/hdc-cli/cli.mjs secrets init
-node apps/hdc-cli/cli.mjs secrets set HDC_PROXMOX_API_TOKEN   # example; set keys your packages need
+hdc secrets init
+hdc secrets set HDC_PROXMOX_API_TOKEN   # example; set keys your packages need
 
 # Edit IPs, hostnames, and inventory in hdc-private only.
 # Verify:
-node apps/hdc-cli/cli.mjs list
-node apps/hdc-cli/cli.mjs run infrastructure proxmox query --
+hdc list
+hdc run infrastructure proxmox query --
 ```
 
 Use RFC 5737 documentation addresses (`192.0.2.x`) and `example.invalid` domains in any **public** forks or examples so you do not publish a real LAN.
@@ -167,11 +167,11 @@ Full checklists:
 
 ## Day-to-day workflow
 
-1. **Discover** — `node apps/hdc-cli/cli.mjs list`; read the package README under hdc-clumps (`services/<id>/README.md`, etc.).
+1. **Discover** — `hdc list`; read the package README under hdc-clumps (`services/<id>/README.md`, etc.).
 2. **Configure** — edit hdc-private `clumps/<tier>/<id>/config.json` and `operations/inventory/` sidecars; maintain `operations/ip-allocations.md` for static IPs.
 3. **Plan** — for new deploys, write `hdc-private/clumps/services/<id>/plan.md` and get approval before `deploy` or destructive `maintain`.
-4. **Run** — `node apps/hdc-cli/cli.mjs run <tier> <clump> query|deploy|maintain -- [flags]` (Windows: `hdc.cmd`).
-5. **Schedule** — `node apps/hdc-cli/cli.mjs maintain daily` on an operator workstation (Task Scheduler, cron, or automation agent).
+4. **Run** — `hdc run <tier> <clump> query|deploy|maintain -- [flags]` (Windows: `hdc.cmd`).
+5. **Schedule** — `hdc maintain daily` on an operator workstation (Task Scheduler, cron, or automation agent).
 
 Detailed CLI and per-package reference: [AGENTS.md](../AGENTS.md).
 

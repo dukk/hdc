@@ -9,8 +9,8 @@ Account inventory for Elastic SIP trunks and phone numbers is managed with the *
 3. Store them in the hdc vault (never commit):
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_TWILIO_ACCOUNT_SID
-node apps/hdc-cli/cli.mjs secrets set HDC_TWILIO_AUTH_TOKEN
+hdc secrets set HDC_TWILIO_ACCOUNT_SID
+hdc secrets set HDC_TWILIO_AUTH_TOKEN
 ```
 
 You may also set the same variable names in repo `.env` (env takes precedence over vault).
@@ -20,8 +20,8 @@ You may also set the same variable names in repo `.env` (env takes precedence ov
 Elastic SIP Trunk **Credential List** username and password are separate secrets used by `clumps/services/asterisk/`:
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_TWILIO_SIP_USERNAME
-node apps/hdc-cli/cli.mjs secrets set HDC_TWILIO_SIP_PASSWORD
+hdc secrets set HDC_TWILIO_SIP_USERNAME
+hdc secrets set HDC_TWILIO_SIP_PASSWORD
 ```
 
 The twilio package imports credential **usernames** from the API; Twilio does not return passwords. Set SIP passwords in the vault manually after creating the Credential List in Console.
@@ -31,20 +31,20 @@ The twilio package imports credential **usernames** from the API; Twilio does no
 Copy `clumps/infrastructure/twilio/config.example.json` to **hdc-private** as `clumps/infrastructure/twilio/config.json`, or bootstrap from the live account:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure twilio query -- --import --yes
+hdc run infrastructure twilio query -- --import --yes
 ```
 
 ## Query and import
 
 ```bash
 # Diff live account vs config (JSON on stdout)
-node apps/hdc-cli/cli.mjs run infrastructure twilio query --
+hdc run infrastructure twilio query --
 
 # Limit trunk diff report
-node apps/hdc-cli/cli.mjs run infrastructure twilio query -- --trunk mytrunk
+hdc run infrastructure twilio query -- --trunk mytrunk
 
 # Refresh hdc-private config from live API
-node apps/hdc-cli/cli.mjs run infrastructure twilio query -- --import --yes
+hdc run infrastructure twilio query -- --import --yes
 ```
 
 Import replaces `sip_trunks[]` and `phone_numbers[]` and updates `twilio.account_sid`, `friendly_name`, and `status`. Vault key references under `twilio.auth` are preserved.

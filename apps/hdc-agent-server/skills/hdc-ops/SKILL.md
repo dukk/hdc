@@ -15,7 +15,7 @@ Humans run the same commands as the agent. Never assume AI-only workflows.
 
 ## Entry points
 
-- Cross-platform: `node apps/hdc-cli/cli.mjs <command>`
+- Cross-platform: `hdc <command>`
 - Windows (repo root): `hdc.cmd <command>`
 - macOS / Linux (repo root, after `chmod +x hdc`): `./hdc <command>`
 
@@ -25,37 +25,37 @@ Load secrets from a repo-root `.env` file (gitignored). See `.env.example` for d
 
 1. **List** hdc packages and inventory sidecars:
 
-   `node apps/hdc-cli/cli.mjs list`
+   `hdc list`
 
 2. **Run** a package verb (`deploy`, `maintain`, `query`, `health`, `teardown`). Tier is `client`, `infrastructure`, or `service` (maps to `clumps/clients`, `clumps/infrastructure`, `clumps/services`). Extra args after `--` go to the package script:
 
-   `node apps/hdc-cli/cli.mjs run service pi-hole query`
+   `hdc run service pi-hole query`
 
-   `node apps/hdc-cli/cli.mjs run service vaultwarden health`
+   `hdc run service vaultwarden health`
 
-   `node apps/hdc-cli/cli.mjs run service pi-hole query -- --verbose`
+   `hdc run service pi-hole query -- --verbose`
 
 3. **Daily maintain** — cross-package orchestrator (safe updates, health checks, no prune/reboot):
 
-   `node apps/hdc-cli/cli.mjs maintain daily`
+   `hdc maintain daily`
 
-   `node apps/hdc-cli/cli.mjs maintain daily --dry-run`
+   `hdc maintain daily --dry-run`
 
-   `node apps/hdc-cli/cli.mjs maintain daily -- --only service/bind`
+   `hdc maintain daily -- --only service/bind`
 
    Writes `apps/hdc-cli/reports/daily-maintain-<timestamp>.md`. Schedule via Task Scheduler or cron on the operator host.
 
 4. **Lint** inventory JSON (`docs lint`). Optional **`docs sync`** runs the same validation; hdc does not read or write companion `.md` files.
 
-   `node apps/hdc-cli/cli.mjs docs lint`
+   `hdc docs lint`
 
-   `node apps/hdc-cli/cli.mjs docs sync --dry-run`
+   `hdc docs sync --dry-run`
 
-   `node apps/hdc-cli/cli.mjs docs sync`
+   `hdc docs sync`
 
 5. **Apply** query JSON output into a sidecar (explicit merge of `query_last` and `last_verified`):
 
-   `node apps/hdc-cli/cli.mjs inventory apply --sidecar inventory/manual/systems/foo.json --from-json /path/to/query.json`
+   `hdc inventory apply --sidecar inventory/manual/systems/foo.json --from-json /path/to/query.json`
 
 ## After query output
 

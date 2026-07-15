@@ -57,10 +57,10 @@ Tighten `Resource` ARNs and add `Condition` on `aws:RequestTag/hdc:managed` for 
 
 1. Copy `config.example.json` to hdc-private and set `aws.region`, resource ids, and AMIs for your account.
 2. Set vault secret and `.env` access key id.
-3. `node apps/hdc-cli/cli.mjs run infrastructure aws query -- --dry-run`
-4. `node apps/hdc-cli/cli.mjs run infrastructure aws deploy -- --dry-run` — review cost estimate in stderr and report.
-5. `node apps/hdc-cli/cli.mjs run infrastructure aws deploy --` — confirm at prompt.
-6. `node apps/hdc-cli/cli.mjs run infrastructure aws query --` — verify diffs.
+3. `hdc run infrastructure aws query -- --dry-run`
+4. `hdc run infrastructure aws deploy -- --dry-run` — review cost estimate in stderr and report.
+5. `hdc run infrastructure aws deploy --` — confirm at prompt.
+6. `hdc run infrastructure aws query --` — verify diffs.
 
 ## Inventory
 

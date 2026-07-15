@@ -67,7 +67,7 @@ You can still configure WinRM by hand and disable auto-bootstrap (`winrm_bootstr
 ## Operator machine
 
 - Run hdc from **Windows** (WinRM remoting is spawned via `powershell.exe` on the operator host).
-- Store the shared remoting password once: `node apps/hdc-cli/cli.mjs secrets set HDC_WINRM_USER_PASSWORD`.
+- Store the shared remoting password once: `hdc secrets set HDC_WINRM_USER_PASSWORD`.
 - Set `HDC_WINRM_USER` in `.env` (MSA example: `MicrosoftAccount\you@outlook.com`).
 - Per-host password override only when needed: `auth.winrm_password_vault_suffix` → `secrets set HDC_WINRM_PASSWORD_<SUFFIX>`.
 

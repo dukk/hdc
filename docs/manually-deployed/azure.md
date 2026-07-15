@@ -37,7 +37,7 @@ Legacy names `HDC_AZURE_ENTRA_CLIENT_ID` / `HDC_AZURE_TENANT_ID` / `HDC_AZURE_CL
 Store the secret **value** (shown only once when created):
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_ENTRA_HDC_SECRET_VALUE
+hdc secrets set HDC_AZURE_ENTRA_HDC_SECRET_VALUE
 ```
 
 Legacy vault key `HDC_AZURE_ENTRA_CLIENT_SECRET` (and older `HDC_AZURE_CLIENT_SECRET`) is still read if the per-app key is missing.
@@ -50,7 +50,7 @@ Separate ARM service principal (Contributor on the target resource group):
 HDC_AZURE_COMPUTE_SUBSCRIPTION_ID=
 HDC_AZURE_COMPUTE_TENANT_ID=
 HDC_AZURE_COMPUTE_CLIENT_ID=
-node apps/hdc-cli/cli.mjs secrets set HDC_AZURE_COMPUTE_CLIENT_SECRET
+hdc secrets set HDC_AZURE_COMPUTE_CLIENT_SECRET
 ```
 
 ## Config (hdc-private)
@@ -81,22 +81,22 @@ Path: `inventory/manual/targets/azure.json`
 
 ## Entra workflow
 
-1. **Discover:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra`
-2. **Import:** `node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section entra --import --yes` — merges live apps into `entra.applications` (preserves `id` / `managed`; writes `entra/applications/*.json`; skips hdc automation app)
+1. **Discover:** `hdc run infrastructure azure query -- --section entra`
+2. **Import:** `hdc run infrastructure azure query -- --section entra --import --yes` — merges live apps into `entra.applications` (preserves `id` / `managed`; writes `entra/applications/*.json`; skips hdc automation app)
 3. Set `"managed": true` on apps you want deploy/maintain to own; prefer `match.client_id`.
-4. **Deploy** missing managed apps: `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra`
-5. **Maintain** drift: `node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section entra`
+4. **Deploy** missing managed apps: `hdc run infrastructure azure deploy -- --section entra`
+5. **Maintain** drift: `hdc run infrastructure azure maintain -- --section entra`
 
 ## Compute workflow
 
 Before billable deploy, hdc estimates cost (Azure Retail Prices API), prints on stderr / operation report, and prompts unless `--yes` / `--dry-run`.
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section compute --live
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a
-node apps/hdc-cli/cli.mjs run infrastructure azure maintain -- --section compute
-node apps/hdc-cli/cli.mjs run infrastructure azure teardown -- --section compute --instance a --yes
+hdc run infrastructure azure query -- --section compute --live
+hdc run infrastructure azure deploy -- --section compute --instance a --dry-run
+hdc run infrastructure azure deploy -- --section compute --instance a
+hdc run infrastructure azure maintain -- --section compute
+hdc run infrastructure azure teardown -- --section compute --instance a --yes
 ```
 
 Flags: `--dry-run`, `--yes`, `--accept-unknown-cost`. Estimates exclude egress, snapshots, reserved discounts, and tax.
@@ -104,7 +104,7 @@ Flags: `--dry-run`, `--yes`, `--accept-unknown-cost`. Estimates exclude egress, 
 ## Both sections
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section all
+hdc run infrastructure azure query -- --section all
 ```
 
 ## Admin consent (Entra)
@@ -121,7 +121,7 @@ When `required_resource_access` changes, hdc updates the app registration object
 
 Declare a managed app under `entra/applications/keycloak-microsoft-idp.json` (see hdc-private):
 
-1. `node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section entra --app keycloak-microsoft-idp`
+1. `hdc run infrastructure azure deploy -- --section entra --app keycloak-microsoft-idp`
 2. Pin `match.client_id` from deploy/query output.
 3. Create a client secret in Entra; `secrets set HDC_KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET`.
 4. Copy the Application ID into Keycloak realm `identity_providers[].client_id`, then `hdc run service keycloak maintain`.

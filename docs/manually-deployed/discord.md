@@ -15,7 +15,7 @@ Each `applications[]` entry needs a `bot_token_vault_key` pointing at the app's 
 Per application, store the bot token from the Developer Portal:
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_HERMES_DISCORD_BOT_TOKEN
+hdc secrets set HDC_HERMES_DISCORD_BOT_TOKEN
 ```
 
 You may also set the same env var name in repo `.env` (env takes precedence over vault).
@@ -24,11 +24,11 @@ You may also set the same env var name in repo `.env` (env takes precedence over
 
 1. Create the application in the [Discord Developer Portal](https://discord.com/developers/applications) and copy the bot token.
 2. Add the app to `applications[]` in config (or start from the Hermes example entry).
-3. Store the bot token: `node apps/hdc-cli/cli.mjs secrets set HDC_HERMES_DISCORD_BOT_TOKEN`
-4. **Import live metadata:** `node apps/hdc-cli/cli.mjs run infrastructure discord query -- --import --yes`
-5. **Verify drift:** `node apps/hdc-cli/cli.mjs run infrastructure discord query -- --require-vault`
+3. Store the bot token: `hdc secrets set HDC_HERMES_DISCORD_BOT_TOKEN`
+4. **Import live metadata:** `hdc run infrastructure discord query -- --import --yes`
+5. **Verify drift:** `hdc run infrastructure discord query -- --require-vault`
 6. Set `managed: true` on entries hdc should PATCH automatically.
-7. **Sync:** `node apps/hdc-cli/cli.mjs run infrastructure discord maintain --`
+7. **Sync:** `hdc run infrastructure discord maintain --`
 
 Enable **Message Content Intent** (and other privileged intents) manually under **Bot → Privileged Gateway Intents** when `portal_checklist.privileged_intents` lists them.
 
@@ -49,11 +49,11 @@ Maintain adds missing redirect URIs from config but does **not** remove extra li
 ## Commands
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure discord query --
-node apps/hdc-cli/cli.mjs run infrastructure discord query -- --app hermes --require-vault
-node apps/hdc-cli/cli.mjs run infrastructure discord query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure discord maintain --
-node apps/hdc-cli/cli.mjs run infrastructure discord maintain -- --app hermes --dry-run
+hdc run infrastructure discord query --
+hdc run infrastructure discord query -- --app hermes --require-vault
+hdc run infrastructure discord query -- --import --yes
+hdc run infrastructure discord maintain --
+hdc run infrastructure discord maintain -- --app hermes --dry-run
 ```
 
 Flags: `--app <id>`, `--import`, `--yes`, `--require-vault`, `--no-derive`, `--dry-run`, `--no-report`.
@@ -66,7 +66,7 @@ buttons on Manager `needs_decision` Discord messages.
 1. Create a Discord application + bot in the Developer Portal (separate from Hermes).
 2. Invite the bot to the ops guild with **Send Messages** (no privileged intents required).
 3. Copy **Application ID**, **Public Key**, bot token, and the target **channel ID**.
-4. Vault: `node apps/hdc-cli/cli.mjs secrets set HDC_OPS_DISCORD_BOT_TOKEN`
+4. Vault: `hdc secrets set HDC_OPS_DISCORD_BOT_TOKEN`
 5. In **discord** config (`hdc-ops` entry): set `match.application_id`, `public_key`,
    `ops_decisions.channel_id`, and `interactions_endpoint_url` to the public HTTPS
    URL for hdc-web, e.g. `https://hdc-web.example/api/discord/interactions`

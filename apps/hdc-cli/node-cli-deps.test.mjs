@@ -11,7 +11,6 @@ describe("createNodeCliDeps", () => {
     expect(typeof d.readStdinUtf8).toBe("function");
     expect(typeof d.defaultVaultPath()).toBe("string");
     expect(typeof d.cliInvocationForHelp()).toBe("string");
-    expect(d.cliInvocationForHelp().length).toBeGreaterThan(3);
     expect(d.cliInvocationForHelp()).toBe("hdc");
     expect(typeof d.stdoutWrite).toBe("function");
     expect(typeof d.hostProbe()).toBe("object");

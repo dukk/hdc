@@ -14,8 +14,8 @@ The management key is created in the OpenRouter dashboard under **Management API
 ## Vault setup
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_OPENROUTER_MANAGEMENT_API_KEY
-node apps/hdc-cli/cli.mjs secrets set HDC_HERMES_OPENROUTER_API_KEY
+hdc secrets set HDC_OPENROUTER_MANAGEMENT_API_KEY
+hdc secrets set HDC_HERMES_OPENROUTER_API_KEY
 ```
 
 You may also set these in repo `.env` (env takes precedence over vault).
@@ -25,7 +25,7 @@ You may also set these in repo `.env` (env takes precedence over vault).
 Copy `clumps/infrastructure/openrouter/config.example.json` to **hdc-private** as `clumps/infrastructure/openrouter/config.json`, or bootstrap from the live account:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --import --yes
+hdc run infrastructure openrouter query -- --import --yes
 ```
 
 Set `managed: true` on `api_keys[]` entries hdc should create or update. Link each consumer with `inference_api_key_vault_key` and optional `consumer` (e.g. `hermes-a`).
@@ -33,9 +33,9 @@ Set `managed: true` on `api_keys[]` entries hdc should create or update. Link ea
 ## Query and import
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query --
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --import --yes
-node apps/hdc-cli/cli.mjs run infrastructure openrouter query -- --key-id hermes
+hdc run infrastructure openrouter query --
+hdc run infrastructure openrouter query -- --import --yes
+hdc run infrastructure openrouter query -- --key-id hermes
 ```
 
 `--import --yes` replaces `api_keys[]` from the live Management API. HDC-local fields (`id`, `consumer`, `notes`, `inference_api_key_vault_key`, `managed`) are preserved when `openrouter_hash` or `name` matches an existing config entry.
@@ -45,9 +45,9 @@ Query exits `1` when `has_drift` (including low account credits below `credits.l
 ## Maintain
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain --
-node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain -- --key-id hermes --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure openrouter maintain -- --prune
+hdc run infrastructure openrouter maintain --
+hdc run infrastructure openrouter maintain -- --key-id hermes --dry-run
+hdc run infrastructure openrouter maintain -- --prune
 ```
 
 For each `managed: true` key:

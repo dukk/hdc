@@ -12,8 +12,8 @@ Single-node Wazuh manager on `vm-wazuh-a` (`192.0.2.202`). Linux Proxmox guests 
 Store with:
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_WAZUH_API_PASSWORD
-node apps/hdc-cli/cli.mjs secrets set HDC_WAZUH_AGENT_PASSWORD
+hdc secrets set HDC_WAZUH_API_PASSWORD
+hdc secrets set HDC_WAZUH_AGENT_PASSWORD
 ```
 
 Push to Vaultwarden for scheduled jobs (`secrets push --force`) when using `HDC_SECRET_BACKEND=auto`. Keep `HDC_VAULT_PASSPHRASE` or Vaultwarden master password available to `maintain daily` and `hdc-runner`.
@@ -21,9 +21,9 @@ Push to Vaultwarden for scheduled jobs (`secrets push --force`) when using `HDC_
 ## Deploy and maintain
 
 ```bash
-node apps/hdc-cli/cli.mjs run service wazuh deploy -- --instance a
-node apps/hdc-cli/cli.mjs run service wazuh maintain --
-node apps/hdc-cli/cli.mjs run service wazuh query -- --live
+hdc run service wazuh deploy -- --instance a
+hdc run service wazuh maintain --
+hdc run service wazuh query -- --live
 ```
 
 `maintain` syncs Docker Compose, manager email (`wazuh_manager.conf`), OpenSearch notification channel `hdc-wazuh-alerts`, and (by default) an OpenSearch Alerting monitor `hdc-wazuh-high-severity`. Skip with `--skip-wazuh-mail` or `--skip-dashboard-monitors`.
@@ -33,8 +33,8 @@ node apps/hdc-cli/cli.mjs run service wazuh query -- --live
 Proxmox `provision.guest_agents.wazuh.manager_host` must point at the manager IP. Run **guest `maintain`** on each Linux VM/LXC (not HAOS, Windows, or Synology):
 
 ```bash
-node apps/hdc-cli/cli.mjs run service bind maintain --
-node apps/hdc-cli/cli.mjs run service nginx-waf maintain --
+hdc run service bind maintain --
+hdc run service nginx-waf maintain --
 ```
 
 Confirm in reports: `wazuh_agent: agent ensured`. Agent package version is pinned to `defaults.wazuh.release` in the wazuh clump config.

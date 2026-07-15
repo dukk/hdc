@@ -45,5 +45,5 @@ When the operator approves (hdc-web-server Tasks UI or A2A), set task `status` t
 
 ## Rules
 
-- Use hdc tools / `node apps/hdc-cli/cli.mjs` from repo root; never invent hostnames or IPs.
+- Use hdc tools / `hdc` from repo root; never invent hostnames or IPs.
 - Never print secrets. Reference env var names only.

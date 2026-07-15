@@ -26,9 +26,9 @@ End-to-end workflow for **configure → plan → approve → deploy → validate
 ## Entry points
 
 ```bash
-node apps/hdc-cli/cli.mjs list
-node apps/hdc-cli/cli.mjs run service <id> query --
-node apps/hdc-cli/cli.mjs run service <id> deploy -- [--instance a] [flags]
+hdc list
+hdc run service <id> query --
+hdc run service <id> deploy -- [--instance a] [flags]
 ```
 
 Windows: `hdc.cmd` from repo root. Config and inventory live in **hdc-private** when present (`HDC_PRIVATE_ROOT` or `../hdc-private`).
@@ -78,7 +78,7 @@ Before writing the plan:
 1. Read `hdc-private/operations/ip-allocations.md` — classify workload IP group and note **Next free** candidate.
 2. Read public `clumps/services/<id>/` (manifest, example config, README).
 3. Read hdc-private overrides: `clumps/services/<id>/config.json`, `inventory/manual/systems/<system-id>.json`, `inventory/manual/services/<id>.json`.
-4. `node apps/hdc-cli/cli.mjs run service <id> query --` (add `--live` if safe and useful).
+4. `hdc run service <id> query --` (add `--live` if safe and useful).
 5. Proxmox capacity unknown → **proxmox-resource-planning** or `run infrastructure proxmox query --`.
 
 Do **not** run `deploy` in this phase.
@@ -103,7 +103,7 @@ Do **not** run `deploy` in this phase.
 
 1. Ensure hdc-private `config.json` exists (`config.example.json` → copy, or `node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs`).
 2. Create/update inventory sidecars (`kind: system`, `kind: services`) — id matches filename; naming rules enforced.
-3. `node apps/hdc-cli/cli.mjs secrets set <KEY>` for each required secret (masked).
+3. `hdc secrets set <KEY>` for each required secret (masked).
 4. Validate JSON against `apps/hdc-cli/schema/*.schema.json` (use `docs lint` if implemented in CLI).
 
 ---
@@ -111,7 +111,7 @@ Do **not** run `deploy` in this phase.
 ## Phase 5 — Deploy and fix loop
 
 ```bash
-node apps/hdc-cli/cli.mjs run service <id> deploy -- [--instance a] [package flags]
+hdc run service <id> deploy -- [--instance a] [package flags]
 ```
 
 **On success:** note IP, ports, and report path on stderr (`clumps/services/<id>/reports/deploy-*.md` in hdc-private). Update `hdc-private/operations/ip-allocations.md` assignment row for the new static IP.
@@ -133,10 +133,10 @@ node apps/hdc-cli/cli.mjs run service <id> deploy -- [--instance a] [package fla
 Follow order in [dependencies.md](dependencies.md). Example after guest is up:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service bind maintain --
-node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --site <site-id>
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone <zone>
-node apps/hdc-cli/cli.mjs run service nagios maintain --
+hdc run service bind maintain --
+hdc run service nginx-waf maintain -- --site <site-id>
+hdc run infrastructure cloudflare maintain -- --zone <zone>
+hdc run service nagios maintain --
 ```
 
 Use upstream from deploy output (e.g. `http://<ct-ip>:5678`). For nginx-waf behind Cloudflare, set `client_ip: cloudflare` on the site when appropriate.
@@ -148,7 +148,7 @@ If the user approved only deploy in section 10, **skip this phase** and remind t
 ## Phase 7 — Validate and close
 
 ```bash
-node apps/hdc-cli/cli.mjs run service <id> query -- --live
+hdc run service <id> query -- --live
 ```
 
 - Update `inventory/manual/systems/<system-id>.json` — `access.nodes[].ip`, `web_ui`.

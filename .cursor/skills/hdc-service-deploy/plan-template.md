@@ -77,7 +77,7 @@ Operator must approve cost line in **Section 10** before non–dry-run cloud dep
 
 ```bash
 # Run only after approval; values entered interactively (masked).
-node apps/hdc-cli/cli.mjs secrets set {{VAULT_KEY}}
+hdc secrets set {{VAULT_KEY}}
 ```
 
 ---
@@ -91,10 +91,10 @@ Run from **hdc repo root** after approval.
 node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs
 
 # Pre-flight (read-only)
-node apps/hdc-cli/cli.mjs run service {{service_id}} query --
+hdc run service {{service_id}} query --
 
 # Deploy
-node apps/hdc-cli/cli.mjs run service {{service_id}} deploy -- {{deploy_flags}}
+hdc run service {{service_id}} deploy -- {{deploy_flags}}
 ```
 
 **Deploy flags for this run:** `{{deploy_flags}}`
@@ -113,10 +113,10 @@ Only run steps you explicitly approve. Upstream URLs must come from deploy/query
 
 ```bash
 # Example (fill after guest IP is known):
-# node apps/hdc-cli/cli.mjs run service bind maintain --
-# node apps/hdc-cli/cli.mjs run service nginx-waf maintain -- --site {{site_id}}
-# node apps/hdc-cli/cli.mjs run infrastructure cloudflare maintain -- --zone {{zone}}
-# node apps/hdc-cli/cli.mjs run service nagios maintain --
+# hdc run service bind maintain --
+# hdc run service nginx-waf maintain -- --site {{site_id}}
+# hdc run infrastructure cloudflare maintain -- --zone {{zone}}
+# hdc run service nagios maintain --
 ```
 
 ---
@@ -124,7 +124,7 @@ Only run steps you explicitly approve. Upstream URLs must come from deploy/query
 ## 8. Validation
 
 ```bash
-node apps/hdc-cli/cli.mjs run service {{service_id}} query -- --live
+hdc run service {{service_id}} query -- --live
 ```
 
 - [ ] Guest reachable at planned IP
@@ -137,9 +137,9 @@ node apps/hdc-cli/cli.mjs run service {{service_id}} query -- --live
 ## 9. Rollback
 
 ```bash
-node apps/hdc-cli/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --dry-run
+hdc run service {{service_id}} teardown -- --instance {{instance}} --dry-run
 # After review:
-# node apps/hdc-cli/cli.mjs run service {{service_id}} teardown -- --instance {{instance}} --yes
+# hdc run service {{service_id}} teardown -- --instance {{instance}} --yes
 ```
 
 Proxmox destroy flags (if applicable): `{{destroy_existing_notes}}`

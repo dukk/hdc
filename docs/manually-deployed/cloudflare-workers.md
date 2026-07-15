@@ -26,7 +26,7 @@ Reuse the same token as DNS sync (`HDC_CLOUDFLARE_API_TOKEN`). Extend permission
 Store in vault:
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_CLOUDFLARE_API_TOKEN
+hdc secrets set HDC_CLOUDFLARE_API_TOKEN
 ```
 
 ### Account id
@@ -61,7 +61,7 @@ Copy `clumps/infrastructure/cloudflare-workers/config.example.json` to hdc-priva
 Import script names, routes, and Pages project names (not source code):
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers query -- --import --yes
+hdc run infrastructure cloudflare-workers query -- --import --yes
 ```
 
 After import, create `workers/<id>/` and `pages/<id>/` trees with wrangler config and source, then deploy.
@@ -69,12 +69,12 @@ After import, create `workers/<id>/` and `pages/<id>/` trees with wrangler confi
 ## Commands
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers query --
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers maintain --
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers maintain -- --redeploy
-node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers teardown -- --worker example-worker --yes
+hdc run infrastructure cloudflare-workers query --
+hdc run infrastructure cloudflare-workers deploy -- --dry-run
+hdc run infrastructure cloudflare-workers deploy -- --worker waitlist-mailer
+hdc run infrastructure cloudflare-workers maintain --
+hdc run infrastructure cloudflare-workers maintain -- --redeploy
+hdc run infrastructure cloudflare-workers teardown -- --worker example-worker --yes
 ```
 
 ## Secrets
@@ -82,7 +82,7 @@ node apps/hdc-cli/cli.mjs run infrastructure cloudflare-workers teardown -- --wo
 Declare Worker secrets in config `workers[].secrets[]` with `vault_key` names. Deploy and maintain push values via the Cloudflare API (values are never logged). Set vault keys before deploy:
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_WAITLIST_API_KEY
+hdc secrets set HDC_WAITLIST_API_KEY
 ```
 
 ## Daily maintain

@@ -52,7 +52,7 @@ Key architectural decisions:
 - **No invented facts.** IPs from `operations/ip-allocations.md`, topology from
   inventory sidecars, capability from clump configs. Secrets are env-var **names**
   only; values stay in the encrypted vault.
-- **Everything through the hdc CLI.** Agents act via `node apps/hdc-cli/cli.mjs …`
+- **Everything through the hdc CLI.** Agents act via `hdc …`
   (tracked, logged, reported) — inside containers via the allowlisted `hdc-mcp`
   surface — never ad-hoc SSH or one-off scripts.
 - **Spend control.** Scripted dispatcher skips the model on idle ticks; LiteLLM

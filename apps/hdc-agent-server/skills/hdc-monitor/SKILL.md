@@ -12,9 +12,9 @@ description: >-
 Prefer hdc tools / CLI:
 
 ```bash
-node apps/hdc-cli/cli.mjs run service uptime-kuma query -- --live
-node apps/hdc-cli/cli.mjs run infrastructure proxmox query
-node apps/hdc-cli/cli.mjs run service gatus query -- --live
+hdc run service uptime-kuma query -- --live
+hdc run infrastructure proxmox query
+hdc run service gatus query -- --live
 ```
 
 ## Uptime Kuma maintain (when fixing drift)

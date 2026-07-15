@@ -21,7 +21,7 @@ Do not confuse the API key with the SMTP username/password on the postfix-relay 
 3. Store it in the hdc vault (never commit):
 
 ```bash
-node apps/hdc-cli/cli.mjs secrets set HDC_SMTP2GO_API_KEY
+hdc secrets set HDC_SMTP2GO_API_KEY
 ```
 
 You may also set `HDC_SMTP2GO_API_KEY` in repo `.env` (env takes precedence over vault).
@@ -31,7 +31,7 @@ You may also set `HDC_SMTP2GO_API_KEY` in repo `.env` (env takes precedence over
 Copy `clumps/infrastructure/smtp2go/config.example.json` to **hdc-private** as `clumps/infrastructure/smtp2go/config.json`, or bootstrap from the live account:
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --import --yes
+hdc run infrastructure smtp2go query -- --import --yes
 ```
 
 Set `managed: true` on resources you want `maintain` to enforce:
@@ -59,13 +59,13 @@ IP allowlist is independent: when `ip_allow_list.enabled` is true, only listed *
 
 ```bash
 # Diff live account vs config (JSON on stdout)
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query --
+hdc run infrastructure smtp2go query --
 
 # Limit to one sender domain
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --domain hdc.example.invalid
+hdc run infrastructure smtp2go query -- --domain hdc.example.invalid
 
 # Refresh hdc-private config from live API
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go query -- --import --yes
+hdc run infrastructure smtp2go query -- --import --yes
 ```
 
 Import preserves section-level `managed` flags and sender-domain metadata (`notes`, `spf`, `dmarc`) when FQDNs match. New domains import with `managed: false`.
@@ -75,11 +75,11 @@ Query JSON includes `dns_checklist[]` per sender domain (SPF template, DKIM, ret
 ## Maintain
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain --
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --prune
-node apps/hdc-cli/cli.mjs run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
+hdc run infrastructure smtp2go maintain --
+hdc run infrastructure smtp2go maintain -- --dry-run
+hdc run infrastructure smtp2go maintain -- --domain-id hdc-example-invalid
+hdc run infrastructure smtp2go maintain -- --prune
+hdc run infrastructure smtp2go maintain -- --skip-ip-allow-list --skip-allowed-senders
 ```
 
 For each `managed: true` sender domain, maintain adds the domain when missing and calls verify when DKIM or return-path is not yet verified.

@@ -5,6 +5,6 @@ Azure VM/ACI automation now lives in the unified **azure** package under `comput
 See [azure.md](azure.md).
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure azure query -- --section compute --live
-node apps/hdc-cli/cli.mjs run infrastructure azure deploy -- --section compute --instance a --dry-run
+hdc run infrastructure azure query -- --section compute --live
+hdc run infrastructure azure deploy -- --section compute --instance a --dry-run
 ```

@@ -22,18 +22,16 @@ This repository is the **platform** home for the **`hdc-engineer`** fleet agent:
 
 ## CLI
 
-From the repository root:
+From the repository root use `hdc <command>` (`hdc.cmd` on Windows, `./hdc` on Unix after `chmod +x hdc`):
 
 ```bash
-node apps/hdc-cli/cli.mjs list
-node apps/hdc-cli/cli.mjs run service pi-hole query
-node apps/hdc-cli/cli.mjs docs lint
-node apps/hdc-cli/cli.mjs docs sync
+hdc list
+hdc run service pi-hole query
+hdc docs lint
+hdc docs sync
 ```
 
 `docs sync` validates the same JSON as `docs lint` and does not modify markdown.
-
-On Windows you can use `hdc.cmd` instead of `node apps/hdc-cli/cli.mjs`. On macOS or Linux, use `./hdc` after `chmod +x hdc`.
 
 Optional: copy [`.env.example`](.env.example) to `.env` and set values. `.env` is gitignored.
 
@@ -46,8 +44,8 @@ Clump `config.json` files and inventory JSON (except [`operations/inventory/syst
 Service and infrastructure packages live in the separate **[hdc-clumps](https://github.com/dukk/hdc-clumps)** repository — owned by **`hdc-sre-engineer`** for package scripts. Bootstrap on a new machine:
 
 ```bash
-node apps/hdc-cli/cli.mjs clumps init
-node apps/hdc-cli/cli.mjs clumps list
+hdc clumps init
+hdc clumps list
 ```
 
 Package scripts import shared runtime via `hdc/package/*` (resolved by the CLI import hook). See [`hdc-clumps` README](../hdc-clumps/README.md) for per-package docs.

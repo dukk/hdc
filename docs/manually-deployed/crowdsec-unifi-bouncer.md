@@ -68,7 +68,7 @@ Keep firewall bouncers on `vm-nginx-waf-*` enabled.
 systemctl status crowdsec-firewall-bouncer
 
 # From operator host
-node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
+hdc run service crowdsec query -- --live
 ```
 
 Test WAN blocking from an external IP listed in `cscli decisions list` on LAPI.

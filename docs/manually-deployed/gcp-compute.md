@@ -23,12 +23,12 @@ Deploy uses on-demand **fallback price tables** when the Cloud Billing Catalog A
 ## Commands
 
 ```bash
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute query --
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute query -- --live
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --instance a --dry-run
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute deploy -- --instance a
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute maintain --
-node apps/hdc-cli/cli.mjs run infrastructure gcp-compute teardown -- --instance a --yes
+hdc run infrastructure gcp-compute query --
+hdc run infrastructure gcp-compute query -- --live
+hdc run infrastructure gcp-compute deploy -- --instance a --dry-run
+hdc run infrastructure gcp-compute deploy -- --instance a
+hdc run infrastructure gcp-compute maintain --
+hdc run infrastructure gcp-compute teardown -- --instance a --yes
 ```
 
 Cloud VMs receive operator `~/.ssh` public keys via instance metadata.

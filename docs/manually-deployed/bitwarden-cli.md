@@ -41,8 +41,8 @@ HDC_VAULTWARDEN_COLLECTION_ID=<uuid>
 Store the key values in the local hdc vault (recommended) or `.env`:
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets set HDC_VAULTWARDEN_KEY_CLIENT_ID
-node apps/hdc-cli/cli.mjs secrets set HDC_VAULTWARDEN_KEY_CLIENT_SECRET
+hdc secrets set HDC_VAULTWARDEN_KEY_CLIENT_ID
+hdc secrets set HDC_VAULTWARDEN_KEY_CLIENT_SECRET
 ```
 
 API key login replaces email+password for `bw login` only. **`HDC_VAULTWARDEN_MASTER_PASSWORD` is still required** for `bw unlock` (vault decryption).
@@ -78,7 +78,7 @@ After [Vaultwarden is deployed](../../clumps/services/vaultwarden/README.md):
 3. Run any hdc command that needs secrets, or:
 
    ```powershell
-   node apps/hdc-cli/cli.mjs secrets unlock
+   hdc secrets unlock
    ```
 
 4. Enter your **Vaultwarden master password** when prompted. hdc offers to save it as `HDC_VAULTWARDEN_MASTER_PASSWORD` in the **local** hdc vault (bootstrap only).
@@ -91,8 +91,8 @@ After [Vaultwarden is deployed](../../clumps/services/vaultwarden/README.md):
 - **Website URLs** (`login.uris[]`) point at HDC service UIs when applicable (public hostnames, nginx-waf aliases, and LAN `http://10.x:port` routes). Infra-only API keys (Cloudflare, AWS, SSH passwords, webhooks, …) intentionally have no website. Sync from clump configs:
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets sync-uris -- --dry-run
-node apps/hdc-cli/cli.mjs secrets sync-uris --
+hdc secrets sync-uris -- --dry-run
+hdc secrets sync-uris --
 ```
 
 `secrets set` and `secrets push` also attach URIs when hdc can derive a URL for the key. Re-run `secrets sync-uris` after nginx-waf or service URL changes.
@@ -100,8 +100,8 @@ node apps/hdc-cli/cli.mjs secrets sync-uris --
 Migrate existing local vault secrets in one step:
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets push -- --dry-run
-node apps/hdc-cli/cli.mjs secrets push -- --force
+hdc secrets push -- --dry-run
+hdc secrets push -- --force
 ```
 
 `--force` overwrites organization items; default `--skip-existing` is safe for re-runs. Bootstrap keys are never pushed.
@@ -109,24 +109,24 @@ node apps/hdc-cli/cli.mjs secrets push -- --force
 Store a secret:
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets set HDC_PROXMOX_API_TOKEN
+hdc secrets set HDC_PROXMOX_API_TOKEN
 ```
 
 List keys:
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets list
+hdc secrets list
 ```
 
 Export values to files (requires unlock; plaintext on disk — use a directory outside the repo):
 
 ```powershell
-node apps/hdc-cli/cli.mjs secrets get HDC_PROXMOX_API_TOKEN --out $env:USERPROFILE\.hdc\export\HDC_PROXMOX_API_TOKEN
-node apps/hdc-cli/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export
-node apps/hdc-cli/cli.mjs secrets dump --out-dir $env:USERPROFILE\.hdc\export --format env
+hdc secrets get HDC_PROXMOX_API_TOKEN --out $env:USERPROFILE\.hdc\export\HDC_PROXMOX_API_TOKEN
+hdc secrets dump --out-dir $env:USERPROFILE\.hdc\export
+hdc secrets dump --out-dir $env:USERPROFILE\.hdc\export --format env
 ```
 
-`dump` omits local bootstrap keys unless you pass `--include-bootstrap`. See `node apps/hdc-cli/cli.mjs help secrets dump`.
+`dump` omits local bootstrap keys unless you pass `--include-bootstrap`. See `hdc help secrets dump`.
 
 ## Bootstrap keys (local hdc vault only)
 
@@ -164,5 +164,5 @@ The [`hdc-agents`](../../clumps/services/hdc-agents/) service guest installs `bw
 
 - **`bw not found`** — Install CLI or set `HDC_BW_EXECUTABLE`. On Windows, npm installs `@bitwarden/cli` as a PowerShell/cmd shim; hdc invokes `node …/bw.js` directly so `shell: false` spawn works.
 - **Unlock fails** — Verify URL, email, and master password; run `bw config server …` and `bw login` manually once.
-- **`bw login` returns `{"statusCode":404}`** — Bitwarden CLI 2026.x calls `POST /identity/accounts/prelogin/password`, which requires **Vaultwarden ≥ 1.36.0**. Upgrade with `node apps/hdc-cli/cli.mjs run service vaultwarden maintain --` (bump `vaultwarden.image_tag` in config first if pinned below 1.36.0).
+- **`bw login` returns `{"statusCode":404}`** — Bitwarden CLI 2026.x calls `POST /identity/accounts/prelogin/password`, which requires **Vaultwarden ≥ 1.36.0**. Upgrade with `hdc run service vaultwarden maintain --` (bump `vaultwarden.image_tag` in config first if pinned below 1.36.0).
 - **Item not found** — Create with `secrets set <ENV_NAME>`; name must match exactly.

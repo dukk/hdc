@@ -11,16 +11,16 @@ disable-model-invocation: true
 ## Query runbook
 
 ```bash
-node apps/hdc-cli/cli.mjs run service wazuh query -- --live
-node apps/hdc-cli/cli.mjs run service crowdsec query -- --live
-node apps/hdc-cli/cli.mjs run service nginx-waf query
-node apps/hdc-cli/cli.mjs run service splunk query
+hdc run service wazuh query -- --live
+hdc run service crowdsec query -- --live
+hdc run service nginx-waf query
+hdc run service splunk query
 ```
 
 ## Active response (expert only)
 
 ```bash
-node apps/hdc-cli/cli.mjs run service crowdsec maintain -- --sync-bouncers
+hdc run service crowdsec maintain -- --sync-bouncers
 ```
 
 WAF blocks are config-driven in `clumps/services/nginx-waf/config.json` — changes need approval and SRE execution.

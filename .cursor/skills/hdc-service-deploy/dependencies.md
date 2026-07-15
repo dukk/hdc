@@ -84,7 +84,7 @@ See [vaultwarden README](../../../clumps/services/vaultwarden/README.md) and [n8
 
 ### Synology Docker (`synology-docker` mode)
 
-- Run `node apps/hdc-cli/cli.mjs run infrastructure synology-nas maintain -- --instance a` (or `b`) **before** immich-style deploy.
+- Run `hdc run infrastructure synology-nas maintain -- --instance a` (or `b`) **before** immich-style deploy.
 - Compose path under `/volume1/docker/…` per service config.
 - Public HTTPS still uses bind + nginx-waf upstream to NAS IP:port (e.g. immich `:2283`).
 
