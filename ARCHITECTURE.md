@@ -184,6 +184,7 @@ flowchart TB
     RES["hdc-research<br/>9206"]
     ENG["hdc-engineer<br/>9207"]
     SRENG["hdc-sre-engineer<br/>9208"]
+    QA["hdc-qa<br/>9209"]
   end
 
   subgraph litellm["litellm-a — AI gateway + A2A registry"]
@@ -201,16 +202,16 @@ flowchart TB
   LAB["Proxmox · Synology · UniFi · services"]
 
   OP <--> MGR
-  MGR -->|"delegate via /a2a"| REG --> MON & SREOPS & SECX & RES & SRENG
-  MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG & MGR -->|"models + publish/discover"| GW
-  MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG <--> TQ & RPT
+  MGR -->|"delegate via /a2a"| REG --> MON & SREOPS & SECX & RES & SRENG & QA
+  MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG & QA -->|"models + publish/discover"| GW
+  MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG & QA <--> TQ & RPT
   POL --> MGR
   SREOPS -->|"hdc-mcp → hdc CLI"| LAB
   LAB -->|"query"| MON & SECX
 
   classDef a fill:#1a2332,stroke:#3d8bfd,color:#e7ecf3;
   classDef s fill:#0f1419,stroke:#3dd68c,color:#e7ecf3;
-  class MGR,MON,SREOPS,SECX,SECA,NETA,RES,ENG,SRENG a
+  class MGR,MON,SREOPS,SECX,SECA,NETA,RES,ENG,SRENG,QA a
   class TQ,RPT,POL s
 ```
 
@@ -226,7 +227,8 @@ flowchart TB
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / post-incident |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` | Queued topics (incl. engineer requests) + weekly brief |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` + augmentors | Queued topics (incl. engineer requests) + weekly brief |
+| `hdc-qa` | **Build** (quality) | `hdc_validate_clump`, query/health, augmentors | After scaffold; before deploy |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
 Canonical definitions live in [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/);
@@ -286,7 +288,7 @@ Default schedules: manager 15 m · monitor 60 m · security 120 m · research 7 
 keys** attribute every model + A2A call to a role (revoke a key = disable that agent).
 
 **Config** is by env-var name only (values from vault at render time): `HDC_AGENT_ROLE`,
-`HDC_AGENT_PORT` (9200–9208), `HDC_LITELLM_BASE_URL`, `HDC_AGENT_LITELLM_KEY`,
+`HDC_AGENT_PORT` (9200–9209), `HDC_LITELLM_BASE_URL`, `HDC_AGENT_LITELLM_KEY`,
 `HDC_PRIVATE_ROOT`, `HDC_AGENT_MODEL`.
 
 ---
@@ -402,7 +404,7 @@ flowchart TB
   subgraph pve["Proxmox cluster (hypervisor-a…d)"]
     subgraph agents["hdc-agents-a (LXC, Docker nesting)"]
       WEB["hdc-web-server :9120"]
-      AC["9× agent containers :9200–9208"]
+      AC["10× agent containers :9200–9209"]
       SIDE["cursor-cloud-bridge :9210"]
     end
     LITELLM["litellm-a (LXC) — /v1 + /a2a + Postgres"]

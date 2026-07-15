@@ -16,7 +16,7 @@ description: >-
 | **hdc-private** | `hdc-sre-ops` | Live `config.json`, inventory, `operations/` |
 | **Clump cache (MCP host)** | `hdc-manager` | `hdc_clumps_sync` (`init` / `sync`; optional `ref` rollback) |
 
-Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `hdc-manager` (sync cache) → `hdc-sre-ops` (approved live run); CLI/runtime failure → `hdc-engineer`.
+Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `hdc-qa` (validate) → `hdc-manager` (sync cache) → `hdc-sre-ops` (approved live run); CLI/runtime failure → `hdc-engineer`.
 
 ## Paths (hdc-private)
 
@@ -26,7 +26,7 @@ Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `h
 | `operations/task-report.md` | Manager-maintained status summary (auto-regenerated) |
 | `operations/delegation-policy.md` | Approval rules |
 | `operations/ip-allocations.md` | IP group boundaries and next-free addresses |
-| `operations/reports/` | Monitor, security, research digests |
+| `operations/reports/` | Monitor, security, research, QA digests |
 | `operations/research/index.md` | Research topic index (status, outcome, report links) |
 | `operations/research/suggestions.md` | Research suggestion inbox (manager triage) |
 | `operations/research/topics/<id>.md` | Per-topic frontmatter + notes |
@@ -47,7 +47,7 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 
 **Priority:** `critical` | `high` | `medium` | `low`
 
-**Role:** `hdc-manager` | `hdc-sre-ops` | `hdc-sre-engineer` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer`
+**Role:** `hdc-manager` | `hdc-sre-ops` | `hdc-sre-engineer` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer` | `hdc-qa`
 
 ## Agent roster (canonical)
 
@@ -58,6 +58,7 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 | SRE ops | `apps/hdc-agent-server/agents/hdc-sre-ops.md` |
 | SRE engineer | `apps/hdc-agent-server/agents/hdc-sre-engineer.md` |
 | Platform engineer | `apps/hdc-agent-server/agents/hdc-engineer.md` |
+| QA | `apps/hdc-agent-server/agents/hdc-qa.md` |
 | Security expert | `apps/hdc-agent-server/agents/hdc-security-expert.md` |
 | Security architect | `apps/hdc-agent-server/agents/hdc-security-architect.md` |
 | Network architect | `apps/hdc-agent-server/agents/hdc-network-architect.md` |
@@ -77,6 +78,7 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 - Security: `operations/reports/security-<ISO8601-basic>.md`
 - Research weekly: `operations/reports/research-<YYYY-MM-DD>.md`
 - Research topic: `operations/reports/research-topic-<id>-<YYYY-MM-DD>.md`
+- QA: `operations/reports/qa-<YYYY-MM-DD>.md` or `qa-<clump>-<YYYY-MM-DD>.md`
 - Manager: `operations/reports/manager-triage-<YYYY-MM-DD>.md`
 
 ## Runtime
@@ -85,21 +87,22 @@ Primary: **hdc-agent-server** containers (LiteLLM tool loop + hdc-mcp-server). S
 
 Primary runtime: hdc-agent-server containers on hdc-agents-a; Tasks UI via hdc-web-server.
 
-## Engineer augmentor delegation
+## Augmentor delegation
 
-Fleet **hdc-engineer** / **hdc-sre-engineer** may delegate code-fix **subtasks** to external augmentors (Cursor Cloud on fleet, Cursor CLI / Claude Code on operator workstation) when registered in LiteLLM `a2a_agents[]`:
+Fleet roles **hdc-engineer**, **hdc-sre-engineer**, **hdc-qa**, **hdc-research**, **hdc-security-expert**, **hdc-security-architect**, and **hdc-network-architect** may delegate code/analysis **subtasks** to external augmentors (Cursor Cloud on fleet, Cursor CLI / Claude Code on operator workstation) when registered in LiteLLM `a2a_agents[]`:
 
 - `hdc_list_augmentors` — discover augmentors for `repo: hdc` or `hdc-clumps`
 - `hdc_delegate_augment` — create subtask + A2A `message/send` via LiteLLM gateway
 
-Parent engineer keeps task ownership; augmentors edit only their declared repo. See `docs/manually-deployed/hdc-augment-bridge.md`.
+Parent agent keeps task ownership; augmentors edit only their declared repo (never hdc-private live state). See `docs/manually-deployed/hdc-augment-bridge.md`.
 
 ## Engineer research and web tools
 
 When scaffolding unknown capabilities or filling platform gaps:
 
 - `hdc_request_research` — queue `operations/research/topics/<id>.md` (`status: queued`) for hdc-research
-- `hdc_web_search` / `hdc_web_fetch` — public web (SSRF-hardened); also available to hdc-research
+- `hdc_web_search` / `hdc_web_fetch` — public web (SSRF-hardened); also available to hdc-research and hdc-qa
+- `hdc_validate_clump` — static package checks (hdc-qa + engineers)
 
 ## Deprecated
 

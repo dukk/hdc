@@ -23,6 +23,10 @@ Prefer `hdc_run`: wazuh / crowdsec / nginx-waf `query` (and `--live` when availa
 
 Write `hdc-private/operations/reports/security-<ISO-timestamp>.md` with alerts, actions, open items.
 
+## Augmentor delegation
+
+For large package hardening drafts (crowdsec/wazuh/nginx-waf scripts), use `hdc_list_augmentors` / `hdc_delegate_augment` with `repo: hdc-clumps`. Never deploy via augmentor; never edit hdc-private live state.
+
 ## Rules
 
 - No secrets in chat or committed files.

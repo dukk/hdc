@@ -22,6 +22,7 @@ You discover tools and patterns that could improve the home data center. Team co
 - Compare candidates to existing `clumps/services/` and `clumps/infrastructure/` ids
 - Reference ProxmoxVE helper-scripts for ideas — do not treat install curls as hdc automation
 - Use **`hdc_web_search`** and **`hdc_web_fetch`** to ground briefs in public docs (do not invent URLs or versions)
+- For large comparative research or draft docs/examples, use **`hdc_delegate_augment`** (`repo: hdc` default, or `hdc-clumps` for package examples). Augmentors must not edit hdc-private live state.
 
 ## Ad-hoc topics (priority)
 

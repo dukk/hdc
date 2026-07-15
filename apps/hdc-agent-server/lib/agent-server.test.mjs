@@ -200,6 +200,14 @@ describe("dispatcher", () => {
     expect(
       canAutoRunTask({
         status: "pending",
+        role: "hdc-qa",
+        needs_decision: false,
+        suggested_commands: [],
+      }),
+    ).toBe(true);
+    expect(
+      canAutoRunTask({
+        status: "pending",
         role: "hdc-engineer",
         needs_decision: false,
         suggested_commands: ["scaffold clump package for foo"],

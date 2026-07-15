@@ -29,9 +29,10 @@ The server communicates over stdin/stdout (JSON-RPC). Do not log to stdout excep
 | `hdc_run` | Single clump verb (role-dependent; see below) |
 | `hdc_clumps_sync` | Clone or pull hdc-clumps repos into local cache (**hdc-manager** only) |
 | `hdc_notify_discord` | Post to agents Discord (`HDC_AGENTS_DISCORD_WEBHOOK_URL`, fallback `HDC_OPS_DISCORD_WEBHOOK_URL`) |
-| `hdc_list_augmentors` / `hdc_delegate_augment` | Engineer augmentor delegation (**hdc-engineer** / **hdc-sre-engineer**) |
+| `hdc_list_augmentors` / `hdc_delegate_augment` | Augmentor delegation (engineers, qa, research, security-*, network-architect) |
 | `hdc_request_research` | Queue research topic for hdc-research (**engineers** only) |
-| `hdc_web_fetch` / `hdc_web_search` | Public web fetch/search, SSRF-hardened (**hdc-research** + engineers) |
+| `hdc_web_fetch` / `hdc_web_search` | Public web fetch/search, SSRF-hardened (**hdc-research**, engineers, **hdc-qa**) |
+| `hdc_validate_clump` | Static clump consistency checks (**hdc-qa**, engineers) |
 
 **`hdc_clumps_sync` parameters:** `action` (`init` or `sync`, default `sync`), optional `repo`, optional `ref` (branch/tag/commit rollback override), optional `dry_run`.
 
@@ -47,11 +48,12 @@ When unset, the **default** profile matches the historical safe set (`query`/`ma
 | `hdc-manager` | all six (includes `hdc_clumps_sync`) | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
 | `hdc-sre-ops` | list, help, run, Discord | `query`, `health`, `maintain`, `deploy` (needs `task_id` **approved**) |
 | `hdc-monitor` | list, help, run, Discord | `query`, `health` |
-| `hdc-security-expert` | list, help, run, Discord | `query`, `health`, `maintain` |
+| `hdc-security-expert` | list, help, run, Discord, augmentors | `query`, `health`, `maintain` |
 | `hdc-scheduler` | list, help, daily, run, Discord | `query`, `health`, `maintain` |
-| `hdc-security-architect` / `hdc-network-architect` | list, help, run | `query`, `health` |
-| `hdc-research` | list, help, run, web fetch/search | `query`, `health` |
-| `hdc-engineer` / `hdc-sre-engineer` | list, help, run, augmentors, `hdc_request_research`, web fetch/search | `query`, `health` |
+| `hdc-security-architect` / `hdc-network-architect` | list, help, run, augmentors | `query`, `health` |
+| `hdc-research` | list, help, run, web fetch/search, augmentors | `query`, `health` |
+| `hdc-qa` | list, help, run, validate_clump, web, augmentors | `query`, `health` |
+| `hdc-engineer` / `hdc-sre-engineer` | list, help, run, validate_clump, augmentors, `hdc_request_research`, web | `query`, `health` |
 
 Legacy role id **`hdc-sre`** maps to **`hdc-sre-ops`** in policy resolution.
 

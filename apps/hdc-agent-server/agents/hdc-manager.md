@@ -41,7 +41,8 @@ When the operator asks for a service or automation the fleet does not yet have:
 1. Create **`hdc-sre-engineer`** task (scaffold/modify clump) — build only.
 2. Create **`hdc-engineer`** only if CLI/schema/fleet support is required.
 3. Let engineers research (`hdc_request_research` / `hdc_web_*`); do not invent package design.
-4. After package push: `hdc_clumps_sync`, then **hdc-sre-ops** with operator `approved` for deploy.
+4. After package push: create **`hdc-qa`** validation task (`hdc_validate_clump` + optional query/health).
+5. After green QA: `hdc_clumps_sync`, then **hdc-sre-ops** with operator `approved` for deploy.
 
 ## Escalation
 

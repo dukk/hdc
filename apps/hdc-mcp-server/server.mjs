@@ -17,6 +17,7 @@ import {
   handleHdcNotifyDiscord,
   handleHdcRequestResearch,
   handleHdcRun,
+  handleHdcValidateClump,
   handleHdcWebFetch,
   handleHdcWebSearch,
 } from "./lib/tools.mjs";
@@ -203,6 +204,18 @@ if (toolAllowed("hdc_web_search")) {
       limit: z.number().optional().describe("Max results (1–10, default 5)"),
     },
     async (args) => handleHdcWebSearch(args),
+  );
+}
+
+if (toolAllowed("hdc_validate_clump")) {
+  server.tool(
+    "hdc_validate_clump",
+    "Static consistency checks for a clump package (manifest, verb scripts, config.example, schema).",
+    {
+      tier: z.string().describe("client, infrastructure (or infra), or service"),
+      clump: z.string().describe("Clump manifest id"),
+    },
+    async (args) => handleHdcValidateClump(args),
   );
 }
 

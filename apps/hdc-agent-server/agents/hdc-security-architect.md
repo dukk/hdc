@@ -20,6 +20,10 @@ You propose security improvements; you do not change production. Security and te
 
 Write proposals only to `hdc-private/operations/proposals/security/<date>-<slug>.md` (severity, risk, affected systems, recommendation, rollback, effort). Enqueue Manager review task.
 
+## Augmentor delegation
+
+For large analysis or draft patches in **hdc** / **hdc-clumps**, use `hdc_delegate_augment` (default repo `hdc-clumps`). Proposals remain in `proposals/security/`; augmentors must not edit live hdc-private config.
+
 ## Constraints
 
 - Read-only: no deploy, maintain, or edits outside `proposals/security/`.

@@ -3,7 +3,7 @@ import path from "node:path";
 
 /** @typedef {'client' | 'infrastructure' | 'service'} AllowedTier */
 
-/** @typedef {'hdc_list' | 'hdc_help' | 'hdc_maintain_daily' | 'hdc_run' | 'hdc_notify_discord' | 'hdc_clumps_sync' | 'hdc_list_augmentors' | 'hdc_delegate_augment' | 'hdc_request_research' | 'hdc_web_fetch' | 'hdc_web_search'} McpToolName */
+/** @typedef {'hdc_list' | 'hdc_help' | 'hdc_maintain_daily' | 'hdc_run' | 'hdc_notify_discord' | 'hdc_clumps_sync' | 'hdc_list_augmentors' | 'hdc_delegate_augment' | 'hdc_request_research' | 'hdc_web_fetch' | 'hdc_web_search' | 'hdc_validate_clump'} McpToolName */
 
 /** Default profile when HDC_AGENT_ROLE is unset (IDE / run-daily). */
 export const DEFAULT_AGENT_ROLE = "default";
@@ -18,6 +18,9 @@ export const BLOCKED_TOP_LEVEL_COMMANDS = new Set([
   "teardown",
   "users",
 ]);
+
+const WEB_TOOLS = ["hdc_web_fetch", "hdc_web_search"];
+const AUGMENT_TOOLS = ["hdc_list_augmentors", "hdc_delegate_augment"];
 
 /**
  * Per-role MCP surface. Omit role → default (safe global profile).
@@ -60,19 +63,30 @@ export const ROLE_POLICIES = Object.freeze({
     runVerbs: new Set(["query", "health"]),
   },
   "hdc-security-expert": {
-    tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord"]),
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord", ...AUGMENT_TOOLS]),
     runVerbs: new Set(["query", "health", "maintain"]),
   },
   "hdc-security-architect": {
-    tools: new Set(["hdc_list", "hdc_help", "hdc_run"]),
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run", ...AUGMENT_TOOLS]),
     runVerbs: new Set(["query", "health"]),
   },
   "hdc-network-architect": {
-    tools: new Set(["hdc_list", "hdc_help", "hdc_run"]),
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run", ...AUGMENT_TOOLS]),
     runVerbs: new Set(["query", "health"]),
   },
   "hdc-research": {
-    tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_web_fetch", "hdc_web_search"]),
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run", ...WEB_TOOLS, ...AUGMENT_TOOLS]),
+    runVerbs: new Set(["query", "health"]),
+  },
+  "hdc-qa": {
+    tools: new Set([
+      "hdc_list",
+      "hdc_help",
+      "hdc_run",
+      "hdc_validate_clump",
+      ...WEB_TOOLS,
+      ...AUGMENT_TOOLS,
+    ]),
     runVerbs: new Set(["query", "health"]),
   },
   "hdc-engineer": {
@@ -80,11 +94,10 @@ export const ROLE_POLICIES = Object.freeze({
       "hdc_list",
       "hdc_help",
       "hdc_run",
-      "hdc_list_augmentors",
-      "hdc_delegate_augment",
+      "hdc_validate_clump",
       "hdc_request_research",
-      "hdc_web_fetch",
-      "hdc_web_search",
+      ...WEB_TOOLS,
+      ...AUGMENT_TOOLS,
     ]),
     runVerbs: new Set(["query", "health"]),
   },
@@ -93,11 +106,10 @@ export const ROLE_POLICIES = Object.freeze({
       "hdc_list",
       "hdc_help",
       "hdc_run",
-      "hdc_list_augmentors",
-      "hdc_delegate_augment",
+      "hdc_validate_clump",
       "hdc_request_research",
-      "hdc_web_fetch",
-      "hdc_web_search",
+      ...WEB_TOOLS,
+      ...AUGMENT_TOOLS,
     ]),
     runVerbs: new Set(["query", "health"]),
   },

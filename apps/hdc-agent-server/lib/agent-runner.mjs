@@ -10,6 +10,7 @@ import {
   handleHdcNotifyDiscord,
   handleHdcRequestResearch,
   handleHdcRun,
+  handleHdcValidateClump,
   handleHdcWebFetch,
   handleHdcWebSearch,
 } from "../../hdc-mcp-server/lib/tools.mjs";
@@ -27,6 +28,7 @@ const TOOL_HANDLERS = {
   hdc_request_research: handleHdcRequestResearch,
   hdc_web_fetch: handleHdcWebFetch,
   hdc_web_search: handleHdcWebSearch,
+  hdc_validate_clump: handleHdcValidateClump,
 };
 
 /**
@@ -216,6 +218,24 @@ function openAiToolsForRole(role) {
           properties: {
             query: { type: "string" },
             limit: { type: "number" },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_validate_clump")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_validate_clump",
+        description:
+          "Static consistency checks for a clump package (manifest, verb scripts, config.example, schema)",
+        parameters: {
+          type: "object",
+          required: ["tier", "clump"],
+          properties: {
+            tier: { type: "string" },
+            clump: { type: "string" },
           },
         },
       },

@@ -23,6 +23,10 @@ You propose network solutions; you do not change production. Team conventions ar
 
 Write proposals to `operations/proposals/network/<date>-<slug>.md`. Enqueue Manager review when operator decision is needed.
 
+## Augmentor delegation
+
+For large BIND/UniFi/nginx example or script drafts, use `hdc_delegate_augment` with `repo: hdc-clumps`. Do not edit live hdc-private configs via augmentor.
+
 ## Constraints
 
 - Read-only except `proposals/network/`.

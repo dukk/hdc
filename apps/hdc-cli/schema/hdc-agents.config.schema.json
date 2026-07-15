@@ -74,7 +74,15 @@
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "enum": ["hdc-engineer", "hdc-sre-engineer"]
+                          "enum": [
+                            "hdc-engineer",
+                            "hdc-sre-engineer",
+                            "hdc-qa",
+                            "hdc-research",
+                            "hdc-security-expert",
+                            "hdc-security-architect",
+                            "hdc-network-architect"
+                          ]
                         }
                       },
                       "repository_url": { "type": "string", "format": "uri" }

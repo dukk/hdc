@@ -18,7 +18,7 @@ apps/hdc-agent-server/
 | Variable | Purpose |
 | --- | --- |
 | `HDC_AGENT_ROLE` | Roster id (`hdc-monitor`, …) — drives mcp policy + prompt |
-| `HDC_AGENT_PORT` | Listen port (9200–9207) |
+| `HDC_AGENT_PORT` | Listen port (9200–9209) |
 | `HDC_ROOT` | Path to hdc checkout (default: repo root) |
 | `HDC_PRIVATE_ROOT` | Path to hdc-private (required for dispatcher) |
 | `HDC_LITELLM_BASE_URL` | LiteLLM base (e.g. `http://10.0.0.116:4000`) |

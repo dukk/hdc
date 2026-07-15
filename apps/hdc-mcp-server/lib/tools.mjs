@@ -24,8 +24,14 @@ import {
 } from "./policy.mjs";
 import { delegateAugmentSubtask } from "../../hdc-agent-server/lib/delegate-augment.mjs";
 import { listAugmentorsForRole } from "../../hdc-agent-server/lib/litellm-a2a.mjs";
+import {
+  assertRepoAllowedForRole,
+  defaultRepoForRole,
+} from "../../hdc-agent-server/lib/augment-policy.mjs";
 import { queueTopicFromAgent } from "../../hdc-agent-server/lib/research-topics.mjs";
+import { primaryClumpsRoot } from "../../hdc-cli/manifests.mjs";
 import { webFetch, webSearch } from "./web-tools.mjs";
+import { validateClump } from "./clump-validate.mjs";
 
 /**
  * Resolve auth (API key preferred) and pin HDC_AGENT_ROLE for this call.
@@ -350,11 +356,6 @@ export async function handleHdcClumpsSync(args = {}) {
   }
 }
 
-const REPO_BY_ENGINEER_ROLE = {
-  "hdc-engineer": "hdc",
-  "hdc-sre-engineer": "hdc-clumps",
-};
-
 /**
  * @param {Record<string, unknown>} [args]
  */
@@ -370,10 +371,11 @@ export async function handleHdcListAugmentors(args = {}) {
     const repo =
       typeof args.repo === "string" && args.repo.trim()
         ? args.repo.trim()
-        : REPO_BY_ENGINEER_ROLE[/** @type {keyof typeof REPO_BY_ENGINEER_ROLE} */ (role)] || "";
+        : defaultRepoForRole(role);
     if (!repo) {
-      throw new Error("repo is required (or use hdc-engineer / hdc-sre-engineer role)");
+      throw new Error("repo is required (or use an augmentor-delegating role)");
     }
+    assertRepoAllowedForRole(role, repo);
     const augmentors = await listAugmentorsForRole({
       privateRoot,
       delegatorRole: role,
@@ -409,7 +411,8 @@ export async function handleHdcDelegateAugment(args = {}) {
     const repo =
       typeof args.repo === "string" && args.repo.trim()
         ? args.repo.trim()
-        : REPO_BY_ENGINEER_ROLE[/** @type {keyof typeof REPO_BY_ENGINEER_ROLE} */ (role)] || "";
+        : defaultRepoForRole(role);
+    assertRepoAllowedForRole(role, repo);
     const result = await delegateAugmentSubtask({
       privateRoot,
       delegatorRole: role,
@@ -506,6 +509,34 @@ export async function handleHdcWebSearch(args = {}) {
       query,
       limit: args.limit != null ? Number(args.limit) : undefined,
       apiKey: deps.env.HDC_WEB_SEARCH_API_KEY,
+    });
+    return toolTextResult(result);
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
+ * Static clump package consistency validation.
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcValidateClump(args = {}) {
+  try {
+    applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_validate_clump");
+    const { deps, root } = createHdcMcpContext();
+    const tier = String(args.tier ?? "").trim();
+    const clump = String(args.clump ?? args.id ?? "").trim();
+    if (!tier) throw new Error("tier is required");
+    if (!clump) throw new Error("clump is required");
+    const clumpsRoot =
+      (args.clumps_root != null ? String(args.clumps_root) : "") ||
+      primaryClumpsRoot(root, deps.env);
+    const result = validateClump({
+      clumpsRoot,
+      hdcRoot: root,
+      tier,
+      clump,
     });
     return toolTextResult(result);
   } catch (e) {

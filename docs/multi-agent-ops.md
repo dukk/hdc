@@ -99,12 +99,13 @@ Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc
 | `hdc-manager` | Orchestrate | Task files, per-route notifications, A2A delegation | Hourly triage loop + A2A + on demand |
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
-| `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; `hdc_request_research` / `hdc_web_*`; read-only `query` | Failure reports, package scaffolds, unknown-capability tasks |
-| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; `hdc_request_research` / `hdc_web_*`; read-only `query` | Failure reports, platform features |
-| `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
-| `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / after incidents |
-| `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` | Queued topics (operator, manager, or engineer `hdc_request_research`) + weekly brief |
+| `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; `hdc_request_research` / `hdc_web_*` / `hdc_validate_clump`; read-only `query` | Failure reports, package scaffolds, unknown-capability tasks |
+| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; `hdc_request_research` / `hdc_web_*` / `hdc_validate_clump`; read-only `query` | Failure reports, platform features |
+| `hdc-qa` | **Build** (quality) | `hdc_validate_clump`, query/health, QA digests, augmentors | After scaffold/repair; before sre-ops deploy |
+| `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync; augmentors | 6 h sweep + incidents |
+| `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/`; augmentors | Weekly / after incidents |
+| `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/`; augmentors | On demand (A2A) |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*`; augmentors | Queued topics (operator, manager, or engineer `hdc_request_research`) + weekly brief |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
 Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
@@ -123,19 +124,22 @@ When the operator asks for something the fleet may not automate yet:
 1. **hdc-manager** creates a build-only **`hdc-sre-engineer`** task (scaffold/modify clump); adds **`hdc-engineer`** only if CLI/schema support is required.
 2. Engineers gather facts via **`hdc_web_search` / `hdc_web_fetch`** and/or **`hdc_request_research`** (queues `operations/research/topics/<id>.md` for hdc-research).
 3. Large implementation slices may use **`hdc_delegate_augment`** (Cursor/Claude).
-4. After hdc-clumps push → manager **`hdc_clumps_sync`** → **hdc-sre-ops** with task `status: approved` for live deploy.
+4. After hdc-clumps push → **hdc-qa** (`hdc_validate_clump` + optional live probes).
+5. After green QA → manager **`hdc_clumps_sync`** → **hdc-sre-ops** with task `status: approved` for live deploy.
 
-Pending engineer/sre-engineer build tasks (no deploy/teardown/prune in `suggested_commands`) auto-run via the dispatcher.
+Pending engineer/sre-engineer/qa tasks (no deploy/teardown/prune in `suggested_commands`) auto-run via the dispatcher.
 
-### MCP tools (engineer / research extras)
+### MCP tools (engineer / research / QA extras)
 
 | Tool | Roles | Purpose |
 | --- | --- | --- |
 | `hdc_request_research` | hdc-engineer, hdc-sre-engineer | Queue research topic (`status: queued`) |
-| `hdc_web_fetch` | hdc-research, both engineers | Fetch public http(s) URL (SSRF-hardened) |
+| `hdc_web_fetch` | hdc-research, engineers, hdc-qa | Fetch public http(s) URL (SSRF-hardened) |
 | `hdc_web_search` | same | Public web search (DuckDuckGo HTML; optional `HDC_WEB_SEARCH_API_KEY`) |
+| `hdc_validate_clump` | hdc-qa, both engineers | Static clump consistency checks |
+| `hdc_list_augmentors` / `hdc_delegate_augment` | engineers, qa, research, security-*, network-architect | Cursor/Claude subtasks (`hdc` / `hdc-clumps` only) |
 
-Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9202 (sre-ops).
+Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-qa,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9209 (qa), 9202 (sre-ops).
 
 ### Lifecycle coverage matrix
 
@@ -197,7 +201,7 @@ agent container is registered declaratively:
     "url": "http://hdc-agents-a.hdc.example:9201",   // container's A2A endpoint
     "description": "HDC monitoring: health queries, digests, SRE task creation"
   }
-  // … one entry per agent, ports 9200 (manager) … 9208 (sre-engineer)
+  // … one entry per agent, ports 9200 (manager) … 9209 (qa)
 ]
 ```
 
@@ -299,9 +303,11 @@ backup-verification runbook; implement `docs lint`; review delegation policy to 
 the autonomous-maintain envelope as trust builds. Tasks UI remains hdc-web-server
 on the hdc-agents guest.
 
-**Engineer augmentors (implemented):** `hdc-engineer` / `hdc-sre-engineer` delegate
-code-fix subtasks to LiteLLM-registered augmentors (`litellm.a2a_agents[]` with
-`kind: augmentor`) via `hdc_delegate_augment`. Cursor Cloud runs as a fleet sidecar;
+**Augmentor delegation (implemented):** fleet roles `hdc-engineer`, `hdc-sre-engineer`,
+`hdc-qa`, `hdc-research`, `hdc-security-expert`, `hdc-security-architect`, and
+`hdc-network-architect` may delegate code/analysis subtasks to LiteLLM-registered
+augmentors (`litellm.a2a_agents[]` with `kind: augmentor`) via `hdc_delegate_augment`
+(allowed repos: `hdc` / `hdc-clumps` only). Cursor Cloud runs as a fleet sidecar;
 Cursor CLI / Claude Code bridges run on the operator workstation. See
 [`docs/manually-deployed/hdc-augment-bridge.md`](manually-deployed/hdc-augment-bridge.md).
 

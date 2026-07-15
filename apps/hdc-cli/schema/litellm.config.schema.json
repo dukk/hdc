@@ -135,7 +135,12 @@
                         "enum": [
                           "hdc-engineer",
                           "hdc-sre-engineer",
-                          "hdc-manager"
+                          "hdc-manager",
+                          "hdc-qa",
+                          "hdc-research",
+                          "hdc-security-expert",
+                          "hdc-security-architect",
+                          "hdc-network-architect"
                         ]
                       },
                       "description": "Fleet roles allowed to delegate subtasks to this augmentor"

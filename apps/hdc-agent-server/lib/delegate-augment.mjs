@@ -12,12 +12,11 @@ import {
   pickAugmentor,
   postA2aMessage,
 } from "./litellm-a2a.mjs";
-
-const ENGINEER_ROLES = new Set(["hdc-engineer", "hdc-sre-engineer"]);
-const REPO_BY_ROLE = {
-  "hdc-engineer": "hdc",
-  "hdc-sre-engineer": "hdc-clumps",
-};
+import {
+  AUGMENT_DELEGATOR_ROLES,
+  assertRepoAllowedForRole,
+  defaultRepoForRole,
+} from "./augment-policy.mjs";
 
 /**
  * @param {string} parentId
@@ -50,8 +49,10 @@ export function buildAugmentSubtaskId(parentId, slug = "slice") {
  */
 export async function delegateAugmentSubtask(opts) {
   const role = String(opts.delegatorRole ?? "").trim();
-  if (!ENGINEER_ROLES.has(role)) {
-    throw new Error(`delegation is only allowed for hdc-engineer and hdc-sre-engineer (got ${JSON.stringify(role)})`);
+  if (!AUGMENT_DELEGATOR_ROLES.has(role)) {
+    throw new Error(
+      `delegation is not allowed for role ${JSON.stringify(role)} (allowed: ${[...AUGMENT_DELEGATOR_ROLES].join(", ")})`,
+    );
   }
   if (!opts.privateRoot) {
     throw new Error("HDC_PRIVATE_ROOT is required for augmentor delegation");
@@ -60,13 +61,8 @@ export async function delegateAugmentSubtask(opts) {
     throw new Error("augmentation is disabled in hdc-agents config (hdc_agents.augmentation.enabled)");
   }
 
-  const repo = String(opts.repo ?? REPO_BY_ROLE[/** @type {keyof typeof REPO_BY_ROLE} */ (role)] ?? "").trim();
-  if (repo !== "hdc" && repo !== "hdc-clumps") {
-    throw new Error(`repo must be "hdc" or "hdc-clumps" (got ${JSON.stringify(opts.repo)})`);
-  }
-  if (repo !== REPO_BY_ROLE[/** @type {keyof typeof REPO_BY_ROLE} */ (role)]) {
-    throw new Error(`${role} may only delegate repo ${REPO_BY_ROLE[/** @type {keyof typeof REPO_BY_ROLE} */ (role)]}`);
-  }
+  const repo = String(opts.repo ?? defaultRepoForRole(role) ?? "").trim();
+  assertRepoAllowedForRole(role, repo);
 
   const parentId = sanitizeTaskId(opts.parentTaskId);
   const parent = readTask(opts.privateRoot, parentId);

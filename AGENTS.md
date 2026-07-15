@@ -1588,7 +1588,7 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 
 ## Agent team (hdc-agent-server fleet)
 
-Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
+Ten role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
 
 | Agent | Role | Repository |
 | --- | --- | --- |
@@ -1597,6 +1597,7 @@ Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent
 | [`hdc-sre-ops`](apps/hdc-agent-server/agents/hdc-sre-ops.md) | Approved deploy/maintain on live systems | hdc-private |
 | [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples (git commit/push) | hdc-clumps |
 | [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | CLI, schemas, agent fleet, tests (no production deploy) | hdc |
+| [`hdc-qa`](apps/hdc-agent-server/agents/hdc-qa.md) | Clump validation (`hdc_validate_clump`), quality digests | — |
 | [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response | — |
 | [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals | — |
 | [`hdc-network-architect`](apps/hdc-agent-server/agents/hdc-network-architect.md) | Read-only network/DNS proposals | — |

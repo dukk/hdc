@@ -1,9 +1,11 @@
 # HDC augmentor bridge
 
-External IDE and cloud agents augment fleet **hdc-engineer** and **hdc-sre-engineer** by
-accepting A2A `message/send` tasks and running Cursor Cloud, Cursor CLI, or Claude Code.
+External IDE and cloud agents augment fleet roles (**hdc-engineer**, **hdc-sre-engineer**,
+**hdc-qa**, **hdc-research**, **hdc-security-expert**, **hdc-security-architect**,
+**hdc-network-architect**) by accepting A2A `message/send` tasks and running Cursor Cloud,
+Cursor CLI, or Claude Code.
 
-Fleet engineers discover augmentors via LiteLLM `a2a_agents[]` and delegate with MCP tools
+Fleet agents discover augmentors via LiteLLM `a2a_agents[]` and delegate with MCP tools
 `hdc_list_augmentors` and `hdc_delegate_augment`.
 
 ## Architecture
@@ -32,7 +34,15 @@ Enabled in `clumps/services/hdc-agents/config.json`:
     "sidecars": ["cursor-cloud-bridge"],
     "cursor_cloud": {
       "repos": ["hdc", "hdc-clumps"],
-      "delegatable_by": ["hdc-engineer", "hdc-sre-engineer"],
+      "delegatable_by": [
+        "hdc-engineer",
+        "hdc-sre-engineer",
+        "hdc-qa",
+        "hdc-research",
+        "hdc-security-expert",
+        "hdc-security-architect",
+        "hdc-network-architect"
+      ],
       "repository_url": "https://github.com/YOUR_ORG/hdc"
     }
   }
@@ -78,13 +88,13 @@ Register in litellm config (use your Tailscale or LAN URL):
 Claude Code: set `HDC_AUGMENT_RUNTIME=claude-code` and
 `HDC_AUGMENT_CLI_COMMAND="claude -p"` (or your installed CLI).
 
-## Engineer delegation flow
+## Delegation flow
 
-1. Parent task exists (`role: hdc-engineer` or `hdc-sre-engineer`).
-2. Engineer calls `hdc_list_augmentors` for the target repo.
-3. Engineer calls `hdc_delegate_augment` with `parent_task_id` and a bounded `prompt`.
+1. Parent task exists for a delegating role (`hdc-engineer`, `hdc-sre-engineer`, `hdc-qa`, `hdc-research`, security/network architects, …).
+2. Agent calls `hdc_list_augmentors` for an allowed target repo (`hdc` or `hdc-clumps`).
+3. Agent calls `hdc_delegate_augment` with `parent_task_id` and a bounded `prompt`.
 4. A subtask file is created (`<parent>--aug-<slug>-<hash>.md`) and A2A is sent via LiteLLM.
-5. Parent engineer reviews augmentor output, runs tests, sets subtask `delegation_status: completed`, continues handoff.
+5. Parent agent reviews augmentor output, runs tests as needed, sets subtask `delegation_status: completed`, continues handoff.
 
 ## Security
 

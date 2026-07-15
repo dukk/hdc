@@ -48,6 +48,7 @@ Claude Code thin pointers under `.claude/skills/` either target the fleet skill 
 | `proxmox-resource-planning` | Sizing a new Proxmox VM/CT and checking cluster headroom |
 | `hdc-manager` | Task triage, escalation, and delegation workflows |
 | `hdc-monitor` | Monitoring runbook (uptime-kuma, proxmox query, digests) |
+| `hdc-qa` | Clump static validation (`hdc_validate_clump`), query/health digests |
 | `hdc-security` | Security queries and response (wazuh, crowdsec, nginx-waf) |
 | `hdc-agent-team` | Shared agent-team conventions: task files, digests, paths |
 
