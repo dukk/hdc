@@ -24,6 +24,8 @@ import {
 } from "./policy.mjs";
 import { delegateAugmentSubtask } from "../../hdc-agent-server/lib/delegate-augment.mjs";
 import { listAugmentorsForRole } from "../../hdc-agent-server/lib/litellm-a2a.mjs";
+import { queueTopicFromAgent } from "../../hdc-agent-server/lib/research-topics.mjs";
+import { webFetch, webSearch } from "./web-tools.mjs";
 
 /**
  * Resolve auth (API key preferred) and pin HDC_AGENT_ROLE for this call.
@@ -426,6 +428,84 @@ export async function handleHdcDelegateAugment(args = {}) {
         deps.env.HDC_AGENT_LITELLM_KEY ||
         deps.env[`HDC_AGENT_LITELLM_KEY_${role.replace(/-/g, "_").toUpperCase()}`] ||
         deps.env.HDC_LITELLM_MASTER_KEY,
+    });
+    return toolTextResult(result);
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
+ * Queue a research topic for hdc-research (engineer / sre-engineer only).
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcRequestResearch(args = {}) {
+  try {
+    const role = applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_request_research", role);
+    const { deps, root } = createHdcMcpContext();
+    const privateRoot =
+      (args.private_root != null ? String(args.private_root) : "") ||
+      hdcPrivateRoot(root, deps.env) ||
+      "";
+    if (!privateRoot) {
+      throw new Error("HDC_PRIVATE_ROOT (or resolved private root) is required");
+    }
+    const title = String(args.title ?? "").trim();
+    if (!title) throw new Error("title is required");
+    const topic = queueTopicFromAgent(privateRoot, {
+      title,
+      suggested_by: role,
+      notes: typeof args.notes === "string" ? args.notes : typeof args.body === "string" ? args.body : "",
+      url: typeof args.url === "string" ? args.url : "",
+      priority: typeof args.priority === "string" ? args.priority : "medium",
+      id: typeof args.id === "string" ? args.id : undefined,
+    });
+    return toolTextResult({
+      ok: true,
+      topic_id: topic.id,
+      status: topic.status,
+      title: topic.title,
+      suggested_by: topic.suggested_by,
+      path: `operations/research/topics/${topic.id}.md`,
+    });
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
+ * Fetch a public http(s) URL as truncated text (SSRF-hardened).
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcWebFetch(args = {}) {
+  try {
+    applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_web_fetch");
+    const url = String(args.url ?? "").trim();
+    if (!url) throw new Error("url is required");
+    const result = await webFetch({ url });
+    return toolTextResult(result);
+  } catch (e) {
+    return toolErrorResult(e instanceof Error ? e : String(e));
+  }
+}
+
+/**
+ * Web search (DuckDuckGo HTML by default).
+ * @param {Record<string, unknown>} [args]
+ */
+export async function handleHdcWebSearch(args = {}) {
+  try {
+    const role = applyMcpAuth(args);
+    assertToolAllowedForRole("hdc_web_search", role);
+    const query = String(args.query ?? "").trim();
+    if (!query) throw new Error("query is required");
+    const { deps } = createHdcMcpContext();
+    const result = await webSearch({
+      query,
+      limit: args.limit != null ? Number(args.limit) : undefined,
+      apiKey: deps.env.HDC_WEB_SEARCH_API_KEY,
     });
     return toolTextResult(result);
   } catch (e) {

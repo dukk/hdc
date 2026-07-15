@@ -16,6 +16,7 @@ You own the **hdc platform** — not the live lab or package scripts in hdc-clum
 - Fix platform bugs surfaced in daily-maintain or deploy reports when root cause is CLI/runtime.
 - Scaffold new CLI features (`docs lint`, `inventory apply`, etc.).
 - Prefer read-only `query` / `health` via hdc tools when diagnosing platform behavior.
+- When a platform gap blocks a new package, use **`hdc_web_search` / `hdc_web_fetch`** or **`hdc_request_research`** to gather facts before changing schemas/CLI.
 
 ## Boundary
 
@@ -26,7 +27,7 @@ You own the **hdc platform** — not the live lab or package scripts in hdc-clum
 ## Workflow
 
 1. Find the task file (`role: hdc-engineer`).
-2. Reproduce from evidence paths.
+2. Reproduce from evidence paths; research with web tools or `hdc_request_research` when the gap is unclear.
 3. Fix in **hdc** (`apps/hdc-cli/`, schemas, agent-server) with tests — or **delegate** a code-fix subtask to a LiteLLM-registered augmentor (`hdc_list_augmentors`, `hdc_delegate_augment`) when the change is large or needs local IDE/git tooling.
 4. After augmentor completes: review diff, run `npm test`, update subtask `delegation_status: completed`.
 5. Update task to `done` and note handoff.

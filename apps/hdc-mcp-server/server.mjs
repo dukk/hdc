@@ -15,7 +15,10 @@ import {
   handleHdcDelegateAugment,
   handleHdcListAugmentors,
   handleHdcNotifyDiscord,
+  handleHdcRequestResearch,
   handleHdcRun,
+  handleHdcWebFetch,
+  handleHdcWebSearch,
 } from "./lib/tools.mjs";
 import { getRolePolicy, resolveAgentRole } from "./lib/policy.mjs";
 import { resolveMcpAuth } from "./lib/api-keys.mjs";
@@ -162,6 +165,44 @@ if (toolAllowed("hdc_delegate_augment")) {
       wait: z.boolean().optional().describe("Wait for augmentor completion (v1: async only)"),
     },
     async (args) => handleHdcDelegateAugment(args),
+  );
+}
+
+if (toolAllowed("hdc_request_research")) {
+  server.tool(
+    "hdc_request_research",
+    "Queue a research topic for hdc-research (writes operations/research/topics/<id>.md with status queued).",
+    {
+      title: z.string().describe("Short research topic title"),
+      notes: z.string().optional().describe("Context / questions for the research agent"),
+      url: z.string().optional().describe("Optional starting URL"),
+      priority: z.enum(["critical", "high", "medium", "low"]).optional().describe("Topic priority (default medium)"),
+      id: z.string().optional().describe("Optional topic id stem (auto-generated when omitted)"),
+    },
+    async (args) => handleHdcRequestResearch(args),
+  );
+}
+
+if (toolAllowed("hdc_web_fetch")) {
+  server.tool(
+    "hdc_web_fetch",
+    "Fetch a public http(s) URL and return truncated plaintext (blocks private/link-local hosts).",
+    {
+      url: z.string().describe("Public http(s) URL"),
+    },
+    async (args) => handleHdcWebFetch(args),
+  );
+}
+
+if (toolAllowed("hdc_web_search")) {
+  server.tool(
+    "hdc_web_search",
+    "Search the public web (DuckDuckGo HTML). Returns title/url/snippet results.",
+    {
+      query: z.string().describe("Search query"),
+      limit: z.number().optional().describe("Max results (1–10, default 5)"),
+    },
+    async (args) => handleHdcWebSearch(args),
   );
 }
 

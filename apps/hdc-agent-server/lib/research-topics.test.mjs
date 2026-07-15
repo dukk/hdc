@@ -7,6 +7,7 @@ import {
   appendSuggestion,
   listQueuedTopics,
   listTopics,
+  queueTopicFromAgent,
   readTopic,
   updateTopic,
   writeResearchIndex,
@@ -137,6 +138,28 @@ describe("research-topics", () => {
       const t = readTopic(root, "foo");
       expect(t.status).toBe("in_progress");
       expect(t.body).toBe("body text");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("queueTopicFromAgent writes queued topic and refreshes index", () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-research-"));
+    try {
+      const topic = queueTopicFromAgent(root, {
+        title: "Evaluate Foo service for Proxmox",
+        suggested_by: "hdc-sre-engineer",
+        notes: "Need install pattern and resource sizing.",
+        url: "https://example.invalid/foo",
+        priority: "medium",
+      });
+      expect(topic.status).toBe("queued");
+      expect(topic.suggested_by).toBe("hdc-sre-engineer");
+      expect(topic.id).toMatch(/^eng-req-/);
+      const queued = listQueuedTopics(root);
+      expect(queued.some((t) => t.id === topic.id)).toBe(true);
+      const index = readFileSync(join(root, "operations", "research", "index.md"), "utf8");
+      expect(index).toContain(topic.id);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

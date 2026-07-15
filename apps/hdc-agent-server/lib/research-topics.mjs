@@ -329,6 +329,71 @@ export function writeResearchIndex(privateRoot, opts = {}) {
 }
 
 /**
+ * Slugify a title for topic ids (lowercase, hyphens, max 40).
+ * @param {string} title
+ */
+export function slugifyTopicTitle(title) {
+  const s = String(title ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return s || "topic";
+}
+
+/**
+ * Queue a research topic from an engineer agent (bypasses suggestion inbox).
+ * @param {string} privateRoot
+ * @param {{
+ *   title: string,
+ *   suggested_by: string,
+ *   notes?: string,
+ *   url?: string,
+ *   priority?: string,
+ *   id?: string,
+ * }} input
+ */
+export function queueTopicFromAgent(privateRoot, input) {
+  const title = String(input.title ?? "").trim();
+  if (!title) throw new Error("title is required");
+  const suggestedBy = String(input.suggested_by ?? "").trim();
+  if (!suggestedBy) throw new Error("suggested_by is required");
+
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  let id = String(input.id ?? "").trim();
+  if (!id) {
+    id = `eng-req-${date}-${slugifyTopicTitle(title)}`;
+  }
+  id = sanitizeTaskId(id);
+
+  if (existsSync(topicFilePath(privateRoot, id))) {
+    let n = 2;
+    while (existsSync(topicFilePath(privateRoot, `${id}-${n}`)) && n < 50) n += 1;
+    id = sanitizeTaskId(`${id}-${n}`);
+  }
+
+  const topic = writeTopic(privateRoot, {
+    ...validateTopicFrontmatter(
+      {
+        id,
+        title,
+        status: "queued",
+        priority: input.priority || "medium",
+        suggested_by: suggestedBy,
+        url: input.url || "",
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      },
+      input.notes || "",
+    ),
+  });
+  writeResearchIndex(privateRoot, { source: `queue-from-${suggestedBy}` });
+  return topic;
+}
+
+/**
  * @param {string} privateRoot
  * @param {string} suggestionTitle
  * @param {Partial<ReturnType<typeof validateTopicFrontmatter>> & { id: string }} topicInput

@@ -51,11 +51,26 @@ export function sha256Hex(text) {
  *
  * @param {ReturnType<typeof import("./operations-fs.mjs").validateTaskFrontmatter>} task
  */
+/**
+ * Whether the dispatcher may A2A/local-run this task without further operator approval.
+ * Approved tasks always run. Pending build tasks for engineers auto-run when they contain
+ * no deploy/teardown/prune/destroy commands. Other pending tasks only when all suggested
+ * commands are query-safe (or UniFi --block).
+ * @param {{ status?: string, needs_decision?: boolean, suggested_commands?: string[], role?: string }} task
+ */
 export function canAutoRunTask(task) {
   if (task.status !== "pending" && task.status !== "approved") return false;
   if (task.status === "approved") return true;
   if (task.needs_decision) return false;
   const cmds = task.suggested_commands ?? [];
+  const role = String(task.role ?? "").trim();
+  const isEngineerBuildRole = role === "hdc-engineer" || role === "hdc-sre-engineer";
+  if (isEngineerBuildRole) {
+    if (!cmds.length) return true;
+    return cmds.every(
+      (c) => !/\b(deploy|teardown|prune|destroy-existing|destroy)\b/i.test(String(c)),
+    );
+  }
   if (!cmds.length) return false;
   return cmds.every(
     (c) =>

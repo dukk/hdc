@@ -69,6 +69,7 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 - **Secrets:** env var names only; values in vault.
 - **Destructive work** requires task status `approved` per `delegation-policy.md`.
 - **No root scratch:** never write `tmp-*` at the hdc / hdc-private repo root.
+- **Hub-and-spoke:** specialists do not assign work to each other — **except** engineers may call `hdc_request_research` to queue a topic for hdc-research (manager still owns all other delegation).
 
 ## Digest filename pattern
 
@@ -92,6 +93,13 @@ Fleet **hdc-engineer** / **hdc-sre-engineer** may delegate code-fix **subtasks**
 - `hdc_delegate_augment` — create subtask + A2A `message/send` via LiteLLM gateway
 
 Parent engineer keeps task ownership; augmentors edit only their declared repo. See `docs/manually-deployed/hdc-augment-bridge.md`.
+
+## Engineer research and web tools
+
+When scaffolding unknown capabilities or filling platform gaps:
+
+- `hdc_request_research` — queue `operations/research/topics/<id>.md` (`status: queued`) for hdc-research
+- `hdc_web_search` / `hdc_web_fetch` — public web (SSRF-hardened); also available to hdc-research
 
 ## Deprecated
 

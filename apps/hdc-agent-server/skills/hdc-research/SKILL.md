@@ -68,4 +68,8 @@ When no queued topics: candidates table, fit vs fleet, resources, integration pa
 
 ## Manager handoff
 
-For `outcome: adopt` or `manual-only`, create `operations/tasks/<id>.md` with `role: hdc-manager`, `priority: low`, evidence pointing at the report.
+For `outcome: adopt` or `manual-only`, create `operations/tasks/<id>.md` with `role: hdc-manager`, `priority: low`, evidence pointing at the report. Do **not** auto-create sre-engineer scaffold tasks — the manager routes unknown-capability / adopt work.
+
+## Engineer-queued topics
+
+Topics may arrive with `suggested_by: hdc-sre-engineer` or `hdc-engineer` (via `hdc_request_research`). Treat them like any other `queued` topic; cite their notes/URL in the report.

@@ -188,6 +188,41 @@ describe("dispatcher", () => {
     ).toBe(false);
   });
 
+  it("canAutoRunTask allows pending engineer build tasks without deploy verbs", () => {
+    expect(
+      canAutoRunTask({
+        status: "pending",
+        role: "hdc-sre-engineer",
+        needs_decision: false,
+        suggested_commands: [],
+      }),
+    ).toBe(true);
+    expect(
+      canAutoRunTask({
+        status: "pending",
+        role: "hdc-engineer",
+        needs_decision: false,
+        suggested_commands: ["scaffold clump package for foo"],
+      }),
+    ).toBe(true);
+    expect(
+      canAutoRunTask({
+        status: "pending",
+        role: "hdc-sre-engineer",
+        needs_decision: false,
+        suggested_commands: ["hdc run service foo deploy"],
+      }),
+    ).toBe(false);
+    expect(
+      canAutoRunTask({
+        status: "pending",
+        role: "hdc-monitor",
+        needs_decision: false,
+        suggested_commands: [],
+      }),
+    ).toBe(false);
+  });
+
   it("research idles when brief exists", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-disp-"));
     try {

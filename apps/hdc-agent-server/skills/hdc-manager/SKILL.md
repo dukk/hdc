@@ -47,6 +47,15 @@ Failed steps → route by root cause:
 - **Package script** → `role: hdc-sre-engineer` (then manager `hdc_clumps_sync` before sre-ops)
 - **Approved production run** → `role: hdc-sre-ops` after code handoff and manager sync when needed
 
+## Unknown capability (new or missing automation)
+
+When the operator asks for something the fleet may not know how to do (no matching clump, unclear install path, greenfield service):
+
+1. Create a **`hdc-sre-engineer`** task to scaffold or modify the package (build-only — no deploy in `suggested_commands`).
+2. Create a **`hdc-engineer`** task only when CLI schemas, shared `hdc/package/*`, or agent-server support is also required.
+3. Do **not** invent package design yourself — engineers use `hdc_web_*` and/or `hdc_request_research`.
+4. After sre-engineer pushes hdc-clumps, run `hdc_clumps_sync`, then open **hdc-sre-ops** with `needs_decision` / await `approved` for live deploy.
+
 ## Never without `approved`
 
 - deploy, teardown, maintain `--prune`

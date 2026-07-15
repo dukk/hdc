@@ -165,8 +165,9 @@ markdown **operation report**. Inventory is JSON sidecars discriminated by `kind
 ## 5. The agent fleet
 
 The fleet turns "a small SRE team" into always-on services. **Hub-and-spoke:** the
-Manager is the only agent that assigns work and talks to the operator; specialists never
-trigger each other directly. Coordination flows through **task files** in hdc-private,
+Manager is the only agent that assigns work and talks to the operator; specialists do
+not assign work to each other **except** engineers may queue research via
+`hdc_request_research`. Coordination flows through **task files** in hdc-private,
 not chat context.
 
 ```mermaid
@@ -225,7 +226,7 @@ flowchart TB
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / post-incident |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + web | Queued topics + weekly brief |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` | Queued topics (incl. engineer requests) + weekly brief |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
 Canonical definitions live in [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/);

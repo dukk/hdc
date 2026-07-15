@@ -11,7 +11,7 @@ export const ROLE_SKILL_IDS = {
   "hdc-manager": ["hdc-agent-team", "hdc-manager"],
   "hdc-monitor": ["hdc-agent-team", "hdc-monitor"],
   "hdc-sre-ops": ["hdc-agent-team", "hdc-ops"],
-  "hdc-sre-engineer": ["hdc-agent-team"],
+  "hdc-sre-engineer": ["hdc-agent-team", "hdc-sre-engineer"],
   "hdc-engineer": ["hdc-agent-team"],
   "hdc-security-expert": ["hdc-agent-team", "hdc-security"],
   "hdc-security-architect": ["hdc-agent-team", "hdc-security"],

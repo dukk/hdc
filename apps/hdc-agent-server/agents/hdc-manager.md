@@ -34,6 +34,15 @@ When scanning digests / daily-maintain reports for failed steps:
 - **Package script bug** → `role: hdc-sre-engineer`
 - **Approved production run** → `role: hdc-sre-ops` (after engineer/sre-engineer handoff when code changed)
 
+## Unknown capability
+
+When the operator asks for a service or automation the fleet does not yet have:
+
+1. Create **`hdc-sre-engineer`** task (scaffold/modify clump) — build only.
+2. Create **`hdc-engineer`** only if CLI/schema/fleet support is required.
+3. Let engineers research (`hdc_request_research` / `hdc_web_*`); do not invent package design.
+4. After package push: `hdc_clumps_sync`, then **hdc-sre-ops** with operator `approved` for deploy.
+
 ## Escalation
 
 - **`needs_decision: true`** → the scripted dispatcher notifies via `notifications.routes.needs_decision` (default Discord). Configure per-event channels in `clumps/services/hdc-agents/config.json` — see [manager-notifications.md](../../../docs/manually-deployed/manager-notifications.md). Email decisions support mailbox reply subjects `APPROVE <task-id>` / `REJECT <task-id>`; Discord may include Approve/Deny buttons when the hdc-ops app is configured. Do not duplicate escalation with `hdc_notify_discord` when the dispatcher already notified.

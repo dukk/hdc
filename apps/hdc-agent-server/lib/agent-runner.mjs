@@ -8,7 +8,10 @@ import {
   handleHdcListAugmentors,
   handleHdcMaintainDaily,
   handleHdcNotifyDiscord,
+  handleHdcRequestResearch,
   handleHdcRun,
+  handleHdcWebFetch,
+  handleHdcWebSearch,
 } from "../../hdc-mcp-server/lib/tools.mjs";
 import { getRolePolicy, resolveAgentRole } from "../../hdc-mcp-server/lib/policy.mjs";
 
@@ -21,6 +24,9 @@ const TOOL_HANDLERS = {
   hdc_notify_discord: handleHdcNotifyDiscord,
   hdc_list_augmentors: handleHdcListAugmentors,
   hdc_delegate_augment: handleHdcDelegateAugment,
+  hdc_request_research: handleHdcRequestResearch,
+  hdc_web_fetch: handleHdcWebFetch,
+  hdc_web_search: handleHdcWebSearch,
 };
 
 /**
@@ -158,6 +164,58 @@ function openAiToolsForRole(role) {
             repo: { type: "string", enum: ["hdc", "hdc-clumps"] },
             augmentor_name: { type: "string" },
             wait: { type: "boolean" },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_request_research")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_request_research",
+        description:
+          "Queue a research topic for hdc-research (operations/research/topics with status queued)",
+        parameters: {
+          type: "object",
+          required: ["title"],
+          properties: {
+            title: { type: "string" },
+            notes: { type: "string" },
+            url: { type: "string" },
+            priority: { type: "string", enum: ["critical", "high", "medium", "low"] },
+            id: { type: "string" },
+          },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_web_fetch")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_web_fetch",
+        description: "Fetch a public http(s) URL as truncated plaintext (SSRF-hardened)",
+        parameters: {
+          type: "object",
+          required: ["url"],
+          properties: { url: { type: "string" } },
+        },
+      },
+    });
+  }
+  if (policy.tools.has("hdc_web_search")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "hdc_web_search",
+        description: "Search the public web; returns title/url/snippet results",
+        parameters: {
+          type: "object",
+          required: ["query"],
+          properties: {
+            query: { type: "string" },
+            limit: { type: "number" },
           },
         },
       },

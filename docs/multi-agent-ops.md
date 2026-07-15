@@ -39,8 +39,10 @@ Key architectural decisions:
   `.cursor/agents/` and `.claude/agents/`. Containerized agents load
   `apps/hdc-agent-server/agents/{role}.md` (skills injected into the system prompt).
 - **Hub-and-spoke orchestration.** The Manager is the only agent that assigns work and
-  talks to the operator; specialists never trigger each other directly. A2A calls
-  between agents go through LiteLLM (or compose DNS peer URLs from the dispatcher), so every delegation is authenticated and logged.
+  talks to the operator; specialists do not assign work to each other **except**
+  engineers may call `hdc_request_research` to queue a topic for `hdc-research`.
+  A2A calls between agents go through LiteLLM (or compose DNS peer URLs from the
+  dispatcher), so every delegation is authenticated and logged.
 - **Files as durable state, A2A as transport.** Tasks (`operations/tasks/*.md`),
   digests (`operations/reports/`), and proposals (`operations/proposals/`) in
   hdc-private remain the auditable system of record. A2A messages trigger work and
@@ -97,12 +99,12 @@ Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc
 | `hdc-manager` | Orchestrate | Task files, per-route notifications, A2A delegation | Hourly triage loop + A2A + on demand |
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
-| `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; read-only `query` | Failure reports, package scaffolds |
-| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; read-only `query` | Failure reports, platform features |
+| `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; `hdc_request_research` / `hdc_web_*`; read-only `query` | Failure reports, package scaffolds, unknown-capability tasks |
+| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; `hdc_request_research` / `hdc_web_*`; read-only `query` | Failure reports, platform features |
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / after incidents |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + web | Queued topics + weekly brief; suggestions via web/email/inbox |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` | Queued topics (operator, manager, or engineer `hdc_request_research`) + weekly brief |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
 Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
@@ -110,9 +112,28 @@ Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
 ### Build roles (revised 2026-07-14)
 
 - **`hdc-engineer`** owns the **hdc** platform (CLI, schemas, agent-server, tests). Never runs production deploy/maintain.
-- **`hdc-sre-engineer`** owns **hdc-clumps** package automation (commit/push git). Never edits hdc-private, runs live deploy/maintain, or syncs clumps on the MCP host.
+- **`hdc-sre-engineer`** owns **hdc-clumps** package automation (commit/push git). Never edits hdc-private live config, runs live deploy/maintain, or syncs clumps on the MCP host.
 - **`hdc-manager`** owns **`hdc_clumps_sync`** on the fleet host — pull package code after git updates before delegating sre-ops.
 - **`hdc-sre-ops`** owns **hdc-private** live state and executes approved deploy/maintain via hdc-service-deploy.
+
+### Unknown capability workflow
+
+When the operator asks for something the fleet may not automate yet:
+
+1. **hdc-manager** creates a build-only **`hdc-sre-engineer`** task (scaffold/modify clump); adds **`hdc-engineer`** only if CLI/schema support is required.
+2. Engineers gather facts via **`hdc_web_search` / `hdc_web_fetch`** and/or **`hdc_request_research`** (queues `operations/research/topics/<id>.md` for hdc-research).
+3. Large implementation slices may use **`hdc_delegate_augment`** (Cursor/Claude).
+4. After hdc-clumps push → manager **`hdc_clumps_sync`** → **hdc-sre-ops** with task `status: approved` for live deploy.
+
+Pending engineer/sre-engineer build tasks (no deploy/teardown/prune in `suggested_commands`) auto-run via the dispatcher.
+
+### MCP tools (engineer / research extras)
+
+| Tool | Roles | Purpose |
+| --- | --- | --- |
+| `hdc_request_research` | hdc-engineer, hdc-sre-engineer | Queue research topic (`status: queued`) |
+| `hdc_web_fetch` | hdc-research, both engineers | Fetch public http(s) URL (SSRF-hardened) |
+| `hdc_web_search` | same | Public web search (DuckDuckGo HTML; optional `HDC_WEB_SEARCH_API_KEY`) |
 
 Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9202 (sre-ops).
 

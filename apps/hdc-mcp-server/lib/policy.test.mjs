@@ -57,6 +57,14 @@ describe("hdc-mcp-server policy", () => {
     expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-manager")).toThrow(
       /not allowed/,
     );
+    expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-sre-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-manager")).toThrow(
+      /not allowed/,
+    );
+    expect(() => assertToolAllowedForRole("hdc_web_fetch", "hdc-research")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_web_search", "hdc-sre-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_web_fetch", "hdc-monitor")).toThrow(/not allowed/);
   });
 
   it("allows hdc_clumps_sync for manager only", () => {
