@@ -27,7 +27,7 @@ export function listBanDecisionsInCt(user, pveHost, vmid) {
     user,
     pveHost,
     vmid,
-    "cscli decisions list -i -o json 2>/dev/null || cscli decisions list -o json",
+    "cscli decisions list -o json 2>/dev/null || cscli decisions list -o raw",
     { capture: true },
   );
   if (r.status !== 0) {

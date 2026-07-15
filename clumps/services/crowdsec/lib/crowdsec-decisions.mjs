@@ -63,7 +63,8 @@ export function filterBanDecisionsForUnifi(decisions, opts = {}) {
   const max = Number.isFinite(opts.maxDecisions) && opts.maxDecisions > 0 ? opts.maxDecisions : 15000;
 
   const bans = decisions.filter((d) => {
-    if (!d.value || d.type && d.type !== "ban") return false;
+    if (!d.value) return false;
+    if (d.type && d.type !== "ban") return false;
     if (!isValidIpv4(d.value)) return false;
     if (isInternalIp(d.value, cidrs)) return false;
     return true;
