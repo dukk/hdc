@@ -18,6 +18,8 @@ import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import {
   buildClumpRunEnv,
 } from "./clump-env.mjs";
+import { cliAppDir } from "../paths.mjs";
+import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
 import {
   buildDailyStepArgs,
   dailyRecipeSteps,
@@ -340,7 +342,11 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
     const started = Date.now();
     const pipeStdoutJson =
       step.verb === "query" || step.verb === "maintain";
-    const runEnv = buildClumpRunEnv(deps, root, resolved.m);
+    const runEnv = augmentPackageSpawnEnv(
+      buildClumpRunEnv(deps, root, resolved.m),
+      cliAppDir(root),
+      deps.clumpsDir(root),
+    );
     const r = deps.spawnSync(deps.execPath, [resolved.script, ...args], {
       cwd: resolved.cwd,
       stdio: pipeStdoutJson ? ["inherit", "pipe", "inherit"] : "inherit",

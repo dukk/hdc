@@ -11,6 +11,7 @@ On agent **`stop`** with `status: completed`, if **hdc** and/or sibling **hdc-pr
 The hook does **not** run `git commit` itself and never pushes.
 
 - Skips secret paths (`.env`, `.env.*`, `*.enc`, `vault.enc`) — listed in the follow-up as do-not-stage
+- Skips Cursor Plan mode files (`.cursor/plans/**`, `*.plan.md`) — plan-only dirty trees do not trigger a follow-up
 - `loop_limit: 2` in `hooks.json` — at most two auto follow-ups; `loop_count >= 2` yields `{}`
 - Fail-open: unexpected errors print `{}` so the agent session is not blocked
 

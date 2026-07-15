@@ -47,6 +47,8 @@ import { resolveSecretBackendMode } from "./secret-backend.mjs";
 import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
 import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
+import { cliAppDir } from "../paths.mjs";
+import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
 
 /**
  * @typedef {{ hostname: string, ips: string[], platform: string, arch: string }} HostProbe
@@ -1182,7 +1184,11 @@ async function cmdRun(deps, root, argv) {
   if (!deps.existsSync(script)) die(deps, `run: missing script ${script}`);
   const pipeStdoutJson =
     verb === "query" || verb === "health" || verb === "deploy" || verb === "teardown";
-  const runEnv = buildClumpRunEnv(deps, root, m);
+  const runEnv = augmentPackageSpawnEnv(
+    buildClumpRunEnv(deps, root, m),
+    cliAppDir(root),
+    deps.clumpsDir(root),
+  );
   const r = deps.spawnSync(deps.execPath, [script, ...extra], {
     cwd,
     stdio: pipeStdoutJson ? ["inherit", "pipe", "inherit"] : "inherit",

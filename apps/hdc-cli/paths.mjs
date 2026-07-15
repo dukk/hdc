@@ -13,6 +13,11 @@ export function cliAppDir(root = repoRoot()) {
   return join(root, "apps", "hdc-cli");
 }
 
+/** Shared package runtime under hdc-cli (former clumps/lib). */
+export function packageLibDir(root = repoRoot()) {
+  return join(cliAppDir(root), "lib", "package");
+}
+
 /** HDC clumps under `clumps/{infrastructure,services,clients}/`. */
 export function clumpsDir(root = repoRoot()) {
   return join(root, "clumps");

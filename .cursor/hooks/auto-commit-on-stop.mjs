@@ -88,6 +88,14 @@ function isSecretPath(relPath) {
   return false;
 }
 
+/** Cursor Plan mode artifacts — never auto-committed. */
+function isPlanPath(relPath) {
+  const normalized = relPath.replace(/\\/g, "/");
+  if (/(^|\/)\.cursor\/plans\//i.test(normalized)) return true;
+  if (/\.plan\.md$/i.test(normalized)) return true;
+  return false;
+}
+
 function listSafeChangedPaths(cwd) {
   if (!isGitWorkTree(cwd)) return null;
   const r = git(cwd, ["status", "--porcelain", "-u"]);
@@ -102,6 +110,7 @@ function listSafeChangedPaths(cwd) {
 
   const safe = [];
   const skippedSecrets = [];
+  const skippedPlans = [];
   for (const line of lines) {
     const p = parsePorcelainPath(line);
     if (!p) continue;
@@ -109,10 +118,17 @@ function listSafeChangedPaths(cwd) {
       skippedSecrets.push(p);
       continue;
     }
+    if (isPlanPath(p)) {
+      skippedPlans.push(p);
+      continue;
+    }
     safe.push(p);
   }
   if (skippedSecrets.length) {
     log(`secret paths present in ${path.basename(cwd)} (do not stage):`, skippedSecrets.join(", "));
+  }
+  if (skippedPlans.length) {
+    log(`plan paths present in ${path.basename(cwd)} (do not stage):`, skippedPlans.join(", "));
   }
   return safe;
 }
@@ -138,7 +154,7 @@ function buildFollowupMessage(repos) {
     "",
     "For each dirty repo below:",
     "1. Run `git status` and `git diff` (plus `git diff --stat`) in that root.",
-    "2. Stage only non-secret paths. Never stage `.env`, `.env.*`, `*.enc`, or `vault.enc`.",
+    "2. Stage only non-secret, non-plan paths. Never stage `.env`, `.env.*`, `*.enc`, `vault.enc`, `.cursor/plans/**`, or `*.plan.md`.",
     "3. Write a [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) message:",
     "   - Form: `type(optional-scope): short description`",
     "   - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`",

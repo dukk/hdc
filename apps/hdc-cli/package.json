@@ -1,0 +1,9 @@
+{
+  "name": "hdc-cli",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package/*": "./lib/package/*",
+    "./paths.mjs": "./paths.mjs"
+  }
+}
