@@ -1,6 +1,7 @@
 {
   "pkg": "hdc-web-server",
   "globalName": "HdcUI",
+  "projectId": "ca80d648-b24e-45fd-9205-6f6bf6601bb8",
   "shape": "package",
   "srcDir": "web/src/ui",
   "cssEntry": "web/src/ui/styles.css",
