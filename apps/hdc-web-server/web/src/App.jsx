@@ -1,5 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.js";
+import {
+  Banner,
+  Button,
+  CardGrid,
+  Field,
+  ListRow,
+  LogView,
+  Message,
+  Panel,
+  SearchInput,
+  SelectInput,
+  Spinner,
+  StatCard,
+  StatusText,
+  Table,
+  Tabs,
+  TextInput,
+} from "./ui/index.js";
 
 const TABS = [
   { id: "dashboard", label: "Dashboard" },
@@ -57,22 +75,20 @@ export default function App() {
   }
 
   if (!authChecked) {
-    return <div className="loading">Loading…</div>;
+    return <Spinner />;
   }
 
   if (!user) {
     return (
-      <div className="panel">
+      <Panel>
         <h1>HDC Web</h1>
-        <p className="muted">Sign in with SSO to manage scheduled jobs, tasks, and inventory.</p>
-        <button type="button" onClick={onSsoLogin} disabled={!oidcConfigured}>
+        <Message>Sign in with SSO to manage scheduled jobs, tasks, and inventory.</Message>
+        <Button onClick={onSsoLogin} disabled={!oidcConfigured}>
           Sign in with SSO
-        </button>
-        {!oidcConfigured ? (
-          <p className="error">OIDC is not configured on this server.</p>
-        ) : null}
-        {loginError ? <p className="error">{loginError}</p> : null}
-      </div>
+        </Button>
+        {!oidcConfigured ? <Message tone="error">OIDC is not configured on this server.</Message> : null}
+        {loginError ? <Message tone="error">{loginError}</Message> : null}
+      </Panel>
     );
   }
 
@@ -80,23 +96,12 @@ export default function App() {
     <>
       <header>
         <h1>HDC Web</h1>
-        <nav>
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={tab === t.id ? "active" : ""}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <Tabs tabs={TABS} activeId={tab} onSelect={setTab} />
         <div className="header-actions">
           <span className="muted">{user}</span>
-          <button type="button" className="btn btn-secondary" onClick={onLogout}>
+          <Button variant="secondary" onClick={onLogout}>
             Sign out
-          </button>
+          </Button>
         </div>
       </header>
       <main>
@@ -139,27 +144,18 @@ function Dashboard() {
   return (
     <section>
       <h2>Dashboard</h2>
-      {error ? <p className="error">{error}</p> : null}
-      <div className="cards">
-        <div className="card">
-          <span className="muted">Schedules</span>
-          <strong>{schedules.length}</strong>
-        </div>
-        <div className="card">
-          <span className="muted">Recent jobs</span>
-          <strong>{jobs.length}</strong>
-        </div>
-        <div className="card">
-          <span className="muted">Failed schedules</span>
-          <strong className={failed.length ? "exit-fail" : "exit-ok"}>{failed.length}</strong>
-        </div>
-      </div>
+      {error ? <Message tone="error">{error}</Message> : null}
+      <CardGrid>
+        <StatCard label="Schedules" value={schedules.length} />
+        <StatCard label="Recent jobs" value={jobs.length} />
+        <StatCard label="Failed schedules" value={failed.length} tone={failed.length ? "fail" : "ok"} />
+      </CardGrid>
       {running ? (
-        <div className="banner">
+        <Banner>
           Job running: {running.type}{" "}
           {running.schedule_id || `${running.tier}/${running.package}/${running.verb}`} (started{" "}
           {running.started_at})
-        </div>
+        </Banner>
       ) : null}
     </section>
   );
@@ -207,51 +203,39 @@ function Tasks({ onRan }) {
     }
   }
 
+  const columns = [
+    { key: "id", header: "ID", render: (t) => <code>{t.id}</code> },
+    { key: "role", header: "Role", render: (t) => t.role },
+    { key: "priority", header: "Priority", render: (t) => t.priority },
+    { key: "status", header: "Status", render: (t) => t.status },
+    { key: "title", header: "Title", render: (t) => t.title },
+    {
+      key: "actions",
+      header: "",
+      render: (t) => (
+        <>
+          {t.status === "pending" ? (
+            <Button size="sm" variant="secondary" onClick={() => approve(t.id)}>
+              Approve
+            </Button>
+          ) : null}
+          {t.status === "pending" || t.status === "approved" ? (
+            <Button size="sm" onClick={() => run(t.id)}>
+              Run agent
+            </Button>
+          ) : null}
+        </>
+      ),
+    },
+  ];
+
   return (
     <section>
       <h2>Agent tasks</h2>
-      <p className="muted">Guest-authoritative task queue. Approve tasks, then run assigned agents.</p>
-      {error ? <p className="error">{error}</p> : null}
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Role</th>
-              <th>Priority</th>
-              <th>Status</th>
-              <th>Title</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((t) => (
-              <tr key={t.id}>
-                <td>
-                  <code>{t.id}</code>
-                </td>
-                <td>{t.role}</td>
-                <td>{t.priority}</td>
-                <td>{t.status}</td>
-                <td>{t.title}</td>
-                <td>
-                  {t.status === "pending" ? (
-                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => approve(t.id)}>
-                      Approve
-                    </button>
-                  ) : null}
-                  {t.status === "pending" || t.status === "approved" ? (
-                    <button type="button" className="btn btn-sm" onClick={() => run(t.id)}>
-                      Run agent
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <pre className="log">{report}</pre>
+      <Message>Guest-authoritative task queue. Approve tasks, then run assigned agents.</Message>
+      {error ? <Message tone="error">{error}</Message> : null}
+      <Table columns={columns} rows={tasks} rowKey={(t) => t.id} />
+      <LogView>{report}</LogView>
     </section>
   );
 }
@@ -291,68 +275,52 @@ function Schedules({ onRan }) {
     }
   }
 
+  const cliOf = (s) =>
+    [...(s.cli ?? []), ...(s.cli_args?.length ? ["--", ...s.cli_args] : [])].join(" ");
+
+  const columns = [
+    { key: "id", header: "ID", render: (s) => <code>{s.id}</code> },
+    { key: "cron", header: "Cron", render: (s) => <code>{s.cron ?? ""}</code> },
+    { key: "cmd", header: "Command", render: (s) => <code>{cliOf(s)}</code> },
+    { key: "last", header: "Last run", render: (s) => s.last_run_iso ?? "—" },
+    {
+      key: "exit",
+      header: "Exit",
+      render: (s) => <StatusText exitCode={s.last_exit_code}>{s.last_exit_code ?? "—"}</StatusText>,
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (s) => (
+        <>
+          <Button size="sm" variant="secondary" onClick={() => showLog(s.id)}>
+            Log
+          </Button>
+          <Button size="sm" onClick={() => runNow(s.id)}>
+            Run now
+          </Button>
+        </>
+      ),
+    },
+  ];
+
   return (
     <section>
       <h2>Schedules</h2>
-      {error ? <p className="error">{error}</p> : null}
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Cron</th>
-              <th>Command</th>
-              <th>Last run</th>
-              <th>Exit</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {schedules.map((s) => {
-              const cli = [...(s.cli ?? []), ...(s.cli_args?.length ? ["--", ...s.cli_args] : [])].join(
-                " ",
-              );
-              const exitClass =
-                s.last_exit_code === 0 ? "exit-ok" : s.last_exit_code != null ? "exit-fail" : "";
-              return (
-                <tr key={s.id}>
-                  <td>
-                    <code>{s.id}</code>
-                  </td>
-                  <td>
-                    <code>{s.cron ?? ""}</code>
-                  </td>
-                  <td>
-                    <code>{cli}</code>
-                  </td>
-                  <td>{s.last_run_iso ?? "—"}</td>
-                  <td className={exitClass}>{s.last_exit_code ?? "—"}</td>
-                  <td>
-                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => showLog(s.id)}>
-                      Log
-                    </button>
-                    <button type="button" className="btn btn-sm" onClick={() => runNow(s.id)}>
-                      Run now
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {error ? <Message tone="error">{error}</Message> : null}
+      <Table columns={columns} rows={schedules} rowKey={(s) => s.id} />
       {detail ? (
-        <div className="panel inline">
+        <Panel inline>
           <h3>Schedule: {detail.id}</h3>
           <div>
             {detail.runs.map((r, i) => (
-              <div key={i} className={r.exit_code === 0 ? "exit-ok" : "exit-fail"}>
+              <StatusText key={i} exitCode={r.exit_code}>
                 {r.started_at ?? "?"} → {r.finished_at ?? "running"} exit={r.exit_code ?? "?"}
-              </div>
+              </StatusText>
             ))}
           </div>
-          <pre className="log">{detail.text}</pre>
-        </div>
+          <LogView>{detail.text}</LogView>
+        </Panel>
       ) : null}
     </section>
   );
@@ -411,48 +379,37 @@ function RunPackage({ onStarted }) {
   return (
     <section>
       <h2>Run package</h2>
-      <form className="panel inline" onSubmit={onSubmit}>
-        <label>
-          Tier
-          <select value={tier} onChange={(e) => setTier(e.target.value)} required>
-            {tiers.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Package
-          <select value={pkg} onChange={(e) => setPkg(e.target.value)} required>
-            {packages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title} ({p.id})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Verb
-          <select value={verb} onChange={(e) => setVerb(e.target.value)} required>
-            {verbs.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Arguments (after --)
-          <input
-            value={args}
-            onChange={(e) => setArgs(e.target.value)}
-            placeholder="--dry-run --instance a"
+      <Panel inline as="form" onSubmit={onSubmit}>
+        <Field label="Tier">
+          <SelectInput
+            value={tier}
+            onChange={setTier}
+            required
+            options={tiers.map((t) => ({ value: t, label: t }))}
           />
-        </label>
-        <button type="submit">Start job</button>
-        {error ? <p className="error">{error}</p> : null}
-      </form>
+        </Field>
+        <Field label="Package">
+          <SelectInput
+            value={pkg}
+            onChange={setPkg}
+            required
+            options={packages.map((p) => ({ value: p.id, label: `${p.title} (${p.id})` }))}
+          />
+        </Field>
+        <Field label="Verb">
+          <SelectInput
+            value={verb}
+            onChange={setVerb}
+            required
+            options={verbs.map((v) => ({ value: v, label: v }))}
+          />
+        </Field>
+        <Field label="Arguments (after --)">
+          <TextInput value={args} onChange={setArgs} placeholder="--dry-run --instance a" />
+        </Field>
+        <Button type="submit">Start job</Button>
+        {error ? <Message tone="error">{error}</Message> : null}
+      </Panel>
     </section>
   );
 }
@@ -497,26 +454,25 @@ function Jobs() {
               : j.type === "agent-task"
                 ? `agent-task:${j.task_id}`
                 : `${j.tier}/${j.package}/${j.verb}`;
+          const tone = j.exit_code === 0 ? "ok" : j.status === "running" ? "neutral" : "fail";
           return (
-            <div key={j.id} className="job-row" onClick={() => showLog(j.id)}>
-              <span>
-                <strong>{label}</strong>{" "}
-                <span className="muted">
-                  {j.status} · {j.started_at ?? ""}
-                </span>
-              </span>
-              <span
-                className={
-                  j.exit_code === 0 ? "exit-ok" : j.status === "running" ? "" : "exit-fail"
-                }
-              >
-                {j.exit_code ?? j.status}
-              </span>
-            </div>
+            <ListRow
+              key={j.id}
+              onClick={() => showLog(j.id)}
+              left={
+                <>
+                  <strong>{label}</strong>{" "}
+                  <span className="muted">
+                    {j.status} · {j.started_at ?? ""}
+                  </span>
+                </>
+              }
+              right={<StatusText tone={tone}>{j.exit_code ?? j.status}</StatusText>}
+            />
           );
         })}
       </div>
-      {selected ? <pre className="log">{log}</pre> : null}
+      {selected ? <LogView>{log}</LogView> : null}
     </section>
   );
 }
@@ -542,51 +498,25 @@ function Inventory() {
     setDetail(JSON.stringify(data.record, null, 2));
   }
 
+  const catTabs = INV_CATS.map((c) => ({ id: c, label: c.charAt(0).toUpperCase() + c.slice(1) }));
+
+  const columns = [
+    { key: "id", header: "ID", render: (item) => <code>{item.id}</code> },
+    { key: "kind", header: "Kind", render: (item) => item.kind },
+    {
+      key: "details",
+      header: "Details",
+      render: (item) => item.primary_ip || item.hostname || item.name || "",
+    },
+  ];
+
   return (
     <section>
       <h2>Inventory</h2>
-      <div className="inv-tabs">
-        {INV_CATS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={category === c ? "active" : ""}
-            onClick={() => setCategory(c)}
-          >
-            {c.charAt(0).toUpperCase() + c.slice(1)}
-          </button>
-        ))}
-      </div>
-      <input
-        className="inv-search"
-        type="search"
-        placeholder="Filter by id or name…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Kind</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((item) => (
-              <tr key={item.id} style={{ cursor: "pointer" }} onClick={() => showDetail(item.id)}>
-                <td>
-                  <code>{item.id}</code>
-                </td>
-                <td>{item.kind}</td>
-                <td>{item.primary_ip || item.hostname || item.name || ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {detail ? <pre className="log">{detail}</pre> : null}
+      <Tabs tabs={catTabs} activeId={category} onSelect={setCategory} />
+      <SearchInput value={q} onChange={setQ} placeholder="Filter by id or name…" />
+      <Table columns={columns} rows={filtered} rowKey={(item) => item.id} onRowClick={(item) => showDetail(item.id)} />
+      {detail ? <LogView>{detail}</LogView> : null}
     </section>
   );
 }

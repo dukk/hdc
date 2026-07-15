@@ -17,7 +17,7 @@
       }
     },
     "unleash": {
-      "image_tag": "v7.6.4",
+      "image_tag": "7.6.5",
       "postgres_image_tag": "17-alpine",
       "host_port": 4242,
       "public_url": "https://unleash.example.invalid",

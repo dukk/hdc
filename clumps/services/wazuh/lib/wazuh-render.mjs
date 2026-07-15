@@ -111,6 +111,9 @@ export function wazuhIndexerPasswordResyncBash() {
     "' || true",
     "docker compose restart wazuh.indexer",
     "for i in $(seq 1 30); do curl -sk -u \"admin:$WAZUH_API_PASSWORD\" https://127.0.0.1:9200/ >/dev/null 2>&1 && break; sleep 5; done",
+    // Indexer bounce can leave manager stopped; bring stack peers back before authd/mail patches.
+    "docker compose up -d wazuh.manager wazuh.dashboard",
+    "for i in $(seq 1 36); do docker inspect -f '{{.State.Running}}' single-node-wazuh.manager-1 2>/dev/null | grep -qi '^true$' && break; sleep 5; done",
   ].join("\n");
 }
 
@@ -119,6 +122,7 @@ export function wazuhDashboardApiConfigSyncBash() {
   return [
     'if test -f config/wazuh_dashboard/wazuh.yml; then',
     "  docker compose restart wazuh.dashboard wazuh.manager",
+    "  for i in $(seq 1 36); do docker inspect -f '{{.State.Running}}' single-node-wazuh.manager-1 2>/dev/null | grep -qi '^true$' && break; sleep 5; done",
     "fi",
   ].join("\n");
 }
@@ -151,7 +155,7 @@ export function wazuhAuthdPasswordEnsureBash() {
     "# Wait briefly if manager is still starting",
     "for _ in range(36):",
     "  ps = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', container], text=True, capture_output=True)",
-    "  if ps.stdout.strip() == 'True':",
+    "  if ps.stdout.strip().lower() == 'true':",
     "    break",
     "  time.sleep(5)",
     "else:",
