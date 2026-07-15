@@ -10,6 +10,31 @@
     "defaults": {
       "type": "object",
       "properties": {
+        "wazuh": {
+          "type": "object",
+          "properties": {
+            "release": { "type": "string" },
+            "dashboard_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "api_password_vault_key": { "type": "string" },
+            "agent_password_vault_key": { "type": "string" },
+            "alert_ignore": {
+              "type": "object",
+              "description": "Mute web/attack alerts from trusted monitoring probe source IPs",
+              "properties": {
+                "srcips": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "Source IPs to silence (homepage, uptime-kuma, etc.)"
+                },
+                "groups": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "Wazuh rule groups to mute when srcip matches (default: web, web_scan, attack, ids, modsecurity, nginx)"
+                }
+              }
+            }
+          }
+        },
         "mail": {
           "type": "object",
           "properties": {
@@ -53,7 +78,23 @@
               "release": { "type": "string" },
               "dashboard_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
               "api_password_vault_key": { "type": "string" },
-              "agent_password_vault_key": { "type": "string" }
+              "agent_password_vault_key": { "type": "string" },
+              "alert_ignore": {
+                "type": "object",
+                "description": "Mute web/attack alerts from trusted monitoring probe source IPs",
+                "properties": {
+                  "srcips": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Source IPs to silence (homepage, uptime-kuma, etc.)"
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Wazuh rule groups to mute when srcip matches (default: web, web_scan, attack, ids, modsecurity, nginx)"
+                  }
+                }
+              }
             }
           },
           "install": {

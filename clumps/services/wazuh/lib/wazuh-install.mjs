@@ -18,6 +18,7 @@ import {
 } from "./wazuh-render.mjs";
 import { buildWazuhNotificationsSyncBash } from "./wazuh-notifications.mjs";
 import { buildWazuhDashboardMonitorsSyncBash } from "./wazuh-dashboard-monitors.mjs";
+import { buildWazuhAlertIgnoreSyncBash, resolveWazuhAlertIgnore } from "./wazuh-alert-ignore.mjs";
 import { wazuhDashboardPort } from "./deployments.mjs";
 
 export { resolvePveSshForHost };
@@ -41,7 +42,7 @@ function shellQuote(s) {
  */
 /**
  * @param {import("./wazuh-mail-config.mjs").WazuhMailSettings | null} [mailSettings]
- * @param {{ skipMail?: boolean }} [opts]
+ * @param {{ skipMail?: boolean; skipAlertIgnore?: boolean; alertIgnore?: import("./wazuh-alert-ignore.mjs").WazuhAlertIgnoreSettings | null }} [opts]
  */
 export function buildInstallScript(wazuh, install, apiPassword, agentPassword, mailSettings = null, opts = {}) {
   const release = wazuhDockerRelease(wazuh);
@@ -49,6 +50,8 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword, m
   const root = composeDir(install).replace(/'/g, `'\\''`);
   const stack = wazuhStackDir(install).replace(/'/g, `'\\''`);
   const agentPw = String(agentPassword ?? "").replace(/'/g, `'\\''`);
+  const alertIgnore =
+    opts.alertIgnore !== undefined ? opts.alertIgnore : resolveWazuhAlertIgnore(/** @type {Record<string, unknown>} */ (wazuh));
   let script = buildOfficialStackInstallScript(release, apiPassword, agentPassword, dashboardPort).replace(
     `export WAZUH_ROOT='${composeDir({}).replace(/'/g, `'\\''`)}'`,
     `export WAZUH_ROOT='${root}'`,
@@ -72,6 +75,11 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword, m
       `export WAZUH_AGENT_PASSWORD='${agentPw}'`,
       wazuhAuthdPasswordEnsureBash(),
     );
+  } else {
+    lines.push(`export STACK='${stack}'`);
+  }
+  if (!opts.skipAlertIgnore && alertIgnore?.srcips?.length) {
+    lines.push(buildWazuhAlertIgnoreSyncBash(alertIgnore));
   }
   return lines.join("\n");
 }
@@ -83,7 +91,7 @@ export function buildInstallScript(wazuh, install, apiPassword, agentPassword, m
  */
 /**
  * @param {import("./wazuh-mail-config.mjs").WazuhMailSettings | null} [mailSettings]
- * @param {{ skipUpgrade?: boolean; skipMail?: boolean; setupDashboardMonitors?: boolean; release?: string }} [opts]
+ * @param {{ skipUpgrade?: boolean; skipMail?: boolean; skipAlertIgnore?: boolean; setupDashboardMonitors?: boolean; release?: string; alertIgnore?: import("./wazuh-alert-ignore.mjs").WazuhAlertIgnoreSettings | null; agentPassword?: string }} [opts]
  */
 export function buildMaintainScript(install, envContent, apiPassword, mailSettings = null, opts = {}) {
   const stack = wazuhStackDir(install).replace(/'/g, `'\\''`);
@@ -91,6 +99,7 @@ export function buildMaintainScript(install, envContent, apiPassword, mailSettin
   const apiPw = apiPassword.replace(/'/g, `'\\''`);
   const agentPw = String(opts.agentPassword ?? "").replace(/'/g, `'\\''`);
   const release = (opts.release ?? "").replace(/'/g, `'\\''`);
+  const alertIgnore = opts.alertIgnore ?? null;
   const lines = [
     "set -euo pipefail",
     `mkdir -p '${root}'`,
@@ -124,6 +133,9 @@ export function buildMaintainScript(install, envContent, apiPassword, mailSettin
         lines.push(buildWazuhDashboardMonitorsSyncBash(mailSettings));
       }
     }
+  }
+  if (!opts.skipAlertIgnore && alertIgnore?.srcips?.length) {
+    lines.push(buildWazuhAlertIgnoreSyncBash(alertIgnore));
   }
   lines.push("docker compose ps");
   return lines.join("\n");
