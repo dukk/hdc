@@ -4,7 +4,8 @@
     "stop": [
       {
         "command": "node .cursor/hooks/auto-commit-on-stop.mjs",
-        "timeout": 60
+        "timeout": 60,
+        "loop_limit": 2
       }
     ]
   }
