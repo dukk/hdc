@@ -113,6 +113,8 @@ export function matchesAugmentorCriteria(entry, criteria) {
   const meta = parseAugmentorMetadata(null, entry);
   if (meta.kind !== "augmentor") return false;
   if (!meta.enabled) return false;
+  // Fleet agents may only augment hdc-clumps (never the hdc platform repo).
+  if (criteria.repo && criteria.repo !== "hdc-clumps") return false;
   if (criteria.delegatorRole && meta.delegatable_by.length) {
     if (!meta.delegatable_by.includes(criteria.delegatorRole)) return false;
   }

@@ -51,6 +51,9 @@ describe("litellm-a2a-metadata", () => {
     expect(matchesAugmentorCriteria(entry, { delegatorRole: "hdc-sre-engineer", repo: "hdc-clumps" })).toBe(
       true,
     );
+    expect(matchesAugmentorCriteria(entry, { delegatorRole: "hdc-sre-engineer", repo: "hdc" })).toBe(
+      false,
+    );
     expect(matchesAugmentorCriteria(entry, { delegatorRole: "hdc-qa", repo: "hdc-clumps" })).toBe(
       false,
     );
