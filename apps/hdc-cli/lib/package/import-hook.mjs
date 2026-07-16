@@ -9,6 +9,35 @@ const packageLibDir = hookDir;
 const cliAppDir = join(hookDir, "..", "..");
 
 /**
+ * Resolve `hdc/package/<rel>` from a clump's `lib/` when the importer lives under
+ * `{clients|infrastructure|services}/<id>/…` (package scripts keep using hdc/package/*
+ * for both shared runtime and clump-local helpers).
+ *
+ * @param {string} rel
+ * @param {string | undefined} parentURL
+ * @returns {string | null}
+ */
+function resolveClumpPackageLib(rel, parentURL) {
+  if (!parentURL || typeof parentURL !== "string" || !parentURL.startsWith("file:")) {
+    return null;
+  }
+  let dir;
+  try {
+    dir = dirname(fileURLToPath(parentURL));
+  } catch {
+    return null;
+  }
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, "lib", rel);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
  * Sync resolve for `module.registerHooks()` (and legacy `module.register()`).
  * @param {string} specifier
  * @param {import('node:module').ResolveHookContext} context
@@ -21,6 +50,10 @@ export function resolve(specifier, context, nextResolve) {
     const target = join(packageLibDir, rel);
     if (existsSync(target)) {
       return nextResolve(pathToFileURL(target).href, context);
+    }
+    const fromClump = resolveClumpPackageLib(rel, context.parentURL);
+    if (fromClump) {
+      return nextResolve(pathToFileURL(fromClump).href, context);
     }
   }
   if (specifier.startsWith("hdc/cli/")) {
