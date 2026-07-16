@@ -1,7 +1,3 @@
-import { register } from "node:module";
-import { pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { registerPackageHooks } from "./register-package-hooks.mjs";
 
-const hookDir = dirname(fileURLToPath(import.meta.url));
-register("./import-hook.mjs", pathToFileURL(join(hookDir, "import-hook.mjs")));
+registerPackageHooks(import.meta.url);

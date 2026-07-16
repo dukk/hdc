@@ -813,5 +813,12 @@ describe("runCli", () => {
     const r = spawnSync(process.execPath, [cli, "--help"], { encoding: "utf8" });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("Usage:");
+    // Node ≥22.15 / 23.5 / 26: registerHooks path must not emit DEP0205
+    const nodeModule = await import("node:module");
+    if (typeof nodeModule.registerHooks === "function") {
+      expect(r.stderr).not.toMatch(/\[DEP0205\]/);
+      expect(r.stderr).not.toMatch(/module\.register\(\) is deprecated/);
+    }
   });
 });
+

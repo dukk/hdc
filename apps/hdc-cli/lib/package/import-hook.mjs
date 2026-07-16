@@ -9,11 +9,13 @@ const packageLibDir = hookDir;
 const cliAppDir = join(hookDir, "..", "..");
 
 /**
+ * Sync resolve for `module.registerHooks()` (and legacy `module.register()`).
  * @param {string} specifier
- * @param {import('node:module').ImportMetaResolveContext} context
- * @param {import('node:module').ResolveHook} nextResolve
+ * @param {import('node:module').ResolveHookContext} context
+ * @param {(specifier: string, context?: import('node:module').ResolveHookContext) => import('node:module').ResolveFnOutput} nextResolve
+ * @returns {import('node:module').ResolveFnOutput}
  */
-export async function resolve(specifier, context, nextResolve) {
+export function resolve(specifier, context, nextResolve) {
   if (specifier.startsWith("hdc/package/")) {
     const rel = specifier.slice("hdc/package/".length);
     const target = join(packageLibDir, rel);
