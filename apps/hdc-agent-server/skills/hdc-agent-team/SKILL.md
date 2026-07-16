@@ -11,12 +11,12 @@ description: >-
 
 | Repository | Primary agent | Owns |
 | --- | --- | --- |
-| **hdc** | `hdc-engineer` | CLI, schemas, shared runtime, agent fleet, tests |
+| **hdc** | *(human / operator)* | CLI, schemas, shared runtime, agent fleet, tests — fleet agents must not update this repo |
 | **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, `config.example.json` (git commit/push) |
 | **hdc-private** | `hdc-sre-ops` | Live `config.json`, inventory, `operations/` |
 | **Clump cache (MCP host)** | `hdc-manager` | `hdc_clumps_sync` (`init` / `sync`; optional `ref` rollback) |
 
-Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `hdc-qa` (validate) → `hdc-manager` (sync cache) → `hdc-sre-ops` (approved live run); CLI/runtime failure → `hdc-engineer`.
+Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `hdc-qa` (validate) → `hdc-manager` (sync cache) → `hdc-sre-ops` (approved live run); CLI/runtime failure → escalate to operator (`needs_decision`).
 
 ## Paths (hdc-private)
 
@@ -47,7 +47,7 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 
 **Priority:** `critical` | `high` | `medium` | `low`
 
-**Role:** `hdc-manager` | `hdc-sre-ops` | `hdc-sre-engineer` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-engineer` | `hdc-qa`
+**Role:** `hdc-manager` | `hdc-sre-ops` | `hdc-sre-engineer` | `hdc-monitor` | `hdc-security-expert` | `hdc-security-architect` | `hdc-network-architect` | `hdc-research` | `hdc-qa`
 
 ## Agent roster (canonical)
 
@@ -57,7 +57,6 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 | Monitor | `apps/hdc-agent-server/agents/hdc-monitor.md` |
 | SRE ops | `apps/hdc-agent-server/agents/hdc-sre-ops.md` |
 | SRE engineer | `apps/hdc-agent-server/agents/hdc-sre-engineer.md` |
-| Platform engineer | `apps/hdc-agent-server/agents/hdc-engineer.md` |
 | QA | `apps/hdc-agent-server/agents/hdc-qa.md` |
 | Security expert | `apps/hdc-agent-server/agents/hdc-security-expert.md` |
 | Security architect | `apps/hdc-agent-server/agents/hdc-security-architect.md` |
@@ -89,20 +88,22 @@ Primary runtime: hdc-agent-server containers on hdc-agents-a; Tasks UI via hdc-w
 
 ## Augmentor delegation
 
-Fleet roles **hdc-engineer**, **hdc-sre-engineer**, **hdc-qa**, **hdc-research**, **hdc-security-expert**, **hdc-security-architect**, and **hdc-network-architect** may delegate code/analysis **subtasks** to external augmentors (Cursor Cloud on fleet, Cursor CLI / Claude Code on operator workstation) when registered in LiteLLM `a2a_agents[]`:
+Fleet roles **hdc-sre-engineer**, **hdc-qa**, **hdc-research**, **hdc-security-expert**, **hdc-security-architect**, and **hdc-network-architect** may delegate code/analysis **subtasks** to external augmentors (Cursor Cloud on fleet, Cursor CLI / Claude Code on operator workstation) when registered in LiteLLM `a2a_agents[]`:
 
-- `hdc_list_augmentors` — discover augmentors for `repo: hdc` or `hdc-clumps`
+- `hdc_list_augmentors` — discover augmentors for `repo: hdc-clumps` only
 - `hdc_delegate_augment` — create subtask + A2A `message/send` via LiteLLM gateway
 
-Parent agent keeps task ownership; augmentors edit only their declared repo (never hdc-private live state). See `docs/manually-deployed/hdc-augment-bridge.md`.
+Parent agent keeps task ownership; augmentors may edit **hdc-clumps** only (never the hdc platform repo or hdc-private live state). See `docs/manually-deployed/hdc-augment-bridge.md`.
 
-## Engineer research and web tools
+## Package research and web tools
 
-When scaffolding unknown capabilities or filling platform gaps:
+When scaffolding unknown capabilities:
 
 - `hdc_request_research` — queue `operations/research/topics/<id>.md` (`status: queued`) for hdc-research
 - `hdc_web_search` / `hdc_web_fetch` — public web (SSRF-hardened); also available to hdc-research and hdc-qa
-- `hdc_validate_clump` — static package checks (hdc-qa + engineers)
+- `hdc_validate_clump` — static package checks (hdc-qa + hdc-sre-engineer)
+
+CLI / schema / agent-server gaps in the **hdc** repo are **operator-owned** — escalate with `needs_decision: true`, do not open a fleet task to edit hdc.
 
 ## Deprecated
 

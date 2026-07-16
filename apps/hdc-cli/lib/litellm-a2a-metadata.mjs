@@ -4,7 +4,7 @@
 
 /** @typedef {"fleet" | "augmentor"} A2aAgentKind */
 /** @typedef {"cursor-cloud" | "cursor-cli" | "claude-code" | "custom"} A2aAgentRuntime */
-/** @typedef {"hdc" | "hdc-clumps"} A2aAgentRepo */
+/** @typedef {"hdc-clumps"} A2aAgentRepo */
 
 const TAG_PREFIX = "[hdc-a2a";
 

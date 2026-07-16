@@ -6,7 +6,7 @@ Provision the **Home Data Center** Paperclip company with HDC skills and agents 
 
 - Paperclip deployed (`paperclip-a`, `https://paperclip.home.example.invalid`)
 - Instance claimed (CEO / first admin)
-- hdc-agents deployed with hdc-web-server (`:9120`) and agent containers (`:9200–9207`)
+- hdc-agents deployed with hdc-web-server (`:9120`) and agent containers (`:9200–9206`, `:9208–9209`)
 - Vault keys: `HDC_PAPERCLIP_API_KEY`, `HDC_WEB_API_TOKEN` (legacy `HDC_HDC_RUNNER_API_TOKEN` still accepted by hdc-web-server)
 - HDC skills committed to public hdc repo (for GitHub import URL in config)
 

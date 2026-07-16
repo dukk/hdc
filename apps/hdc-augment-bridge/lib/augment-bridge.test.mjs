@@ -6,28 +6,35 @@ import { runCursorCloudAugment } from "./adapters.mjs";
 describe("hdc-augment-bridge", () => {
   it("builds augmentor agent card with hdc-a2a tags", () => {
     const card = buildAugmentAgentCard({
-      name: "cursor-cloud-hdc",
+      name: "cursor-cloud-clumps",
       hostHeader: "127.0.0.1:9210",
       runtime: "cursor-cloud",
-      repos: ["hdc"],
-      delegatableBy: ["hdc-engineer"],
+      repos: ["hdc-clumps"],
+      delegatableBy: ["hdc-sre-engineer"],
     });
-    expect(card.name).toBe("cursor-cloud-hdc");
+    expect(card.name).toBe("cursor-cloud-clumps");
     expect(card.description).toContain("kind=augmentor");
     expect(card.description).toContain("runtime=cursor-cloud");
   });
 
   it("parses bridge config from env", () => {
     const cfg = augmentBridgeConfigFromEnv({
-      HDC_AUGMENT_BRIDGE_NAME: "cursor-cli-hdc",
+      HDC_AUGMENT_BRIDGE_NAME: "cursor-cli-clumps",
       HDC_AUGMENT_RUNTIME: "cursor-cli",
-      HDC_AUGMENT_REPOS: "hdc",
-      HDC_AUGMENT_DELEGATABLE_BY: "hdc-engineer",
+      HDC_AUGMENT_REPOS: "hdc-clumps",
+      HDC_AUGMENT_DELEGATABLE_BY: "hdc-sre-engineer",
       HDC_AUGMENT_BRIDGE_PORT: "9211",
     });
-    expect(cfg.name).toBe("cursor-cli-hdc");
-    expect(cfg.repos).toEqual(["hdc"]);
+    expect(cfg.name).toBe("cursor-cli-clumps");
+    expect(cfg.repos).toEqual(["hdc-clumps"]);
     expect(cfg.port).toBe(9211);
+  });
+
+  it("defaults repos to hdc-clumps without hdc-engineer", () => {
+    const cfg = augmentBridgeConfigFromEnv({});
+    expect(cfg.repos).toEqual(["hdc-clumps"]);
+    expect(cfg.delegatableBy).not.toContain("hdc-engineer");
+    expect(cfg.delegatableBy).toContain("hdc-sre-engineer");
   });
 
   it("calls Cursor Cloud API", async () => {

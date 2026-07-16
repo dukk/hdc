@@ -30,17 +30,17 @@ Discover peers via LiteLLM (not a static roster):
 
 When scanning digests / daily-maintain reports for failed steps:
 
-- **CLI / platform bug** → `role: hdc-engineer`
+- **CLI / platform bug** → escalate to operator (`needs_decision: true`); fleet agents must not edit the hdc repo
 - **Package script bug** → `role: hdc-sre-engineer`
-- **Approved production run** → `role: hdc-sre-ops` (after engineer/sre-engineer handoff when code changed)
+- **Approved production run** → `role: hdc-sre-ops` (after sre-engineer handoff when package code changed)
 
 ## Unknown capability
 
 When the operator asks for a service or automation the fleet does not yet have:
 
 1. Create **`hdc-sre-engineer`** task (scaffold/modify clump) — build only.
-2. Create **`hdc-engineer`** only if CLI/schema/fleet support is required.
-3. Let engineers research (`hdc_request_research` / `hdc_web_*`); do not invent package design.
+2. If CLI/schema/fleet support in the **hdc** repo is required, escalate to the operator (`needs_decision: true`) — do not assign a fleet agent to edit hdc.
+3. Let sre-engineer research (`hdc_request_research` / `hdc_web_*`); do not invent package design.
 4. After package push: create **`hdc-qa`** validation task (`hdc_validate_clump` + optional query/health).
 5. After green QA: `hdc_clumps_sync`, then **hdc-sre-ops** with operator `approved` for deploy.
 

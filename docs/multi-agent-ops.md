@@ -27,8 +27,8 @@ Key architectural decisions:
    pre-approved bounds, and propose hardening.
 4. **Deploy** new services repeatably (plan → approve → deploy → wire DNS/proxy →
    monitor) instead of ad-hoc sessions.
-5. **Build** and repair the automation itself — hdc CLI, clump scripts, schemas,
-   tests — as the estate evolves.
+5. **Build** and repair package automation (hdc-clumps) as the estate evolves;
+   hdc platform (CLI, schemas, agent-server) stays human/operator-owned.
 6. Run agents as **always-on, individually restartable services** with central
    auth, routing, and spend tracking — not just IDE sessions and cron scripts.
 
@@ -40,7 +40,7 @@ Key architectural decisions:
   `apps/hdc-agent-server/agents/{role}.md` (skills injected into the system prompt).
 - **Hub-and-spoke orchestration.** The Manager is the only agent that assigns work and
   talks to the operator; specialists do not assign work to each other **except**
-  engineers may call `hdc_request_research` to queue a topic for `hdc-research`.
+  `hdc-sre-engineer` may call `hdc_request_research` to queue a topic for `hdc-research`.
   A2A calls between agents go through LiteLLM (or compose DNS peer URLs from the
   dispatcher), so every delegation is authenticated and logged.
 - **Files as durable state, A2A as transport.** Tasks (`operations/tasks/*.md`),
@@ -76,19 +76,17 @@ Hub-and-spoke summary:
 - **hdc-agents-a** runs one container per roster agent; all call **LiteLLM** for
   models and A2A publish/discover/route.
 - Durable state lives in **hdc-private** `operations/` (tasks, reports, policy).
-- **hdc-sre-ops** / **hdc-sre-engineer** / **hdc-engineer** reach diagnostics through **hdc-mcp** → hdc CLI (deploy/maintain only for **hdc-sre-ops** on approved tasks).
+- **hdc-sre-ops** / **hdc-sre-engineer** reach diagnostics through **hdc-mcp** → hdc CLI (deploy/maintain only for **hdc-sre-ops** on approved tasks). Fleet agents must not write the **hdc** repo.
 
 ## Repository ownership
 
-Three repositories map to three build/ops agents (see each repo README):
-
-| Repository | Primary agent | Owns |
+| Repository | Owner | Owns |
 | --- | --- | --- |
-| **hdc** | `hdc-engineer` | CLI, schemas, `hdc/package/*`, agent fleet, tests |
+| **hdc** | Human / operator | CLI, schemas, `hdc/package/*`, agent fleet, tests |
 | **hdc-clumps** | `hdc-sre-engineer` | Package scripts, manifests, examples |
 | **hdc-private** | `hdc-sre-ops` | Live config, inventory, `operations/` |
 
-Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc-manager` (`hdc_clumps_sync`) → `hdc-sre-ops` (approved live run); CLI failure → `hdc-engineer`.
+Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc-manager` (`hdc_clumps_sync`) → `hdc-sre-ops` (approved live run); CLI/platform gaps → escalate to the operator (`needs_decision`).
 
 ## Agent roster
 
@@ -100,19 +98,18 @@ Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
 | `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; `hdc_request_research` / `hdc_web_*` / `hdc_validate_clump`; read-only `query` | Failure reports, package scaffolds, unknown-capability tasks |
-| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; `hdc_request_research` / `hdc_web_*` / `hdc_validate_clump`; read-only `query` | Failure reports, platform features |
 | `hdc-qa` | **Build** (quality) | `hdc_validate_clump`, query/health, QA digests, augmentors | After scaffold/repair; before sre-ops deploy |
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync; augmentors | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/`; augmentors | Weekly / after incidents |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/`; augmentors | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*`; augmentors | Queued topics (operator, manager, or engineer `hdc_request_research`) + weekly brief |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*`; augmentors | Queued topics (operator, manager, or sre-engineer `hdc_request_research`) + weekly brief |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
-Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
+Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged). A2A ports: **9200–9206**, **9208–9209** (no 9207).
 
-### Build roles (revised 2026-07-14)
+### Build roles (revised 2026-07-16)
 
-- **`hdc-engineer`** owns the **hdc** platform (CLI, schemas, agent-server, tests). Never runs production deploy/maintain.
+- **hdc** platform (CLI, schemas, agent-server, tests) is **human/operator-owned**. Fleet agents must not write the hdc repo.
 - **`hdc-sre-engineer`** owns **hdc-clumps** package automation (commit/push git). Never edits hdc-private live config, runs live deploy/maintain, or syncs clumps on the MCP host.
 - **`hdc-manager`** owns **`hdc_clumps_sync`** on the fleet host — pull package code after git updates before delegating sre-ops.
 - **`hdc-sre-ops`** owns **hdc-private** live state and executes approved deploy/maintain via hdc-service-deploy.
@@ -121,31 +118,31 @@ Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged).
 
 When the operator asks for something the fleet may not automate yet:
 
-1. **hdc-manager** creates a build-only **`hdc-sre-engineer`** task (scaffold/modify clump); adds **`hdc-engineer`** only if CLI/schema support is required.
-2. Engineers gather facts via **`hdc_web_search` / `hdc_web_fetch`** and/or **`hdc_request_research`** (queues `operations/research/topics/<id>.md` for hdc-research).
-3. Large implementation slices may use **`hdc_delegate_augment`** (Cursor/Claude).
+1. **hdc-manager** creates a build-only **`hdc-sre-engineer`** task (scaffold/modify clump). CLI/schema gaps escalate to the operator (`needs_decision`) — not a fleet agent.
+2. **hdc-sre-engineer** gathers facts via **`hdc_web_search` / `hdc_web_fetch`** and/or **`hdc_request_research`** (queues `operations/research/topics/<id>.md` for hdc-research).
+3. Large package implementation slices may use **`hdc_delegate_augment`** (Cursor/Claude; **hdc-clumps** only).
 4. After hdc-clumps push → **hdc-qa** (`hdc_validate_clump` + optional live probes).
 5. After green QA → manager **`hdc_clumps_sync`** → **hdc-sre-ops** with task `status: approved` for live deploy.
 
-Pending engineer/sre-engineer/qa tasks (no deploy/teardown/prune in `suggested_commands`) auto-run via the dispatcher.
+Pending sre-engineer/qa tasks (no deploy/teardown/prune in `suggested_commands`) auto-run via the dispatcher.
 
-### MCP tools (engineer / research / QA extras)
+### MCP tools (sre-engineer / research / QA extras)
 
 | Tool | Roles | Purpose |
 | --- | --- | --- |
-| `hdc_request_research` | hdc-engineer, hdc-sre-engineer | Queue research topic (`status: queued`) |
-| `hdc_web_fetch` | hdc-research, engineers, hdc-qa | Fetch public http(s) URL (SSRF-hardened) |
+| `hdc_request_research` | hdc-sre-engineer | Queue research topic (`status: queued`) |
+| `hdc_web_fetch` | hdc-research, hdc-sre-engineer, hdc-qa | Fetch public http(s) URL (SSRF-hardened) |
 | `hdc_web_search` | same | Public web search (DuckDuckGo HTML; optional `HDC_WEB_SEARCH_API_KEY`) |
-| `hdc_validate_clump` | hdc-qa, both engineers | Static clump consistency checks |
-| `hdc_list_augmentors` / `hdc_delegate_augment` | engineers, qa, research, security-*, network-architect | Cursor/Claude subtasks (`hdc` / `hdc-clumps` only) |
+| `hdc_validate_clump` | hdc-qa, hdc-sre-engineer | Static clump consistency checks |
+| `hdc_list_augmentors` / `hdc_delegate_augment` | hdc-sre-engineer, qa, research, security-*, network-architect | Cursor/Claude subtasks (**hdc-clumps** only) |
 
-Definitions: `apps/hdc-agent-server/agents/{hdc-engineer,hdc-sre-engineer,hdc-qa,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9207 (engineer), 9208 (sre-engineer), 9209 (qa), 9202 (sre-ops).
+Definitions: `apps/hdc-agent-server/agents/{hdc-sre-engineer,hdc-qa,hdc-sre-ops}.md` (+ IDE pointers). Containers: ports 9208 (sre-engineer), 9209 (qa), 9202 (sre-ops).
 
 ### Lifecycle coverage matrix
 
 | Lifecycle | Sense | Decide | Act |
 | --- | --- | --- | --- |
-| **Build** | hdc-research (candidates), failure reports | Manager + operator | **hdc-engineer** (platform), **hdc-sre-engineer** (packages), hdc-network-architect (design) |
+| **Build** | hdc-research (candidates), failure reports | Manager + operator | **hdc-sre-engineer** (packages), human/operator (hdc platform), hdc-network-architect (design) |
 | **Secure** | hdc-security-expert (Wazuh/CrowdSec/WAF) | hdc-security-architect proposals → Manager | hdc-security-expert (bounded response), hdc-sre-ops (hardening deploys) |
 | **Monitor** | hdc-monitor (uptime-kuma, proxmox, gatus) | Manager triage | hdc-sre-ops (fix tasks), hdc-sre-engineer (script fixes) |
 | **Deploy** | proxmox-resource-planning skill (capacity) | plan.md + operator approval | hdc-sre-ops via hdc-service-deploy |
@@ -163,7 +160,7 @@ pattern — a new **`clumps/services/hdc-agents`** package:
   hypervisor later without design changes.
 - **Compose:** one service per agent (`hdc-manager`, `hdc-monitor`, `hdc-sre-ops`,
   `hdc-sre-engineer`, `hdc-security-expert`, `hdc-security-architect`, `hdc-network-architect`,
-  `hdc-research`, `hdc-engineer`). Standard verbs: `deploy` (LXC + compose up),
+  `hdc-research`, `hdc-qa`). Standard verbs: `deploy` (LXC + compose up),
   `maintain` (re-render, pull, `up -d`, guest baseline), `query --live` (container
   + agent-card health), `teardown`.
 - **Image:** a single shared **`hdc/agent-runtime`** image (built on the guest like
@@ -236,7 +233,7 @@ runtimes must honor:
 - **Task files** `operations/tasks/{id}.md` with YAML frontmatter: `id`, `role`,
   `priority` (critical/high/medium/low), `status`
   (`pending → approved → in_progress → blocked/done`), `needs_decision`, `evidence`,
-  `suggested_commands`. Allowed roles include `hdc-engineer`, `hdc-sre-engineer`, and `hdc-sre-ops`.
+  `suggested_commands`. Allowed roles include `hdc-sre-engineer` and `hdc-sre-ops`.
 - **A2A triggers, files decide.** An A2A message may *ask* an agent to act, but the
   agent still validates against the task file and delegation policy before any
   non-read action. Task state stays guest-authoritative in hdc-private.
@@ -265,14 +262,14 @@ runtimes must honor:
 
 | # | Gap | Proposal | Size |
 | --- | --- | --- | --- |
-| 1 | No owner for automation-code repair | Add `hdc-engineer` agent + task role + container | M |
+| 1 | Platform (hdc) has no fleet write owner | **Done (policy):** human/operator owns hdc; fleet agents banned from hdc writes | — |
 | 2 | Claude Code couldn't see rules/skills/agents | **Done**: `CLAUDE.md`, `.claude/skills/`, `.claude/agents/`, `.claude/settings.json` | — |
 | 3 | Agents only run in IDE sessions / cron scripts | `hdc-agents` clump: per-agent Docker containers on PVE with `apps/hdc-agent-server` A2A wrapper | L |
 | 4 | a2a-registry is in-memory, unauthenticated, and separate from model routing | Publish agents to **LiteLLM** as A2A registry/gateway; discover via agent cards; deprecate `a2a-registry` | M |
 | 5 | No per-agent identity, audit, or kill switch | One LiteLLM virtual key per agent (model + A2A calls); revoke key = disable agent | S |
 | 6 | hdc-mcp policy is global, not per-role | Extend policy layer with `HDC_AGENT_ROLE` allowlists | S–M |
-| 7 | `docs lint` / `inventory apply` referenced but not implemented | `hdc-engineer` backlog item; until then schema-validate manually | M |
-| 8 | No feedback loop from daily-maintain failures to fixes | Manager triage: failed daily-maintain steps → `role: hdc-engineer` tasks with report paths as evidence | S |
+| 7 | `docs lint` / `inventory apply` referenced but not implemented | Operator backlog on hdc; until then schema-validate manually | M |
+| 8 | No feedback loop from daily-maintain failures to fixes | Manager triage: package failures → `role: hdc-sre-engineer`; CLI/platform → operator (`needs_decision`) with report paths as evidence | S |
 | 9 | Backup/restore verification has no explicit owner | Add to hdc-monitor runbook: PBS/Synology backup queries + restore-test task generation (monthly) | M |
 
 ## Rollout plan
@@ -282,12 +279,14 @@ layer, `CLAUDE.md` imports, project settings with secret-deny rules, docs update
 Verify a Claude Code session picks up rules and can invoke `hdc-ops` /
 `hdc-service-deploy`.
 
-**Phase 2 — engineer role + per-role tooling.** Author
-`apps/hdc-agent-server/agents/hdc-engineer.md` + IDE pointer; add the role to the task schema and
-delegation policy; extend hdc-mcp with `HDC_AGENT_ROLE` allowlists (gap 6).
+**Phase 2 — build roles + per-role tooling.** Package build via **`hdc-sre-engineer`**
+(hdc-clumps); hdc platform remains human/operator-owned (fleet agents must not write hdc).
+Extend hdc-mcp with `HDC_AGENT_ROLE` allowlists (gap 6); task schema and
+delegation policy cover sre-engineer / sre-ops / qa.
 
 **Phase 3 — LiteLLM as A2A registry.** Add `a2a_agents[]` to the litellm config
-schema and renderer; register hdc-agents fleet endpoints (manager `:9200` …);
+schema and renderer; register hdc-agents fleet endpoints (manager `:9200` …
+`:9206`, `:9208`–`:9209`);
 validate card discovery and proxied A2A calls through LiteLLM with a virtual
 key; deprecate `a2a-registry`.
 
@@ -303,11 +302,11 @@ backup-verification runbook; implement `docs lint`; review delegation policy to 
 the autonomous-maintain envelope as trust builds. Tasks UI remains hdc-web-server
 on the hdc-agents guest.
 
-**Augmentor delegation (implemented):** fleet roles `hdc-engineer`, `hdc-sre-engineer`,
+**Augmentor delegation (implemented):** fleet roles `hdc-sre-engineer`,
 `hdc-qa`, `hdc-research`, `hdc-security-expert`, `hdc-security-architect`, and
 `hdc-network-architect` may delegate code/analysis subtasks to LiteLLM-registered
 augmentors (`litellm.a2a_agents[]` with `kind: augmentor`) via `hdc_delegate_augment`
-(allowed repos: `hdc` / `hdc-clumps` only). Cursor Cloud runs as a fleet sidecar;
+(allowed repos: **hdc-clumps** only). Cursor Cloud runs as a fleet sidecar;
 Cursor CLI / Claude Code bridges run on the operator workstation. See
 [`docs/manually-deployed/hdc-augment-bridge.md`](manually-deployed/hdc-augment-bridge.md).
 

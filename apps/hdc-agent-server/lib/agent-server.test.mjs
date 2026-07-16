@@ -95,7 +95,7 @@ describe("schedule", () => {
 
 describe("operations-fs roles", () => {
   it("includes build and ops roles", () => {
-    expect(TASK_ROLES).toContain("hdc-engineer");
+    expect(TASK_ROLES).not.toContain("hdc-engineer");
     expect(TASK_ROLES).toContain("hdc-sre-engineer");
     expect(TASK_ROLES).toContain("hdc-sre-ops");
   });
@@ -208,7 +208,7 @@ describe("dispatcher", () => {
     expect(
       canAutoRunTask({
         status: "pending",
-        role: "hdc-engineer",
+        role: "hdc-sre-engineer",
         needs_decision: false,
         suggested_commands: ["scaffold clump package for foo"],
       }),

@@ -43,7 +43,7 @@ description: >-
 
 Failed steps → route by root cause:
 
-- **CLI / platform** → `role: hdc-engineer`
+- **CLI / platform** → escalate to operator (`needs_decision: true`); do not assign fleet work against the hdc repo
 - **Package script** → `role: hdc-sre-engineer` (then manager `hdc_clumps_sync` before sre-ops)
 - **Approved production run** → `role: hdc-sre-ops` after code handoff and manager sync when needed
 
@@ -52,8 +52,8 @@ Failed steps → route by root cause:
 When the operator asks for something the fleet may not know how to do (no matching clump, unclear install path, greenfield service):
 
 1. Create a **`hdc-sre-engineer`** task to scaffold or modify the package (build-only — no deploy in `suggested_commands`).
-2. Create a **`hdc-engineer`** task only when CLI schemas, shared `hdc/package/*`, or agent-server support is also required.
-3. Do **not** invent package design yourself — engineers use `hdc_web_*` and/or `hdc_request_research`.
+2. When CLI schemas, shared `hdc/package/*`, or agent-server support is also required, escalate to the operator (`needs_decision: true`) — the hdc repo is human-owned.
+3. Do **not** invent package design yourself — sre-engineer uses `hdc_web_*` and/or `hdc_request_research`.
 4. After sre-engineer pushes hdc-clumps, create an **`hdc-qa`** task to run `hdc_validate_clump` (and optional live probes).
 5. After QA is green, run `hdc_clumps_sync`, then open **hdc-sre-ops** with `needs_decision` / await `approved` for live deploy.
 

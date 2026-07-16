@@ -66,12 +66,12 @@ describe("hdc-mcp-server api-keys", () => {
   it("prefer api key over HDC_AGENT_ROLE and require when configured", () => {
     const root = tmpPrivate();
     const secret = mintMcpApiKeySecret();
-    registerMcpApiKeyHash(root, { role: "hdc-engineer", secret });
+    registerMcpApiKeyHash(root, { role: "hdc-sre-engineer", secret });
     const auth = resolveMcpAuth({
       env: { HDC_AGENT_ROLE: "hdc-manager", HDC_MCP_API_KEY: secret },
       privateRoot: root,
     });
-    expect(auth).toEqual({ role: "hdc-engineer", via: "api_key" });
+    expect(auth).toEqual({ role: "hdc-sre-engineer", via: "api_key" });
 
     expect(mcpApiKeyRequired({ HDC_MCP_REQUIRE_API_KEY: "1" })).toBe(true);
     expect(() =>

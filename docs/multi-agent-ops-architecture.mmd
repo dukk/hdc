@@ -18,7 +18,7 @@ flowchart TB
         SECA[hdc-security-architect]
         NETA[hdc-network-architect]
         RES[hdc-research]
-        ENG[hdc-engineer]
+        QA[hdc-qa]
     end
 
     subgraph State["hdc-private operations/ (durable state)"]
@@ -32,11 +32,11 @@ flowchart TB
         LAB[Proxmox / Synology / UniFi / services]
     end
 
-    MGR & MON & SREOPS & SREENG & SECX & SECA & NETA & RES & ENG -- publish card / discover peers --> REG
-    MGR -- delegate via /a2a --> REG -- route --> MON & SREOPS & SREENG & SECX & RES
-    MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG <--> TQ & RPT
+    MGR & MON & SREOPS & SREENG & SECX & SECA & NETA & RES & QA -- publish card / discover peers --> REG
+    MGR -- delegate via /a2a --> REG -- route --> MON & SREOPS & SREENG & SECX & RES & QA
+    MGR & MON & SREOPS & SECX & SECA & NETA & RES & SREENG & QA <--> TQ & RPT
     POL --> MGR
     MGR <--> OP
     SREOPS --> CLI --> LAB
-    SREENG & ENG --> CLI
+    SREENG --> CLI
     LAB -- query --> MON & SECX

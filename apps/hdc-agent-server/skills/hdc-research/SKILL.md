@@ -72,4 +72,4 @@ For `outcome: adopt` or `manual-only`, create `operations/tasks/<id>.md` with `r
 
 ## Engineer-queued topics
 
-Topics may arrive with `suggested_by: hdc-sre-engineer` or `hdc-engineer` (via `hdc_request_research`). Treat them like any other `queued` topic; cite their notes/URL in the report.
+Topics may arrive with `suggested_by: hdc-sre-engineer` (via `hdc_request_research`). Treat them like any other `queued` topic; cite their notes/URL in the report.

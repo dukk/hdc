@@ -1,20 +1,21 @@
 # HDC augmentor bridge
 
-External IDE and cloud agents augment fleet roles (**hdc-engineer**, **hdc-sre-engineer**,
+External IDE and cloud agents augment fleet roles (**hdc-sre-engineer**,
 **hdc-qa**, **hdc-research**, **hdc-security-expert**, **hdc-security-architect**,
 **hdc-network-architect**) by accepting A2A `message/send` tasks and running Cursor Cloud,
 Cursor CLI, or Claude Code.
 
 Fleet agents discover augmentors via LiteLLM `a2a_agents[]` and delegate with MCP tools
-`hdc_list_augmentors` and `hdc_delegate_augment`.
+`hdc_list_augmentors` and `hdc_delegate_augment`. Allowed target repo: **hdc-clumps** only
+(hdc platform work is human/operator-owned).
 
 ## Architecture
 
 | Runtime | Host | LiteLLM name (example) |
 | --- | --- | --- |
 | `cursor-cloud` | hdc-agents-a sidecar (`cursor-cloud-bridge`, port 9210) | `cursor-cloud-bridge` |
-| `cursor-cli` | Operator workstation (Tailscale/LAN) | `cursor-cli-hdc`, `cursor-cli-clumps` |
-| `claude-code` | Operator workstation | `claude-code-hdc`, `claude-code-clumps` |
+| `cursor-cli` | Operator workstation (Tailscale/LAN) | `cursor-cli-clumps` |
+| `claude-code` | Operator workstation | `claude-code-clumps` |
 
 Register every bridge in hdc-private `clumps/services/litellm/config.json` → `a2a_agents[]`
 with `kind: augmentor`, `runtime`, `repos`, and `delegatable_by`. Run
@@ -33,9 +34,8 @@ Enabled in `clumps/services/hdc-agents/config.json`:
     "enabled": true,
     "sidecars": ["cursor-cloud-bridge"],
     "cursor_cloud": {
-      "repos": ["hdc", "hdc-clumps"],
+      "repos": ["hdc-clumps"],
       "delegatable_by": [
-        "hdc-engineer",
         "hdc-sre-engineer",
         "hdc-qa",
         "hdc-research",
@@ -43,7 +43,7 @@ Enabled in `clumps/services/hdc-agents/config.json`:
         "hdc-security-architect",
         "hdc-network-architect"
       ],
-      "repository_url": "https://github.com/YOUR_ORG/hdc"
+      "repository_url": "https://github.com/YOUR_ORG/hdc-clumps"
     }
   }
 }
@@ -57,16 +57,16 @@ Vault / clump `.env`:
 
 ## Workstation bridge (Cursor CLI / Claude Code)
 
-On the operator machine with local hdc / hdc-clumps checkouts:
+On the operator machine with a local hdc-clumps checkout:
 
 ```bash
-# Cursor CLI example (repo: hdc)
+# Cursor CLI example (repo: hdc-clumps)
 export HDC_AUGMENT_RUNTIME=cursor-cli
-export HDC_AUGMENT_BRIDGE_NAME=cursor-cli-hdc
+export HDC_AUGMENT_BRIDGE_NAME=cursor-cli-clumps
 export HDC_AUGMENT_BRIDGE_PORT=9211
-export HDC_AUGMENT_REPOS=hdc
-export HDC_AUGMENT_DELEGATABLE_BY=hdc-engineer
-export HDC_AUGMENT_WORKSPACE=/path/to/hdc
+export HDC_AUGMENT_REPOS=hdc-clumps
+export HDC_AUGMENT_DELEGATABLE_BY=hdc-sre-engineer
+export HDC_AUGMENT_WORKSPACE=/path/to/hdc-clumps
 export HDC_AUGMENT_CLI_COMMAND="cursor agent"
 export HDC_AUGMENT_BRIDGE_TOKEN=your-bridge-secret
 node apps/hdc-augment-bridge/server.mjs
@@ -76,12 +76,12 @@ Register in litellm config (use your Tailscale or LAN URL):
 
 ```json
 {
-  "name": "cursor-cli-hdc",
+  "name": "cursor-cli-clumps",
   "url": "http://workstation.tailnet:9211",
   "kind": "augmentor",
   "runtime": "cursor-cli",
-  "repos": ["hdc"],
-  "delegatable_by": ["hdc-engineer"]
+  "repos": ["hdc-clumps"],
+  "delegatable_by": ["hdc-sre-engineer"]
 }
 ```
 
@@ -90,8 +90,8 @@ Claude Code: set `HDC_AUGMENT_RUNTIME=claude-code` and
 
 ## Delegation flow
 
-1. Parent task exists for a delegating role (`hdc-engineer`, `hdc-sre-engineer`, `hdc-qa`, `hdc-research`, security/network architects, …).
-2. Agent calls `hdc_list_augmentors` for an allowed target repo (`hdc` or `hdc-clumps`).
+1. Parent task exists for a delegating role (`hdc-sre-engineer`, `hdc-qa`, `hdc-research`, security/network architects, …).
+2. Agent calls `hdc_list_augmentors` for the allowed target repo (`hdc-clumps`).
 3. Agent calls `hdc_delegate_augment` with `parent_task_id` and a bounded `prompt`.
 4. A subtask file is created (`<parent>--aug-<slug>-<hash>.md`) and A2A is sent via LiteLLM.
 5. Parent agent reviews augmentor output, runs tests as needed, sets subtask `delegation_status: completed`, continues handoff.

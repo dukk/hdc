@@ -22,11 +22,11 @@ For how the three repos fit together, see [Three repositories](docs/three-repos.
 
 ## Agent ownership
 
-This repository is the **platform** home for the **`hdc-engineer`** fleet agent: CLI, schemas, shared package runtime, agent fleet, tests, and public docs. Package automation scripts live in [**hdc-clumps**](../hdc-clumps/README.md) (`hdc-sre-engineer`); live operator state lives in [**hdc-private**](../hdc-private/README.md) (`hdc-sre-ops`). See [multi-agent operations](docs/multi-agent-ops.md) for the full roster and handoff rules.
+This repository is the **platform** home — CLI, schemas, shared package runtime, agent fleet, tests, and public docs — owned by the **human/operator**. Fleet agents must not write hdc. Package automation scripts live in [**hdc-clumps**](../hdc-clumps/README.md) (`hdc-sre-engineer`); live operator state lives in [**hdc-private**](../hdc-private/README.md) (`hdc-sre-ops`). See [multi-agent operations](docs/multi-agent-ops.md) for the full roster and handoff rules.
 
-| Repository | Primary agent | Owns |
+| Repository | Owner | Owns |
 | --- | --- | --- |
-| **hdc** (this repo) | `hdc-engineer` | `apps/hdc-cli/`, schemas, `hdc/package/*`, `apps/hdc-agent-server/`, tests |
+| **hdc** (this repo) | Human / operator | `apps/hdc-cli/`, schemas, `hdc/package/*`, `apps/hdc-agent-server/`, tests |
 | [**hdc-clumps**](../hdc-clumps/README.md) | `hdc-sre-engineer` | Package manifests, deploy/maintain/query scripts, `config.example.json` |
 | [**hdc-private**](../hdc-private/README.md) | `hdc-sre-ops` | Live `config.json`, inventory, `operations/` (tasks, digests, plans) |
 
@@ -66,10 +66,10 @@ Package scripts import shared runtime via `hdc/package/*` (resolved by the CLI i
 
 ## Layout
 
-| Path | Role | Agent |
+| Path | Role | Owner |
 | --- | --- | --- |
-| [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and helpers | `hdc-engineer` |
-| [`apps/hdc-agent-server/`](apps/hdc-agent-server/) | Fleet agent definitions, skills, dispatcher runtime | `hdc-engineer` |
+| [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and helpers | Human / operator |
+| [`apps/hdc-agent-server/`](apps/hdc-agent-server/) | Fleet agent definitions, skills, dispatcher runtime | Human / operator |
 | **hdc-clumps** (external) | HDC plugins: run `hdc clumps init` then see [hdc-clumps README](../hdc-clumps/README.md) for every package | `hdc-sre-engineer` |
 | [`operations/inventory/`](operations/inventory/) | Operator sidecars in **hdc-private**; public repo keeps [`systems/_example.json`](operations/inventory/systems/_example.json) only | `hdc-sre-ops` |
 | [`operations/automated/`](operations/automated/) | Operator overlay in **hdc-private** (UniFi/Proxmox query snapshots) | `hdc-sre-ops` |

@@ -54,11 +54,14 @@ export function buildAugmentAgentCard(opts) {
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function augmentBridgeConfigFromEnv(env = process.env) {
-  const repos = String(env.HDC_AUGMENT_REPOS ?? "hdc")
+  const repos = String(env.HDC_AUGMENT_REPOS ?? "hdc-clumps")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const delegatableBy = String(env.HDC_AUGMENT_DELEGATABLE_BY ?? "hdc-engineer,hdc-sre-engineer")
+  const delegatableBy = String(
+    env.HDC_AUGMENT_DELEGATABLE_BY ??
+      "hdc-sre-engineer,hdc-qa,hdc-research,hdc-security-expert,hdc-security-architect,hdc-network-architect",
+  )
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);

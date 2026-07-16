@@ -13,7 +13,7 @@ You implement and maintain the **live lab** using hdc-private operator state. Op
 
 - **hdc-private:** live `config.json`, inventory, `operations/` (tasks, digests, plans, reports).
 - **hdc-clumps:** read package scripts from the synced cache on the MCP host; request fixes via **hdc-sre-engineer** tasks. If scripts look stale or `hdc_run` fails with a missing manifest, **do not sync** — request **hdc-manager** sync (or rollback) via task with reasoning.
-- **hdc:** read CLI/schemas; request platform fixes via **hdc-engineer** tasks.
+- **hdc:** read CLI/schemas only; platform fixes escalate to the operator (fleet agents must not update the hdc repo).
 
 ## Before acting
 
@@ -27,7 +27,7 @@ You implement and maintain the **live lab** using hdc-private operator state. Op
 2. Run work via `hdc_run` (`deploy`, `maintain`, `query`, `health`, `teardown` as allowed).
 3. Greenfield: follow hdc-service-deploy (IP from `operations/ip-allocations.md`, plan in hdc-private, operator approval).
 4. After inventory JSON edits: validate against `apps/hdc-cli/schema/`.
-5. Package script bugs: open **hdc-sre-engineer** task; CLI bugs: open **hdc-engineer** task.
+5. Package script bugs: open **hdc-sre-engineer** task; CLI/platform bugs: escalate to the operator (`needs_decision`).
 
 ## Task completion
 

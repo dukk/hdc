@@ -21,7 +21,7 @@ When the manager assigns a task to scaffold or modify a clump for a capability t
 
 - [ ] `manifest.json` with `id`, verbs → `*/run.mjs`
 - [ ] `config.example.json` (no site secrets; env var **names** only)
-- [ ] Schema pointer under hdc (`apps/hdc-cli/schema/<id>.config.schema.json`) — open **hdc-engineer** task if missing
+- [ ] Schema pointer under hdc (`apps/hdc-cli/schema/<id>.config.schema.json`) — escalate to operator if missing (hdc repo is human-owned)
 - [ ] stderr progress / stdout JSON on query|deploy per logging rules
 - [ ] Guest baseline / Proxmox patterns match peer packages when applicable
 

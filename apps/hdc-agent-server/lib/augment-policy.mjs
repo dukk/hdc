@@ -1,10 +1,10 @@
 /**
  * Shared augmentor delegation allowlists (MCP + delegate-augment).
+ * Fleet agents may only delegate against hdc-clumps (never the hdc platform repo).
  */
 
 /** @type {ReadonlySet<string>} */
 export const AUGMENT_DELEGATOR_ROLES = new Set([
-  "hdc-engineer",
   "hdc-sre-engineer",
   "hdc-qa",
   "hdc-research",
@@ -15,12 +15,11 @@ export const AUGMENT_DELEGATOR_ROLES = new Set([
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 export const REPOS_BY_ROLE = Object.freeze({
-  "hdc-engineer": Object.freeze(["hdc"]),
   "hdc-sre-engineer": Object.freeze(["hdc-clumps"]),
-  "hdc-qa": Object.freeze(["hdc-clumps", "hdc"]),
-  "hdc-research": Object.freeze(["hdc", "hdc-clumps"]),
+  "hdc-qa": Object.freeze(["hdc-clumps"]),
+  "hdc-research": Object.freeze(["hdc-clumps"]),
   "hdc-security-expert": Object.freeze(["hdc-clumps"]),
-  "hdc-security-architect": Object.freeze(["hdc-clumps", "hdc"]),
+  "hdc-security-architect": Object.freeze(["hdc-clumps"]),
   "hdc-network-architect": Object.freeze(["hdc-clumps"]),
 });
 
@@ -42,8 +41,8 @@ export function assertRepoAllowedForRole(role, repo) {
   if (!allowed) {
     throw new Error(`role ${JSON.stringify(role)} may not delegate to augmentors`);
   }
-  if (repo !== "hdc" && repo !== "hdc-clumps") {
-    throw new Error(`repo must be "hdc" or "hdc-clumps" (got ${JSON.stringify(repo)})`);
+  if (repo !== "hdc-clumps") {
+    throw new Error(`repo must be "hdc-clumps" (got ${JSON.stringify(repo)})`);
   }
   if (!allowed.includes(repo)) {
     throw new Error(

@@ -34,7 +34,7 @@ describe("hdc-mcp-server policy", () => {
     expect(assertAllowedRunVerb("query", "hdc-monitor")).toBe("query");
     expect(assertAllowedRunVerb("health", "hdc-monitor")).toBe("health");
     expect(() => assertAllowedRunVerb("maintain", "hdc-monitor")).toThrow(/not allowed/);
-    expect(() => assertAllowedRunVerb("maintain", "hdc-engineer")).toThrow(/not allowed/);
+    expect(() => assertAllowedRunVerb("maintain", "hdc-sre-engineer")).toThrow(/not allowed/);
   });
 
   it("allows deploy for sre-ops/manager only with role policy", () => {
@@ -49,15 +49,14 @@ describe("hdc-mcp-server policy", () => {
   });
 
   it("blocks tools by role", () => {
-    expect(() => assertToolAllowedForRole("hdc_maintain_daily", "hdc-engineer")).toThrow(
+    expect(() => assertToolAllowedForRole("hdc_maintain_daily", "hdc-sre-engineer")).toThrow(
       /not allowed/,
     );
-    expect(() => assertToolAllowedForRole("hdc_list", "hdc-engineer")).not.toThrow();
-    expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_list", "hdc-sre-engineer")).not.toThrow();
+    expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-sre-engineer")).not.toThrow();
     expect(() => assertToolAllowedForRole("hdc_delegate_augment", "hdc-manager")).toThrow(
       /not allowed/,
     );
-    expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-engineer")).not.toThrow();
     expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-sre-engineer")).not.toThrow();
     expect(() => assertToolAllowedForRole("hdc_request_research", "hdc-manager")).toThrow(
       /not allowed/,

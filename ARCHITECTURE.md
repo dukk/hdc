@@ -86,13 +86,13 @@ path-resolution rules.
 hdc/
 ├── hdc, hdc.cmd                 # CLI entry (./hdc on Unix, hdc.cmd on Windows)
 ├── apps/
-│   ├── hdc-cli/                 # the CLI + package runtime (hdc-engineer)
+│   ├── hdc-cli/                 # the CLI + package runtime (human/operator-owned)
 │   │   ├── cli.mjs              # thin entry → lib/cli-app.mjs
 │   │   ├── lib/                 # command logic, package runtime, ~260 modules + tests
 │   │   └── schema/              # inventory + per-package config JSON schemas
 │   ├── hdc-agent-server/        # fleet agent runtime (A2A + dispatcher)
 │   │   ├── server.mjs           # one A2A server per agent role
-│   │   ├── agents/              # 10 role prompts (canonical)
+│   │   ├── agents/              # 9 role prompts (canonical)
 │   │   ├── skills/  rules/  automations/
 │   │   └── lib/                 # dispatcher, LiteLLM client, task queue, mailbox
 │   ├── hdc-mcp-server/          # MCP tool surface over the CLI (allowlisted)
@@ -114,7 +114,7 @@ The five apps and their jobs:
 | **hdc-agent-server** | An A2A HTTP server hosting **one** agent role; scripted dispatcher + LiteLLM tool-loop. | One container per agent on `hdc-agents-a` |
 | **hdc-mcp-server** | MCP server exposing a **safe, allowlisted** slice of the CLI as tools, gated per role. | In-process/stdio inside each agent container |
 | **hdc-web-server** | LAN web UI + REST API for tasks, jobs, schedules, inventory, research. | `hdc-agents-a` `:9120` |
-| **hdc-augment-bridge** | A2A server wrapping IDE/cloud coding agents so fleet engineers can delegate code fixes. | Fleet sidecar + operator workstation |
+| **hdc-augment-bridge** | A2A server wrapping IDE/cloud coding agents so fleet roles can delegate package-code subtasks (hdc-clumps). | Fleet sidecar + operator workstation |
 
 ---
 
@@ -166,7 +166,7 @@ markdown **operation report**. Inventory is JSON sidecars discriminated by `kind
 
 The fleet turns "a small SRE team" into always-on services. **Hub-and-spoke:** the
 Manager is the only agent that assigns work and talks to the operator; specialists do
-not assign work to each other **except** engineers may queue research via
+not assign work to each other **except** `hdc-sre-engineer` may queue research via
 `hdc_request_research`. Coordination flows through **task files** in hdc-private,
 not chat context.
 
@@ -182,7 +182,6 @@ flowchart TB
     SECA["hdc-security-architect<br/>9204"]
     NETA["hdc-network-architect<br/>9205"]
     RES["hdc-research<br/>9206"]
-    ENG["hdc-engineer<br/>9207"]
     SRENG["hdc-sre-engineer<br/>9208"]
     QA["hdc-qa<br/>9209"]
   end
@@ -203,19 +202,19 @@ flowchart TB
 
   OP <--> MGR
   MGR -->|"delegate via /a2a"| REG --> MON & SREOPS & SECX & RES & SRENG & QA
-  MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG & QA -->|"models + publish/discover"| GW
-  MGR & MON & SREOPS & SECX & SECA & NETA & RES & ENG & SRENG & QA <--> TQ & RPT
+  MGR & MON & SREOPS & SECX & SECA & NETA & RES & SRENG & QA -->|"models + publish/discover"| GW
+  MGR & MON & SREOPS & SECX & SECA & NETA & RES & SRENG & QA <--> TQ & RPT
   POL --> MGR
   SREOPS -->|"hdc-mcp → hdc CLI"| LAB
   LAB -->|"query"| MON & SECX
 
   classDef a fill:#1a2332,stroke:#3d8bfd,color:#e7ecf3;
   classDef s fill:#0f1419,stroke:#3dd68c,color:#e7ecf3;
-  class MGR,MON,SREOPS,SECX,SECA,NETA,RES,ENG,SRENG,QA a
+  class MGR,MON,SREOPS,SECX,SECA,NETA,RES,SRENG,QA a
   class TQ,RPT,POL s
 ```
 
-### Roster (10 roles)
+### Roster (9 roles)
 
 | Agent | Lifecycle | Access | Trigger |
 | --- | --- | --- | --- |
@@ -223,11 +222,10 @@ flowchart TB
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live) | Full hdc CLI on approved tasks; hdc-private writes | Per approved task |
 | `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; read-only `query` | Failure reports, scaffolds |
-| `hdc-engineer` | **Build** (platform) | hdc CLI/schemas/agent-server; read-only `query` | Failure reports, platform features |
 | `hdc-security-expert` | **Secure** (detect/respond) | Query + pre-approved bouncer sync | 6 h sweep + incidents |
 | `hdc-security-architect` | **Secure** (plan) | Read-only + `proposals/security/` | Weekly / post-incident |
 | `hdc-network-architect` | **Build** (network design) | Read-only + `proposals/network/` | On demand (A2A) |
-| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` + augmentors | Queued topics (incl. engineer requests) + weekly brief |
+| `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*` + augmentors | Queued topics (incl. sre-engineer requests) + weekly brief |
 | `hdc-qa` | **Build** (quality) | `hdc_validate_clump`, query/health, augmentors | After scaffold; before deploy |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
@@ -236,9 +234,9 @@ Canonical definitions live in [`apps/hdc-agent-server/agents/`](apps/hdc-agent-s
 
 ### Repository ownership → build/ops roles
 
-| Repository | Primary agent | Handoff on failure |
+| Repository | Owner | Handoff on failure |
 | --- | --- | --- |
-| **hdc** (platform) | `hdc-engineer` | CLI failure → `hdc-engineer` |
+| **hdc** (platform) | Human / operator | CLI/platform gaps → escalate to operator (`needs_decision`) |
 | **hdc-clumps** (packages) | `hdc-sre-engineer` | Clump script fails → `hdc-sre-engineer` commits/pushes → `hdc-manager` runs `hdc_clumps_sync` → `hdc-sre-ops` runs approved live op |
 | **hdc-private** (site) | `hdc-sre-ops` | Live config/state; executes approved deploy/maintain |
 
@@ -288,7 +286,7 @@ Default schedules: manager 15 m · monitor 60 m · security 120 m · research 7 
 keys** attribute every model + A2A call to a role (revoke a key = disable that agent).
 
 **Config** is by env-var name only (values from vault at render time): `HDC_AGENT_ROLE`,
-`HDC_AGENT_PORT` (9200–9209), `HDC_LITELLM_BASE_URL`, `HDC_AGENT_LITELLM_KEY`,
+`HDC_AGENT_PORT` (9200–9206, 9208–9209), `HDC_LITELLM_BASE_URL`, `HDC_AGENT_LITELLM_KEY`,
 `HDC_PRIVATE_ROOT`, `HDC_AGENT_MODEL`.
 
 ---
@@ -303,7 +301,7 @@ sequenceDiagram
   participant Sensor as Monitor / Security / Research
   participant Mgr as hdc-manager
   participant Op as Operator
-  participant Worker as hdc-sre-ops / engineer
+  participant Worker as hdc-sre-ops / hdc-sre-engineer
   participant Lab as Proxmox / services
 
   Sensor->>Sensor: sweep (allowlisted hdc query)
@@ -342,8 +340,9 @@ auth, spend/logging, **and** an A2A gateway that fronts registered agents.
   capabilities, and sends the task to `https://litellm.example/a2a/<agent>`; LiteLLM
   authenticates, logs, and proxies to the target container.
 - **Augmentors** — IDE/cloud coding agents (Cursor Cloud, Cursor CLI, Claude Code) are
-  registered with `kind: augmentor`. `hdc-engineer` / `hdc-sre-engineer` delegate code
-  fixes to them via MCP `hdc_list_augmentors` + `hdc_delegate_augment`, bridged by
+  registered with `kind: augmentor`. `hdc-sre-engineer` (and other allowed roles)
+  delegate package-code subtasks (**hdc-clumps** only) via MCP `hdc_list_augmentors` +
+  `hdc_delegate_augment`, bridged by
   [hdc-augment-bridge](docs/manually-deployed/hdc-augment-bridge.md).
 
 ---

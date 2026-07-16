@@ -68,14 +68,13 @@
                       "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
                       "repos": {
                         "type": "array",
-                        "items": { "type": "string", "enum": ["hdc", "hdc-clumps"] }
+                        "items": { "type": "string", "enum": ["hdc-clumps"] }
                       },
                       "delegatable_by": {
                         "type": "array",
                         "items": {
                           "type": "string",
                           "enum": [
-                            "hdc-engineer",
                             "hdc-sre-engineer",
                             "hdc-qa",
                             "hdc-research",

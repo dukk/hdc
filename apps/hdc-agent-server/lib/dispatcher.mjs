@@ -64,8 +64,7 @@ export function canAutoRunTask(task) {
   if (task.needs_decision) return false;
   const cmds = task.suggested_commands ?? [];
   const role = String(task.role ?? "").trim();
-  const isBuildOrQaRole =
-    role === "hdc-engineer" || role === "hdc-sre-engineer" || role === "hdc-qa";
+  const isBuildOrQaRole = role === "hdc-sre-engineer" || role === "hdc-qa";
   if (isBuildOrQaRole) {
     if (!cmds.length) return true;
     return cmds.every(
@@ -152,7 +151,6 @@ const PEER_PORTS = {
   "hdc-security-architect": 9204,
   "hdc-network-architect": 9205,
   "hdc-research": 9206,
-  "hdc-engineer": 9207,
   "hdc-sre-engineer": 9208,
   "hdc-qa": 9209,
 };

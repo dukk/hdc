@@ -44,7 +44,7 @@ description: >-
 | Finding | Role |
 | --- | --- |
 | Package script / manifest / example | `hdc-sre-engineer` |
-| Missing schema / CLI | `hdc-engineer` |
+| Missing schema / CLI (hdc platform) | Operator (escalate `needs_decision`) |
 | Ready for deploy after green QA | `hdc-manager` → `hdc-sre-ops` (approved) |
 
 ## Augmentor

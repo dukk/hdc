@@ -740,7 +740,7 @@ Example: `hdc run service hermes deploy -- --instance a`
 
 | Verb | Summary |
 | --- | --- |
-| `deploy` | LXC (4 vCPU / 8 GiB / 32 GiB) + Docker Compose one container per roster agent (ports 9200–9207) + hdc-web-server |
+| `deploy` | LXC (4 vCPU / 8 GiB / 32 GiB) + Docker Compose one container per roster agent (ports 9200–9206, 9208–9209) + hdc-web-server |
 | `maintain` | Rebuild `hdc/agent-runtime`, push schedules/mail/discord, `up -d`, guest baseline |
 | `query` | Config summary; `--live` for Docker + manager `/health` + web `:9120` |
 | `teardown` | Compose down then destroy LXC |
@@ -1588,7 +1588,7 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 
 ## Agent team (hdc-agent-server fleet)
 
-Ten role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor).
+Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor). The **hdc** platform is human/operator-owned — fleet agents must not write that repo.
 
 | Agent | Role | Repository |
 | --- | --- | --- |
@@ -1596,7 +1596,6 @@ Ten role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-
 | [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests | — |
 | [`hdc-sre-ops`](apps/hdc-agent-server/agents/hdc-sre-ops.md) | Approved deploy/maintain on live systems | hdc-private |
 | [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples (git commit/push) | hdc-clumps |
-| [`hdc-engineer`](apps/hdc-agent-server/agents/hdc-engineer.md) | CLI, schemas, agent fleet, tests (no production deploy) | hdc |
 | [`hdc-qa`](apps/hdc-agent-server/agents/hdc-qa.md) | Clump validation (`hdc_validate_clump`), quality digests | — |
 | [`hdc-security-expert`](apps/hdc-agent-server/agents/hdc-security-expert.md) | Wazuh, CrowdSec, nginx-waf response | — |
 | [`hdc-security-architect`](apps/hdc-agent-server/agents/hdc-security-architect.md) | Read-only security proposals | — |

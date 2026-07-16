@@ -124,16 +124,15 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["hdc", "hdc-clumps"]
+                        "enum": ["hdc-clumps"]
                       },
-                      "description": "Repositories an augmentor may edit"
+                      "description": "Repositories an augmentor may edit (hdc-clumps only; hdc platform is human-owned)"
                     },
                     "delegatable_by": {
                       "type": "array",
                       "items": {
                         "type": "string",
                         "enum": [
-                          "hdc-engineer",
                           "hdc-sre-engineer",
                           "hdc-manager",
                           "hdc-qa",

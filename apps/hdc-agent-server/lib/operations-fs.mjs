@@ -29,7 +29,6 @@ export const TASK_ROLES = /** @type {const} */ ([
   "hdc-security-architect",
   "hdc-network-architect",
   "hdc-research",
-  "hdc-engineer",
   "hdc-qa",
 ]);
 
@@ -40,7 +39,7 @@ export const DELEGATION_STATUSES = /** @type {const} */ ([
   "failed",
 ]);
 
-/** @typedef {"hdc-manager"|"hdc-sre-ops"|"hdc-sre-engineer"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-engineer"|"hdc-qa"} TaskRole */
+/** @typedef {"hdc-manager"|"hdc-sre-ops"|"hdc-sre-engineer"|"hdc-monitor"|"hdc-security-expert"|"hdc-security-architect"|"hdc-network-architect"|"hdc-research"|"hdc-qa"} TaskRole */
 
 export const TASKS_DIR = "operations/tasks";
 export const TASK_REPORT_REL = "operations/task-report.md";

@@ -89,18 +89,6 @@ export const ROLE_POLICIES = Object.freeze({
     ]),
     runVerbs: new Set(["query", "health"]),
   },
-  "hdc-engineer": {
-    tools: new Set([
-      "hdc_list",
-      "hdc_help",
-      "hdc_run",
-      "hdc_validate_clump",
-      "hdc_request_research",
-      ...WEB_TOOLS,
-      ...AUGMENT_TOOLS,
-    ]),
-    runVerbs: new Set(["query", "health"]),
-  },
   "hdc-sre-engineer": {
     tools: new Set([
       "hdc_list",
