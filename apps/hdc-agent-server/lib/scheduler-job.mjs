@@ -128,10 +128,15 @@ export async function runScheduledCliJob(opts) {
       : [cliPath, ...cli];
 
   process.stderr.write(`[hdc-scheduler] job ${scheduleId}: node ${args.join(" ")}\n`);
+  const childEnv = {
+    ...process.env,
+    // CLI child notifications are from the hdc CLI surface, not the scheduler role.
+    HDC_OPS_NOTIFY_APP: "cli",
+  };
   const r = spawnSync(process.execPath, args, {
     cwd: installRoot,
     encoding: "utf8",
-    env: process.env,
+    env: childEnv,
     maxBuffer: CLI_MAX_BUFFER,
   });
 

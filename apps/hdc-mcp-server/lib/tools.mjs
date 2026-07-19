@@ -231,7 +231,10 @@ export async function handleHdcNotifyDiscord(args = {}) {
     const taskId = String(args.task_id ?? args.taskId ?? "").trim();
     if (decision && !taskId) throw new Error("task_id is required when decision is true");
 
-    const content = formatDiscordContent(title, redactIpsFromText(message));
+    const content = formatDiscordContent(title, redactIpsFromText(message), {
+      env: { ...process.env, HDC_OPS_NOTIFY_APP: "mcp" },
+      app: "mcp",
+    });
 
     if (dryRun) {
       const interactive = decision

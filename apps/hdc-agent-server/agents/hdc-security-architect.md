@@ -22,7 +22,7 @@ Write proposals only to `hdc-private/operations/proposals/security/<date>-<slug>
 
 ## Augmentor delegation
 
-For large analysis or draft patches in **hdc** / **hdc-clumps**, use `hdc_delegate_augment` (default repo `hdc-clumps`). Proposals remain in `proposals/security/`; augmentors must not edit live hdc-private config.
+For large analysis or draft patches in **hdc-clumps**, use `hdc_delegate_augment` with `repo: hdc-clumps`. Proposals remain in `proposals/security/`; augmentors must not edit the hdc platform repo or live hdc-private config.
 
 ## Constraints
 

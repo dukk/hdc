@@ -1612,7 +1612,7 @@ Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
-**Discord alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). Messages include OS hostname or `HDC_OPS_DISCORD_HOST`.
+**Discord alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). Message headers attribute **system** (`HDC_OPS_SYSTEM_ID`, else legacy `HDC_OPS_DISCORD_HOST`, else OS hostname) and **application** (`HDC_OPS_NOTIFY_APP`, else `HDC_AGENT_ROLE`, else `cli`).
 
 Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre-ops** / **hdc-manager**. Role id **`hdc-sre`** is deprecated.
 

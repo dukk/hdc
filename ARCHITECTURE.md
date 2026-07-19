@@ -403,7 +403,7 @@ flowchart TB
   subgraph pve["Proxmox cluster (hypervisor-a…d)"]
     subgraph agents["hdc-agents-a (LXC, Docker nesting)"]
       WEB["hdc-web-server :9120"]
-      AC["10× agent containers :9200–9209"]
+      AC["9× agent containers :9200–9206, 9208–9209"]
       SIDE["cursor-cloud-bridge :9210"]
     end
     LITELLM["litellm-a (LXC) — /v1 + /a2a + Postgres"]

@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url";
 export const OPS_DISCORD_WEBHOOK_KEY = "HDC_OPS_DISCORD_WEBHOOK_URL";
 export const AGENTS_DISCORD_WEBHOOK_KEY = "HDC_AGENTS_DISCORD_WEBHOOK_URL";
 export const OPS_DISCORD_NOTIFY_ENV = "HDC_OPS_DISCORD_NOTIFY";
+/** @deprecated Prefer HDC_OPS_SYSTEM_ID; still honored as system fallback. */
 export const OPS_DISCORD_HOST_ENV = "HDC_OPS_DISCORD_HOST";
+/** Inventory system id of the host that sent the notification (e.g. hdc-agents-a). */
+export const OPS_SYSTEM_ID_ENV = "HDC_OPS_SYSTEM_ID";
+/** Application surface that sent the notification (cli, mcp, web, agent role, …). */
+export const OPS_NOTIFY_APP_ENV = "HDC_OPS_NOTIFY_APP";
 export const OPS_DISCORD_APPLICATION_ID_ENV = "HDC_OPS_DISCORD_APPLICATION_ID";
 export const OPS_DISCORD_PUBLIC_KEY_ENV = "HDC_OPS_DISCORD_PUBLIC_KEY";
 export const OPS_DISCORD_BOT_TOKEN_ENV = "HDC_OPS_DISCORD_BOT_TOKEN";
@@ -18,6 +23,7 @@ export const DISCORD_COMPONENT_ACTION_ROW = 1;
 export const DISCORD_COMPONENT_BUTTON = 2;
 const MAX_CONTENT = 1900;
 const DEFAULT_DISCORD_API_BASE = "https://discord.com/api/v10";
+const DEFAULT_NOTIFY_APP = "cli";
 
 const IPV4_CIDR_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
 const IPV6_RE =
@@ -41,25 +47,66 @@ export function redactIpsFromText(text) {
 }
 
 /**
+ * System id for notification attribution (inventory system, not Docker container id).
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolveOpsNotifySystem(env = process.env) {
+  const systemId = String(env[OPS_SYSTEM_ID_ENV] ?? "").trim();
+  if (systemId) return systemId;
+  const legacyHost = String(env[OPS_DISCORD_HOST_ENV] ?? "").trim();
+  if (legacyHost) return legacyHost;
+  return hostname();
+}
+
+/**
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
 export function resolveOpsDiscordHost(env = process.env) {
-  const override = String(env[OPS_DISCORD_HOST_ENV] ?? "").trim();
-  if (override) return override;
-  return hostname();
+  return resolveOpsNotifySystem(env);
+}
+
+/**
+ * Application surface for notification attribution (cli, mcp, web, agent role, …).
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolveOpsNotifyApp(env = process.env) {
+  const explicit = String(env[OPS_NOTIFY_APP_ENV] ?? "").trim();
+  if (explicit) return explicit;
+  const role = String(env.HDC_AGENT_ROLE ?? "").trim();
+  if (role) return role;
+  return DEFAULT_NOTIFY_APP;
+}
+
+/**
+ * @param {string} title
+ * @param {{ system?: string; app?: string; env?: NodeJS.ProcessEnv; host?: string }} [opts]
+ * @returns {string}
+ */
+export function formatNotifyAttributionHeader(title, opts = {}) {
+  const env = opts.env ?? process.env;
+  const system = String(opts.system ?? opts.host ?? resolveOpsNotifySystem(env)).trim();
+  const app = String(opts.app ?? resolveOpsNotifyApp(env)).trim();
+  const titlePart = title.trim() || "HDC Ops";
+  /** @type {string[]} */
+  const parts = [`**${titlePart}**`];
+  if (system) parts.push(`\`${system}\``);
+  if (app) parts.push(`\`${app}\``);
+  return parts.join(" · ");
 }
 
 /**
  * @param {string} title
  * @param {string} message
- * @param {{ env?: NodeJS.ProcessEnv; host?: string }} [opts]
+ * @param {{ env?: NodeJS.ProcessEnv; host?: string; system?: string; app?: string }} [opts]
  * @returns {string}
  */
 export function formatDiscordContent(title, message, opts = {}) {
-  const host = opts.host ?? resolveOpsDiscordHost(opts.env);
-  const titlePart = title.trim() || "HDC Ops";
-  const header = host ? `**${titlePart}** · \`${host}\`` : `**${titlePart}**`;
+  const header = formatNotifyAttributionHeader(title, opts);
   const body = message.trim();
   const text = body ? `${header}\n\n${body}` : header;
   return text.length > MAX_CONTENT ? `${text.slice(0, MAX_CONTENT - 3)}...` : text;

@@ -31,31 +31,77 @@ import {
   OPS_DISCORD_HOST_ENV,
   OPS_DISCORD_NOTIFY_ENV,
   OPS_DISCORD_PUBLIC_KEY_ENV,
+  OPS_NOTIFY_APP_ENV,
+  OPS_SYSTEM_ID_ENV,
   postDiscordWebhook,
   redactIpsFromText,
   resolveOpsDiscordHost,
   resolveOpsDiscordInteractiveConfig,
+  resolveOpsNotifyApp,
+  resolveOpsNotifySystem,
   sendOpsDiscordMessage,
   sendOpsDiscordNotifyBestEffort,
 } from "./ops-discord-notify.mjs";
 
 describe("ops-discord-notify", () => {
   describe("formatDiscordContent", () => {
-    it("includes host in header when provided", () => {
+    it("includes system and app in header when provided", () => {
       const content = formatDiscordContent("Pi-hole maintain — OK", "completed", {
-        host: "hdc-runner-a",
+        system: "hdc-agents-a",
+        app: "cli",
       });
-      expect(content).toBe("**Pi-hole maintain — OK** · `hdc-runner-a`\n\ncompleted");
+      expect(content).toBe(
+        "**Pi-hole maintain — OK** · `hdc-agents-a` · `cli`\n\ncompleted",
+      );
     });
 
-    it("resolveOpsDiscordHost prefers HDC_OPS_DISCORD_HOST", () => {
+    it("resolveOpsNotifySystem prefers HDC_OPS_SYSTEM_ID over host override", () => {
+      const prevSystem = process.env[OPS_SYSTEM_ID_ENV];
+      const prevHost = process.env[OPS_DISCORD_HOST_ENV];
+      process.env[OPS_SYSTEM_ID_ENV] = "hdc-agents-a";
+      process.env[OPS_DISCORD_HOST_ENV] = "legacy-host";
+      try {
+        expect(resolveOpsNotifySystem()).toBe("hdc-agents-a");
+        expect(resolveOpsDiscordHost()).toBe("hdc-agents-a");
+      } finally {
+        if (prevSystem === undefined) delete process.env[OPS_SYSTEM_ID_ENV];
+        else process.env[OPS_SYSTEM_ID_ENV] = prevSystem;
+        if (prevHost === undefined) delete process.env[OPS_DISCORD_HOST_ENV];
+        else process.env[OPS_DISCORD_HOST_ENV] = prevHost;
+      }
+    });
+
+    it("resolveOpsDiscordHost still honors HDC_OPS_DISCORD_HOST when system unset", () => {
       const prev = process.env[OPS_DISCORD_HOST_ENV];
+      const prevSystem = process.env[OPS_SYSTEM_ID_ENV];
+      delete process.env[OPS_SYSTEM_ID_ENV];
       process.env[OPS_DISCORD_HOST_ENV] = "custom-host";
       try {
         expect(resolveOpsDiscordHost()).toBe("custom-host");
       } finally {
         if (prev === undefined) delete process.env[OPS_DISCORD_HOST_ENV];
         else process.env[OPS_DISCORD_HOST_ENV] = prev;
+        if (prevSystem === undefined) delete process.env[OPS_SYSTEM_ID_ENV];
+        else process.env[OPS_SYSTEM_ID_ENV] = prevSystem;
+      }
+    });
+
+    it("resolveOpsNotifyApp prefers explicit env then agent role then cli", () => {
+      const prevApp = process.env[OPS_NOTIFY_APP_ENV];
+      const prevRole = process.env.HDC_AGENT_ROLE;
+      delete process.env[OPS_NOTIFY_APP_ENV];
+      delete process.env.HDC_AGENT_ROLE;
+      try {
+        expect(resolveOpsNotifyApp()).toBe("cli");
+        process.env.HDC_AGENT_ROLE = "hdc-scheduler";
+        expect(resolveOpsNotifyApp()).toBe("hdc-scheduler");
+        process.env[OPS_NOTIFY_APP_ENV] = "mcp";
+        expect(resolveOpsNotifyApp()).toBe("mcp");
+      } finally {
+        if (prevApp === undefined) delete process.env[OPS_NOTIFY_APP_ENV];
+        else process.env[OPS_NOTIFY_APP_ENV] = prevApp;
+        if (prevRole === undefined) delete process.env.HDC_AGENT_ROLE;
+        else process.env.HDC_AGENT_ROLE = prevRole;
       }
     });
   });

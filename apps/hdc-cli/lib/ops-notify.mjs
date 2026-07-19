@@ -4,13 +4,13 @@
 import {
   AGENTS_DISCORD_WEBHOOK_KEY,
   formatDiscordContent,
+  formatNotifyAttributionHeader,
   OPS_DISCORD_APPLICATION_ID_ENV,
   OPS_DISCORD_BOT_TOKEN_ENV,
   OPS_DISCORD_CHANNEL_ID_ENV,
   OPS_DISCORD_PUBLIC_KEY_ENV,
   OPS_DISCORD_WEBHOOK_KEY,
   redactIpsFromText,
-  resolveOpsDiscordHost,
   sendOpsDiscordMessage,
 } from "./ops-discord-notify.mjs";
 import { sendPlainEmail } from "./package/report-email.mjs";
@@ -27,13 +27,13 @@ const MAX_TEXT = 1900;
 /**
  * @param {string} title
  * @param {string} message
- * @param {{ env?: NodeJS.ProcessEnv; host?: string }} [opts]
+ * @param {{ env?: NodeJS.ProcessEnv; host?: string; system?: string; app?: string }} [opts]
  * @returns {string}
  */
 export function formatNotifyBody(title, message, opts = {}) {
-  const host = opts.host ?? resolveOpsDiscordHost(opts.env);
-  const titlePart = title.trim() || "HDC";
-  const header = host ? `${titlePart} · ${host}` : titlePart;
+  const discordHeader = formatNotifyAttributionHeader(title.trim() || "HDC", opts);
+  // Plain-text channels: drop markdown bold markers from the shared header.
+  const header = discordHeader.replace(/\*\*/g, "");
   const body = message.trim();
   const text = body ? `${header}\n\n${body}` : header;
   return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 3)}...` : text;

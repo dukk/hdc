@@ -56,9 +56,12 @@ describe("notifications-config", () => {
 });
 
 describe("ops-notify", () => {
-  it("formatNotifyBody includes host when provided", () => {
-    const text = formatNotifyBody("Alert", "body", { host: "hdc-agents-a" });
-    expect(text).toContain("Alert · hdc-agents-a");
+  it("formatNotifyBody includes system and app when provided", () => {
+    const text = formatNotifyBody("Alert", "body", {
+      system: "hdc-agents-a",
+      app: "cli",
+    });
+    expect(text).toContain("Alert · `hdc-agents-a` · `cli`");
     expect(text).toContain("body");
   });
 
