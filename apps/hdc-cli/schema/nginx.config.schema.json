@@ -42,7 +42,7 @@
     },
     "defaults": {
       "type": "object",
-      "description": "Merged into each deployments[] entry. For proxmox-qemu, defaults.proxmox.qemu.rootfs_gb sets the target root disk size in GiB (maintain grows live guests when config exceeds live size)."
+      "description": "Merged into each deployments[] entry. For proxmox-qemu, defaults.proxmox.qemu.rootfs_gb sets the target root disk size in GiB (maintain grows live guests when config exceeds live size).",
       "properties": {
         "nginx": {
           "type": "object",

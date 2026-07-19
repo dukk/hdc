@@ -41,7 +41,7 @@
           "notes": { "type": ["string", "null"] },
           "dmarc": { "type": ["string", "null"] },
           "spf": { "type": ["string", "null"] },
-          "spf_variant": { "type": ["string", "enum": ["default", "mailcow"] }
+          "spf_variant": { "type": ["string", "null"], "enum": ["default", "mailcow", null] }
         }
       }
     },

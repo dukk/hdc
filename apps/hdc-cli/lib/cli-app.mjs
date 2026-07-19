@@ -1430,16 +1430,20 @@ export async function runCli(argv, deps) {
       if (rest[0] !== "lint") {
         die(deps, 'docs: need subcommand "lint"');
       }
+      const strict = rest.includes("--strict");
       const result = runDocsLint({
         publicRoot: root,
         privateRoot: hdcPrivateRoot(root, deps.env),
+        strict,
         log: (line) => deps.log(`[hdc] docs lint: ${line}`),
       });
       for (const err of result.errors) {
-        deps.error(`[hdc] docs lint: ${err.path}: ${err.message}`);
+        const prefix = err.level === "warning" ? "warning" : "error";
+        const fn = err.level === "warning" ? deps.warn : deps.error;
+        fn(`[hdc] docs lint: ${prefix}: ${err.path}: ${err.message}`);
       }
       deps.log(
-        `[hdc] docs lint: ${result.schemaCount} schema(s), ${result.checked} file(s) checked, ${result.errors.length} error(s)`,
+        `[hdc] docs lint: ${result.schemaCount} schema(s), ${result.checked} file(s) checked, ${result.errors.filter((e) => e.level === "error").length} error(s), ${result.errors.filter((e) => e.level === "warning").length} warning(s)`,
       );
       return result.ok ? 0 : 1;
     } else {

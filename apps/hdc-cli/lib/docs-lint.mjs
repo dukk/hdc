@@ -4,8 +4,7 @@ import { basename, join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { preprocessJsonConfigText } from "./json-config-preprocess.mjs";
-import { resolveRepoFile } from "./private-repo.mjs";
+import { parseJsonc, readResolvedPackageConfigJson } from "./json-config-preprocess.mjs";
 
 /**
  * @param {string} dir
@@ -34,19 +33,11 @@ function listFilesRecursive(dir, filter) {
 }
 
 /**
- * @param {string} path
- * @returns {unknown}
- */
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-/**
  * Validate HDC JSON schemas and optionally inventory / config examples.
  *
- * Default mode fails only when a schema file is invalid JSON or cannot compile
- * (after registering sibling $refs). Inventory and config.example checks are
- * recorded as warnings unless `strict` is true.
+ * Default mode fails only when a schema file is invalid JSON/JSONC or cannot
+ * compile after registering sibling `$ref`s. Inventory and config.example checks
+ * are warnings unless `strict` is true.
  *
  * @param {object} opts
  * @param {string} opts.publicRoot
@@ -80,7 +71,9 @@ export function runDocsLint(opts) {
   for (const file of schemaFiles) {
     const key = basename(file);
     try {
-      const schema = /** @type {Record<string, unknown>} */ (readJson(file));
+      const schema = /** @type {Record<string, unknown>} */ (
+        parseJsonc(readFileSync(file, "utf8"), key)
+      );
       if (!schema.$id) {
         schema.$id = `https://hdc.local/schema/${key}`;
       }
@@ -125,7 +118,7 @@ export function runDocsLint(opts) {
     let payload = data;
     if (payload === undefined) {
       try {
-        payload = readJson(filePath);
+        payload = parseJsonc(readFileSync(filePath, "utf8"), filePath);
       } catch (e) {
         errors.push({
           path: filePath,
@@ -160,21 +153,19 @@ export function runDocsLint(opts) {
 
   /** @type {string[]} */
   const clumpsRoots = [];
-  const siblingClumps = join(publicRoot, "..", "hdc-clumps");
-  try {
-    if (statSync(siblingClumps).isDirectory()) clumpsRoots.push(siblingClumps);
-  } catch {
-    /* optional */
-  }
-  try {
-    if (statSync(join(publicRoot, "hdc-clumps")).isDirectory()) {
-      clumpsRoots.push(join(publicRoot, "hdc-clumps"));
+  for (const candidate of [
+    join(publicRoot, "..", "hdc-clumps"),
+    join(publicRoot, "hdc-clumps"),
+    join(publicRoot, "clumps"),
+    privateRoot ? join(privateRoot, "clumps") : null,
+  ]) {
+    if (!candidate) continue;
+    try {
+      if (statSync(candidate).isDirectory()) clumpsRoots.push(candidate);
+    } catch {
+      /* optional */
     }
-  } catch {
-    /* optional */
   }
-  clumpsRoots.push(join(publicRoot, "clumps"));
-  if (privateRoot) clumpsRoots.push(join(privateRoot, "clumps"));
 
   const seenExamples = new Set();
   for (const clumpsRoot of clumpsRoots) {
@@ -190,38 +181,18 @@ export function runDocsLint(opts) {
       const schemaKey = `${id}.config.schema.json`;
       if (!validators.has(schemaKey)) continue;
       try {
-        const resolved = {
-          found: true,
-          path: file,
-          rel: `clumps/${m[1]}/${id}/config.example.json`,
-          source: "public",
-        };
-        const data = preprocessJsonConfigText(readFileSync(file, "utf8"), {
-          publicRoot,
-          env: process.env,
-          includingPath: file,
-          resolveInclude: (includeRel, fromDir) => {
-            const fromFile = resolveRepoFile(
-              publicRoot,
-              join(fromDir, includeRel).replace(/\\/g, "/").replace(/^.*?clumps\//, "clumps/"),
-              process.env,
-            );
-            // Prefer path relative to the including file's directory in clumps tree
-            const local = join(fromDir, includeRel);
-            try {
-              if (statSync(local).isFile()) {
-                return { found: true, path: local, rel: includeRel, source: "public" };
-              }
-            } catch {
-              /* fall through */
-            }
-            return fromFile.found ? fromFile : { found: false, path: local, rel: includeRel, source: "public" };
+        const data = readResolvedPackageConfigJson(
+          {
+            found: true,
+            path: file,
+            rel: `clumps/${m[1]}/${id}/config.example.json`,
+            source: "public",
           },
-        });
+          { publicRoot, env: process.env, preprocess: true },
+        );
         checkAgainst(file, schemaKey, dataLevel, data);
         checked += 1;
       } catch (e) {
-        // Examples often use $hdc.include stubs; keep as warnings unless strict
         errors.push({
           path: file,
           message: `example load failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -252,6 +223,11 @@ export function runDocsLint(opts) {
   }
 
   const hardErrors = errors.filter((e) => e.level === "error");
+  const warnings = errors.filter((e) => e.level === "warning");
+  if (warnings.length) {
+    log(`${warnings.length} warning(s) (use docs lint --strict to fail on these)`);
+  }
+
   return {
     ok: hardErrors.length === 0,
     schemaCount: schemaFiles.length,
