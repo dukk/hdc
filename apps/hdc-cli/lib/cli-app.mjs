@@ -37,18 +37,25 @@ import {
   vaultDepsFromCli,
 } from "./vault-access.mjs";
 import { runUsersBootstrapHdc } from "./users-bootstrap-hdc.mjs";
-import { resolveRepoFile } from "./private-repo.mjs";
+import { hdcPrivateRoot, resolveRepoFile } from "./private-repo.mjs";
 import {
   filterSecretsForExport,
   parseSecretsExportArgv,
   writeSecretExport,
 } from "./secrets-export.mjs";
+import {
+  parseSecretsBackupArgv,
+  restoreBootstrapBundle,
+  runSecretsBackup,
+  unlockLocalVaultPassphrase,
+} from "./secrets-backup.mjs";
 import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultwarden-sync.mjs";
 import { parseSecretsSyncUrisArgv, syncVaultKeyUris } from "./vaultwarden-sync-uris.mjs";
 import { resolveSecretBackendMode } from "./secret-backend.mjs";
 import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
 import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
 import { cmdMaintainDaily } from "./daily-maintain.mjs";
+import { runDocsLint } from "./docs-lint.mjs";
 import { cliAppDir } from "../paths.mjs";
 import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
 import {
@@ -131,8 +138,11 @@ Usage:
   ${c} secrets unlock   # pre-unlock Vaultwarden when HDC_SECRET_BACKEND uses it
   ${c} secrets push [--dry-run] [--skip-existing] [--force]   # local vault -> Vaultwarden HDC org
   ${c} secrets sync-uris [--dry-run] [--key <ENV>] [--force]   # HDC service URLs on Login items
+  ${c} secrets backup [--dest <dir> ...] [--retain <n>] [--dry-run]   # vault.enc + encrypted .env bundle
+  ${c} secrets restore-bootstrap <file> --out-dir <dir> [--force]
   ${c} users bootstrap-hdc [--dry-run] [--sidecar <path> ...]
-  ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades] [--only <tier>/<id>] [--skip <tier>/<id>] [--no-report] [--report <path>]
+  ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades] [--only <tier>/<id>] [--skip <tier>/<id>] [--skip-vault-backup] [--skip-private-git-check] [--skip-lock] [--step-timeout-ms <n>] [--no-report] [--report <path>]
+  ${c} docs lint        # AJV validate schemas + inventory / config.example.json
   ${c} env              # HDC_* variables (secrets redacted)
 
 verbs: ${VERBS.join(", ")}
@@ -477,6 +487,8 @@ Subcommands:
   unlock  Unlock Vaultwarden vault (bw session) when HDC_SECRET_BACKEND is vaultwarden or auto.
   push    Copy local vault secrets into the Vaultwarden HDC organization collection.
   sync-uris  Set HDC service website URLs on Vaultwarden Login items (from clump configs).
+  backup  Copy vault.enc plus an encrypted bundle of bootstrap .env files to backup dirs.
+  restore-bootstrap  Decrypt a bootstrap bundle back into .env files (disaster recovery).
 
 Examples:
   ${c} secrets path
@@ -484,6 +496,7 @@ Examples:
   ${c} help secrets set
   ${c} help secrets push
   ${c} help secrets sync-uris
+  ${c} help secrets backup
 `);
       return;
     }
@@ -662,9 +675,47 @@ Examples:
 `);
       return;
     }
+    if (sub === "backup") {
+      const c = helpExe(deps);
+      deps.log(`secrets backup — off-workstation copies of the vault and bootstrap files
+
+Copies vault.enc as-is (already AES-256-GCM encrypted) and writes an encrypted bundle
+of bootstrap files (root .env plus every clump .env under hdc and hdc-private) to each
+destination directory. The bundle is encrypted with the local vault passphrase.
+Retention keeps the newest N files per prefix (hdc-vault-*, hdc-bootstrap-*).
+
+Usage:
+  ${c} secrets backup [--dest <dir> ...] [--retain <n>] [--dry-run]
+
+Destinations default to HDC_VAULT_BACKUP_DIRS in .env (";"-separated paths, e.g. a NAS
+share plus a second copy). Retention defaults to HDC_VAULT_BACKUP_RETAIN or 30.
+When HDC_VAULT_BACKUP_DIRS is set, "maintain daily" runs this backup automatically.
+
+Examples:
+  ${c} secrets backup --dest \\\\nas-a\\backups\\hdc-vault
+  ${c} secrets backup --retain 14 --dry-run
+`);
+      return;
+    }
+    if (sub === "restore-bootstrap") {
+      const c = helpExe(deps);
+      deps.log(`secrets restore-bootstrap — recover bootstrap .env files from a backup bundle
+
+Decrypts an hdc-bootstrap-<timestamp>.enc bundle (written by "secrets backup") with the
+vault passphrase and writes the contained .env files under --out-dir, preserving their
+repo-relative layout (hdc/.env, hdc-private/clumps/<tier>/<id>/.env, ...).
+
+Usage:
+  ${c} secrets restore-bootstrap <file> --out-dir <dir> [--force]
+
+Example:
+  ${c} secrets restore-bootstrap hdc-bootstrap-2026-07-18T03-00-00.enc --out-dir ./restored
+`);
+      return;
+    }
     die(
       deps,
-      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, get, dump, delete, unlock, push)`,
+      `help secrets: unknown subtopic ${JSON.stringify(sub)} (try: path, init, change-passphrase, set, list, get, dump, delete, unlock, push, backup, restore-bootstrap)`,
     );
   }
 
@@ -728,11 +779,17 @@ Example:
 Usage:
   ${c} maintain daily [--dry-run] [--skip-clients] [--skip-upgrades]
   ${c} maintain daily [--only <tier>/<id>] [--skip <tier>/<id>] [--no-report] [--report <path>]
+  ${c} maintain daily [--skip-vault-backup] [--skip-private-git-check] [--skip-lock]
+  ${c} maintain daily [--step-timeout-ms <n>]
   ${c} maintain daily -- [--only service/bind]   # flags after -- also accepted
 
 Runs configured packages sequentially (continues on failure). Skips packages without
 config.json. Applies routine updates (Docker pull, guest apt, DSM packages) but avoids
 prune, rolling restarts, and reboots. Home clients run query only.
+
+Built-in steps (skipped when using --only): fails the run when hdc-private has
+uncommitted or unpushed changes (--skip-private-git-check to disable), and backs up
+vault.enc + bootstrap .env bundle when HDC_VAULT_BACKUP_DIRS is set (--skip-vault-backup).
 
 Writes an aggregated markdown report under apps/hdc-cli/reports/ (hdc-private when present).
 
@@ -775,7 +832,7 @@ function bootstrapEnv(deps) {
 
 /**
  * @param {CliDeps} deps
- * @param {string} sub
+ * @param {"get" | "dump"} sub
  * @param {string[]} rest
  */
 async function cmdSecretsExport(deps, sub, rest) {
@@ -979,6 +1036,68 @@ async function cmdSecrets(deps, argv) {
   }
   if (sub === "get" || sub === "dump") {
     await cmdSecretsExport(deps, sub, argv.slice(1));
+    return;
+  }
+  if (sub === "backup") {
+    const parsed = parseSecretsBackupArgv(argv.slice(1), deps.env);
+    if (parsed.dests.length === 0) {
+      die(
+        deps,
+        "secrets backup: no destination (use --dest <dir> or set HDC_VAULT_BACKUP_DIRS)",
+      );
+    }
+    let passphrase = "";
+    if (!parsed.dryRun) {
+      try {
+        passphrase = await unlockLocalVaultPassphrase(deps);
+      } catch (e) {
+        if (e instanceof CliExit) throw e;
+        die(deps, `secrets backup: ${/** @type {Error} */ (e).message}`);
+      }
+    }
+    const result = runSecretsBackup({
+      vaultPath,
+      passphrase,
+      publicRoot: deps.repoRoot(),
+      env: deps.env,
+      dests: parsed.dests,
+      retain: parsed.retain,
+      dryRun: parsed.dryRun,
+      log: deps.log,
+      warn: deps.warn,
+    });
+    if (!result.ok) {
+      die(deps, "secrets backup: one or more destinations failed");
+    }
+    return;
+  }
+  if (sub === "restore-bootstrap") {
+    const file = argv[1] && !argv[1].startsWith("-") ? argv[1] : null;
+    if (!file) die(deps, "secrets restore-bootstrap: need a bundle file path");
+    const outIdx = argv.indexOf("--out-dir");
+    const outDir = outIdx !== -1 ? (argv[outIdx + 1] ?? null) : null;
+    if (!outDir) die(deps, "secrets restore-bootstrap: --out-dir <dir> is required");
+    if (!deps.existsSync(file)) {
+      die(deps, `secrets restore-bootstrap: no such file: ${file}`);
+    }
+    let passphrase = "";
+    try {
+      passphrase = await unlockLocalVaultPassphrase(deps);
+    } catch (e) {
+      if (e instanceof CliExit) throw e;
+      die(deps, `secrets restore-bootstrap: ${/** @type {Error} */ (e).message}`);
+    }
+    try {
+      const { written } = restoreBootstrapBundle({
+        file,
+        passphrase,
+        outDir,
+        force: argv.includes("--force"),
+      });
+      deps.log(`restored ${written.length} file(s) under ${deps.resolve(outDir)}`);
+    } catch (e) {
+      die(deps, /** @type {Error} */ (e).message);
+    }
     return;
   }
   if (sub === "delete") {
@@ -1307,6 +1426,22 @@ export async function runCli(argv, deps) {
         die(deps, "maintain: need a subcommand (daily)");
       }
       return await cmdMaintainDaily(deps, root, rest);
+    } else if (cmd === "docs") {
+      if (rest[0] !== "lint") {
+        die(deps, 'docs: need subcommand "lint"');
+      }
+      const result = runDocsLint({
+        publicRoot: root,
+        privateRoot: hdcPrivateRoot(root, deps.env),
+        log: (line) => deps.log(`[hdc] docs lint: ${line}`),
+      });
+      for (const err of result.errors) {
+        deps.error(`[hdc] docs lint: ${err.path}: ${err.message}`);
+      }
+      deps.log(
+        `[hdc] docs lint: ${result.schemaCount} schema(s), ${result.checked} file(s) checked, ${result.errors.length} error(s)`,
+      );
+      return result.ok ? 0 : 1;
     } else {
       usage(deps);
       die(deps, `unknown command: ${cmd}`, 1);

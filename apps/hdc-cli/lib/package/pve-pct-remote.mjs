@@ -8,28 +8,67 @@ const SSH_OPTS = [
   "StrictHostKeyChecking=no",
   "-o",
   `UserKnownHostsFile=${devNull}`,
+  "-o",
+  "ConnectTimeout=15",
+  "-o",
+  "ServerAliveInterval=30",
+  "-o",
+  "ServerAliveCountMax=6",
 ];
+
+/** Default hard timeout for a single remote command (override: HDC_SSH_COMMAND_TIMEOUT_MS). */
+export const SSH_DEFAULT_COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * @param {{ timeoutMs?: number } | undefined} opts
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function resolveSshCommandTimeoutMs(opts, env = process.env) {
+  const fromOpts = Number(opts?.timeoutMs);
+  if (Number.isFinite(fromOpts) && fromOpts > 0) return Math.round(fromOpts);
+  const fromEnv = Number(env.HDC_SSH_COMMAND_TIMEOUT_MS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.round(fromEnv);
+  return SSH_DEFAULT_COMMAND_TIMEOUT_MS;
+}
+
+/**
+ * @param {ReturnType<typeof spawnSync>} r
+ * @param {boolean} capture
+ * @param {number} timeoutMs
+ */
+function spawnResultToRemoteResult(r, capture, timeoutMs) {
+  const timedOut = r.error != null && /** @type {NodeJS.ErrnoException} */ (r.error).code === "ETIMEDOUT";
+  const stderrBase = capture ? String(r.stderr ?? "") : "";
+  return {
+    status: r.status ?? 1,
+    stdout: capture ? String(r.stdout ?? "") : "",
+    stderr: timedOut
+      ? `${stderrBase}${stderrBase ? "\n" : ""}remote command timed out after ${timeoutMs}ms`
+      : stderrBase,
+    timedOut,
+  };
+}
 
 /**
  * @param {string} user
  * @param {string} host
  * @param {string} remoteCommand
- * @param {{ capture?: boolean }} [opts]
+ * @param {{ capture?: boolean; timeoutMs?: number }} [opts]
  */
 export function sshRemote(user, host, remoteCommand, opts = {}) {
   const capture = Boolean(opts.capture);
+  const timeoutMs = resolveSshCommandTimeoutMs(opts);
   const r = spawnSync(
     "ssh",
     [...SSH_OPTS, `${user}@${host}`, remoteCommand],
-    capture
-      ? { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
-      : { encoding: "utf8", stdio: "inherit" },
+    {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+      ...(capture ? { stdio: ["pipe", "pipe", "pipe"] } : { stdio: "inherit" }),
+    },
   );
-  return {
-    status: r.status ?? 1,
-    stdout: capture ? String(r.stdout ?? "") : "",
-    stderr: capture ? String(r.stderr ?? "") : "",
-  };
+  return spawnResultToRemoteResult(r, capture, timeoutMs);
 }
 
 /**
@@ -57,21 +96,20 @@ export function pctExec(user, pveHost, vmid, innerCommand, opts = {}) {
  * @param {string} pveHost
  * @param {number} vmid
  * @param {string} innerCommand
- * @param {{ capture?: boolean }} [opts]
+ * @param {{ capture?: boolean; timeoutMs?: number }} [opts]
  */
 export function pctExecScript(user, pveHost, vmid, innerCommand, opts = {}) {
   const capture = Boolean(opts.capture);
+  const timeoutMs = resolveSshCommandTimeoutMs(opts);
   const remote = `pct exec ${vmid} -- bash -s`;
   const r = spawnSync("ssh", [...SSH_OPTS, `${user}@${pveHost}`, remote], {
     encoding: "utf8",
     input: String(innerCommand ?? ""),
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
     stdio: capture ? ["pipe", "pipe", "pipe"] : ["pipe", "inherit", "inherit"],
   });
-  return {
-    status: r.status ?? 1,
-    stdout: capture ? String(r.stdout ?? "") : "",
-    stderr: capture ? String(r.stderr ?? "") : "",
-  };
+  return spawnResultToRemoteResult(r, capture, timeoutMs);
 }
 
 /**

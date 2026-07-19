@@ -696,6 +696,22 @@
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/provision_backup_profile" },
           "description": "Named backup profiles (hourly, daily, weekly, twice-weekly). Daily/weekly/twice-weekly schedules are staggered into 00:00–06:00 by maintain."
+        },
+        "verify": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Backup freshness verification (maintain checks the last vzdump run status/age per hdc-managed job).",
+          "properties": {
+            "enabled": {
+              "type": ["boolean", "integer"],
+              "description": "When false, maintain skips backup freshness verification (default true)."
+            },
+            "window_days": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "vzdump task history look-back window in days (default 9)."
+            }
+          }
         }
       }
     },

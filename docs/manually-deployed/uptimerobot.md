@@ -2,6 +2,23 @@
 
 Monitors, public status pages, and alert contacts for your UptimeRobot account are managed with the **uptimerobot** infrastructure package (`clumps/infrastructure/uptimerobot/`). Self-hosted LAN monitoring remains in the **uptime-kuma** service package.
 
+## Role in HDC monitoring
+
+**Decision (stability hardening):** UptimeRobot is the independent third-party **watcher of watchers**. It must not duplicate the full LAN/OCI Uptime Kuma catalog. Keep a small set of public heartbeat URLs only:
+
+| Monitor id | Target |
+| --- | --- |
+| `uptime-kuma-lan-watchdog` | `https://status.dukk.org/api/status-page/heartbeat/watchdog` |
+| `uptime-kuma-ext-public-edge` | `https://status-ext.dukk.org/api/status-page/heartbeat/public-edge` |
+
+Existing public site monitors (bookshelf, immich, vault, …) may stay as unmanaged inventory. **Gatus** is retired from the daily recipe (duplicate of Uptime Kuma); keep the package for optional restore, but do not re-add it to `hdc maintain daily`.
+
+Free-plan accounts often return HTTP 403 on `newMonitor` via API. Create the two watchdog monitors in the UptimeRobot dashboard if missing, then:
+
+```bash
+hdc run infrastructure uptimerobot query -- --import --yes
+```
+
 ## API key
 
 1. Log in to [UptimeRobot](https://uptimerobot.com/).

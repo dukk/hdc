@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -214,6 +222,124 @@ describe("runDailyMaintain", () => {
     expect(code).toBe(1);
     expect(capture.logLines.join("\n")).toMatch(/homeassistant.*ok/);
     expect(capture.errorLines.join("\n")).toMatch(/kafka.*failed/);
+  });
+
+  it("runs built-in vault backup when HDC_VAULT_BACKUP_DIRS is set", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    mkdirSync(join(root, "clumps"), { recursive: true });
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "pw", { HDC_X: "1" });
+    const dest = join(root, "backup-dest");
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      envVars: {
+        HDC_VAULT_PASSPHRASE: "pw",
+        HDC_VAULT_BACKUP_DIRS: dest,
+        HDC_PRIVATE_ROOT: join(root, "no-private"),
+      },
+      defaultVaultPath: () => vaultPath,
+    });
+
+    const code = await runDailyMaintain(deps, root, ["--no-report"]);
+    expect(code).toBe(0);
+    const written = existsSync(dest)
+      ? readFileSync(join(dest, readdirSync(dest)[0]), "utf8")
+      : "";
+    expect(written).toContain('"v":1');
+    expect(capture.logLines.join("\n")).toMatch(/secrets backup: .*backup-dest/);
+  });
+
+  it("skips built-in vault backup when env var unset or flag given", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    mkdirSync(join(root, "clumps"), { recursive: true });
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      envVars: { HDC_PRIVATE_ROOT: join(root, "no-private") },
+    });
+    const code = await runDailyMaintain(deps, root, ["--dry-run", "--no-report"]);
+    expect(code).toBe(0);
+    expect(capture.logLines.join("\n")).toMatch(/skip hdc\/vault-backup/);
+
+    const capture2 = { logLines: [], errorLines: [], warnLines: [] };
+    const deps2 = createMemoryCliDeps({
+      root,
+      capture: capture2,
+      envVars: {
+        HDC_VAULT_BACKUP_DIRS: join(root, "dest"),
+        HDC_PRIVATE_ROOT: join(root, "no-private"),
+      },
+    });
+    const code2 = await runDailyMaintain(deps2, root, [
+      "--dry-run",
+      "--no-report",
+      "--skip-vault-backup",
+    ]);
+    expect(code2).toBe(0);
+    expect(capture2.logLines.join("\n")).not.toMatch(/vault backup/);
+  });
+
+  it("fails when hdc-private has uncommitted or unpushed changes", { timeout: 20_000 }, async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    mkdirSync(join(root, "clumps"), { recursive: true });
+    const priv = join(root, "private");
+    mkdirSync(join(priv, ".git"), { recursive: true });
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "pw", {});
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const gitMock = vi.fn((cmd, args) => {
+      if (args.includes("status")) return { status: 0, stdout: " M config.json\n" };
+      if (args.includes("rev-list")) return { status: 0, stdout: "2\n" };
+      return { status: 0, stdout: "" };
+    });
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      spawnSync: /** @type {any} */ (gitMock),
+      envVars: { HDC_PRIVATE_ROOT: priv, HDC_VAULT_PASSPHRASE: "pw" },
+      defaultVaultPath: () => vaultPath,
+    });
+
+    const code = await runDailyMaintain(deps, root, [
+      "--no-report",
+      "--skip-vault-backup",
+    ]);
+    expect(code).toBe(1);
+    expect(capture.errorLines.join("\n")).toMatch(/hdc-private has un-backed-up state/);
+    expect(capture.errorLines.join("\n")).toMatch(/1 uncommitted change/);
+    expect(capture.errorLines.join("\n")).toMatch(/2 unpushed commit/);
+  });
+
+  it("private git check passes on a clean pushed repo", { timeout: 20_000 }, async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-daily-"));
+    mkdirSync(join(root, "clumps"), { recursive: true });
+    const priv = join(root, "private");
+    mkdirSync(join(priv, ".git"), { recursive: true });
+    const vaultPath = join(root, "vault.enc");
+    writeVault(vaultPath, "pw", {});
+    const capture = { logLines: [], errorLines: [], warnLines: [] };
+    const gitMock = vi.fn((cmd, args) => {
+      if (Array.isArray(args) && args.includes("status")) return { status: 0, stdout: "" };
+      if (Array.isArray(args) && args.includes("rev-list")) return { status: 0, stdout: "0\n" };
+      return { status: 0, stdout: "" };
+    });
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      spawnSync: /** @type {any} */ (gitMock),
+      envVars: { HDC_PRIVATE_ROOT: priv, HDC_VAULT_PASSPHRASE: "pw" },
+      defaultVaultPath: () => vaultPath,
+    });
+
+    const code = await runDailyMaintain(deps, root, [
+      "--no-report",
+      "--skip-vault-backup",
+    ]);
+    expect(code).toBe(0);
+    expect(capture.errorLines.join("\n")).not.toMatch(/hdc-private/);
   });
 
   it("writes aggregated report by default", async () => {

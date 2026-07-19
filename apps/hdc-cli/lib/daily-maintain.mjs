@@ -13,8 +13,13 @@ import {
   verbSpec,
 } from "../manifests.mjs";
 import { resolveClumpConfig } from "./clump-config.mjs";
-import { preferredNewFilePath } from "./private-repo.mjs";
+import { hdcPrivateRoot, preferredNewFilePath } from "./private-repo.mjs";
 import { splitRunArgs } from "./split-run-args.mjs";
+import {
+  runSecretsBackup,
+  splitBackupDirs,
+  unlockLocalVaultPassphrase,
+} from "./secrets-backup.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "./vault-access.mjs";
 import {
   buildClumpRunEnv,
@@ -29,6 +34,13 @@ import {
   packageRefKey,
   parseDailyMaintainArgv,
 } from "./daily-maintain-recipe.mjs";
+import {
+  acquireDailyMaintainLock,
+  defaultDailyMaintainLockPath,
+  releaseDailyMaintainLock,
+  resolveDailyStepTimeoutMs,
+} from "./daily-maintain-lock.mjs";
+import { runDocsLint } from "./docs-lint.mjs";
 
 /**
  * @typedef {import("./cli-app.mjs").CliDeps} CliDeps
@@ -227,6 +239,211 @@ function defaultReportPath(root, basename, env) {
 }
 
 /**
+ * Built-in daily step: copy vault.enc + encrypted bootstrap bundle to
+ * HDC_VAULT_BACKUP_DIRS destinations (skipped when the env var is unset).
+ *
+ * @param {CliDeps} deps
+ * @param {string} root
+ * @param {boolean} dryRun
+ * @returns {Promise<DailyStepResult>}
+ */
+async function runVaultBackupStep(deps, root, dryRun) {
+  /** @type {DailyStepResult} */
+  const base = {
+    key: "hdc/vault-backup",
+    tier: "infrastructure",
+    id: "vault-backup",
+    title: "Vault + bootstrap backup",
+    status: "maintain",
+    verb: "maintain",
+    ok: null,
+    exitCode: 0,
+    durationMs: 0,
+  };
+  const dests = splitBackupDirs(deps.env.HDC_VAULT_BACKUP_DIRS);
+  if (dests.length === 0) {
+    deps.log("[hdc] maintain daily: skip hdc/vault-backup (HDC_VAULT_BACKUP_DIRS not set)");
+    return { ...base, status: "skipped", skipReason: "HDC_VAULT_BACKUP_DIRS not set" };
+  }
+  if (dryRun) {
+    deps.log(`[hdc] maintain daily: plan vault backup to ${dests.join(", ")}`);
+    return { ...base, invoke: "hdc secrets backup" };
+  }
+  const started = Date.now();
+  try {
+    const passphrase = await unlockLocalVaultPassphrase(deps);
+    const retainRaw = Number.parseInt(String(deps.env.HDC_VAULT_BACKUP_RETAIN ?? ""), 10);
+    const result = runSecretsBackup({
+      vaultPath: deps.defaultVaultPath(),
+      passphrase,
+      publicRoot: root,
+      env: deps.env,
+      dests,
+      retain: Number.isInteger(retainRaw) && retainRaw > 0 ? retainRaw : 30,
+      log: deps.log,
+      warn: deps.warn,
+    });
+    const failed = result.destinations.filter((d) => !d.ok);
+    return {
+      ...base,
+      ok: result.ok,
+      exitCode: result.ok ? 0 : 1,
+      durationMs: Date.now() - started,
+      invoke: "hdc secrets backup",
+      error: result.ok
+        ? undefined
+        : `backup failed for: ${failed.map((d) => d.dest).join(", ")}`,
+    };
+  } catch (e) {
+    const msg = /** @type {Error} */ (e).message || String(e);
+    deps.error(`[hdc] maintain daily: vault backup failed: ${msg}`);
+    return {
+      ...base,
+      ok: false,
+      exitCode: 1,
+      durationMs: Date.now() - started,
+      invoke: "hdc secrets backup",
+      error: msg,
+    };
+  }
+}
+
+/**
+ * Built-in daily step: fail when hdc-private has uncommitted changes or
+ * unpushed commits (site state that a workstation loss would destroy).
+ *
+ * @param {CliDeps} deps
+ * @param {string} root
+ * @param {boolean} dryRun
+ * @returns {DailyStepResult}
+ */
+function runPrivateGitCheckStep(deps, root, dryRun) {
+  /** @type {DailyStepResult} */
+  const base = {
+    key: "hdc/private-git-check",
+    tier: "infrastructure",
+    id: "private-git-check",
+    title: "hdc-private push check",
+    status: "query",
+    verb: "query",
+    ok: null,
+    exitCode: 0,
+    durationMs: 0,
+  };
+  const privateRoot = hdcPrivateRoot(root, deps.env);
+  if (!privateRoot) {
+    return { ...base, status: "skipped", skipReason: "no hdc-private" };
+  }
+  if (!deps.existsSync(deps.join(privateRoot, ".git"))) {
+    return { ...base, status: "skipped", skipReason: "hdc-private is not a git repo" };
+  }
+  if (dryRun) {
+    deps.log(`[hdc] maintain daily: plan hdc-private git check (${privateRoot})`);
+    return { ...base, invoke: "git status / git rev-list @{u}..HEAD" };
+  }
+  const started = Date.now();
+  /**
+   * @param {string[]} args
+   * @returns {{ status: number | null; stdout: string }}
+   */
+  const git = (args) => {
+    const r = deps.spawnSync("git", ["-C", privateRoot, ...args], {
+      encoding: "utf8",
+      shell: false,
+    });
+    return {
+      status: r.status ?? (r.error ? 1 : null),
+      stdout: typeof r.stdout === "string" ? r.stdout : "",
+    };
+  };
+  const status = git(["status", "--porcelain"]);
+  if (status.status !== 0) {
+    return {
+      ...base,
+      status: "skipped",
+      skipReason: "git unavailable",
+      durationMs: Date.now() - started,
+    };
+  }
+  const dirtyCount = status.stdout.split("\n").filter((l) => l.trim()).length;
+  const ahead = git(["rev-list", "--count", "@{upstream}..HEAD"]);
+  /** @type {string[]} */
+  const problems = [];
+  if (dirtyCount > 0) {
+    problems.push(`${dirtyCount} uncommitted change(s)`);
+  }
+  if (ahead.status !== 0) {
+    problems.push("no upstream configured for the current branch");
+  } else {
+    const aheadCount = Number.parseInt(ahead.stdout.trim(), 10);
+    if (Number.isInteger(aheadCount) && aheadCount > 0) {
+      problems.push(`${aheadCount} unpushed commit(s)`);
+    }
+  }
+  const ok = problems.length === 0;
+  if (!ok) {
+    deps.error(
+      `[hdc] maintain daily: hdc-private has un-backed-up state: ${problems.join("; ")} — commit and push`,
+    );
+  }
+  return {
+    ...base,
+    ok,
+    exitCode: ok ? 0 : 1,
+    durationMs: Date.now() - started,
+    error: ok ? undefined : `hdc-private not pushed: ${problems.join("; ")}`,
+  };
+}
+
+/**
+ * Built-in daily step: AJV schema validation (docs lint).
+ *
+ * @param {CliDeps} deps
+ * @param {string} root
+ * @param {boolean} dryRun
+ * @returns {DailyStepResult}
+ */
+function runDocsLintStep(deps, root, dryRun) {
+  /** @type {DailyStepResult} */
+  const base = {
+    key: "hdc/docs-lint",
+    tier: "infrastructure",
+    id: "docs-lint",
+    title: "Schema / inventory lint",
+    status: "query",
+    verb: "query",
+    ok: null,
+    exitCode: 0,
+    durationMs: 0,
+  };
+  if (dryRun) {
+    deps.log("[hdc] maintain daily: plan docs lint");
+    return { ...base, invoke: "hdc docs lint" };
+  }
+  const started = Date.now();
+  const result = runDocsLint({
+    publicRoot: root,
+    privateRoot: hdcPrivateRoot(root, deps.env),
+    log: (line) => deps.log(`[hdc] docs lint: ${line}`),
+  });
+  if (!result.ok) {
+    for (const err of result.errors.slice(0, 20)) {
+      deps.error(`[hdc] docs lint: ${err.path}: ${err.message}`);
+    }
+  }
+  return {
+    ...base,
+    ok: result.ok,
+    exitCode: result.ok ? 0 : 1,
+    durationMs: Date.now() - started,
+    invoke: "hdc docs lint",
+    error: result.ok
+      ? undefined
+      : `${result.errors.length} schema validation error(s)`,
+  };
+}
+
+/**
  * @param {CliDeps} deps
  * @param {string} root
  * @param {string[]} argv
@@ -243,6 +460,44 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
   const collectedAt = new Date().toISOString();
   deps.log(`[hdc] maintain daily: ${recipe.length} recipe step(s)${flags.dryRun ? " (dry-run)" : ""}.`);
 
+  /** @type {string | null} */
+  let lockPath = null;
+  if (!flags.dryRun && !flags.skipLock) {
+    const lock = acquireDailyMaintainLock({
+      lockPath: defaultDailyMaintainLockPath(deps.env),
+    });
+    if (!lock.ok) {
+      deps.error(
+        `[hdc] maintain daily: another run holds the lock (pid ${lock.holder.pid}, started ${lock.holder.startedAt || "?"}) at ${lock.lockPath} — use --skip-lock to override`,
+      );
+      return {
+        exitCode: 1,
+        dryRun: flags.dryRun,
+        collectedAt,
+        results: [],
+      };
+    }
+    lockPath = lock.lockPath;
+    deps.log(`[hdc] maintain daily: lock ${lockPath}`);
+  }
+
+  try {
+    return await runDailyMaintainBody(deps, root, argv, flags, recipe, collectedAt);
+  } finally {
+    if (lockPath) releaseDailyMaintainLock(lockPath);
+  }
+}
+
+/**
+ * @param {CliDeps} deps
+ * @param {string} root
+ * @param {string[]} argv
+ * @param {ReturnType<typeof parseDailyMaintainArgv>} flags
+ * @param {DailyRecipeStep[]} recipe
+ * @param {string} collectedAt
+ * @returns {Promise<DailyMaintainResult>}
+ */
+async function runDailyMaintainBody(deps, root, argv, flags, recipe, collectedAt) {
   if (!flags.dryRun) {
     const vault = createVaultAccess(vaultDepsFromCli(deps));
     try {
@@ -261,6 +516,24 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
   /** @type {DailyStepResult[]} */
   const results = [];
   let exitCode = 0;
+  const stepTimeoutMs = resolveDailyStepTimeoutMs(flags, deps.env);
+
+  const runBuiltins = flags.only.size === 0;
+  if (runBuiltins && !flags.skipPrivateGitCheck) {
+    const r = runPrivateGitCheckStep(deps, root, flags.dryRun);
+    results.push(r);
+    if (r.ok === false) exitCode = 1;
+  }
+  if (runBuiltins && !flags.skipDocsLint) {
+    const r = runDocsLintStep(deps, root, flags.dryRun);
+    results.push(r);
+    if (r.ok === false) exitCode = 1;
+  }
+  if (runBuiltins && !flags.skipVaultBackup) {
+    const r = await runVaultBackupStep(deps, root, flags.dryRun);
+    results.push(r);
+    if (r.ok === false) exitCode = 1;
+  }
 
   for (const step of recipe) {
     const key = packageRefKey(step.tier, step.id);
@@ -357,9 +630,13 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
       shell: false,
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,
+      timeout: stepTimeoutMs,
+      killSignal: "SIGKILL",
     });
     const durationMs = Date.now() - started;
-    const status = r.status ?? 1;
+    const timedOut =
+      r.error != null && /** @type {NodeJS.ErrnoException} */ (r.error).code === "ETIMEDOUT";
+    const status = timedOut ? 124 : (r.status ?? 1);
     const stdoutStr =
       pipeStdoutJson && r.stdout !== undefined && r.stdout !== null
         ? typeof r.stdout === "string"
@@ -367,11 +644,16 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
           : String(r.stdout)
         : "";
     const payload = parseStdoutPayload(stdoutStr);
-    const ok = status === 0 && (payload?.ok === undefined || payload.ok !== false);
+    const ok =
+      !timedOut && status === 0 && (payload?.ok === undefined || payload.ok !== false);
 
     if (!ok) {
       exitCode = 1;
-      deps.error(`[hdc] maintain daily: ${stepKey} failed (exit ${status})`);
+      deps.error(
+        timedOut
+          ? `[hdc] maintain daily: ${stepKey} timed out after ${stepTimeoutMs}ms`
+          : `[hdc] maintain daily: ${stepKey} failed (exit ${status})`,
+      );
     } else {
       deps.log(`[hdc] maintain daily: ${stepKey} ok (${durationMs}ms)`);
     }
@@ -389,7 +671,11 @@ export async function runDailyMaintainWithResult(deps, root, argv) {
       durationMs,
       invoke,
       payload,
-      error: ok ? undefined : `exit ${status}`,
+      error: ok
+        ? undefined
+        : timedOut
+          ? `timed out after ${stepTimeoutMs}ms`
+          : `exit ${status}`,
     });
   }
 

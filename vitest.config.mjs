@@ -53,19 +53,14 @@ export default defineConfig({
     setupFiles: ["apps/hdc-cli/test/vitest-setup.mjs"],
 
     include: [
-
       "apps/hdc-cli/**/*.test.mjs",
-
       "apps/hdc-cli/lib/package/**/*.test.mjs",
-
       "apps/hdc-mcp-server/**/*.test.mjs",
-
       "apps/hdc-agent-server/**/*.test.mjs",
-
       "apps/hdc-augment-bridge/**/*.test.mjs",
-
       "apps/hdc-web-server/**/*.test.mjs",
-
+      "../hdc-clumps/**/*.test.mjs",
+      "hdc-clumps/**/*.test.mjs",
     ],
 
     coverage: {

@@ -27,7 +27,6 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "docuseal",
   "draw-io",
   "homepage",
-  "gatus",
   "gitlab",
   "hdc-agents",
   "immich",
@@ -342,8 +341,13 @@ export function filterDailyRecipeSteps(steps, filters = {}) {
  *   dryRun: boolean;
  *   skipClients: boolean;
  *   skipUpgrades: boolean;
+ *   skipVaultBackup: boolean;
+ *   skipPrivateGitCheck: boolean;
+ *   skipLock: boolean;
+ *   skipDocsLint: boolean;
  *   noReport: boolean;
  *   reportPath?: string;
+ *   stepTimeoutMs?: number;
  *   only: Set<string>;
  *   skip: Set<string>;
  * }}
@@ -352,12 +356,18 @@ export function parseDailyMaintainArgv(argv) {
   const dryRun = argv.includes("--dry-run");
   const skipClients = argv.includes("--skip-clients");
   const skipUpgrades = argv.includes("--skip-upgrades");
+  const skipVaultBackup = argv.includes("--skip-vault-backup");
+  const skipPrivateGitCheck = argv.includes("--skip-private-git-check");
+  const skipLock = argv.includes("--skip-lock");
+  const skipDocsLint = argv.includes("--skip-docs-lint");
   const noReport = argv.includes("--no-report");
   /** @type {Set<string>} */
   const only = new Set();
   /** @type {Set<string>} */
   const skip = new Set();
   let reportPath;
+  /** @type {number | undefined} */
+  let stepTimeoutMs;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -375,7 +385,25 @@ export function parseDailyMaintainArgv(argv) {
       reportPath = String(argv[++i]).trim();
       continue;
     }
+    if (a === "--step-timeout-ms" && argv[i + 1]) {
+      const n = Number(argv[++i]);
+      if (Number.isFinite(n) && n > 0) stepTimeoutMs = Math.round(n);
+      continue;
+    }
   }
 
-  return { dryRun, skipClients, skipUpgrades, noReport, reportPath, only, skip };
+  return {
+    dryRun,
+    skipClients,
+    skipUpgrades,
+    skipVaultBackup,
+    skipPrivateGitCheck,
+    skipLock,
+    skipDocsLint,
+    noReport,
+    reportPath,
+    stepTimeoutMs,
+    only,
+    skip,
+  };
 }

@@ -14,10 +14,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "docs:lint": "node apps/hdc-cli/cli.mjs docs lint",
     "sync-hdc-cli-share": "node apps/hdc-cli/scripts/sync-share-assets.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "vitest": "^3.2.4"
   },
   "dependencies": {
