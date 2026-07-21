@@ -47,7 +47,7 @@ Example (split Cloudflare zones):
 | --- | --- |
 | [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and shared libraries |
 | **hdc-clumps** (external) | Plugins: `clients/`, `infrastructure/`, `services/` — bootstrap with `hdc clumps init` |
-| [`operations/inventory/`](operations/inventory/) | Authoritative sidecars in **hdc-private** (`systems/`, `networks/`, `services/`, `targets/`); public repo: [`systems/_example.json`](operations/inventory/systems/_example.json) only |
+| [`operations/inventory/`](operations/inventory/) | Authoritative sidecars in **hdc-private** (`systems/`, `networks/`, `services/`, `targets/`, `domains/`); public repo: `_example.json` under each of those folders |
 | [`operations/automated/`](operations/automated/) | Overlay in **hdc-private** (per-file under `systems/`, `networks/`, `policies/`) |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Human-oriented markdown for gear hdc does not manage end-to-end |
 
@@ -117,7 +117,7 @@ hdc maintain daily -- --skip service/trivy --skip-upgrades
 
 ## Inventory
 
-- **Manual sidecars:** `operations/inventory/{systems,networks,services,targets}/*.json`, discriminated by `kind`: `system`, `network`, `target`, or `services`.
+- **Manual sidecars:** `operations/inventory/{systems,networks,services,targets,domains}/*.json`, discriminated by `kind`: `system`, `network`, `target`, `services`, or `domain`. Public hdc keeps one `_example.json` per folder.
 - **Systems** may list `services: [{ "id": "<id>", "nodes"?: ["…"] }]` pointing at `kind: "services"` records under `operations/inventory/services/` (by id only).
 - **Targets:** `kind: "target"` with `automation_target` set to a package manifest id (e.g. `proxmox`, `unifi-network`).
 - **Schemas:** [`inventory.schema.json`](apps/hdc-cli/schema/inventory.schema.json) (union), plus `inventory.system.schema.json`, `inventory.network.schema.json`, `inventory.target.schema.json`, `inventory.services.schema.json`, `inventory.policy.schema.json`.
@@ -1651,7 +1651,8 @@ Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **
 ## hdc-mcp-server and run-daily in this repo
 
 - **MCP server:** [`apps/hdc-mcp-server/server.mjs`](apps/hdc-mcp-server/server.mjs) — stdio MCP exposing `hdc_list`, `hdc_help`, `hdc_maintain_daily`, `hdc_run`, `hdc_clumps_sync` (manager only), `hdc_notify_discord`. Policy blocks secrets, teardown, and destructive flags.
-- **Scheduled daily:** [`apps/hdc-agent-server/bin/run-daily.mjs`](apps/hdc-agent-server/bin/run-daily.mjs) — deterministic `maintain daily` + Discord (no LLM). hdc-agents schedule `hdc-ops-daily` uses `cli: ["run-daily"]`.
+- **Scheduled daily:** [`apps/hdc-agent-server/bin/run-daily.mjs`](apps/hdc-agent-server/bin/run-daily.mjs) — deterministic `maintain daily` + Discord (no LLM). hdc-agents schedule `hdc-ops-daily` uses `cli: ["run-daily"]`. With `on_failure_only`, Discord only on failure.
+- **Schedule summary:** [`apps/hdc-agent-server/bin/schedule-summary.mjs`](apps/hdc-agent-server/bin/schedule-summary.mjs) — silent daily rollup of scheduler logs (`cli: ["schedule-summary"]`). See [manager-notifications.md](docs/manually-deployed/manager-notifications.md).
 - **Docs:** [`docs/manually-deployed/hdc-mcp-server.md`](docs/manually-deployed/hdc-mcp-server.md).
 
 Examples:
@@ -1659,6 +1660,7 @@ Examples:
 ```bash
 node apps/hdc-mcp-server/server.mjs
 node apps/hdc-agent-server/bin/run-daily.mjs --dry-run
+node apps/hdc-agent-server/bin/schedule-summary.mjs --dry-run
 hdc run service hdc-agents maintain --
 ```
 

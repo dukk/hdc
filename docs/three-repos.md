@@ -176,7 +176,7 @@ node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs
 | `manifest.json`, `config.example.json` | No | Yes | Optional copy |
 | `config.json` | **Never** | **Never** | Yes |
 | `.env` | `.env.example` only | `.env.example` only | Yes |
-| `operations/inventory/**` | `_example.json` only | No | Yes |
+| `operations/inventory/**` | `_example.json` only (`systems/`, `services/`, `networks/`, `targets/`, `domains/`) | No | Yes |
 | `operations/tasks/`, `ip-allocations.md`, reports | No | No | Yes |
 | Deploy/maintain reports under `clumps/**/reports/` | No (gitignored) | No (gitignored) | Yes |
 | Human docs (`docs/`) | Yes | Optional package READMEs | Ops notes under `operations/` |

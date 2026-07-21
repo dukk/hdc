@@ -5,7 +5,7 @@ import { parseHomepageServicesYaml } from "hdc/clump/services/homepage/lib/homep
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../hdc-clumps/services/homepage");
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../hdc-clumps/services/homepage");
 
 describe("homepage-services-parse", () => {
   it("parses group, service, icon, and widget", () => {

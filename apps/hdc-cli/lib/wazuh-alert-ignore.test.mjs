@@ -27,10 +27,10 @@ const SAMPLE_CONF = `<ossec_config>
 describe("wazuh-alert-ignore", () => {
   it("resolves srcips and default groups", () => {
     const resolved = resolveWazuhAlertIgnore({
-      alert_ignore: { srcips: ["10.0.0.105", " 10.0.0.49 ", "not-an-ip", "10.0.0.105"] },
+      alert_ignore: { srcips: ["192.0.2.105", " 192.0.2.49 ", "not-an-ip", "192.0.2.105"] },
     });
     expect(resolved).toEqual({
-      srcips: ["10.0.0.105", "10.0.0.49"],
+      srcips: ["192.0.2.105", "192.0.2.49"],
       groups: ["web", "web_scan", "attack", "ids", "modsecurity", "nginx"],
     });
   });
@@ -41,14 +41,14 @@ describe("wazuh-alert-ignore", () => {
   });
 
   it("renders CDB list with trailing colons", () => {
-    expect(renderWazuhMonitorCdbList(["10.0.0.105", "132.145.205.212"])).toBe(
-      "10.0.0.105:\n132.145.205.212:\n",
+    expect(renderWazuhMonitorCdbList(["192.0.2.105", "132.145.205.212"])).toBe(
+      "192.0.2.105:\n132.145.205.212:\n",
     );
   });
 
   it("renders local_rules that mute configured groups for list srcips", () => {
     const xml = renderWazuhMonitorLocalRules({
-      srcips: ["10.0.0.105"],
+      srcips: ["192.0.2.105"],
       groups: ["web", "attack"],
     });
     expect(xml).toContain(`id="${WAZUH_MONITOR_RULE_ID}"`);
@@ -59,26 +59,26 @@ describe("wazuh-alert-ignore", () => {
 
   it("patches ruleset list and white_list entries", () => {
     const patched = patchWazuhManagerConfAlertIgnore(SAMPLE_CONF, {
-      srcips: ["10.0.0.105", "10.0.0.49"],
+      srcips: ["192.0.2.105", "192.0.2.49"],
       groups: ["web"],
     });
     expect(patched).toContain(`<list>${WAZUH_MONITOR_LIST_REL}</list>`);
-    expect(patched).toContain("<white_list>10.0.0.105</white_list>");
-    expect(patched).toContain("<white_list>10.0.0.49</white_list>");
+    expect(patched).toContain("<white_list>192.0.2.105</white_list>");
+    expect(patched).toContain("<white_list>192.0.2.49</white_list>");
     // idempotent
     expect(patchWazuhManagerConfMonitorList(patched)).toBe(patched);
-    expect(patchWazuhManagerConfWhiteList(patched, ["10.0.0.105"])).toBe(patched);
+    expect(patchWazuhManagerConfWhiteList(patched, ["192.0.2.105"])).toBe(patched);
   });
 
   it("builds sync bash with CDB path and manager restart", () => {
     const bash = buildWazuhAlertIgnoreSyncBash({
-      srcips: ["10.0.0.105"],
+      srcips: ["192.0.2.105"],
       groups: ["web", "attack"],
     });
     expect(bash).toContain("hdc-monitor-sources");
     expect(bash).toContain("local_rules.xml");
     expect(bash).toContain("docker");
-    expect(bash).toContain("10.0.0.105");
+    expect(bash).toContain("192.0.2.105");
   });
 
   it("skips when --skip-alert-ignore is set", () => {

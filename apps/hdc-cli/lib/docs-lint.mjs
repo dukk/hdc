@@ -160,24 +160,24 @@ export function runDocsLint(opts) {
   let checked = 0;
   const dataLevel = strict ? "error" : "warning";
 
-  const exampleInventory = join(publicRoot, "operations", "inventory", "systems", "_example.json");
-  try {
-    if (statSync(exampleInventory).isFile()) {
-      checkAgainst(exampleInventory, "inventory.system.schema.json", dataLevel);
-      checked += 1;
+  /** @type {{ rel: string[]; schema: string }[]} */
+  const exampleSidecars = [
+    { rel: ["systems", "_example.json"], schema: "inventory.system.schema.json" },
+    { rel: ["services", "_example.json"], schema: "inventory.services.schema.json" },
+    { rel: ["networks", "_example.json"], schema: "inventory.network.schema.json" },
+    { rel: ["targets", "_example.json"], schema: "inventory.target.schema.json" },
+    { rel: ["domains", "_example.json"], schema: "inventory.domain.schema.json" },
+  ];
+  for (const { rel, schema } of exampleSidecars) {
+    const examplePath = join(publicRoot, "operations", "inventory", ...rel);
+    try {
+      if (statSync(examplePath).isFile()) {
+        checkAgainst(examplePath, schema, dataLevel);
+        checked += 1;
+      }
+    } catch {
+      /* optional */
     }
-  } catch {
-    /* optional */
-  }
-
-  const exampleDomain = join(publicRoot, "operations", "inventory", "domains", "_example.json");
-  try {
-    if (statSync(exampleDomain).isFile()) {
-      checkAgainst(exampleDomain, "inventory.domain.schema.json", dataLevel);
-      checked += 1;
-    }
-  } catch {
-    /* optional */
   }
 
   /** @type {string[]} */

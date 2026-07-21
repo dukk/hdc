@@ -26,7 +26,7 @@ describe("litellm-a2a", () => {
               a2a_agents: [
                 {
                   name: "cursor-cli-clumps",
-                  url: "http://10.0.0.5:9211",
+                  url: "http://192.0.2.5:9211",
                   kind: "augmentor",
                   repos: ["hdc-clumps"],
                   delegatable_by: ["hdc-sre-engineer"],

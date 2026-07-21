@@ -94,7 +94,7 @@ describe("resolveSystemSidecarWrite / upsert", () => {
       hardware: [{ type: "memory", total_gb: 32 }],
       tags: ["proxmox"],
       automationTargets: ["proxmox"],
-      accessNode: { ip: "10.0.0.11" },
+      accessNode: { ip: "192.0.2.11" },
       source: "proxmox",
     });
     expect(result.rel).toBe("operations/inventory/systems/pve-a.json");
@@ -102,7 +102,7 @@ describe("resolveSystemSidecarWrite / upsert", () => {
     const data = JSON.parse(readFileSync(result.path, "utf8"));
     expect(data.system_class).toBe("physical");
     expect(data.hardware).toEqual([{ type: "memory", total_gb: 32 }]);
-    expect(data.access.nodes[0].ip).toBe("10.0.0.11");
+    expect(data.access.nodes[0].ip).toBe("192.0.2.11");
     expect(data.automation_targets).toContain("proxmox");
 
     delete process.env.HDC_PRIVATE_ROOT;

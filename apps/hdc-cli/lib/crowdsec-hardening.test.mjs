@@ -38,7 +38,7 @@ describe("crowdsec-decisions", () => {
   it("parses decisions JSON array", () => {
     const raw = JSON.stringify([
       { value: "203.0.113.1", type: "ban", scenario: "crowdsecurity/ssh-bf" },
-      { value: "10.0.0.5", type: "ban" },
+      { value: "192.0.2.5", type: "ban" },
     ]);
     const parsed = parseCrowdsecDecisionsJson(raw);
     expect(parsed).toHaveLength(2);
@@ -46,7 +46,7 @@ describe("crowdsec-decisions", () => {
 
   it("filters internal IPs and caps decisions", () => {
     const decisions = [
-      { value: "10.0.0.5", type: "ban", scenario: "crowdsecurity/ssh-bf" },
+      { value: "192.0.2.5", type: "ban", scenario: "crowdsecurity/ssh-bf" },
       { value: "203.0.113.10", type: "ban", scenario: "crowdsecurity/unifi-cef" },
       { value: "203.0.113.11", type: "ban", scenario: "crowdsecurity/ssh-bf" },
     ];
@@ -95,12 +95,12 @@ describe("crowdsec unifi syslog config", () => {
         syslog: {
           enabled: true,
           listen_port: 4242,
-          allowed_senders: ["10.0.0.1/32"],
+          allowed_senders: ["192.0.2.1/32"],
         },
       },
     });
     expect(cfg?.listen_port).toBe(4242);
-    expect(cfg?.allowed_senders).toEqual(["10.0.0.1/32"]);
+    expect(cfg?.allowed_senders).toEqual(["192.0.2.1/32"]);
   });
 });
 

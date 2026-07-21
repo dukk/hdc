@@ -10,8 +10,8 @@ import { parseRunDailyArgv, runDailyOpsWorkflow } from "../lib/run-daily.mjs";
 function printHelp() {
   process.stderr.write(
     [
-      "usage: run-daily.mjs [--dry-run] [--skip-discord] [--no-skip-clients] [--skip-upgrades]",
-      "                     [--title-prefix <text>]",
+      "usage: run-daily.mjs [--dry-run] [--skip-discord] [--on-failure-only] [--no-skip-clients]",
+      "                     [--skip-upgrades] [--title-prefix <text>]",
       "",
     ].join("\n"),
   );

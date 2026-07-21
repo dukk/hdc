@@ -19,7 +19,7 @@ describe("homepage mailcow widget", () => {
         mode: "proxmox-qemu",
         mailcow: {
           hostname: "mail.example.invalid",
-          api_url: "https://10.0.0.62",
+          api_url: "https://192.0.2.62",
           api_key_vault_key: "HDC_MAILCOW_API_KEY",
         },
       },
@@ -27,13 +27,13 @@ describe("homepage mailcow widget", () => {
         {
           system_id: "vm-mailcow-a",
           mode: "proxmox-qemu",
-          proxmox: { host_id: "pve-b", qemu: { vmid: 100, template_vmid: 9024, ip: "10.0.0.62/24" } },
-          configure: { ssh: { host: "10.0.0.62" } },
+          proxmox: { host_id: "pve-b", qemu: { vmid: 100, template_vmid: 9024, ip: "192.0.2.62/24" } },
+          configure: { ssh: { host: "192.0.2.62" } },
         },
       ],
     };
     expect(resolveMailcowWidgetCredentials(cfg)).toEqual({
-      url: "https://10.0.0.62",
+      url: "https://192.0.2.62",
       vaultKey: "HDC_MAILCOW_API_KEY",
     });
   });

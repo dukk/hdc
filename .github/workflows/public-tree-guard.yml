@@ -8,8 +8,13 @@ on:
 jobs:
   guard:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hdc
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: hdc
       - name: Checkout hdc-clumps
         uses: actions/checkout@v4
         with:

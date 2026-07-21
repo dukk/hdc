@@ -10,7 +10,9 @@ import {
  * @property {boolean} [skipClients]
  * @property {boolean} [skipUpgrades]
  * @property {boolean} [skipDiscord]
+ * @property {boolean} [onFailureOnly]
  * @property {string} [titlePrefix]
+ * @property {boolean} [help]
  */
 
 /**
@@ -25,6 +27,7 @@ export function parseRunDailyArgv(argv) {
     skipClients: true,
     skipUpgrades: false,
     skipDiscord: false,
+    onFailureOnly: false,
     titlePrefix: "[HDC]",
   };
   for (let i = 0; i < argv.length; i++) {
@@ -34,6 +37,7 @@ export function parseRunDailyArgv(argv) {
     else if (a === "--no-skip-clients") opts.skipClients = false;
     else if (a === "--skip-upgrades") opts.skipUpgrades = true;
     else if (a === "--skip-discord") opts.skipDiscord = true;
+    else if (a === "--on-failure-only") opts.onFailureOnly = true;
     else if (a === "--title-prefix" && argv[i + 1]) opts.titlePrefix = String(argv[++i]);
     else if (a === "--help" || a === "-h") {
       return { ...opts, help: true };
@@ -54,7 +58,9 @@ export async function runDailyOpsWorkflow(opts) {
     skip_upgrades: opts.skipUpgrades === true,
   };
 
-  if (!opts.skipDiscord) {
+  const onFailureOnly = opts.onFailureOnly === true;
+
+  if (!opts.skipDiscord && !onFailureOnly) {
     const started = await handleHdcNotifyDiscord({
       title: `${titlePrefix} hdc-ops-daily — started`,
       message: `Daily maintain started at ${new Date().toISOString()}`,
@@ -88,8 +94,8 @@ export async function runDailyOpsWorkflow(opts) {
     results,
   });
 
-  if (!opts.skipDiscord) {
-    const ok = exitCode === 0;
+  const ok = exitCode === 0;
+  if (!opts.skipDiscord && (!onFailureOnly || !ok)) {
     const drySuffix = parsed.dryRun === true ? " (dry-run)" : "";
     await handleHdcNotifyDiscord({
       title: `${titlePrefix} hdc-ops-daily — ${ok ? "OK" : "FAILED"}${drySuffix}`,

@@ -38,12 +38,12 @@ describe("homepage diskstation widget", () => {
         {
           instance: "a",
           system_id: "nas-a",
-          ssh: { host: "10.0.0.9" },
+          ssh: { host: "192.0.2.9" },
         },
         {
           instance: "b",
           system_id: "nas-b",
-          ssh: { host: "10.0.0.10", user: "dukk" },
+          ssh: { host: "192.0.2.10", user: "dukk" },
         },
       ],
     };
@@ -52,10 +52,10 @@ describe("homepage diskstation widget", () => {
     expect(all[0]).toEqual({
       letter: "a",
       systemId: "nas-a",
-      url: "http://10.0.0.9:5000",
+      url: "http://192.0.2.9:5000",
       username: "homepage-stats",
       passwordVaultKey: "HDC_HOMEPAGE_SYNOLOGY_NAS_A_PASSWORD",
     });
-    expect(all[1].url).toBe("http://10.0.0.10:5000");
+    expect(all[1].url).toBe("http://192.0.2.10:5000");
   });
 });

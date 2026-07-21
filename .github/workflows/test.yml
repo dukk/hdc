@@ -8,8 +8,13 @@ on:
 jobs:
   vitest:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hdc
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: hdc
       - name: Checkout hdc-clumps
         uses: actions/checkout@v4
         with:
@@ -20,6 +25,7 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+          cache-dependency-path: hdc/package-lock.json
       - run: npm ci
       - name: Unit tests with coverage thresholds
         run: npm run test:coverage

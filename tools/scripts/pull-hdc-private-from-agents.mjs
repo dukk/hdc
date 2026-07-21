@@ -6,7 +6,7 @@
  * Usage:
  *   node tools/scripts/pull-hdc-private-from-agents.mjs
  *   node tools/scripts/pull-hdc-private-from-agents.mjs --dry-run
- *   node tools/scripts/pull-hdc-private-from-agents.mjs --host 10.0.0.117
+ *   node tools/scripts/pull-hdc-private-from-agents.mjs --host 192.0.2.117
  *   node tools/scripts/pull-hdc-private-from-agents.mjs --instance a
  *   node tools/scripts/pull-hdc-private-from-agents.mjs --system-id hdc-agents-a
  */

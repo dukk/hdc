@@ -21,7 +21,7 @@ apps/hdc-agent-server/
 | `HDC_AGENT_PORT` | Listen port (9200–9209) |
 | `HDC_ROOT` | Path to hdc checkout (default: repo root) |
 | `HDC_PRIVATE_ROOT` | Path to hdc-private (required for dispatcher) |
-| `HDC_LITELLM_BASE_URL` | LiteLLM base (e.g. `http://10.0.0.116:4000`) |
+| `HDC_LITELLM_BASE_URL` | LiteLLM base (e.g. `http://192.0.2.116:4000`) |
 | `HDC_AGENT_LITELLM_KEY` | Virtual key for this agent |
 | `HDC_AGENT_MODEL` | Model id on LiteLLM (default `lan-best-available`) |
 | `HDC_AGENT_SCHEDULE_MINUTES` | Override schedule (`0` / `off` disables) |
@@ -47,7 +47,15 @@ node apps/hdc-agent-server/bin/run-daily.mjs --dry-run
 npm run run-daily --prefix apps/hdc-agent-server -- --dry-run
 ```
 
-Deterministic `maintain daily` + Discord reporting (hdc-agents schedule `hdc-ops-daily` / `cli: ["run-daily"]`).
+Deterministic `maintain daily` + Discord reporting (hdc-agents schedule `hdc-ops-daily` / `cli: ["run-daily"]`). With `discord.on_failure_only: true`, posts only on failure (`--on-failure-only`).
+
+## Schedule summary (no LLM)
+
+```bash
+node apps/hdc-agent-server/bin/schedule-summary.mjs --dry-run
+```
+
+Daily silent Discord/Slack rollup of scheduler job logs (schedule `schedule-summary` / `cli: ["schedule-summary"]`): each job’s cron, run counts, and ok/fail for the last 24h.
 
 ## Schedules (scripted first)
 

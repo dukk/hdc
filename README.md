@@ -51,7 +51,7 @@ Optional: copy [`.env.example`](.env.example) to `.env` and set values. `.env` i
 
 ## Private operator data (hdc-private)
 
-Clump `config.json` files and inventory JSON (except [`operations/inventory/systems/_example.json`](operations/inventory/systems/_example.json)) belong in a separate **hdc-private** repository with the same directory layout — owned by **`hdc-sre-ops`** for live ops. Clone it beside this repo (`../hdc-private`) or set `HDC_PRIVATE_ROOT` in `.env`. Hdc loads **public hdc first**, then hdc-private. See [hdc-private README](../hdc-private/README.md) (sibling checkout).
+Clump `config.json` files and inventory JSON (except public [`operations/inventory/**/_example.json`](operations/inventory/) fixtures) belong in a separate **hdc-private** repository with the same directory layout — owned by **`hdc-sre-ops`** for live ops. Clone it beside this repo (`../hdc-private`) or set `HDC_PRIVATE_ROOT` in `.env`. Hdc loads **public hdc first**, then hdc-private. See [hdc-private README](../hdc-private/README.md) (sibling checkout).
 
 ## Clump packages (hdc-clumps)
 
@@ -71,7 +71,7 @@ Package scripts import shared runtime via `hdc/package/*` (resolved by the CLI i
 | [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and helpers | Human / operator |
 | [`apps/hdc-agent-server/`](apps/hdc-agent-server/) | Fleet agent definitions, skills, dispatcher runtime | Human / operator |
 | **hdc-clumps** (external) | HDC plugins: run `hdc clumps init` then see [hdc-clumps README](../hdc-clumps/README.md) for every package | `hdc-sre-engineer` |
-| [`operations/inventory/`](operations/inventory/) | Operator sidecars in **hdc-private**; public repo keeps [`systems/_example.json`](operations/inventory/systems/_example.json) only | `hdc-sre-ops` |
+| [`operations/inventory/`](operations/inventory/) | Operator sidecars in **hdc-private**; public repo keeps `_example.json` under `systems/`, `services/`, `networks/`, `targets/`, and `domains/` | `hdc-sre-ops` |
 | [`operations/automated/`](operations/automated/) | Operator overlay in **hdc-private** (UniFi/Proxmox query snapshots) | `hdc-sre-ops` |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Markdown notes for manually operated gear (structured inventory lives under `operations/inventory/`) | — |
 | [`.cursor/`](.cursor/) | Canonical agent rules, skills, subagents, and automations (read directly by Cursor) | — |

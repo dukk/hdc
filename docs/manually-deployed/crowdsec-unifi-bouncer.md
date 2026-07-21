@@ -11,7 +11,7 @@ Use **one** enforcement path at a time:
 
 ## Prerequisites
 
-- Central LAPI running (`crowdsec-a`, e.g. `http://10.0.0.201:8080`)
+- Central LAPI running (`crowdsec-a`, e.g. `http://192.0.2.201:8080`)
 - SSH access to UniFi OS on the gateway
 - Bouncer API key from LAPI
 
@@ -27,7 +27,7 @@ Save the key securely. It is rotated if you re-run `cscli bouncers add` with the
 
 ## 2. Install on the UDM
 
-SSH to the gateway (default `root@10.0.0.1` on many sites) and run the community bootstrap:
+SSH to the gateway (default `root@192.0.2.1` on many sites) and run the community bootstrap:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/wolffcatskyy/crowdsec-unifi-bouncer/main/bootstrap.sh | bash
@@ -36,7 +36,7 @@ curl -sSL https://raw.githubusercontent.com/wolffcatskyy/crowdsec-unifi-bouncer/
 Edit `/data/crowdsec-bouncer/crowdsec-firewall-bouncer.yaml`:
 
 ```yaml
-api_url: http://10.0.0.201:8080/
+api_url: http://192.0.2.201:8080/
 api_key: <key from step 1>
 ```
 

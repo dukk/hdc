@@ -9,7 +9,7 @@ The **hdc** repository on GitHub is public automation and documentation. **Live 
 | Package code (`clumps/**`) | Yes | No (mirror paths only for configs) |
 | `config.example.json` | Yes | Optional copy |
 | `config.json` | **Never** | Yes |
-| `inventory/**` | Only `inventory/manual/systems/_example.json` | Yes |
+| `operations/inventory/**` | Only `_example.json` under `systems/`, `services/`, `networks/`, `targets/`, `domains/` | Yes |
 | `.env` | Only `.env.example` | Yes |
 | DNS zone JSON, operations notes | No | Yes |
 | Deploy/maintain reports | No (gitignored) | Yes |
@@ -32,7 +32,7 @@ Do not commit real hostnames, MAC addresses, VMIDs from production, or operator 
 ## Never commit
 
 - `config.json` (any package)
-- `inventory/**` except `_example.json`
+- `operations/inventory/**` except `_example.json`
 - `.env` (except `.env.example`)
 - `vault.enc`, `*.pem`, `*.key`, `**/client_secret*.json`
 - Operation reports under `clumps/**/reports/`

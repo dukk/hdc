@@ -83,6 +83,18 @@
           "description": "Override site CIDRs that must never be blocked (defaults from ip-allocations)."
         }
       }
+    },
+    "client_aliases": {
+      "type": "object",
+      "description": "Sync UniFi client aliases (name) to Proxmox guest inventory system ids matched by IP/MAC.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, maintain sets UniFi client name to the matching inventory system id. Skip with --skip-client-aliases."
+        }
+      }
     }
   }
 }

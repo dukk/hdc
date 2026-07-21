@@ -10,7 +10,7 @@ describe("homepage-sitemonitor-probe", () => {
     const yaml = `- Personal:
     - Immich:
         siteMonitor: https://immich.example.invalid
-        ping: 10.0.0.10
+        ping: 192.0.2.10
 `;
     const targets = parseHomepageMonitorTargetsFromYaml(yaml);
     expect(targets).toHaveLength(2);
@@ -24,7 +24,7 @@ describe("homepage-sitemonitor-probe", () => {
       group: "Personal",
       name: "Immich",
       kind: "ping",
-      target: "10.0.0.10",
+      target: "192.0.2.10",
     });
   });
 
@@ -32,7 +32,7 @@ describe("homepage-sitemonitor-probe", () => {
     const targets = enumerateHomepageMonitorTargets([
       {
         name: "Infra",
-        services: [{ name: "No probe" }, { name: "Pi-hole", ping: "10.0.0.2" }],
+        services: [{ name: "No probe" }, { name: "Pi-hole", ping: "192.0.2.2" }],
       },
     ]);
     expect(targets).toHaveLength(1);

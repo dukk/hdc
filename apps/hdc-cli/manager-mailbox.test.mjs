@@ -30,7 +30,7 @@ describe("manager-mailbox parse", () => {
     expect(w.kind).toBe("wazuh");
     expect(parseWazuhLevel("level 12", "")).toBe(12);
     expect(parseWazuhSourceIp("", "srcip: 203.0.113.9")).toBe("203.0.113.9");
-    expect(parseWazuhSourceIp("", "srcip: 10.0.0.5")).toBe(null);
+    expect(parseWazuhSourceIp("", "srcip: 192.0.2.5")).toBe(null);
   });
 
   it("classifies research suggestions", () => {

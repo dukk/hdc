@@ -4,6 +4,19 @@ The hdc-manager scripted dispatcher and manager mailbox can deliver alerts on **
 
 CLI deploy/maintain summaries, Proxmox maintain, scheduler job Discord posts, `run-daily`, and MCP `hdc_notify_discord` also **mirror to Slack** when `HDC_AGENTS_SLACK_WEBHOOK_URL` (or CLI `HDC_OPS_SLACK_WEBHOOK_URL`) is set — no per-schedule Slack block required. Prefer the **`slack-hdc-app`** channel for interactive Approve/Deny buttons (see below).
 
+## Scheduled CLI jobs (hdc-scheduler)
+
+Per-schedule Discord/Slack under `hdc_agents.schedules[].discord` (defaults from `hdc_agents.discord`):
+
+| Setting | Effect |
+| --- | --- |
+| `enabled: true` | Allow Discord/Slack for that job |
+| `on_failure_only: true` | **Default** — no start/success posts; alert only when the job exits non-zero (push notification) |
+| `on_failure_only: false` | Post start + completion (success posts are silent / no push) |
+
+`run-daily` honors the same flag via `--on-failure-only` (appended by the scheduler when the schedule has `on_failure_only: true`).
+
+**Daily healthy rollup:** schedule id `schedule-summary` (`cli: ["schedule-summary"]`, cron e.g. `0 12 * * *` UTC) reads `/opt/hdc-agents-meta/logs/*.log`, joins cron from `schedules.json`, and posts one **silent** Discord/Slack message: each job’s cadence, run count, ok/fail counts for the last 24h. Keep `on_failure_only: false` on that schedule so the summary always posts. Manager `needs_decision` / mailbox routes are unchanged.
 Legacy channel id `slack` is accepted and normalized to `slack-incoming-webhook`.
 
 ## Configuration

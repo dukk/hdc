@@ -22,4 +22,5 @@ regexes = [
   '''example\.invalid''',
   '''session-key''',
   '''ssh-ed25519 AAAA''',
+  '''oa3KeyPresent''',
 ]

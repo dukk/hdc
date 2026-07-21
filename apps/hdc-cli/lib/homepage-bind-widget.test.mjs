@@ -18,7 +18,7 @@ describe("homepage bind widget", () => {
       countBindZones([
         { id: "example.invalid", zone_type: "forward", records: [] },
         { id: "other.invalid", zone_type: "forward", records: [] },
-        { id: "0.0.10.in-addr.arpa", zone_type: "reverse", subnet: "10.0.0.0/24", records: [] },
+        { id: "0.0.10.in-addr.arpa", zone_type: "reverse", subnet: "192.0.2.0/24", records: [] },
       ]),
     ).toEqual({
       zones_total: 3,
@@ -32,7 +32,7 @@ describe("homepage bind widget", () => {
       schema_version: 2,
       zones: [
         { id: "example.invalid", zone_type: "forward", records: [] },
-        { id: "0.0.10.in-addr.arpa", zone_type: "reverse", subnet: "10.0.0.0/24", records: [] },
+        { id: "0.0.10.in-addr.arpa", zone_type: "reverse", subnet: "192.0.2.0/24", records: [] },
       ],
       deployments: [{ system_id: "vm-bind-a", role: "primary" }],
     };

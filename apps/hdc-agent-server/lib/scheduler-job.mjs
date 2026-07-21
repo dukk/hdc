@@ -157,16 +157,20 @@ export async function runScheduledCliJob(opts) {
 
   const cliPath = join(installRoot, "apps/hdc-cli/cli.mjs");
   const opsDailyPath = join(installRoot, "apps/hdc-agent-server/bin/run-daily.mjs");
+  const scheduleSummaryPath = join(installRoot, "apps/hdc-agent-server/bin/schedule-summary.mjs");
   const isOpsDaily = cli.length === 1 && cli[0] === "run-daily";
+  const isScheduleSummary = cli.length === 1 && cli[0] === "schedule-summary";
 
   const discord = /** @type {Record<string, unknown>} */ (schedule.discord ?? {});
   const discordPrefix = String(discord.title_prefix || "[HDC]");
+  const discordOnFailureOnly = discord.on_failure_only === true;
   const discordWebhookKey =
     typeof discord.webhook_vault_key === "string" && discord.webhook_vault_key.trim()
       ? discord.webhook_vault_key.trim()
       : "HDC_AGENTS_DISCORD_WEBHOOK_URL";
 
-  if (discord.enabled === true && !isOpsDaily) {
+  // Started posts ignore on_failure_only would spam success paths; skip when gated.
+  if (discord.enabled === true && !isOpsDaily && !isScheduleSummary && !discordOnFailureOnly) {
     await sendDiscordAndSlack({
       installRoot,
       title: `${discordPrefix} ${scheduleId} — started`,
@@ -176,12 +180,20 @@ export async function runScheduledCliJob(opts) {
     });
   }
 
-  const scriptPath = isOpsDaily ? opsDailyPath : cliPath;
-  const args = isOpsDaily
-    ? [scriptPath, ...cliArgs]
-    : cliArgs.length > 0
-      ? [cliPath, ...cli, "--", ...cliArgs]
-      : [cliPath, ...cli];
+  /** @type {string[]} */
+  let args;
+  if (isOpsDaily) {
+    args = [opsDailyPath, ...cliArgs];
+    if (discordOnFailureOnly && !args.includes("--on-failure-only")) {
+      args.push("--on-failure-only");
+    }
+  } else if (isScheduleSummary) {
+    args = [scheduleSummaryPath, ...cliArgs];
+  } else if (cliArgs.length > 0) {
+    args = [cliPath, ...cli, "--", ...cliArgs];
+  } else {
+    args = [cliPath, ...cli];
+  }
 
   process.stderr.write(`[hdc-scheduler] job ${scheduleId}: node ${args.join(" ")}\n`);
   const childEnv = {
@@ -239,8 +251,12 @@ export async function runScheduledCliJob(opts) {
     }
   }
 
+  // run-daily and schedule-summary own their Discord posts.
   const shouldDiscord =
-    discord.enabled === true && !isOpsDaily && (!discord.on_failure_only || !ok);
+    discord.enabled === true &&
+    !isOpsDaily &&
+    !isScheduleSummary &&
+    (!discordOnFailureOnly || !ok);
   if (shouldDiscord) {
     await sendDiscordAndSlack({
       installRoot,

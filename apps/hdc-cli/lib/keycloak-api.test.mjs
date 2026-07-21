@@ -144,8 +144,8 @@ describe("resolveKeycloakApiBaseUrl", () => {
   });
 
   it("falls back to CT IP", () => {
-    expect(resolveKeycloakApiBaseUrl({ host_port: 8080 }, { ctIp: "10.0.0.197" })).toBe(
-      "http://10.0.0.197:8080",
+    expect(resolveKeycloakApiBaseUrl({ host_port: 8080 }, { ctIp: "192.0.2.197" })).toBe(
+      "http://192.0.2.197:8080",
     );
   });
 });
