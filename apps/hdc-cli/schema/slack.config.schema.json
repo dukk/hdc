@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dukk/hdc/schema/slack.config.schema.json",
+  "title": "Slack infrastructure config",
+  "type": "object",
+  "required": ["schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "slack": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "api_base_url": { "type": "string" },
+        "config_token_vault_key": { "type": "string" },
+        "config_refresh_token_vault_key": { "type": "string" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "managed": { "type": "boolean" }
+      }
+    },
+    "apps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/app" }
+    }
+  },
+  "$defs": {
+    "app": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "managed": { "type": "boolean" },
+        "match": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "app_id": { "type": ["string", "null"] }
+          }
+        },
+        "display_name": { "type": "string" },
+        "bot_display_name": { "type": "string" },
+        "bot_scopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "icon": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "repo_path": { "type": "string", "minLength": 1 },
+            "background_color": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}){1,2}$"
+            },
+            "applied_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        },
+        "interactivity": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "request_url": { "type": ["string", "null"] },
+            "derive_from": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "event_subscriptions": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "request_url": { "type": ["string", "null"] },
+            "derive_from": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "bot_events": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "slash_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "command": { "type": "string" },
+              "description": { "type": "string" },
+              "url": { "type": ["string", "null"] },
+              "derive_from": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "vault": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "signing_secret_key": { "type": "string" },
+            "client_id_key": { "type": "string" },
+            "client_secret_key": { "type": "string" },
+            "bot_token_key": { "type": "string" }
+          }
+        },
+        "portal_checklist": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "notes": { "type": "string" }
+          }
+        },
+        "consumer": { "type": ["string", "null"] },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

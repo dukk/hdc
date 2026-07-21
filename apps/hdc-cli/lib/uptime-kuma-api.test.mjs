@@ -7,6 +7,7 @@ import {
   waitForMonitorListEvent,
   waitForNotificationListEvent,
   waitForStatusPageListEvent,
+  waitForHeartbeatListEvent,
 } from "hdc/clump/services/uptime-kuma/lib/uptime-kuma-api.mjs";
 
 describe("uptime-kuma-api monitorList", () => {
@@ -108,5 +109,19 @@ describe("uptime-kuma-api statusPageList", () => {
     };
     const list = await waitForStatusPageListEvent(socket, 1000);
     expect(list).toEqual({ 1: { id: 1, slug: "public", title: "Public" } });
+  });
+});
+
+describe("uptime-kuma-api heartbeatList", () => {
+  it("waitForHeartbeatListEvent resolves on heartbeatList socket event", async () => {
+    /** @type {import("socket.io-client").Socket} */
+    const socket = {
+      once(event, handler) {
+        expect(event).toBe("heartbeatList");
+        setTimeout(() => handler({ 3: [{ status: 0, msg: "down" }] }), 10);
+      },
+    };
+    const list = await waitForHeartbeatListEvent(socket, 1000);
+    expect(list).toEqual({ 3: [{ status: 0, msg: "down" }] });
   });
 });

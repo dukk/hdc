@@ -119,6 +119,10 @@
           "analytics_script_url": { "type": ["string", "null"] },
           "analytics_type": { "type": ["string", "null"] },
           "managed": { "type": "boolean" },
+          "include_all_monitors": {
+            "type": "boolean",
+            "description": "When true, maintain expands groups from every monitor's group field (for homepage all-monitors widgets)."
+          },
           "groups": {
             "type": "array",
             "items": {

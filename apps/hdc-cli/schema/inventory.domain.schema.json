@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/inventory.domain.schema.json",
+  "title": "HDC inventory sidecar — domain",
+  "description": "Registered apex domain (registrar portfolio). DNS record lists stay in cloudflare/bind configs.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "id", "kind"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Apex FQDN; must match filename stem (e.g. dukk.org)."
+    },
+    "kind": { "const": "domain" },
+    "apex": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Same as id when set; apex FQDN."
+    },
+    "dns": {
+      "type": "string",
+      "enum": ["empty", "minimal", "yes", "config-only"]
+    },
+    "website": { "type": "boolean" },
+    "mail": {
+      "type": "string",
+      "enum": ["none", "mailcow", "mx-only"]
+    },
+    "renewal_usd": { "type": ["number", "null"] },
+    "expires_at": {
+      "type": ["string", "null"],
+      "description": "ISO 8601 registration expiry (UTC day or full timestamp)."
+    },
+    "registrar": {
+      "type": "string",
+      "description": "Automation backend id (e.g. cloudflare)."
+    },
+    "registrar_name": {
+      "type": "string",
+      "description": "Display name from RDAP or registrar API."
+    },
+    "in_config": {
+      "type": "boolean",
+      "description": "Present in cloudflare zones[] (or other DNS clump config)."
+    },
+    "in_account": {
+      "type": "boolean",
+      "description": "Present in live registrar/DNS account."
+    },
+    "zone_id": { "type": ["string", "null"] },
+    "zone_status": { "type": ["string", "null"] },
+    "purpose": { "type": "string" },
+    "notes": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "automation_targets": { "type": "array", "items": { "type": "string" } },
+    "query_last": { "type": ["string", "null"] },
+    "sources": { "type": "object" },
+    "last_verified": { "type": ["string", "null"] }
+  }
+}

@@ -32,10 +32,11 @@ You own **hdc-clumps** package automation — deploy/maintain/query scripts, man
 2. Reproduce from evidence paths (operation reports, daily-maintain output) **or** research the unknown capability (`hdc_web_*` / `hdc_request_research`).
 3. Fix in **hdc-clumps** only — or **delegate** a code-fix subtask via `hdc_delegate_augment` (repo `hdc-clumps`) when the change is large or needs local IDE/git tooling.
 4. After augmentor completes: review diff, run package tests if applicable, update subtask `delegation_status: completed`.
-5. **Commit and push to git**.
-6. Open or update a **hdc-manager** task requesting sync (include commit, branch, and why sre-ops should proceed).
-7. If a bad package change is live, suggest manager rollback via task (`ref` + severity).
-8. Update your task to `done` after the handoff notes are written.
+5. If the fix introduced a durable gotcha or playbook, update **`hdc-private/ai-docs/`** via skill **`hdc-okf`** (index + `log.md`) before handoff.
+6. **Commit and push to git**.
+7. Open or update a **hdc-manager** task requesting sync (include commit, branch, and why sre-ops should proceed).
+8. If a bad package change is live, suggest manager rollback via task (`ref` + severity).
+9. Update your task to `done` after the handoff notes are written.
 
 ## Augmentor delegation
 
@@ -47,3 +48,4 @@ You own **hdc-clumps** package automation — deploy/maintain/query scripts, man
 - Never invent hostnames/IPs — use inventory and `operations/ip-allocations.md` (read-only).
 - Never commit `.env` or secret values.
 - Never create `tmp-*` at hdc / hdc-private repo root (see automation rules).
+- Own package OKF under `hdc-private/ai-docs/` (`hdc-okf`); never write the hdc platform repo.

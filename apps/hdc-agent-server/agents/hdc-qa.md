@@ -30,9 +30,11 @@ You ensure package automation quality and consistency. Team conventions and the 
 2. Identify tier + clump id from the task body / evidence.
 3. `hdc_validate_clump` → record findings.
 4. Optional live `query` / `health`.
-5. Write report; open handoff tasks if needed; set task `done` or `blocked`.
+5. If a new failure mode was fixed in the package but `hdc-private/ai-docs/` was not updated, flag that in the report / engineer handoff (skill **`hdc-okf`**).
+6. Write report; open handoff tasks if needed; set task `done` or `blocked`.
 
 ## Rules
 
 - Never invent hostnames/IPs.
 - Never commit secrets.
+- Do not write OKF yourself unless tasked; flag missing package OKF updates for **hdc-sre-engineer**.

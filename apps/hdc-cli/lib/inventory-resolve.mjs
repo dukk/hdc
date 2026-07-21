@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import {
+  automatedDomainRel,
   automatedSystemRel,
   manualSidecarLegacyRels,
   manualSidecarRel,
@@ -19,6 +20,21 @@ function isObject(v) {
  */
 export function mergeSystemRecords(manual, automated) {
   return { ...manual, ...automated };
+}
+
+/**
+ * Domain merge: automated wins on live keys; keep manual purpose/notes/site flags when automated omits them.
+ * @param {Record<string, unknown>} manual
+ * @param {Record<string, unknown>} automated
+ */
+export function mergeDomainRecords(manual, automated) {
+  const merged = { ...manual, ...automated };
+  for (const key of ["purpose", "notes", "dns", "website", "mail", "renewal_usd", "in_config"]) {
+    if (merged[key] === undefined || merged[key] === null) {
+      if (manual[key] !== undefined) merged[key] = manual[key];
+    }
+  }
+  return merged;
 }
 
 /**
@@ -76,4 +92,24 @@ export function resolveServiceById(publicRoot, serviceId, env = process.env) {
     [manualSidecarRel("services", serviceId), ...manualSidecarLegacyRels("services", serviceId)],
     env,
   );
+}
+
+/**
+ * Load manual + automated domain sidecar by apex id.
+ * @param {string} publicRoot
+ * @param {string} domainId
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Record<string, unknown> | null}
+ */
+export function resolveDomainById(publicRoot, domainId, env = process.env) {
+  const manual = readFirstJson(
+    publicRoot,
+    [manualSidecarRel("domains", domainId), ...manualSidecarLegacyRels("domains", domainId)],
+    env,
+  );
+  const automated = readJsonIfExists(publicRoot, automatedDomainRel(domainId), env);
+  if (!manual && !automated) return null;
+  if (!manual) return automated;
+  if (!automated) return manual;
+  return mergeDomainRecords(manual, automated);
 }

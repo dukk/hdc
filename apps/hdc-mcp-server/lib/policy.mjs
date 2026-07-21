@@ -62,6 +62,10 @@ export const ROLE_POLICIES = Object.freeze({
     tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord"]),
     runVerbs: new Set(["query", "health"]),
   },
+  "hdc-maintainer": {
+    tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord"]),
+    runVerbs: new Set(["query", "health"]),
+  },
   "hdc-security-expert": {
     tools: new Set(["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord", ...AUGMENT_TOOLS]),
     runVerbs: new Set(["query", "health", "maintain"]),

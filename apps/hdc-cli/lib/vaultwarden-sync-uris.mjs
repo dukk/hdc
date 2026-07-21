@@ -1,11 +1,19 @@
 import { repoRoot } from "../paths.mjs";
-import { buildAllVaultKeyUris, vaultKeyUrisEqual } from "./vault-key-uris.mjs";
 import {
   bwGetLoginUris,
   bwListItemNames,
   bwUpdateLoginUris,
   ensureBwUnlocked,
 } from "./vaultwarden-cli.mjs";
+
+/**
+ * Lazy-load vault-key-uris (pulls hdc/clump/*) so MCP/agent images can import
+ * vault-access without a clumps tree.
+ * @returns {Promise<typeof import("./vault-key-uris.mjs")>}
+ */
+function loadVaultKeyUris() {
+  return import("./vault-key-uris.mjs");
+}
 
 /**
  * @typedef {object} SyncVaultKeyUrisOptions
@@ -53,6 +61,7 @@ export async function syncVaultKeyUris(access, vwCli, options = {}) {
     },
   );
 
+  const { buildAllVaultKeyUris, vaultKeyUrisEqual } = await loadVaultKeyUris();
   const uriMap = buildAllVaultKeyUris(publicRoot, vwCli.env);
   /** @type {string[]} */
   const itemNames = bwListItemNames(vwCli, session).filter((name) =>
@@ -143,11 +152,17 @@ export function parseSecretsSyncUrisArgv(argv) {
 
 /**
  * Resolve website URIs for an env key (for secrets set/push).
+ * Returns undefined when the clumps tree is unavailable (e.g. slim agent image).
  * @param {string} envKey
  * @param {NodeJS.ProcessEnv} [env]
- * @returns {string[] | undefined}
+ * @returns {Promise<string[] | undefined>}
  */
-export function resolveUrisForSecretKey(envKey, env = process.env) {
-  const uris = buildAllVaultKeyUris(repoRoot(), env).get(envKey);
-  return uris && uris.length > 0 ? uris : undefined;
+export async function resolveUrisForSecretKey(envKey, env = process.env) {
+  try {
+    const { buildAllVaultKeyUris } = await loadVaultKeyUris();
+    const uris = buildAllVaultKeyUris(repoRoot(), env).get(envKey);
+    return uris && uris.length > 0 ? uris : undefined;
+  } catch {
+    return undefined;
+  }
 }

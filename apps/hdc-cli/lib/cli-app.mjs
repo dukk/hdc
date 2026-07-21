@@ -50,7 +50,6 @@ import {
   unlockLocalVaultPassphrase,
 } from "./secrets-backup.mjs";
 import { parseSecretsPushArgv, pushLocalSecretsToVaultwarden } from "./vaultwarden-sync.mjs";
-import { parseSecretsSyncUrisArgv, syncVaultKeyUris } from "./vaultwarden-sync-uris.mjs";
 import { resolveSecretBackendMode } from "./secret-backend.mjs";
 import { vaultwardenCliDepsFromCli } from "./vaultwarden-cli.mjs";
 import { isLocalOnlyVaultKey } from "./secret-backend.mjs";
@@ -60,6 +59,8 @@ import { cliAppDir } from "../paths.mjs";
 import { augmentPackageSpawnEnv } from "./package/spawn-env.mjs";
 import {
   loadClumpsReposConfig,
+  persistClumpRepoRef,
+  readClumpRepoResolved,
   resolveClumpRoots,
   syncClumpRepo,
 } from "./clump-repos.mjs";
@@ -123,8 +124,8 @@ Usage:
   ${c} help [ <topic> ... ]
   ${c} list
   ${c} clumps list [--reference]
-  ${c} clumps sync [--repo <id>] [--dry-run]
-  ${c} clumps init
+  ${c} clumps sync [--repo <id>] [--ref <branch|tag|sha>] [--persist|--no-persist] [--dry-run]
+  ${c} clumps init   # same flags as sync
   ${c} run <tier> <clump> <verb> [-- <extra args...>]
   ${c} run <tier> <clump> <platform> <verb> [-- <extra args...>]   # when manifest lists "platforms"
   ${c} secrets path
@@ -1014,6 +1015,8 @@ async function cmdSecrets(deps, argv) {
     return;
   }
   if (sub === "sync-uris") {
+    // Lazy: vault-key-uris pulls hdc/clump/* (not present in slim agent images).
+    const { parseSecretsSyncUrisArgv, syncVaultKeyUris } = await import("./vaultwarden-sync-uris.mjs");
     const parsed = parseSecretsSyncUrisArgv(argv.slice(1));
     const vwCli = vaultwardenCliDepsFromCli(deps, deps.spawnSync);
     const result = await syncVaultKeyUris(access, vwCli, parsed);
@@ -1283,18 +1286,58 @@ async function cmdClumps(deps, root, argv) {
   if (sub === "init" || sub === "sync") {
     const dryRun = argv.includes("--dry-run");
     const repoIdx = argv.indexOf("--repo");
-    const onlyId = repoIdx >= 0 ? argv[repoIdx + 1] : null;
-    const targets = config.repos.filter((r) => !onlyId || r.id === onlyId);
+    const onlyId = repoIdx >= 0 ? String(argv[repoIdx + 1] || "").trim() : "";
+    const refIdx = argv.indexOf("--ref");
+    const refOverride = refIdx >= 0 ? String(argv[refIdx + 1] || "").trim() : "";
+    const noPersist = argv.includes("--no-persist");
+    const explicitPersist = argv.includes("--persist");
+    if (explicitPersist && !refOverride) {
+      die(deps, "clumps sync: --persist requires --ref <branch|tag|sha>");
+    }
+    if (refIdx >= 0 && !refOverride) {
+      die(deps, "clumps sync: --ref requires a branch, tag, or commit");
+    }
+    /** Persist by default when --ref is set; --no-persist keeps a one-shot checkout. */
+    const shouldPersist = Boolean(refOverride) && !noPersist;
+
+    const targets = config.repos
+      .filter((r) => !onlyId || r.id === onlyId)
+      .map((r) => (refOverride ? { ...r, ref: refOverride } : r));
     if (!targets.length) die(deps, `clumps: unknown repo ${JSON.stringify(onlyId)}`);
     let failed = false;
+    /** @type {{ id: string; ref: string; resolved: string|null; action: string }[]} */
+    const synced = [];
     for (const repo of targets) {
       const r = syncClumpRepo(config, repo, {
         dryRun,
         log: (line) => deps.log(`[hdc] ${line}`),
       });
-      if (!r.ok) failed = true;
+      if (!r.ok) {
+        failed = true;
+        deps.error(
+          `[hdc] clumps sync failed for ${repo.id} @ ${repo.ref} (${r.action})`,
+        );
+        continue;
+      }
+      synced.push({ id: repo.id, ref: r.ref, resolved: r.resolved, action: r.action });
+      if (r.resolved) {
+        deps.log(`[hdc] ${repo.id} resolved ${r.resolved.slice(0, 12)} @ ${r.ref}`);
+      }
     }
     if (failed) die(deps, "clumps sync: one or more repos failed");
+
+    if (shouldPersist && !dryRun) {
+      try {
+        for (const row of synced) {
+          const written = persistClumpRepoRef(root, row.id, row.ref, deps.env);
+          deps.log(`[hdc] persisted ${row.id} ref=${row.ref} → ${written.path}`);
+        }
+      } catch (e) {
+        die(deps, e instanceof Error ? e.message : String(e));
+      }
+    } else if (shouldPersist && dryRun) {
+      deps.log(`[hdc] would persist ref=${refOverride} for ${synced.map((s) => s.id).join(", ")}`);
+    }
     return;
   }
   if (sub !== "list") die(deps, "clumps: need list, sync, or init");
@@ -1306,7 +1349,11 @@ async function cmdClumps(deps, root, argv) {
       (r) => r.repoId === repo.id,
     );
     const count = rootEntry ? discoverManifests(rootEntry.root).length : 0;
-    const state = rootEntry ? `synced (${count} manifests)` : "missing — run: hdc clumps sync";
+    const head = rootEntry ? readClumpRepoResolved(rootEntry.root) : null;
+    const headShort = head ? head.slice(0, 12) : null;
+    const state = rootEntry
+      ? `synced (${count} manifests${headShort ? `; HEAD ${headShort}` : ""})`
+      : "missing — run: hdc clumps sync";
     deps.log(`  ${repo.id}\t${repo.mode}\t${repo.url} @ ${repo.ref}\t${state}`);
   }
 }

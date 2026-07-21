@@ -9,6 +9,15 @@ import {
   resolveOpsDiscordInteractiveConfig,
   sendOpsDiscordMessage,
 } from "../../hdc-cli/lib/ops-discord-notify.mjs";
+import {
+  AGENTS_SLACK_WEBHOOK_KEY,
+  formatSlackIncomingWebhookText,
+  sendOpsSlackIncomingWebhookMessage,
+} from "../../hdc-cli/lib/ops-slack-incoming-webhook.mjs";
+import {
+  formatSlackAppText,
+  sendOpsSlackAppMessage,
+} from "../../hdc-cli/lib/ops-slack-app-notify.mjs";
 import { runDailyMaintainWithResult } from "../../hdc-cli/lib/daily-maintain.mjs";
 
 import { hdcPrivateRoot } from "../../hdc-cli/lib/private-repo.mjs";
@@ -231,8 +240,18 @@ export async function handleHdcNotifyDiscord(args = {}) {
     const taskId = String(args.task_id ?? args.taskId ?? "").trim();
     if (decision && !taskId) throw new Error("task_id is required when decision is true");
 
-    const content = formatDiscordContent(title, redactIpsFromText(message), {
-      env: { ...process.env, HDC_OPS_NOTIFY_APP: "mcp" },
+    const notifyEnv = { ...process.env, HDC_OPS_NOTIFY_APP: "mcp" };
+    const redacted = redactIpsFromText(message);
+    const content = formatDiscordContent(title, redacted, {
+      env: notifyEnv,
+      app: "mcp",
+    });
+    const slackText = formatSlackIncomingWebhookText(title, redacted, {
+      env: notifyEnv,
+      app: "mcp",
+    });
+    const slackAppText = formatSlackAppText(title, redacted, {
+      env: notifyEnv,
       app: "mcp",
     });
 
@@ -245,6 +264,8 @@ export async function handleHdcNotifyDiscord(args = {}) {
         dry_run: true,
         content_length: content.length,
         content,
+        slack_content: slackAppText || slackText,
+        slack_content_length: (slackAppText || slackText).length,
         decision: decision || undefined,
         task_id: taskId || undefined,
         interactive: interactive.enabled === true,
@@ -254,6 +275,7 @@ export async function handleHdcNotifyDiscord(args = {}) {
 
     const { deps } = createHdcMcpContext();
     const vault = createVaultAccess(vaultDepsFromCli(deps));
+    const getSecret = (key, opts) => vault.getSecret(key, opts);
     const result = await sendOpsDiscordMessage({
       content,
       decision,
@@ -262,16 +284,39 @@ export async function handleHdcNotifyDiscord(args = {}) {
       webhookVaultKey: AGENTS_DISCORD_WEBHOOK_KEY,
       fallbackWebhookVaultKey: OPS_DISCORD_WEBHOOK_KEY,
       env: deps.env,
-      getSecret: (key, opts) => vault.getSecret(key, opts),
+      getSecret,
     });
-    return toolTextResult({ ok: true, sent: true, silent, mode: result.mode });
+    let slack = await sendOpsSlackAppMessage({
+      content: slackAppText,
+      decision,
+      taskId,
+      env: deps.env,
+      getSecret,
+    });
+    if (slack.skipped) {
+      slack = await sendOpsSlackIncomingWebhookMessage({
+        content: slackText,
+        env: deps.env,
+        getSecret,
+        webhookVaultKey: AGENTS_SLACK_WEBHOOK_KEY,
+      });
+    }
+    return toolTextResult({
+      ok: true,
+      sent: true,
+      silent,
+      mode: result.mode,
+      slack: slack.ok
+        ? { sent: true, mode: slack.mode || "slack" }
+        : { sent: false, skipped: slack.skipped === true, error: slack.error },
+    });
   } catch (e) {
     return toolErrorResult(e instanceof Error ? e : String(e));
   }
 }
 
 /**
- * Env var name for a one-shot clump repo ref override.
+ * Env var name for a clump repo ref override (still honored by loadClumpsReposConfig).
  * @param {string} repoId
  */
 export function clumpRepoRefEnvKey(repoId) {
@@ -294,6 +339,13 @@ export function buildClumpsSyncArgv(opts = {}) {
   if (typeof opts.repo === "string" && opts.repo.trim()) {
     argv.push("--repo", opts.repo.trim());
   }
+  if (typeof opts.ref === "string" && opts.ref.trim()) {
+    argv.push("--ref", opts.ref.trim());
+  }
+  if (opts.persist === true) argv.push("--persist");
+  if (opts.persist === false || opts.no_persist === true || opts.noPersist === true) {
+    argv.push("--no-persist");
+  }
   if (opts.dry_run === true || opts.dryRun === true) argv.push("--dry-run");
   return argv;
 }
@@ -311,39 +363,26 @@ export async function handleHdcClumpsSync(args = {}) {
     }
     const repo = typeof args.repo === "string" ? args.repo.trim() : "";
     const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+    /** @type {boolean|undefined} */
+    let persist;
+    if (typeof args.persist === "boolean") {
+      persist = args.persist;
+    } else if (ref) {
+      // Lasting pin by default when a ref is requested.
+      persist = true;
+    }
+
     const argv = buildClumpsSyncArgv({
       action,
       repo: repo || undefined,
+      ref: ref || undefined,
+      persist,
       dry_run: args.dry_run === true,
     });
 
     const { deps, capture, resetCapture } = createHdcMcpContext();
     resetCapture();
-
-    /** @type {Record<string, string | undefined>} */
-    const savedEnv = {};
-    if (ref) {
-      const repoId = repo || "hdc-clumps";
-      const key = clumpRepoRefEnvKey(repoId);
-      savedEnv[key] = deps.env[key];
-      deps.env[key] = ref;
-      process.env[key] = ref;
-    }
-
-    let code;
-    try {
-      code = await runCli(argv, deps);
-    } finally {
-      for (const [key, value] of Object.entries(savedEnv)) {
-        if (value === undefined) {
-          delete deps.env[key];
-          delete process.env[key];
-        } else {
-          deps.env[key] = value;
-          process.env[key] = value;
-        }
-      }
-    }
+    const code = await runCli(argv, deps);
 
     return toolTextResult({
       ok: code === 0,
@@ -351,6 +390,7 @@ export async function handleHdcClumpsSync(args = {}) {
       action,
       repo: repo || null,
       ref: ref || null,
+      persist: persist ?? null,
       log: capture.logLines,
       errors: capture.errorLines,
     });

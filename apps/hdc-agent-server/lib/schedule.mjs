@@ -5,6 +5,7 @@
  * Defaults by role when env unset:
  * - hdc-manager: 15
  * - hdc-monitor: 60
+ * - hdc-maintainer: 1440 (daily)
  * - hdc-security-expert: 120
  * - hdc-research: 10080 (7d)
  * - others: disabled (0) — A2A on-demand only
@@ -15,6 +16,8 @@ export function defaultScheduleMinutes(role) {
       return 15;
     case "hdc-monitor":
       return 60;
+    case "hdc-maintainer":
+      return 1440;
     case "hdc-security-expert":
       return 120;
     case "hdc-research":

@@ -128,6 +128,25 @@
                   "token_vault_key": {
                     "type": "string",
                     "description": "Vault key for Audiobookshelf admin API token (default HDC_HOMEPAGE_AUDIOBOOKSHELF_TOKEN)."
+                  },
+                  "library_buckets": {
+                    "type": "object",
+                    "description": "Optional exact library name → bucket overrides for customapi stats (audiobooks, ebooks, other). Unlisted libraries use folder/name heuristics.",
+                    "properties": {
+                      "audiobooks": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      },
+                      "ebooks": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      },
+                      "other": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false

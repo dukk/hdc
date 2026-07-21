@@ -31,6 +31,8 @@ whenever the matching files are actually in play.
 
 @.cursor/rules/proxmox-resource-planning.mdc
 
+@.cursor/rules/hdc-okf-ai-docs.mdc
+
 **Archived (not imported):** [`.cursor/rules/hdc-nagios-monitoring.mdc`](.cursor/rules/hdc-nagios-monitoring.mdc)
 — Nagios is decommissioned; read it only if restoring the `nagios` package.
 
@@ -48,15 +50,19 @@ Claude Code thin pointers under `.claude/skills/` either target the fleet skill 
 | `proxmox-resource-planning` | Sizing a new Proxmox VM/CT and checking cluster headroom |
 | `hdc-manager` | Task triage, escalation, and delegation workflows |
 | `hdc-monitor` | Monitoring runbook (uptime-kuma, proxmox query, digests) |
+| `hdc-maintainer` | Maintenance planning (updates, reboot/upgrade approval tasks) |
 | `hdc-qa` | Clump static validation (`hdc_validate_clump`), query/health digests |
 | `hdc-security` | Security queries and response (wazuh, crowdsec, nginx-waf) |
 | `hdc-agent-team` | Shared agent-team conventions: task files, digests, paths |
+| `hdc-okf` | Promote / maintain OKF in `hdc-private/ai-docs/` |
 
 ## Subagents
 
 Canonical fleet agent definitions live in [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/).
 `.cursor/agents/` and `.claude/agents/` are thin pointers for IDE sessions. Production
 runtime is hdc-agent-server + LiteLLM — see [docs/multi-agent-ops.md](docs/multi-agent-ops.md).
+
+Agent OKF knowledge (recall): start at [`../hdc-private/ai-docs/index.md`](../hdc-private/ai-docs/index.md); human docs stay under `docs/`.
 
 ## Quality gate
 

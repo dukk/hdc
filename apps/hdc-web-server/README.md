@@ -33,11 +33,21 @@ Without a Vite build, `/` returns a short HTML notice; `/api/health` still works
 | `HDC_WEB_META_ROOT` | `HDC_RUNNER_META_ROOT` | Jobs/schedules dir (default `~/.hdc/web-meta`) |
 | `HDC_WEB_LOG_DIR` | `HDC_RUNNER_LOG_DIR` | Schedule logs (default `<meta>/logs`) |
 
-Human login defaults to **encrypted htpasswd** (username/password form). Keycloak OIDC SSO is optional when `HDC_WEB_OIDC_*` is fully configured.
+Human login defaults to **encrypted htpasswd** (username/password form). Keycloak OIDC SSO is optional when `HDC_WEB_OIDC_*` is fully configured. Default `auth.mode` is **`both`**: password form and SSO when OIDC env is set.
+
+### Auth modes (`web-config.json` → `auth.mode`)
+
+| Mode | Password login | OIDC SSO |
+|------|----------------|----------|
+| `both` (default) | Yes (when session secret set) | Yes (when OIDC env set) |
+| `htpasswd` | Same as `both` (backward compatible alias) | Yes (when OIDC env set) |
+| `oidc` | No | Yes (when OIDC env set) |
+
+hdc-agents maintain renders `{metaRoot}/web-config.json` from `hdc_agents.web.auth_mode` (default `both`).
 
 ### Password auth (default)
 
-On first start (when `auth.mode` is `htpasswd`, the default), the server creates `{metaRoot}/.htpasswd.enc`:
+On first start (when password login is enabled — `auth.mode` `both` or `htpasswd`), the server creates `{metaRoot}/.htpasswd.enc`:
 
 - Usernames and APR1-MD5 password hashes inside an AES-256-GCM blob (same envelope format as `~/.hdc/vault.enc`).
 - Encryption key derived from `HDC_WEB_UI_SESSION_SECRET`.
@@ -45,7 +55,7 @@ On first start (when `auth.mode` is `htpasswd`, the default), the server creates
 - Password from `HDC_WEB_ADMIN_PASSWORD` when set; otherwise a random password is generated and logged once to stderr.
 - If the admin user already exists, the password is never changed (env var is ignored).
 
-Set `auth.mode` to `oidc` in `web-config.json` to disable password login.
+Set `auth.mode` to `oidc` in `web-config.json` to disable password login (SSO-only). Default is `both`.
 
 **Session secret rotation:** changing `HDC_WEB_UI_SESSION_SECRET` invalidates the encrypted htpasswd file. Delete `.htpasswd.enc` and restart to recreate the admin user, or re-encrypt manually.
 
@@ -54,7 +64,7 @@ Optional `web-config.json` under the meta root:
 ```json
 {
   "auth": {
-    "mode": "htpasswd",
+    "mode": "both",
     "htpasswd_file": ".htpasswd.enc",
     "admin_username": "admin"
   },

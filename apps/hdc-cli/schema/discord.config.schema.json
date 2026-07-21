@@ -35,6 +35,14 @@
             }
           },
           "display_name": { "type": "string", "minLength": 1 },
+          "icon": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "repo_path": { "type": "string", "minLength": 1 },
+              "applied_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          },
           "bot_token_vault_key": { "type": "string", "minLength": 1 },
           "public_key": {
             "type": ["string", "null"],

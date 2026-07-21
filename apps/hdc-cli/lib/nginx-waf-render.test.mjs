@@ -78,7 +78,8 @@ describe("nginx-waf render", () => {
     const vhost = renderWithCatalog(sampleSite);
     expect(vhost).toContain("proxy_pass http://192.0.2.50:8080");
     expect(vhost).toContain("ssl_certificate /etc/letsencrypt/live/app.hdc.example.invalid/fullchain.pem");
-    expect(vhost).toContain("/.well-known/acme-challenge/");
+    // ACME on :80 (CF/LE) and :443 (Cloudflare Full SSL origin fetch)
+    expect(vhost.match(/\/\.well-known\/acme-challenge\//g)?.length).toBeGreaterThanOrEqual(2);
     expect(vhost).toContain("return 301 https://");
     expect(vhost).toContain("modsecurity_rules_file /etc/modsecurity/hdc-waf-modsecurity-default.conf");
     expect(vhost).not.toContain("geo $remote_addr $hdc_trusted_internal");

@@ -14,6 +14,8 @@ import { listTasks, writeTaskReport } from "./operations-fs.mjs";
 import { listQueuedTopics } from "./research-topics.mjs";
 import { notifyManagerDecision } from "./notify-manager.mjs";
 import { processManagerMailbox } from "./manager-mailbox.mjs";
+import { runMonitorOutageCheck } from "./monitor-outage-check.mjs";
+import { runMaintenanceScan } from "./maintenance-scan.mjs";
 
 export { notifyManagerDecision };
 
@@ -145,6 +147,7 @@ export function newestMtimeMs(dir, nameRe) {
 const PEER_PORTS = {
   "hdc-manager": 9200,
   "hdc-monitor": 9201,
+  "hdc-maintainer": 9207,
   "hdc-sre-ops": 9202,
   "hdc-sre": 9202,
   "hdc-security-expert": 9203,
@@ -232,20 +235,9 @@ export async function runDispatcher(opts) {
     case "hdc-manager":
       return dispatchManager({ ...opts, privateRoot, nowMs, log });
     case "hdc-monitor":
-      return dispatchProbeThenLlm({
-        ...opts,
-        privateRoot,
-        nowMs,
-        log,
-        stateKey: "monitor_probe_hash",
-        probes: [
-          ["run", "service", "uptime-kuma", "query", "--", "--live"],
-          ["run", "infrastructure", "proxmox", "query"],
-        ],
-        llmPrompt:
-          "Scheduled monitor sweep. Probe hashes changed (or first run). Analyze health, " +
-          "write operations/reports/monitor-*.md, enqueue hdc-sre-ops tasks for actionable issues.",
-      });
+      return dispatchMonitorOutageSweep({ ...opts, privateRoot, nowMs, log });
+    case "hdc-maintainer":
+      return await dispatchMaintainerScanSweep({ ...opts, privateRoot, nowMs, log });
     case "hdc-security-expert":
       return dispatchProbeThenLlm({
         ...opts,
@@ -325,8 +317,29 @@ async function dispatchManager(opts) {
       newlyNotified.push(t.id);
       notifiedSet.add(t.id);
       opts.log(`[dispatcher] notified for ${t.id}`);
+      try {
+        const parsed = JSON.parse(String(r.stdout ?? "").trim());
+        const slackResult = parsed?.results?.["slack-hdc-app"];
+        if (slackResult && !slackResult.ok && !slackResult.skipped) {
+          opts.log(
+            `[dispatcher] slack-hdc-app failed for ${t.id}: ${slackResult.error || "unknown error"}`,
+          );
+        }
+      } catch {
+        /* stdout not JSON */
+      }
     } else {
-      opts.log(`[dispatcher] notify failed for ${t.id}: ${r.error || r.stderr || r.status}`);
+      let detail = r.error || r.stderr || String(r.status ?? "");
+      try {
+        const parsed = JSON.parse(String(r.stdout ?? "").trim());
+        const slackResult = parsed?.results?.["slack-hdc-app"];
+        if (slackResult && !slackResult.ok) {
+          detail = `${detail}; slack-hdc-app: ${slackResult.error || slackResult.skipped ? "skipped" : "failed"}`;
+        }
+      } catch {
+        /* ignore */
+      }
+      opts.log(`[dispatcher] notify failed for ${t.id}: ${detail}`);
     }
   }
 
@@ -428,6 +441,123 @@ async function dispatchManager(opts) {
     work,
     report_path: reportPath,
     discord_notified: newlyNotified,
+  };
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.role
+ * @param {string} opts.hdcRoot
+ * @param {string} opts.privateRoot
+ * @param {number} opts.nowMs
+ * @param {(line: string) => void} opts.log
+ */
+function dispatchMonitorOutageSweep(opts) {
+  const check = runMonitorOutageCheck({
+    hdcRoot: opts.hdcRoot,
+    privateRoot: opts.privateRoot,
+    nowMs: opts.nowMs,
+    log: opts.log,
+  });
+
+  if (!check.has_outages) {
+    opts.log("[dispatcher] hdc-monitor idle (no outages)");
+    return {
+      role: opts.role,
+      invoked_llm: false,
+      work: [],
+      idle_reason: "no outages",
+      outage_check: check,
+    };
+  }
+
+  if (check.same_as_last_cycle) {
+    opts.log("[dispatcher] hdc-monitor idle (same outage fingerprint)");
+    return {
+      role: opts.role,
+      invoked_llm: false,
+      work: [],
+      idle_reason: "same outage fingerprint",
+      outage_check: check,
+    };
+  }
+
+  return {
+    role: opts.role,
+    invoked_llm: true,
+    work: [
+      {
+        id: `${opts.role}-outage-${opts.nowMs}`,
+        local: true,
+        prompt:
+          "Scheduled monitor outage sweep. Scripted pre-check found new or changed outages.\n\n" +
+          `${check.summary_markdown}\n\n` +
+          "Analyze the outages above, write operations/reports/monitor-<ISO-timestamp>.md, and create or " +
+          "update task files under operations/tasks/ for investigation (role: hdc-sre-ops) or package fixes " +
+          "(role: hdc-sre-engineer). Use stable task ids like monitor-outage-<slug>; update existing open tasks " +
+          "instead of duplicating. Set needs_decision: true with priority critical/high for public/LAN remediation " +
+          "that requires deploy/maintain. Query-only investigation tasks may use needs_decision: false.",
+      },
+    ],
+    outage_check: check,
+  };
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.role
+ * @param {string} opts.hdcRoot
+ * @param {string} opts.privateRoot
+ * @param {number} opts.nowMs
+ * @param {(line: string) => void} opts.log
+ */
+async function dispatchMaintainerScanSweep(opts) {
+  const check = await runMaintenanceScan({
+    hdcRoot: opts.hdcRoot,
+    privateRoot: opts.privateRoot,
+    nowMs: opts.nowMs,
+    log: opts.log,
+  });
+
+  if (!check.has_requirements) {
+    opts.log("[dispatcher] hdc-maintainer idle (no maintenance requirements)");
+    return {
+      role: opts.role,
+      invoked_llm: false,
+      work: [],
+      idle_reason: "no maintenance requirements",
+      maintenance_scan: check,
+    };
+  }
+
+  if (check.same_as_last_cycle) {
+    opts.log("[dispatcher] hdc-maintainer idle (same maintenance fingerprint)");
+    return {
+      role: opts.role,
+      invoked_llm: false,
+      work: [],
+      idle_reason: "same maintenance fingerprint",
+      maintenance_scan: check,
+    };
+  }
+
+  return {
+    role: opts.role,
+    invoked_llm: true,
+    work: [
+      {
+        id: `${opts.role}-scan-${opts.nowMs}`,
+        local: true,
+        prompt:
+          "Scheduled maintainer scan. Scripted pre-check found new or changed maintenance requirements.\n\n" +
+          `${check.summary_markdown}\n\n` +
+          `Tasks created: ${check.tasks_created.join(", ") || "(none)"}. ` +
+          `Tasks updated: ${check.tasks_updated.join(", ") || "(none)"}.\n\n` +
+          "Write operations/reports/maintainer-<ISO-timestamp>.md, refine maintainer-* task bodies, " +
+          "and ensure reboot/upgrade tasks have needs_decision: true for hdc-sre-ops execution after approval.",
+      },
+    ],
+    maintenance_scan: check,
   };
 }
 

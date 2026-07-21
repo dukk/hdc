@@ -68,6 +68,62 @@ async function sendDiscord(opts) {
 }
 
 /**
+ * Mirror Discord schedule alerts to Slack: prefer HDC app (bot token) when configured,
+ * else Incoming Webhook (HDC_AGENTS_SLACK_WEBHOOK_URL).
+ *
+ * @param {object} opts
+ */
+async function sendSlack(opts) {
+  const installRoot = opts.installRoot;
+  const { createVaultAccess, vaultDepsFromCli } = await import(
+    pathToFileURL(join(installRoot, "apps/hdc-cli/lib/vault-access.mjs")).href
+  );
+  const { createNodeCliDeps } = await import(
+    pathToFileURL(join(installRoot, "apps/hdc-cli/lib/node-cli-deps.mjs")).href
+  );
+  const deps = createNodeCliDeps();
+  const vault = createVaultAccess(vaultDepsFromCli(deps));
+  const getSecret = (key, secretOpts) => vault.getSecret(key, secretOpts);
+
+  const { sendOpsSlackAppMessage } = await import(
+    pathToFileURL(join(installRoot, "apps/hdc-cli/lib/ops-slack-app-notify.mjs")).href
+  );
+  const appResult = await sendOpsSlackAppMessage({
+    title: opts.title,
+    message: opts.message,
+    env: deps.env,
+    getSecret,
+  });
+  if (appResult.ok || (appResult.ok === false && !appResult.skipped)) {
+    return appResult;
+  }
+
+  const { sendOpsSlackIncomingWebhookMessage } = await import(
+    pathToFileURL(join(installRoot, "apps/hdc-cli/lib/ops-slack-incoming-webhook.mjs")).href
+  );
+  return sendOpsSlackIncomingWebhookMessage({
+    title: opts.title,
+    message: opts.message,
+    env: deps.env,
+    getSecret,
+    webhookVaultKey: opts.webhookVaultKey || "HDC_AGENTS_SLACK_WEBHOOK_URL",
+  });
+}
+
+/**
+ * @param {object} opts
+ */
+async function sendDiscordAndSlack(opts) {
+  const discord = await sendDiscord(opts);
+  const slack = await sendSlack({
+    installRoot: opts.installRoot,
+    title: opts.title,
+    message: opts.message,
+  });
+  return { discord, slack };
+}
+
+/**
  * @param {object} opts
  * @param {Record<string, unknown>} opts.schedule
  * @param {string} [opts.installRoot]
@@ -111,7 +167,7 @@ export async function runScheduledCliJob(opts) {
       : "HDC_AGENTS_DISCORD_WEBHOOK_URL";
 
   if (discord.enabled === true && !isOpsDaily) {
-    await sendDiscord({
+    await sendDiscordAndSlack({
       installRoot,
       title: `${discordPrefix} ${scheduleId} — started`,
       message: `Scheduled job started at ${startedAt}`,
@@ -173,7 +229,7 @@ export async function runScheduledCliJob(opts) {
         markdownPath: reportPath,
         env: process.env,
       });
-      await sendDiscord({
+      await sendDiscordAndSlack({
         installRoot,
         title: `${discordPrefix} email sent`,
         message: `To: ${mail.to}\nFrom: ${from || "(relay default)"}\nSubject: ${scheduleId}`,
@@ -186,7 +242,7 @@ export async function runScheduledCliJob(opts) {
   const shouldDiscord =
     discord.enabled === true && !isOpsDaily && (!discord.on_failure_only || !ok);
   if (shouldDiscord) {
-    await sendDiscord({
+    await sendDiscordAndSlack({
       installRoot,
       title: `${discordPrefix} ${scheduleId} — ${ok ? "OK" : "FAILED"}`,
       message: `${stderr}${stdout}`.trim().slice(-1200) || (ok ? "completed" : "failed"),

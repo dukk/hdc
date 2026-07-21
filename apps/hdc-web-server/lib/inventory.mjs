@@ -2,15 +2,28 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  AUTOMATED_DOMAINS,
   manualCategoryLegacyRels,
   manualCategoryRel,
   manualSidecarLegacyRels,
   manualSidecarRel,
 } from "../../hdc-cli/lib/inventory-paths.mjs";
-import { resolveRepoFile } from "../../hdc-cli/lib/private-repo.mjs";
+import { resolveDomainById } from "../../hdc-cli/lib/inventory-resolve.mjs";
+import { hdcPrivateRoot, resolveRepoFile } from "../../hdc-cli/lib/private-repo.mjs";
 import { primaryIpFromSystem } from "../../hdc-cli/lib/package/inventory-sidecar.mjs";
 
-const VALID_CATEGORIES = new Set(["systems", "services", "networks", "targets"]);
+const VALID_CATEGORIES = new Set(["systems", "services", "networks", "targets", "domains"]);
+
+/**
+ * @param {string} absDir
+ * @returns {string[]}
+ */
+function listJsonIdsInDir(absDir) {
+  if (!existsSync(absDir)) return [];
+  return readdirSync(absDir)
+    .filter((f) => f.endsWith(".json") && !f.startsWith("_"))
+    .map((f) => f.slice(0, -5));
+}
 
 /**
  * @param {string} publicRoot
@@ -35,11 +48,21 @@ function listCategoryIds(publicRoot, category) {
     const privateRoot = resolved.privateRoot;
     absDir = privateRoot ? join(privateRoot, relDir) : join(publicRoot, relDir);
   }
-  if (!existsSync(absDir)) return [];
-  return readdirSync(absDir)
-    .filter((f) => f.endsWith(".json") && !f.startsWith("_"))
-    .map((f) => f.slice(0, -5))
-    .sort((a, b) => a.localeCompare(b));
+  /** @type {Set<string>} */
+  const ids = new Set(listJsonIdsInDir(absDir));
+
+  if (category === "domains") {
+    const privateRoot = hdcPrivateRoot(publicRoot);
+    const autoDirs = [
+      privateRoot ? join(privateRoot, AUTOMATED_DOMAINS) : null,
+      join(publicRoot, AUTOMATED_DOMAINS),
+    ].filter(Boolean);
+    for (const d of autoDirs) {
+      for (const id of listJsonIdsInDir(/** @type {string} */ (d))) ids.add(id);
+    }
+  }
+
+  return [...ids].sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -58,6 +81,20 @@ function inventorySummary(record, category) {
     if (ip) summary.primary_ip = ip;
   }
   if (typeof record.system_class === "string") summary.system_class = record.system_class;
+  if (category === "domains") {
+    if (typeof record.dns === "string") summary.dns = record.dns;
+    if (typeof record.website === "boolean") summary.website = record.website;
+    if (typeof record.mail === "string") summary.mail = record.mail;
+    if (typeof record.renewal_usd === "number" || record.renewal_usd === null) {
+      summary.renewal_usd = record.renewal_usd;
+    }
+    if (typeof record.expires_at === "string" || record.expires_at === null) {
+      summary.expires_at = record.expires_at;
+    }
+    if (typeof record.purpose === "string") summary.purpose = record.purpose;
+    if (typeof record.registrar === "string") summary.registrar = record.registrar;
+    if (typeof record.notes === "string") summary.notes = record.notes;
+  }
   return summary;
 }
 
@@ -92,6 +129,12 @@ export function getInventoryRecord(publicRoot, _privateRoot, category, id) {
   const safeId = String(id ?? "").trim();
   if (!safeId || safeId.includes("..") || safeId.includes("/") || safeId.includes("\\")) {
     return { error: "invalid id" };
+  }
+
+  if (category === "domains") {
+    const merged = resolveDomainById(publicRoot, safeId);
+    if (!merged) return { error: "not found" };
+    return { category, id: safeId, record: merged, source: "merged" };
   }
 
   const candidates = [

@@ -265,7 +265,7 @@ export function createVaultAccess(deps) {
         if (isLocalOnlyVaultKey(key)) {
           await setLocalSecret(key, value);
         } else {
-          const uris = resolveUrisForSecretKey(key, deps.env);
+          const uris = await resolveUrisForSecretKey(key, deps.env);
           bwSetPassword(vwCli, session, key, value, uris ? { uris } : {});
         }
       }
@@ -403,7 +403,7 @@ export function createVaultAccess(deps) {
           }
         }
         if (value) {
-          const uris = resolveUrisForSecretKey(key, deps.env);
+          const uris = await resolveUrisForSecretKey(key, deps.env);
           bwSetPassword(vwCli, session, key, value, uris ? { uris } : {});
           vaultwardenSecretCache.set(key, value);
         }
@@ -510,9 +510,9 @@ export function createVaultAccess(deps) {
           await setLocalSecret(k, val);
         },
       );
-      const uris = resolveUrisForSecretKey(key, deps.env);
-      bwSetPassword(vwCli, session, key, value, uris ? { uris } : {});
-      vaultwardenSecretCache.set(key, value);
+          const uris = await resolveUrisForSecretKey(key, deps.env);
+          bwSetPassword(vwCli, session, key, value, uris ? { uris } : {});
+          vaultwardenSecretCache.set(key, value);
       await setLocalSecret(key, value);
     } catch (e) {
       if (isAutoSecretBackend(deps.env)) {

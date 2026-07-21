@@ -171,9 +171,11 @@ describe("meshcentral-ops commands", () => {
     expect(hardwareCommand("windows")).toContain("Win32_ComputerSystem");
     expect(hardwareCommand("windows")).toContain("nvidia-smi");
     expect(hardwareCommand("windows")).toContain("Win32_VideoController");
+    expect(hardwareCommand("windows")).toContain("OA3xOriginalProductKey");
     expect(hardwareCommand("linux")).toContain("python3");
     expect(hardwareCommand("linux")).toContain("nvidia-smi");
     expect(hardwareCommand("linux")).toContain("lspci");
+    expect(hardwareCommand("linux")).toContain("oem_firmware_msdm");
     expect(updatesCommand("linux")).toContain("apt-get dist-upgrade");
     expect(installCommand("windows", "Git.Git")).toContain("winget install");
     expect(installCommand("linux", "curl")).toContain("apt-get install");
@@ -207,6 +209,46 @@ describe("meshcentral-ops commands", () => {
       device: "C:",
       size_gb: 512,
     });
+  });
+
+  it("parses OEM Windows key presence without storing a full key", () => {
+    const parsed = parseHardwareOutput(
+      JSON.stringify({
+        manufacturer: "Dell",
+        model: "XPS",
+        cpu_model: "Intel",
+        logical_cores: 8,
+        memory_gb: 16,
+        disks: [],
+        gpus: [],
+        oem_oa3_key_present: true,
+        oem_partial_product_key: "XXXXX",
+        oem_channel: "OEM:DM",
+      }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.hardware.find((h) => h.type === "oem_windows")).toMatchObject({
+      present: true,
+      oa3_key_present: true,
+      partial_product_key: "XXXXX",
+      channel: "OEM:DM",
+    });
+  });
+
+  it("preserves node_id when re-normalizing an already-normalized live device", () => {
+    const once = normalizeLiveDevice({
+      _id: "node//abc",
+      name: "lan-1",
+      host: "10.1.1.11",
+      conn: 1,
+      pwr: 1,
+      osdesc: "Windows 11",
+    });
+    expect(once.node_id).toBe("node//abc");
+    const twice = normalizeLiveDevice(once);
+    expect(twice.node_id).toBe("node//abc");
+    expect(twice.online).toBe(true);
   });
 });
 

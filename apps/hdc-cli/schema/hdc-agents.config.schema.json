@@ -29,6 +29,11 @@
                 "type": "object",
                 "additionalProperties": true,
                 "properties": {
+                  "auth_mode": {
+                    "type": "string",
+                    "enum": ["both", "htpasswd", "oidc"],
+                    "description": "hdc-web login: both (default) enables htpasswd + OIDC when configured; oidc is SSO-only"
+                  },
                   "admin_username": { "type": "string" },
                   "admin_password_vault_key": { "type": "string" }
                 }
@@ -98,7 +103,13 @@
                     "properties": {
                       "email": { "type": "object", "additionalProperties": true },
                       "discord": { "type": "object", "additionalProperties": true },
-                      "slack": { "type": "object", "additionalProperties": true },
+                      "slack-incoming-webhook": { "type": "object", "additionalProperties": true },
+                      "slack-hdc-app": { "type": "object", "additionalProperties": true },
+                      "slack": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Deprecated alias for slack-incoming-webhook"
+                      },
                       "teams": { "type": "object", "additionalProperties": true },
                       "telegram": { "type": "object", "additionalProperties": true }
                     }
@@ -108,25 +119,73 @@
                     "additionalProperties": {
                       "type": "array",
                       "items": {
-                        "enum": ["discord", "email", "slack", "teams", "telegram"]
+                        "enum": [
+                          "discord",
+                          "email",
+                          "slack-incoming-webhook",
+                          "slack-hdc-app",
+                          "slack",
+                          "teams",
+                          "telegram"
+                        ]
                       }
                     },
                     "properties": {
                       "needs_decision": {
                         "type": "array",
-                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                        "items": {
+                          "enum": [
+                            "discord",
+                            "email",
+                            "slack-incoming-webhook",
+                            "slack-hdc-app",
+                            "slack",
+                            "teams",
+                            "telegram"
+                          ]
+                        }
                       },
                       "mailbox_received": {
                         "type": "array",
-                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                        "items": {
+                          "enum": [
+                            "discord",
+                            "email",
+                            "slack-incoming-webhook",
+                            "slack-hdc-app",
+                            "slack",
+                            "teams",
+                            "telegram"
+                          ]
+                        }
                       },
                       "mailbox_spoof": {
                         "type": "array",
-                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                        "items": {
+                          "enum": [
+                            "discord",
+                            "email",
+                            "slack-incoming-webhook",
+                            "slack-hdc-app",
+                            "slack",
+                            "teams",
+                            "telegram"
+                          ]
+                        }
                       },
                       "mailbox_task_update": {
                         "type": "array",
-                        "items": { "enum": ["discord", "email", "slack", "teams", "telegram"] }
+                        "items": {
+                          "enum": [
+                            "discord",
+                            "email",
+                            "slack-incoming-webhook",
+                            "slack-hdc-app",
+                            "slack",
+                            "teams",
+                            "telegram"
+                          ]
+                        }
                       }
                     }
                   }

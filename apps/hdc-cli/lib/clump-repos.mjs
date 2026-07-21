@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { hdcPrivateRoot, resolveRepoFile } from "./private-repo.mjs";
+import { formatRepoJson, hdcPrivateRoot, resolveRepoFile } from "./private-repo.mjs";
 import { discoverManifests, manifestId } from "../manifests.mjs";
 
 const CONFIG_REL = ".hdc/clumps-repos.json";
@@ -26,6 +26,15 @@ const CONFIG_REL = ".hdc/clumps-repos.json";
  */
 
 /**
+ * @typedef {object} SyncClumpRepoResult
+ * @property {boolean} ok
+ * @property {string} path
+ * @property {string} action
+ * @property {string} ref
+ * @property {string|null} resolved
+ */
+
+/**
  * @param {string} p
  */
 function expandHome(p) {
@@ -33,6 +42,19 @@ function expandHome(p) {
   if (s.startsWith("~/")) return join(homedir(), s.slice(2));
   if (s === "~") return homedir();
   return s;
+}
+
+/**
+ * @param {string[]} args
+ * @param {{ stdio?: "inherit"|"pipe"; encoding?: BufferEncoding }} [opts]
+ */
+export function defaultGitRun(args, opts = {}) {
+  const stdio = opts.stdio ?? "inherit";
+  return spawnSync("git", args, {
+    stdio,
+    shell: false,
+    encoding: opts.encoding ?? (stdio === "pipe" ? "utf8" : undefined),
+  });
 }
 
 /**
@@ -99,38 +121,181 @@ export function loadClumpsReposConfig(publicRoot, env = process.env) {
 }
 
 /**
+ * True when `ref` names a remote-tracking branch under origin after fetch.
+ * @param {string} dest
+ * @param {string} ref
+ * @param {(args: string[], opts?: { stdio?: "inherit"|"pipe"; encoding?: BufferEncoding }) => import("node:child_process").SpawnSyncReturns<string|Buffer>} git
+ */
+export function isRemoteBranchRef(dest, ref, git = defaultGitRun) {
+  const r = git(["-C", dest, "rev-parse", "--verify", "--quiet", `refs/remotes/origin/${ref}`], {
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+  return (r.status ?? 1) === 0;
+}
+
+/**
+ * @param {string} dest
+ * @param {(args: string[], opts?: { stdio?: "inherit"|"pipe"; encoding?: BufferEncoding }) => import("node:child_process").SpawnSyncReturns<string|Buffer>} [git]
+ * @returns {string|null}
+ */
+export function readClumpRepoResolved(dest, git = defaultGitRun) {
+  if (!existsSync(dest)) return null;
+  const r = git(["-C", dest, "rev-parse", "HEAD"], { stdio: "pipe", encoding: "utf8" });
+  if ((r.status ?? 1) !== 0) return null;
+  const sha = String(r.stdout || "").trim();
+  return sha || null;
+}
+
+/**
+ * Checkout `ref` (branch, tag, or commit) after fetch. Pulls ff-only only for branches.
+ * @param {string} dest
+ * @param {string} ref
+ * @param {(args: string[], opts?: { stdio?: "inherit"|"pipe"; encoding?: BufferEncoding }) => import("node:child_process").SpawnSyncReturns<string|Buffer>} git
+ * @returns {{ ok: boolean; action: string }}
+ */
+export function checkoutClumpRepoRef(dest, ref, git = defaultGitRun) {
+  let r = git(["-C", dest, "fetch", "origin", "--tags"], { stdio: "inherit" });
+  if ((r.status ?? 1) !== 0) return { ok: false, action: "fetch-failed" };
+
+  // Fetch the named ref when possible (branches/tags). SHAs may fail; ignore and rely on prior fetch.
+  r = git(["-C", dest, "fetch", "origin", ref], { stdio: "pipe", encoding: "utf8" });
+  if ((r.status ?? 1) !== 0) {
+    r = git(["-C", dest, "fetch", "origin"], { stdio: "inherit" });
+    if ((r.status ?? 1) !== 0) return { ok: false, action: "fetch-failed" };
+  }
+
+  if (isRemoteBranchRef(dest, ref, git)) {
+    r = git(["-C", dest, "checkout", "-B", ref, `origin/${ref}`], { stdio: "inherit" });
+    if ((r.status ?? 1) !== 0) return { ok: false, action: "checkout-failed" };
+    return { ok: true, action: "pulled" };
+  }
+
+  r = git(["-C", dest, "checkout", "--detach", ref], { stdio: "inherit" });
+  if ((r.status ?? 1) !== 0) {
+    // Tags/branches checked out locally without --detach
+    r = git(["-C", dest, "checkout", ref], { stdio: "inherit" });
+    if ((r.status ?? 1) !== 0) return { ok: false, action: "checkout-failed" };
+  }
+  return { ok: true, action: "checked-out" };
+}
+
+/**
  * @param {ClumpsReposConfig} config
  * @param {ClumpRepoEntry} repo
- * @param {{ log?: (line: string) => void; dryRun?: boolean }} [opts]
+ * @param {{
+ *   log?: (line: string) => void;
+ *   dryRun?: boolean;
+ *   git?: typeof defaultGitRun;
+ * }} [opts]
+ * @returns {SyncClumpRepoResult}
  */
 export function syncClumpRepo(config, repo, opts = {}) {
   const log = opts.log ?? (() => {});
+  const git = opts.git ?? defaultGitRun;
   const cacheDir = config.cache_dir || expandHome("~/.hdc/clump-repos");
   const dest = join(cacheDir, repo.id);
+  const ref = String(repo.ref || "main").trim() || "main";
+
   if (opts.dryRun) {
-    log(`would sync ${repo.id} → ${dest}`);
-    return { ok: true, path: dest, action: "dry-run" };
+    log(`would sync ${repo.id} @ ${ref} → ${dest}`);
+    return { ok: true, path: dest, action: "dry-run", ref, resolved: null };
   }
+
+  let cloned = false;
   if (!existsSync(dest)) {
     log(`cloning ${repo.url} → ${dest}`);
-    const r = spawnSync("git", ["clone", "--branch", repo.ref, repo.url, dest], {
-      stdio: "inherit",
-      shell: false,
-    });
-    if ((r.status ?? 1) !== 0) return { ok: false, path: dest, action: "clone-failed" };
-    return { ok: true, path: dest, action: "cloned" };
+    const r = git(["clone", repo.url, dest], { stdio: "inherit" });
+    if ((r.status ?? 1) !== 0) {
+      return { ok: false, path: dest, action: "clone-failed", ref, resolved: null };
+    }
+    cloned = true;
   }
-  log(`pulling ${repo.id} @ ${repo.ref}`);
-  let r = spawnSync("git", ["-C", dest, "fetch", "origin", repo.ref], { stdio: "inherit", shell: false });
-  if ((r.status ?? 1) !== 0) return { ok: false, path: dest, action: "fetch-failed" };
-  r = spawnSync("git", ["-C", dest, "checkout", repo.ref], { stdio: "inherit", shell: false });
-  if ((r.status ?? 1) !== 0) return { ok: false, path: dest, action: "checkout-failed" };
-  r = spawnSync("git", ["-C", dest, "pull", "--ff-only", "origin", repo.ref], {
-    stdio: "inherit",
-    shell: false,
-  });
-  if ((r.status ?? 1) !== 0) return { ok: false, path: dest, action: "pull-failed" };
-  return { ok: true, path: dest, action: "pulled" };
+
+  log(`syncing ${repo.id} @ ${ref}`);
+  const checked = checkoutClumpRepoRef(dest, ref, git);
+  if (!checked.ok) {
+    return { ok: false, path: dest, action: checked.action, ref, resolved: null };
+  }
+
+  const resolved = readClumpRepoResolved(dest, git);
+  const action = cloned ? "cloned" : checked.action;
+  return { ok: true, path: dest, action, ref, resolved };
+}
+
+/**
+ * Write lasting `ref` for a repo into hdc-private `.hdc/clumps-repos.json`.
+ * @param {string} publicRoot
+ * @param {string} repoId
+ * @param {string} ref
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ path: string; repoId: string; ref: string }}
+ */
+export function persistClumpRepoRef(publicRoot, repoId, ref, env = process.env) {
+  const id = String(repoId || "").trim();
+  const nextRef = String(ref || "").trim();
+  if (!id) throw new Error("persistClumpRepoRef: repo id is required");
+  if (!nextRef) throw new Error("persistClumpRepoRef: ref is required");
+
+  const privateRoot = hdcPrivateRoot(publicRoot, env);
+  if (!privateRoot) {
+    throw new Error(
+      "hdc-private not configured (set HDC_PRIVATE_ROOT or sibling hdc-private); cannot persist clump ref",
+    );
+  }
+
+  const privPath = join(privateRoot, CONFIG_REL);
+  const loaded = loadClumpsReposConfig(publicRoot, env);
+  const known = loaded.repos.find((r) => r.id === id);
+  if (!known) {
+    throw new Error(`clumps: unknown repo ${JSON.stringify(id)}`);
+  }
+
+  /** @type {Record<string, unknown>} */
+  let data;
+  if (existsSync(privPath)) {
+    data = /** @type {Record<string, unknown>} */ (JSON.parse(readFileSync(privPath, "utf8")));
+  } else {
+    data = {
+      version: 1,
+      cache_dir: "~/.hdc/clump-repos",
+      repos: loaded.repos.map((r) => ({
+        id: r.id,
+        url: r.url,
+        ref: r.ref,
+        mode: r.mode,
+      })),
+      precedence: loaded.precedence ?? loaded.repos.map((r) => r.id),
+      overrides: loaded.overrides ?? {},
+    };
+  }
+
+  /** @type {Record<string, unknown>[]} */
+  const repos = Array.isArray(data.repos)
+    ? data.repos.filter((row) => row && typeof row === "object" && !Array.isArray(row)).map((row) => ({
+        .../** @type {Record<string, unknown>} */ (row),
+      }))
+    : [];
+
+  let found = false;
+  for (const row of repos) {
+    if (String(row.id || "").trim() === id) {
+      row.ref = nextRef;
+      if (!row.url) row.url = known.url;
+      if (!row.mode) row.mode = known.mode;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    repos.push({ id, url: known.url, ref: nextRef, mode: known.mode });
+  }
+  data.repos = repos;
+  if (data.version == null) data.version = 1;
+
+  mkdirSync(dirname(privPath), { recursive: true });
+  writeFileSync(privPath, formatRepoJson(data), "utf8");
+  return { path: privPath, repoId: id, ref: nextRef };
 }
 
 /**
@@ -193,3 +358,5 @@ export function discoverAllManifests(config, env = process.env) {
 export function defaultClumpsCacheDir(publicRoot, env = process.env) {
   return loadClumpsReposConfig(publicRoot, env).cache_dir;
 }
+
+export { CONFIG_REL as CLUMPS_REPOS_CONFIG_REL };

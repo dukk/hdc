@@ -4,10 +4,12 @@ export const MANUAL_SYSTEMS = "operations/inventory/systems";
 export const MANUAL_SERVICES = "operations/inventory/services";
 export const MANUAL_NETWORKS = "operations/inventory/networks";
 export const MANUAL_TARGETS = "operations/inventory/targets";
+export const MANUAL_DOMAINS = "operations/inventory/domains";
 
 export const AUTOMATED_SYSTEMS = "operations/automated/systems";
 export const AUTOMATED_NETWORKS = "operations/automated/networks";
 export const AUTOMATED_POLICIES = "operations/automated/policies";
+export const AUTOMATED_DOMAINS = "operations/automated/domains";
 
 /** @deprecated Use MANUAL_SYSTEMS */
 export const LEGACY_OPERATIONS_MANUAL_SYSTEMS = "operations/manual/systems";
@@ -35,7 +37,7 @@ export const LEGACY_MANUAL_TARGETS = "inventory/manual/targets";
 
 /**
  * Resolve a manual inventory category path with legacy fallback.
- * @param {string} category systems | services | networks | targets
+ * @param {string} category systems | services | networks | targets | domains
  */
 export function manualCategoryRel(category) {
   switch (category) {
@@ -47,6 +49,8 @@ export function manualCategoryRel(category) {
       return MANUAL_NETWORKS;
     case "targets":
       return MANUAL_TARGETS;
+    case "domains":
+      return MANUAL_DOMAINS;
     default:
       throw new Error(`unknown inventory category: ${category}`);
   }
@@ -54,7 +58,7 @@ export function manualCategoryRel(category) {
 
 /**
  * Legacy category dirs to scan when canonical path is missing.
- * @param {"systems"|"services"|"networks"|"targets"} category
+ * @param {"systems"|"services"|"networks"|"targets"|"domains"} category
  * @returns {string[]}
  */
 export function manualCategoryLegacyRels(category) {
@@ -67,13 +71,15 @@ export function manualCategoryLegacyRels(category) {
       return [LEGACY_OPERATIONS_MANUAL_NETWORKS, LEGACY_MANUAL_NETWORKS];
     case "targets":
       return [LEGACY_OPERATIONS_MANUAL_TARGETS, LEGACY_MANUAL_TARGETS];
+    case "domains":
+      return [];
     default:
       throw new Error(`unknown inventory category: ${category}`);
   }
 }
 
 /**
- * @param {"systems"|"services"|"networks"|"targets"} category
+ * @param {"systems"|"services"|"networks"|"targets"|"domains"} category
  * @param {string} id filename stem
  */
 export function manualSidecarRel(category, id) {
@@ -82,7 +88,7 @@ export function manualSidecarRel(category, id) {
 
 /**
  * Older repo-relative paths for a manual sidecar (canonical path excluded).
- * @param {"systems"|"services"|"networks"|"targets"} category
+ * @param {"systems"|"services"|"networks"|"targets"|"domains"} category
  * @param {string} id
  * @returns {string[]}
  */
@@ -95,4 +101,11 @@ export function manualSidecarLegacyRels(category, id) {
  */
 export function automatedSystemRel(systemId) {
   return `${AUTOMATED_SYSTEMS}/${systemId}.json`;
+}
+
+/**
+ * @param {string} domainId apex FQDN
+ */
+export function automatedDomainRel(domainId) {
+  return `${AUTOMATED_DOMAINS}/${domainId}.json`;
 }

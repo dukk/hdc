@@ -177,6 +177,7 @@ flowchart TB
   subgraph fleet["hdc-agents-a — one container per agent"]
     MGR["hdc-manager<br/>orchestrate · 9200"]
     MON["hdc-monitor<br/>9201"]
+    MAINT["hdc-maintainer<br/>9207"]
     SREOPS["hdc-sre-ops<br/>9202"]
     SECX["hdc-security-expert<br/>9203"]
     SECA["hdc-security-architect<br/>9204"]

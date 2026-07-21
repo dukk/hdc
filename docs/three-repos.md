@@ -71,7 +71,7 @@ Package code and operator data use **independent** resolution (see [`apps/hdc-cl
 2. **Clump repos** — entries in `.hdc/clumps-repos.json` (merged from hdc and hdc-private when present), cloned under `~/.hdc/clump-repos/` after `hdc clumps init` / `hdc clumps sync`.
 3. **Legacy** — in-tree `hdc/clumps/` if it still exists (older layouts).
 
-Manifest discovery respects `precedence` and per-package `overrides` in `.hdc/clumps-repos.json`. Environment overrides: `HDC_CLUMPS_REPO_<ID>_URL` and `HDC_CLUMPS_REPO_<ID>_REF`.
+Manifest discovery respects `precedence` and per-package `overrides` in `.hdc/clumps-repos.json`. Environment overrides: `HDC_CLUMPS_REPO_<ID>_URL` and `HDC_CLUMPS_REPO_<ID>_REF`. Lasting pins belong in **hdc-private** `.hdc/clumps-repos.json` (`ref` = branch, tag, or commit). Sync with `hdc clumps sync --ref <x>` (persists by default; `--no-persist` for a one-shot) or manager MCP `hdc_clumps_sync` with the same semantics.
 
 ### Operator data (configs, inventory)
 
@@ -179,6 +179,10 @@ node apps/hdc-cli/scripts/bootstrap-hdc-private-configs.mjs
 | `operations/inventory/**` | `_example.json` only | No | Yes |
 | `operations/tasks/`, `ip-allocations.md`, reports | No | No | Yes |
 | Deploy/maintain reports under `clumps/**/reports/` | No (gitignored) | No (gitignored) | Yes |
+| Human docs (`docs/`) | Yes | Optional package READMEs | Ops notes under `operations/` |
+| Agent OKF (`ai-docs/`) | No | No | Yes (platform + package + site) |
+
+**docs vs ai-docs:** [`docs/`](./) is human-oriented prose. Agent [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (markdown + YAML frontmatter) lives only under **hdc-private** [`ai-docs/`](../../hdc-private/ai-docs/) — start at `ai-docs/index.md` there. Do not put `ai-docs/` in public hdc or hdc-clumps trees.
 
 Full checklists:
 

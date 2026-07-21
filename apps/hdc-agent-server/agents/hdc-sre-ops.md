@@ -33,9 +33,11 @@ You implement and maintain the **live lab** using hdc-private operator state. Op
 
 - Mark task `done` in `operations/tasks/<id>.md` and update `task-report.md`.
 - Note outcome in the related digest or operation report path.
+- If the run produced a durable site lesson (DR, IP procedure, guest quirk), update **`hdc-private/ai-docs/`** via skill **`hdc-okf`**.
 
 ## Rules
 
 - Never commit `.env` or secret values.
 - Prefer tracked hdc-clumps scripts over one-off shell.
 - Never create `tmp-*` at hdc / hdc-private repo root (see automation rules).
+- Own OKF under `hdc-private/ai-docs/` (`hdc-okf`); never write the hdc platform repo.

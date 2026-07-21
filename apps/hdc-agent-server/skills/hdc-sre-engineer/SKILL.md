@@ -24,6 +24,7 @@ When the manager assigns a task to scaffold or modify a clump for a capability t
 - [ ] Schema pointer under hdc (`apps/hdc-cli/schema/<id>.config.schema.json`) — escalate to operator if missing (hdc repo is human-owned)
 - [ ] stderr progress / stdout JSON on query|deploy per logging rules
 - [ ] Guest baseline / Proxmox patterns match peer packages when applicable
+- [ ] Durable package gotchas/playbooks promoted to `hdc-private/ai-docs/` via skill **`hdc-okf`**
 
 ## Research request
 
@@ -38,3 +39,4 @@ Writes `operations/research/topics/<id>.md` with `status: queued` and `suggested
 - Live `deploy` / `maintain --prune` / hdc-private live config edits
 - `hdc_clumps_sync` on the MCP host (manager only)
 - Invent IPs or hostnames
+- Edit the hdc platform repo (escalate CLI/schema gaps with `needs_decision`)

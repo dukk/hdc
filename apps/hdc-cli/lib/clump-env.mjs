@@ -194,22 +194,26 @@ export function resolveEnvIncludes(manifest, publicRoot, env = process.env) {
  * @param {string} publicRoot
  * @param {string} clumpId
  * @param {{ clumpsDir: (root: string) => string; join: typeof join }} deps
+ * @param {NodeJS.ProcessEnv} [env]
  * @returns {string | null} Repo-relative path to package .env
  */
-export function packageDotenvRel(publicRoot, clumpId, deps) {
+export function packageDotenvRel(publicRoot, clumpId, deps, env = process.env) {
   const packagesRoot = deps.clumpsDir(publicRoot);
+  const privateRoot = privateRootFor(publicRoot, env);
   for (const tier of ["infrastructure", "services", "clients"]) {
     const rel = join("clumps", tier, clumpId, PACKAGE_DOTENV_NAME).replace(/\\/g, "/");
-    const abs = deps.join(packagesRoot, "..", "clumps", tier, clumpId, PACKAGE_DOTENV_NAME);
-    const absFromRoot = deps.join(publicRoot, "clumps", tier, clumpId, PACKAGE_DOTENV_NAME);
-    if (existsSync(absFromRoot)) return rel;
-    if (existsSync(abs)) return rel;
-    const privateRoot = privateRootFor(publicRoot, process.env);
-    if (privateRoot && existsSync(deps.join(privateRoot, rel))) return rel;
-  }
-  for (const tier of ["infrastructure", "services", "clients"]) {
-    const candidate = join("clumps", tier, clumpId, PACKAGE_DOTENV_NAME).replace(/\\/g, "/");
-    if (existsSync(deps.join(publicRoot, "clumps", tier, clumpId))) return candidate;
+    const absFromRoot = deps.join(publicRoot, "clumps", tier, clumpId);
+    const absFromClumps = deps.join(packagesRoot, tier, clumpId);
+    const absFromPrivate = privateRoot
+      ? deps.join(privateRoot, "clumps", tier, clumpId)
+      : null;
+    if (
+      existsSync(absFromRoot) ||
+      existsSync(absFromClumps) ||
+      (absFromPrivate && existsSync(absFromPrivate))
+    ) {
+      return rel;
+    }
   }
   return join("clumps", "services", clumpId, PACKAGE_DOTENV_NAME).replace(/\\/g, "/");
 }
@@ -221,12 +225,17 @@ export function packageDotenvRel(publicRoot, clumpId, deps) {
  * @param {{ clumpsDir: (root: string) => string; join: typeof join; existsSync?: typeof existsSync }} deps
  */
 export function loadPackageDotenvById(publicRoot, clumpId, targetEnv, deps) {
+  const exists = deps.existsSync ?? existsSync;
   const packagesRoot = deps.clumpsDir(publicRoot);
-  const pubPackages = deps.join(packagesRoot, "..");
+  const privateRoot = privateRootFor(publicRoot, /** @type {NodeJS.ProcessEnv} */ (targetEnv));
   for (const tier of ["infrastructure", "services", "clients"]) {
     const rel = join("clumps", tier, clumpId, PACKAGE_DOTENV_NAME).replace(/\\/g, "/");
-    const dir = deps.join(publicRoot, "clumps", tier, clumpId);
-    if (existsSync(dir)) {
+    const dirPublic = deps.join(publicRoot, "clumps", tier, clumpId);
+    const dirClumps = deps.join(packagesRoot, tier, clumpId);
+    const dirPrivate = privateRoot
+      ? deps.join(privateRoot, "clumps", tier, clumpId)
+      : null;
+    if (exists(dirPublic) || exists(dirClumps) || (dirPrivate && exists(dirPrivate))) {
       loadMergedRepoDotenv(publicRoot, rel, targetEnv, deps);
       return rel;
     }
@@ -288,8 +297,15 @@ export function buildClumpRunEnv(deps, publicRoot, manifest, baseEnv) {
     loadPackageDotenvById(publicRoot, includeId, runEnv, deps);
   }
 
-  const pkgRel = relative(publicRoot, join(manifest.dir, PACKAGE_DOTENV_NAME)).replace(/\\/g, "/");
-  loadMergedRepoDotenv(publicRoot, pkgRel, runEnv, deps);
+  // Prefer id-based load so external HDC_CLUMPS_ROOT packages still pick up
+  // hdc-private clumps/<tier>/<id>/.env (relative(manifest.dir) breaks across roots).
+  if (!loadPackageDotenvById(publicRoot, targetId, runEnv, deps)) {
+    const pkgRel = relative(publicRoot, join(manifest.dir, PACKAGE_DOTENV_NAME)).replace(
+      /\\/g,
+      "/",
+    );
+    loadMergedRepoDotenv(publicRoot, pkgRel, runEnv, deps);
+  }
 
   applyRootEnvFallback(runEnv, deps, publicRoot, targetId);
 

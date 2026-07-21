@@ -32,10 +32,21 @@ Handoffs: package script failure → `hdc-sre-engineer` (commit/push git) → `h
 | `operations/research/topics/<id>.md` | Per-topic frontmatter + notes |
 | `operations/proposals/security/` | Security architect output |
 | `operations/proposals/network/` | Network architect output |
+| `ai-docs/` | Unified OKF knowledge (platform, package, site); start at `ai-docs/index.md` |
 
 **Guest-authoritative:** Task files live on the hdc-agents guest (or shared hdc-private mount). Use hdc-web-server (`:9120`) or A2A for approvals.
 
 Resolve hdc-private via sibling `../hdc-private` or `HDC_PRIVATE_ROOT`.
+
+## Agent knowledge (OKF)
+
+Google Open Knowledge Format bundles for progressive disclosure (not a substitute for inventory/config):
+
+| Bundle | Path | Writers |
+| --- | --- | --- |
+| All agent OKF | `hdc-private/ai-docs/` | Humans / IDE; `hdc-sre-ops` / `hdc-manager` / `hdc-sre-engineer` |
+
+Before inventing process knowledge, open `hdc-private/ai-docs/index.md` and follow links. After learning a durable fact, write or update a concept (YAML `type` required) and append `log.md` there. Human guides remain under `hdc/docs/`. Full workflow: skill **`hdc-okf`** (`apps/hdc-agent-server/skills/hdc-okf/SKILL.md`).
 
 ## Task file schema
 
@@ -65,11 +76,12 @@ Optional augmentor subtask fields: `parent_task_id`, `delegated_to`, `delegation
 
 ## Rules
 
-- **Never invent** hostnames, IPs, VLANs, or credentials — use `operations/ip-allocations.md`, inventory, and clump configs.
+- **Never invent** hostnames, IPs, VLANs, or credentials — use `operations/ip-allocations.md`, inventory, and clump configs (see also hdc-private `ai-docs/site/ip-planning.md`).
 - **Secrets:** env var names only; values in vault.
 - **Destructive work** requires task status `approved` per `delegation-policy.md`.
 - **No root scratch:** never write `tmp-*` at the hdc / hdc-private repo root.
 - **Hub-and-spoke:** specialists do not assign work to each other — **except** engineers may call `hdc_request_research` to queue a topic for hdc-research (manager still owns all other delegation).
+- **OKF recall:** prefer `hdc-private/ai-docs/` for durable process knowledge; promote new learnings there via skill **`hdc-okf`**.
 
 ## Digest filename pattern
 

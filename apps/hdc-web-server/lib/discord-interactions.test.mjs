@@ -70,8 +70,8 @@ describe("discord-interactions", () => {
     ).toBe(false);
   });
 
-  it("handleDiscordInteractionPayload answers PING", () => {
-    const result = handleDiscordInteractionPayload({
+  it("handleDiscordInteractionPayload answers PING", async () => {
+    const result = await handleDiscordInteractionPayload({
       body: { type: DISCORD_INTERACTION_PING },
       privateRoot: "/tmp/unused",
     });
@@ -79,7 +79,7 @@ describe("discord-interactions", () => {
     expect(result.body.type).toBe(DISCORD_CALLBACK_PONG);
   });
 
-  it("applyDiscordTaskDecision approves and denies tasks", () => {
+  it("applyDiscordTaskDecision approves and denies tasks", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-discord-tasks-"));
     temps.push(root);
     const tasksDir = join(root, "operations", "tasks");
@@ -102,11 +102,11 @@ Body
       "utf8",
     );
 
-    const approved = applyDiscordTaskDecision(root, { action: "approve", taskId: "task-a" });
+    const approved = await applyDiscordTaskDecision(root, { action: "approve", taskId: "task-a" });
     expect(approved.ok).toBe(true);
     expect(approved.status).toBe("approved");
 
-    const again = applyDiscordTaskDecision(root, { action: "approve", taskId: "task-a" });
+    const again = await applyDiscordTaskDecision(root, { action: "approve", taskId: "task-a" });
     expect(again.already).toBe(true);
 
     writeFileSync(
@@ -126,12 +126,12 @@ Body
 `,
       "utf8",
     );
-    const denied = applyDiscordTaskDecision(root, { action: "deny", taskId: "task-b" });
+    const denied = await applyDiscordTaskDecision(root, { action: "deny", taskId: "task-b" });
     expect(denied.ok).toBe(true);
     expect(denied.status).toBe("blocked");
   });
 
-  it("handleDiscordInteractionPayload updates message and clears components", () => {
+  it("handleDiscordInteractionPayload updates message and clears components", async () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-discord-tasks-"));
     temps.push(root);
     const tasksDir = join(root, "operations", "tasks");
@@ -154,7 +154,7 @@ Body
       "utf8",
     );
 
-    const result = handleDiscordInteractionPayload({
+    const result = await handleDiscordInteractionPayload({
       privateRoot: root,
       body: {
         type: DISCORD_INTERACTION_MESSAGE_COMPONENT,

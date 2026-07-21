@@ -70,6 +70,10 @@ When no queued topics: candidates table, fit vs fleet, resources, integration pa
 
 For `outcome: adopt` or `manual-only`, create `operations/tasks/<id>.md` with `role: hdc-manager`, `priority: low`, evidence pointing at the report. Do **not** auto-create sre-engineer scaffold tasks — the manager routes unknown-capability / adopt work.
 
+## OKF promotion
+
+Durable site lessons and package gotchas → `hdc-private/ai-docs/` via skill **`hdc-okf`** (package notes: ask engineer to promote, or promote yourself when clear). Never edit the hdc platform repo.
+
 ## Engineer-queued topics
 
 Topics may arrive with `suggested_by: hdc-sre-engineer` (via `hdc_request_research`). Treat them like any other `queued` topic; cite their notes/URL in the report.

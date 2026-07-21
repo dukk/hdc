@@ -23,7 +23,7 @@ import {
   DEFAULT_NEVER_BLOCK_CIDRS,
   isInternalIp,
   isValidIpv4,
-} from "hdc/clump/infrastructure/unifi-network/lib/unifi-ip-block.mjs";
+} from "./ip-guard.mjs";
 
 export const MAILBOX_STATE_REL = "operations/.mailbox-state.json";
 

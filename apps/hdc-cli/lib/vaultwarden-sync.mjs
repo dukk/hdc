@@ -98,7 +98,7 @@ export async function pushLocalSecretsToVaultwarden(access, vwCli, options = {})
     }
 
     try {
-      const uris = resolveUrisForSecretKey(key, vwCli.env);
+      const uris = await resolveUrisForSecretKey(key, vwCli.env);
       bwSetPassword(vwCli, session, key, value, uris ? { uris } : {});
       if (exists) {
         result.updated += 1;

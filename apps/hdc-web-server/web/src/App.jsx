@@ -26,10 +26,11 @@ const TABS = [
   { id: "schedules", label: "Schedules" },
   { id: "run", label: "Run package" },
   { id: "jobs", label: "Jobs" },
+  { id: "domains", label: "Domains" },
   { id: "inventory", label: "Inventory" },
 ];
 
-const INV_CATS = ["systems", "services", "networks", "targets"];
+const INV_CATS = ["systems", "services", "networks", "targets", "domains"];
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -166,6 +167,7 @@ export default function App() {
         {tab === "schedules" && <Schedules onRan={() => setTab("jobs")} />}
         {tab === "run" && <RunPackage onStarted={() => setTab("jobs")} />}
         {tab === "jobs" && <Jobs />}
+        {tab === "domains" && <Domains />}
         {tab === "inventory" && <Inventory />}
       </main>
     </>
@@ -623,6 +625,83 @@ function Jobs() {
         })}
       </div>
       {selected ? <LogView>{log}</LogView> : null}
+    </section>
+  );
+}
+
+function Domains() {
+  const [items, setItems] = useState([]);
+  const [q, setQ] = useState("");
+  const [detail, setDetail] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+    api("/inventory/domains")
+      .then((data) => setItems(data.items ?? []))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    setDetail("");
+  }, []);
+
+  const filtered = items.filter((item) => {
+    const text = JSON.stringify(item).toLowerCase();
+    return !q || text.includes(q.toLowerCase());
+  });
+
+  async function showDetail(id) {
+    const data = await api(`/inventory/domains/${encodeURIComponent(id)}`);
+    setDetail(JSON.stringify(data.record, null, 2));
+  }
+
+  function fmtExpires(v) {
+    if (!v) return "—";
+    const s = String(v);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
+
+  function fmtRenewal(v) {
+    if (typeof v !== "number") return "—";
+    return `$${v.toFixed(2)}`;
+  }
+
+  const columns = [
+    { key: "id", header: "Domain", render: (item) => <code>{item.id}</code> },
+    { key: "dns", header: "DNS", render: (item) => item.dns || "—" },
+    {
+      key: "website",
+      header: "Website",
+      render: (item) => (item.website === true ? "yes" : item.website === false ? "no" : "—"),
+    },
+    { key: "mail", header: "Mail", render: (item) => item.mail || "—" },
+    { key: "renewal", header: "Renewal", render: (item) => fmtRenewal(item.renewal_usd) },
+    { key: "expires", header: "Expires", render: (item) => fmtExpires(item.expires_at) },
+    {
+      key: "purpose",
+      header: "Purpose",
+      render: (item) => {
+        const p = item.purpose || "";
+        const note = item.notes ? ` (${item.notes})` : "";
+        const full = p + note;
+        return full.length > 72 ? `${full.slice(0, 69)}…` : full || "—";
+      },
+    },
+  ];
+
+  return (
+    <section>
+      <h2>Domains</h2>
+      <p className="muted">
+        Merged portfolio from <code>operations/inventory/domains</code> and automated registrar overlay.
+      </p>
+      {error ? <Message tone="danger">{error}</Message> : null}
+      <SearchInput value={q} onChange={setQ} placeholder="Filter domains…" />
+      <Table
+        columns={columns}
+        rows={filtered}
+        rowKey={(item) => item.id}
+        onRowClick={(item) => showDetail(item.id)}
+      />
+      {detail ? <LogView>{detail}</LogView> : null}
     </section>
   );
 }

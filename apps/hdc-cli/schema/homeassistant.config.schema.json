@@ -3,6 +3,43 @@
   "title": "homeassistant package config",
   "type": "object",
   "required": ["deployments"],
+  "definitions": {
+    "hdcInclude": {
+      "type": "object",
+      "required": ["$hdc.include"],
+      "additionalProperties": false,
+      "properties": {
+        "$hdc.include": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "object",
+              "required": ["file"],
+              "properties": { "file": { "type": "string", "minLength": 1 } }
+            }
+          ]
+        }
+      }
+    },
+    "integrationEntry": {
+      "type": "object",
+      "required": ["id", "domain"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "entries": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "yamlConfigEntry": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "entity_id": { "type": "string" },
+        "config": {}
+      }
+    }
+  },
   "properties": {
     "schema_version": { "type": "integer", "minimum": 1 },
     "homeassistant": {
@@ -14,7 +51,64 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "description": "Optional override for nginx-waf LAN IPs; default resolves vm-nginx-waf-a/b from inventory"
+        },
+        "api": {
+          "type": "object",
+          "properties": {
+            "token_vault_key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Vault key for HA long-lived access token (default HDC_HOMEASSISTANT_TOKEN)"
+            }
+          }
         }
+      }
+    },
+    "imported": {
+      "type": "object",
+      "description": "Metadata from query --import (read-only snapshot)",
+      "properties": {
+        "imported_at": { "type": "string" },
+        "ha_version": { "type": ["string", "null"] },
+        "core": { "type": "object" },
+        "source": { "type": "string" },
+        "base_url": { "type": "string" }
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/hdcInclude" },
+          { "$ref": "#/definitions/integrationEntry" }
+        ]
+      }
+    },
+    "automations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/hdcInclude" },
+          { "$ref": "#/definitions/yamlConfigEntry" }
+        ]
+      }
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/hdcInclude" },
+          { "$ref": "#/definitions/yamlConfigEntry" }
+        ]
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/hdcInclude" },
+          { "$ref": "#/definitions/yamlConfigEntry" }
+        ]
       }
     },
     "defaults": { "type": "object" },

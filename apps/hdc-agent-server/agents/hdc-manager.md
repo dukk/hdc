@@ -46,7 +46,8 @@ When the operator asks for a service or automation the fleet does not yet have:
 
 ## Escalation
 
-- **`needs_decision: true`** → the scripted dispatcher notifies via `notifications.routes.needs_decision` (default Discord). Configure per-event channels in `clumps/services/hdc-agents/config.json` — see [manager-notifications.md](../../../docs/manually-deployed/manager-notifications.md). Email decisions support mailbox reply subjects `APPROVE <task-id>` / `REJECT <task-id>`; Discord may include Approve/Deny buttons when the hdc-ops app is configured. Do not duplicate escalation with `hdc_notify_discord` when the dispatcher already notified.
+- **`needs_decision: true`** → the scripted dispatcher notifies via `notifications.routes.needs_decision` (default Discord). Configure per-event channels in `clumps/services/hdc-agents/config.json` — see [manager-notifications.md](../../../docs/manually-deployed/manager-notifications.md). Email decisions support mailbox reply subjects `APPROVE <task-id>` / `REJECT <task-id>`; Discord/Slack may include Approve/Deny buttons when the ops apps are configured. Do not duplicate escalation with `hdc_notify_discord` when the dispatcher already notified.
+- **Slack operator chat** — DMs, `@mentions`, and `/hdc` prompts arrive as interactive turns (`/internal/operator-prompt`) with an audit task under `operations/tasks/slack-*.md`. Treat them like mailbox free-form asks: answer status questions with tools, create/update tasks when asked, keep the final summary Slack-sized.
 - Never run deploy, teardown, `--prune`, or `inventory apply` unless the task status is **`approved`**.
 
 ## Approvals
@@ -59,7 +60,12 @@ You own pulling package code onto the fleet host via `hdc_clumps_sync` (not othe
 
 - Run `action: init` on first bootstrap; `action: sync` after hdc-clumps git updates.
 - Before delegating **hdc-sre-ops** on a task that depends on fresh package scripts, sync (or confirm the cache is current via `hdc_list`).
-- **hdc-sre-engineer** and **hdc-sre-ops** may open manager tasks suggesting sync or rollback (`ref` = branch, tag, or commit) with evidence; you decide timing and whether operator approval is required for risky rollbacks.
+- **Configured pin:** lasting `ref` lives in hdc-private `.hdc/clumps-repos.json`. Sync with **no** `ref` honors that pin.
+- **Get latest:** `hdc_clumps_sync({ action: "sync", ref: "main", persist: true })` (or another tracking branch).
+- **Pin to tag/branch/commit:** pass `ref` (persist defaults **true** and rewrites the private pin).
+- **Temporary try / rollback probe:** `ref` + `persist: false` (checkout only; pin unchanged).
+- Record the resolved SHA from the tool log/result in task evidence / `task-report.md`.
+- **hdc-sre-engineer** and **hdc-sre-ops** may open manager tasks suggesting sync or rollback with evidence; you decide timing and whether operator approval is required for risky rollbacks.
 - Never delegate clumps sync to other roles.
 
 ## Rules

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,6 +17,7 @@ import {
 } from "./dispatcher.mjs";
 import { createTask, TASK_ROLES } from "./operations-fs.mjs";
 import { buildAgentCard } from "./agent-card.mjs";
+import * as monitorOutageCheck from "./monitor-outage-check.mjs";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HDC_ROOT = join(PACKAGE_ROOT, "..", "..");
@@ -85,9 +86,10 @@ describe("agent card", () => {
 });
 
 describe("schedule", () => {
-  it("defaults manager 15m monitor 60m", () => {
+  it("defaults manager 15m monitor 60m maintainer daily", () => {
     expect(defaultScheduleMinutes("hdc-manager")).toBe(15);
     expect(defaultScheduleMinutes("hdc-monitor")).toBe(60);
+    expect(defaultScheduleMinutes("hdc-maintainer")).toBe(1440);
     expect(resolveScheduleMinutes("hdc-sre-ops", {})).toBe(0);
     expect(resolveScheduleMinutes("hdc-monitor", { HDC_AGENT_SCHEDULE_MINUTES: "off" })).toBe(0);
   });
@@ -98,6 +100,7 @@ describe("operations-fs roles", () => {
     expect(TASK_ROLES).not.toContain("hdc-engineer");
     expect(TASK_ROLES).toContain("hdc-sre-engineer");
     expect(TASK_ROLES).toContain("hdc-sre-ops");
+    expect(TASK_ROLES).toContain("hdc-maintainer");
   });
 });
 
@@ -291,5 +294,96 @@ describe("dispatcher", () => {
   it("sha256Hex is stable", () => {
     expect(sha256Hex("a")).toBe(sha256Hex("a"));
     expect(sha256Hex("a")).not.toBe(sha256Hex("b"));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("hdc-monitor idles when outage pre-check finds no failures", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-disp-monitor-"));
+    try {
+      mkdirSync(join(root, "operations"), { recursive: true });
+      vi.spyOn(monitorOutageCheck, "runMonitorOutageCheck").mockReturnValue({
+        has_outages: false,
+        fingerprint: null,
+        same_as_last_cycle: false,
+        should_invoke_llm: false,
+        summary_markdown: "No outages detected by scripted pre-check.",
+        outages: [],
+      });
+
+      const r = await runDispatcher({
+        role: "hdc-monitor",
+        hdcRoot: HDC_ROOT,
+        privateRoot: root,
+        nowMs: Date.now(),
+        log: () => {},
+      });
+
+      expect(r.invoked_llm).toBe(false);
+      expect(r.idle_reason).toBe("no outages");
+      expect(r.work).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("hdc-monitor invokes LLM when outage fingerprint is new", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-disp-monitor-"));
+    try {
+      mkdirSync(join(root, "operations"), { recursive: true });
+      vi.spyOn(monitorOutageCheck, "runMonitorOutageCheck").mockReturnValue({
+        has_outages: true,
+        fingerprint: "abc123",
+        same_as_last_cycle: false,
+        should_invoke_llm: true,
+        summary_markdown: "## Outage pre-check\n\n- **Immich** (`uptime-kuma`)",
+        outages: [{ source: "uptime-kuma", key: "uk:immich", label: "Immich", details: {} }],
+      });
+
+      const r = await runDispatcher({
+        role: "hdc-monitor",
+        hdcRoot: HDC_ROOT,
+        privateRoot: root,
+        nowMs: 1_700_000_000_000,
+        log: () => {},
+      });
+
+      expect(r.invoked_llm).toBe(true);
+      expect(r.work.length).toBe(1);
+      expect(r.work[0].prompt).toContain("Outage pre-check");
+      expect(r.work[0].prompt).toContain("monitor-outage");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("hdc-monitor idles when same outage fingerprint persists", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-disp-monitor-"));
+    try {
+      mkdirSync(join(root, "operations"), { recursive: true });
+      vi.spyOn(monitorOutageCheck, "runMonitorOutageCheck").mockReturnValue({
+        has_outages: true,
+        fingerprint: "same-fp",
+        same_as_last_cycle: true,
+        should_invoke_llm: false,
+        summary_markdown: "## Outage pre-check",
+        outages: [{ source: "proxmox", key: "pve:vm-bind-a:stopped", label: "vm-bind-a", details: {} }],
+      });
+
+      const r = await runDispatcher({
+        role: "hdc-monitor",
+        hdcRoot: HDC_ROOT,
+        privateRoot: root,
+        nowMs: Date.now(),
+        log: () => {},
+      });
+
+      expect(r.invoked_llm).toBe(false);
+      expect(r.idle_reason).toBe("same outage fingerprint");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

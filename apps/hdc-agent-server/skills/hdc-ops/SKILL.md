@@ -81,3 +81,7 @@ When creating or renaming `kind: "system"` inventory ids, follow **`.cursor/rule
 ## Scratch scripts
 
 **Never** create `tmp-*` (or similar one-offs) at the hdc or hdc-private **repo root**. Use `hdc run …` / clump flags first. If a helper is unavoidable: `tools/scripts/tmp-<purpose>.mjs` only (ephemeral, gitignored). Durable utilities: `tools/scripts/<name>.mjs`. Prefer extending clumps. See `.cursor/rules/hdc-automation.mdc`.
+
+## Site knowledge (OKF)
+
+After a durable site incident, DR drill, IP-planning lesson, or package gotcha, promote into `hdc-private/ai-docs/` via skill **`hdc-okf`**. Start recall at that bundle’s `ai-docs/index.md`.

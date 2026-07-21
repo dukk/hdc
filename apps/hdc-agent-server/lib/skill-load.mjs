@@ -10,6 +10,7 @@ const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const ROLE_SKILL_IDS = {
   "hdc-manager": ["hdc-agent-team", "hdc-manager"],
   "hdc-monitor": ["hdc-agent-team", "hdc-monitor"],
+  "hdc-maintainer": ["hdc-agent-team", "hdc-maintainer"],
   "hdc-sre-ops": ["hdc-agent-team", "hdc-ops"],
   "hdc-sre-engineer": ["hdc-agent-team", "hdc-sre-engineer"],
   "hdc-qa": ["hdc-agent-team", "hdc-qa"],

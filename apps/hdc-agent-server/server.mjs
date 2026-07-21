@@ -9,11 +9,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { handleA2aHttp } from "./lib/a2a-http.mjs";
+import { handleInternalHttp } from "./lib/internal-http.mjs";
 import { createTaskQueue } from "./lib/task-queue.mjs";
 import { runAgentTurn } from "./lib/agent-runner.mjs";
 import { loadRolePrompt } from "./lib/role-prompt.mjs";
 import { startScheduleLoop } from "./lib/schedule.mjs";
 import { runDispatcher } from "./lib/dispatcher.mjs";
+import { postA2aMessage } from "./lib/task-execution.mjs";
+import { triggerManagerDecisionScan } from "../hdc-web-server/lib/manager-dispatch-client.mjs";
 import { resolveAgentRole } from "../hdc-mcp-server/lib/policy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +39,17 @@ async function runTurn(message, meta) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const internalHandled = await handleInternalHttp({
+      req,
+      res,
+      role,
+      hdcRoot,
+      privateRoot,
+      queue,
+      runTurn,
+    });
+    if (internalHandled) return;
+
     const handled = await handleA2aHttp({
       req,
       res,
@@ -87,36 +101,20 @@ server.listen(port, "0.0.0.0", () => {
           continue;
         }
         process.stderr.write(`[hdc-agent-server] enqueue LLM ${item.id}\n`);
-        queue.enqueue(item.id, item.prompt, (msg) => runTurn(msg));
+        const queued = queue.enqueue(item.id, item.prompt, async (msg) => {
+          const turnResult = await runTurn(msg);
+          if (role === "hdc-monitor" || role === "hdc-maintainer") {
+            const scan = await triggerManagerDecisionScan();
+            if (scan.ok && Array.isArray(scan.newly_notified) && scan.newly_notified.length) {
+              process.stderr.write(
+                `[hdc-agent-server] manager notified: ${scan.newly_notified.join(", ")}\n`,
+              );
+            }
+          }
+          return turnResult;
+        });
+        void queued;
       }
     },
   });
 });
-
-/**
- * @param {string} baseUrl e.g. http://hdc-sre:9202
- * @param {string} text
- */
-async function postA2aMessage(baseUrl, text) {
-  const url = `${baseUrl.replace(/\/$/, "")}/a2a`;
-  const body = {
-    jsonrpc: "2.0",
-    id: `dispatch-${Date.now()}`,
-    method: "message/send",
-    params: {
-      message: {
-        role: "user",
-        parts: [{ kind: "text", text }],
-      },
-    },
-  };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`A2A peer ${url} → ${res.status}: ${t.slice(0, 300)}`);
-  }
-}

@@ -34,7 +34,7 @@ The server communicates over stdin/stdout (JSON-RPC). Do not log to stdout excep
 | `hdc_web_fetch` / `hdc_web_search` | Public web fetch/search, SSRF-hardened (**hdc-research**, **hdc-sre-engineer**, **hdc-qa**) |
 | `hdc_validate_clump` | Static clump consistency checks (**hdc-qa**, **hdc-sre-engineer**) |
 
-**`hdc_clumps_sync` parameters:** `action` (`init` or `sync`, default `sync`), optional `repo`, optional `ref` (branch/tag/commit rollback override), optional `dry_run`.
+**`hdc_clumps_sync` parameters:** `action` (`init` or `sync`, default `sync`), optional `repo`, optional `ref` (branch/tag/commit; use `main` for latest), optional `persist` (default `true` when `ref` is set — writes lasting pin to hdc-private `.hdc/clumps-repos.json`; `false` = one-shot), optional `dry_run`. Omit `ref` to sync the configured pin only.
 
 **Blocked globally:** `secrets`, `teardown`, `users`, and destructive flags (`--prune`, `--reboot`, `--destroy-existing`, `--rolling-restart`).
 

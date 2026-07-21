@@ -14,6 +14,30 @@ describe("hdc_clumps_sync helpers", () => {
     ]);
   });
 
+  it("includes --ref and persist flags", () => {
+    expect(buildClumpsSyncArgv({ action: "sync", ref: "main", persist: true })).toEqual([
+      "clumps",
+      "sync",
+      "--ref",
+      "main",
+      "--persist",
+    ]);
+    expect(buildClumpsSyncArgv({ action: "sync", ref: "abc1234", persist: false })).toEqual([
+      "clumps",
+      "sync",
+      "--ref",
+      "abc1234",
+      "--no-persist",
+    ]);
+    expect(buildClumpsSyncArgv({ action: "sync", ref: "v1", no_persist: true })).toEqual([
+      "clumps",
+      "sync",
+      "--ref",
+      "v1",
+      "--no-persist",
+    ]);
+  });
+
   it("rejects invalid action", () => {
     expect(() => buildClumpsSyncArgv({ action: "pull" })).toThrow(/init.*sync/);
   });

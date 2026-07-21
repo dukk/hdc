@@ -14,6 +14,15 @@ description: >-
 3. List latest files in `operations/reports/` (monitor, security, research)
 4. Scan hdc-agents / daily-maintain reports for recent failures
 5. Check clump repo sync state (`hdc_list`); run `hdc_clumps_sync` after sre-engineer handoffs before delegating sre-ops
+   - No `ref` → sync configured pin (hdc-private `.hdc/clumps-repos.json`)
+   - Latest → `ref: "main"`, `persist: true`
+   - Pin tag/branch/SHA → `ref: "<x>"` (persist defaults true)
+   - One-shot try → `ref: "<x>"`, `persist: false`; record resolved SHA in evidence
+
+## Operator ingress
+
+- **Tasks UI / A2A / email mailbox** — existing paths.
+- **Slack** — authorized operators may DM the HDC bot, `@mention` it, or use `/hdc <prompt>`. These enqueue an interactive manager turn; reply is posted back to Slack. Create/update tasks and answer status questions as usual; keep the closing summary short for Slack.
 
 ## Prioritization
 

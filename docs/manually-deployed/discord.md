@@ -46,6 +46,10 @@ Optional `derive_from` merges redirect URIs from nginx-waf site hostnames (same 
 
 Maintain adds missing redirect URIs from config but does **not** remove extra live URIs in v1 (reported as drift only).
 
+## App icon
+
+Set per-app `icon.repo_path` (relative to the **hdc** repo root, e.g. `assets/beetle-agent.png` — use the same path as the Slack `hdc` app for a consistent brand). Maintain uploads the image via `PATCH /applications/@me` (data URI). After a successful upload, `icon.applied_sha256` is written to hdc-private config; maintain re-uploads only when the local file changes. Skip icon upload with `--skip-icon`.
+
 ## Commands
 
 ```bash
@@ -56,7 +60,7 @@ hdc run infrastructure discord maintain --
 hdc run infrastructure discord maintain -- --app hermes --dry-run
 ```
 
-Flags: `--app <id>`, `--import`, `--yes`, `--require-vault`, `--no-derive`, `--dry-run`, `--no-report`.
+Flags: `--app <id>`, `--import`, `--yes`, `--require-vault`, `--no-derive`, `--dry-run`, `--skip-icon`, `--no-report`.
 
 ## HDC Ops decision buttons
 
@@ -88,6 +92,7 @@ When any of those four values is missing, decision notifies fall back to the pla
 | List all developer apps | Declare each app in config |
 | Privileged Gateway Intents | Portal checklist only |
 | Bot token rotation | Manual vault update |
+| Application icon | `icon.repo_path` + maintain (PATCH `/applications/@me`) |
 | Global slash commands | Not in scope |
 | Ops decision buttons | hdc-ops app + hdc-web interactions endpoint |
 

@@ -63,6 +63,13 @@ export function resolve(specifier, context, nextResolve) {
       return nextResolve(pathToFileURL(target).href, context);
     }
   }
+  if (specifier.startsWith("hdc/apps/")) {
+    const rel = specifier.slice("hdc/apps/".length);
+    const target = join(cliAppDir, "..", rel);
+    if (existsSync(target)) {
+      return nextResolve(pathToFileURL(target).href, context);
+    }
+  }
   if (specifier.startsWith("hdc/clump/")) {
     const rel = specifier.slice("hdc/clump/".length);
     const target = join(clumpsRoot(), rel);

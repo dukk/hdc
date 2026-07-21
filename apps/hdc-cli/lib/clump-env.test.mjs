@@ -14,6 +14,7 @@ import {
   configUsesProxmox,
   isGlobalEnvKey,
   loadMergedRepoDotenv,
+  loadPackageDotenvById,
   resolveEnvIncludes,
 } from "./clump-env.mjs";
 import { clearBwSessionProcessCache, ensureBwUnlocked, getProcessBwSession } from "./vaultwarden-cli.mjs";
@@ -47,6 +48,32 @@ describe("loadMergedRepoDotenv", () => {
     loadMergedRepoDotenv(publicRoot, rel, env);
     expect(env.HDC_PROXMOX_SSH_USER).toBe("root");
     expect(env.HDC_PROXMOX_API_TOKEN).toBe("public");
+  });
+});
+
+describe("loadPackageDotenvById", () => {
+  it("loads private package .env when clump lives under external clumps root", () => {
+    const publicRoot = mkdtempSync(join(tmpdir(), "hdc-ext-pub-"));
+    const privateRoot = mkdtempSync(join(tmpdir(), "hdc-ext-priv-"));
+    const clumpsRoot = mkdtempSync(join(tmpdir(), "hdc-ext-clumps-"));
+    mkdirSync(join(clumpsRoot, "infrastructure/proxmox"), { recursive: true });
+    mkdirSync(join(privateRoot, "clumps/infrastructure/proxmox"), { recursive: true });
+    writeFileSync(
+      join(privateRoot, "clumps/infrastructure/proxmox/.env"),
+      "HDC_PROXMOX_API_TOKEN=from-private\nHDC_PROXMOX_SSH_USER=root\n",
+      "utf8",
+    );
+
+    /** @type {NodeJS.ProcessEnv} */
+    const env = { HDC_PRIVATE_ROOT: privateRoot };
+    const deps = {
+      clumpsDir: () => clumpsRoot,
+      join,
+    };
+    const rel = loadPackageDotenvById(publicRoot, "proxmox", env, deps);
+    expect(rel).toBe("clumps/infrastructure/proxmox/.env");
+    expect(env.HDC_PROXMOX_API_TOKEN).toBe("from-private");
+    expect(env.HDC_PROXMOX_SSH_USER).toBe("root");
   });
 });
 
@@ -96,6 +123,42 @@ describe("buildClumpRunEnv", () => {
     expect(runEnv.HDC_DEMO_TOKEN).toBe("from-package");
     expect(runEnv.HDC_VAULT_PASSPHRASE).toBe("global");
     expect(parent.HDC_DEMO_TOKEN).toBeUndefined();
+  });
+
+  it("loads hdc-private package .env when clump lives under external clumps root", () => {
+    const publicRoot = mkdtempSync(join(tmpdir(), "hdc-run-ext-pub-"));
+    const privateRoot = mkdtempSync(join(tmpdir(), "hdc-run-ext-priv-"));
+    const clumpsRoot = mkdtempSync(join(tmpdir(), "hdc-run-ext-clumps-"));
+    mkdirSync(join(clumpsRoot, "services/uptime-kuma"), { recursive: true });
+    mkdirSync(join(privateRoot, "clumps/services/uptime-kuma"), { recursive: true });
+    writeFileSync(
+      join(clumpsRoot, "services/uptime-kuma/manifest.json"),
+      JSON.stringify({ id: "uptime-kuma", verbs: { maintain: { script: "run.mjs" } } }),
+      "utf8",
+    );
+    writeFileSync(
+      join(privateRoot, "clumps/services/uptime-kuma/.env"),
+      "HDC_UPTIME_KUMA_USERNAME=admin\n",
+      "utf8",
+    );
+
+    /** @type {NodeJS.ProcessEnv} */
+    const parent = { HDC_PRIVATE_ROOT: privateRoot };
+    const manifest = {
+      path: join(clumpsRoot, "services/uptime-kuma/manifest.json"),
+      dir: join(clumpsRoot, "services/uptime-kuma"),
+      raw: { id: "uptime-kuma", verbs: { maintain: { script: "run.mjs" } } },
+    };
+    const deps = {
+      env: parent,
+      clumpsDir: () => clumpsRoot,
+      join,
+      warn: () => {},
+    };
+
+    const runEnv = buildClumpRunEnv(deps, publicRoot, manifest);
+    expect(runEnv.HDC_UPTIME_KUMA_USERNAME).toBe("admin");
+    expect(parent.HDC_UPTIME_KUMA_USERNAME).toBeUndefined();
   });
 
   it("warns once when falling back to root .env package keys", () => {

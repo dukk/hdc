@@ -12,7 +12,8 @@ description: >-
 2. Fix blockers via engineer tasks (do not silently ignore errors)
 3. Optional: `hdc_run` `query` / `health` when guest is live
 4. Optional: `hdc_delegate_augment` for deep test/refactor slices
-5. Write report under `operations/reports/`
+5. If a durable new failure mode was fixed, check whether `hdc-private/ai-docs/` needs a Gotcha/Playbook (`hdc-okf`) — flag in handoff if missing
+6. Write report under `operations/reports/`
 
 ## Report template
 

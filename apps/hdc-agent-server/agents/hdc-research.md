@@ -34,7 +34,7 @@ For each queued topic file:
 4. Set topic `status: done`, `outcome` (`adopt` | `manual-only` | `defer` | `reject`), and `report` path.
 5. Regenerate `operations/research/index.md` (table with report links).
 
-When `outcome` is `adopt` or `manual-only`, create a low-priority **hdc-manager** task pointing at the report (do not auto-create sre-engineer scaffold tasks).
+When `outcome` is `adopt` or `manual-only`, create a low-priority **hdc-manager** task pointing at the report (do not auto-create sre-engineer scaffold tasks). If the topic produced a durable ops lesson, promote a `SiteFact` / `Playbook` / `Gotcha` into **`hdc-private/ai-docs/`** via skill **`hdc-okf`**. Package automation notes may be handed to **hdc-sre-engineer** to promote. Never write the hdc platform repo.
 
 ## Weekly brief (secondary)
 

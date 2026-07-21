@@ -3,6 +3,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stderr } from "node:process";
 
 import {
   AGENTS_DISCORD_WEBHOOK_KEY,
@@ -18,15 +19,21 @@ export const MANAGER_ROUTE_KEYS = /** @type {const} */ ([
   "mailbox_task_update",
 ]);
 
-/** @typedef {"discord" | "email" | "slack" | "teams" | "telegram"} NotifyChannelId */
+/**
+ * @typedef {"discord" | "email" | "slack-incoming-webhook" | "slack-hdc-app" | "teams" | "telegram"} NotifyChannelId
+ */
 
 export const NOTIFY_CHANNEL_IDS = /** @type {const} */ ([
   "discord",
   "email",
-  "slack",
+  "slack-incoming-webhook",
+  "slack-hdc-app",
   "teams",
   "telegram",
 ]);
+
+/** Legacy channel id accepted in configs; normalized to slack-incoming-webhook. */
+export const LEGACY_SLACK_CHANNEL_ID = "slack";
 
 /**
  * @param {unknown} value
@@ -37,6 +44,30 @@ function isObject(value) {
 }
 
 /**
+ * Map legacy "slack" → "slack-incoming-webhook".
+ *
+ * @param {string} id
+ * @param {{ warn?: boolean }} [opts]
+ * @returns {NotifyChannelId | null}
+ */
+export function normalizeNotifyChannelId(id, opts = {}) {
+  const raw = String(id ?? "").trim();
+  if (!raw) return null;
+  if (raw === LEGACY_SLACK_CHANNEL_ID) {
+    if (opts.warn !== false) {
+      stderr.write(
+        "notifications: channel id \"slack\" is deprecated; use \"slack-incoming-webhook\" (or \"slack-hdc-app\" for the bot app)\n",
+      );
+    }
+    return "slack-incoming-webhook";
+  }
+  if (NOTIFY_CHANNEL_IDS.includes(/** @type {NotifyChannelId} */ (raw))) {
+    return /** @type {NotifyChannelId} */ (raw);
+  }
+  return null;
+}
+
+/**
  * @param {unknown} raw
  * @returns {NotifyChannelId[]}
  */
@@ -44,10 +75,13 @@ function parseRouteChannels(raw) {
   if (!Array.isArray(raw)) return [];
   /** @type {NotifyChannelId[]} */
   const out = [];
+  /** @type {Set<string>} */
+  const seen = new Set();
   for (const item of raw) {
-    const id = String(item ?? "").trim();
-    if (NOTIFY_CHANNEL_IDS.includes(/** @type {NotifyChannelId} */ (id))) {
-      out.push(/** @type {NotifyChannelId} */ (id));
+    const id = normalizeNotifyChannelId(String(item ?? "").trim());
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
     }
   }
   return out;
@@ -60,6 +94,7 @@ function parseRouteChannels(raw) {
  * @returns {{
  *   channels: Record<string, Record<string, unknown>>,
  *   routes: Record<ManagerRouteKey, NotifyChannelId[]>,
+ *   public_url: string,
  * }}
  */
 export function normalizeNotificationsConfig(hdcAgents = {}) {
@@ -78,7 +113,20 @@ export function normalizeNotificationsConfig(hdcAgents = {}) {
 
   const emailChannel = isObject(channelsRaw.email) ? channelsRaw.email : {};
   const discordChannel = isObject(channelsRaw.discord) ? channelsRaw.discord : {};
-  const slackChannel = isObject(channelsRaw.slack) ? channelsRaw.slack : {};
+  // Prefer new key; accept legacy "slack" channel object.
+  const slackIncomingRaw = isObject(channelsRaw["slack-incoming-webhook"])
+    ? channelsRaw["slack-incoming-webhook"]
+    : isObject(channelsRaw.slack)
+      ? channelsRaw.slack
+      : {};
+  if (isObject(channelsRaw.slack) && !isObject(channelsRaw["slack-incoming-webhook"])) {
+    stderr.write(
+      "notifications: channels.slack is deprecated; rename to channels.slack-incoming-webhook\n",
+    );
+  }
+  const slackAppChannel = isObject(channelsRaw["slack-hdc-app"])
+    ? channelsRaw["slack-hdc-app"]
+    : {};
   const teamsChannel = isObject(channelsRaw.teams) ? channelsRaw.teams : {};
   const telegramChannel = isObject(channelsRaw.telegram) ? channelsRaw.telegram : {};
 
@@ -145,13 +193,34 @@ export function normalizeNotificationsConfig(hdcAgents = {}) {
             ? discord.channel_id.trim()
             : "",
     },
-    slack: {
-      enabled: slackChannel.enabled === true,
+    "slack-incoming-webhook": {
+      enabled: slackIncomingRaw.enabled === true,
       webhook_vault_key:
-        typeof slackChannel.webhook_vault_key === "string" &&
-        slackChannel.webhook_vault_key.trim()
-          ? slackChannel.webhook_vault_key.trim()
+        typeof slackIncomingRaw.webhook_vault_key === "string" &&
+        slackIncomingRaw.webhook_vault_key.trim()
+          ? slackIncomingRaw.webhook_vault_key.trim()
           : "HDC_AGENTS_SLACK_WEBHOOK_URL",
+    },
+    "slack-hdc-app": {
+      enabled: slackAppChannel.enabled === true,
+      bot_token_vault_key:
+        typeof slackAppChannel.bot_token_vault_key === "string" &&
+        slackAppChannel.bot_token_vault_key.trim()
+          ? slackAppChannel.bot_token_vault_key.trim()
+          : "HDC_SLACK_BOT_TOKEN",
+      channel_id:
+        typeof slackAppChannel.channel_id === "string"
+          ? slackAppChannel.channel_id.trim()
+          : "",
+      channel_env:
+        typeof slackAppChannel.channel_env === "string" && slackAppChannel.channel_env.trim()
+          ? slackAppChannel.channel_env.trim()
+          : "HDC_SLACK_DECISION_CHANNEL",
+      decision_authorized_users: Array.isArray(slackAppChannel.decision_authorized_users)
+        ? slackAppChannel.decision_authorized_users
+            .map((u) => String(u ?? "").trim())
+            .filter(Boolean)
+        : [],
     },
     teams: {
       enabled: teamsChannel.enabled === true,

@@ -53,6 +53,10 @@ Example (split Cloudflare zones):
 
 Optional companion `*.md` next to inventory JSON is for humans/agents; **hdc does not read or write those files**.
 
+## Agent knowledge (OKF)
+
+[`../hdc-private/ai-docs/`](../hdc-private/ai-docs/) is Google Open Knowledge Format (OKF) for **agent recall** (platform, package, and site). Human guides stay under [`docs/`](docs/). Start at [`../hdc-private/ai-docs/index.md`](../hdc-private/ai-docs/index.md), then open section indexes. Before inventing process knowledge, traverse that index; after learning a durable fact, write/update a concept + `log.md` there (fleet agents must not edit the hdc platform repo for code).
+
 ## CLI (implemented)
 
 Commands from [`apps/hdc-cli/lib/cli-app.mjs`](apps/hdc-cli/lib/cli-app.mjs):
@@ -62,7 +66,7 @@ Commands from [`apps/hdc-cli/lib/cli-app.mjs`](apps/hdc-cli/lib/cli-app.mjs):
 | `help [topic …]` | Hierarchical usage |
 | `list` | Packages and manifest metadata |
 | `clumps list [--reference]` | Active and reference clump repos, sync status |
-| `clumps sync [--repo <id>] [--dry-run]` | Clone or pull external clump repos |
+| `clumps sync [--repo <id>] [--ref <branch\|tag\|sha>] [--persist\|--no-persist] [--dry-run]` | Clone or pull clump repos; `--ref` persists the pin to hdc-private by default |
 | `clumps init` | Bootstrap default hdc-clumps cache |
 | `run <tier> <clump> <verb> [-- <args>]` | Run a package script (`deploy`, `maintain`, `query`, `health`, `teardown`); tier: `client`, `infrastructure`, or `service` |
 | `run <tier> <clump> <platform> <verb> [-- <args>]` | When manifest lists `platforms` (legacy platform-routed layout) |
@@ -1072,12 +1076,16 @@ Example: `hdc run service paperclip deploy -- --instance a`
 | --- | --- |
 | `deploy` | Proxmox QEMU on configured host (e.g. `pve-h`): import HAOS OVA qcow2, USB passthrough for Zigbee/Z-Wave; when `public_url` is HTTPS, sync nginx-waf `trusted_proxies` into HAOS `configuration.yaml` (`deployments[]`; `--instance a`, `--destroy-existing`, `--usb-id`, `--no-wait-http`, `--skip-reverse-proxy`) |
 | `maintain` | Sync nginx-waf `trusted_proxies` when `public_url` is HTTPS; HTTP probe on port 8123; `--reapply-usb` to refresh USB mapping; `--skip-reverse-proxy` to skip |
-| `query` | Config summary; `--live` for Proxmox guest + HTTP probe |
+| `query` | Config summary; `--live` for Proxmox guest + HTTP probe; `--import --yes` writes split `integrations/` + UI automations/scripts/scenes into hdc-private |
 | `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override). No vault secrets for v1.
+Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override). Vault: `HDC_HOMEASSISTANT_TOKEN` (long-lived access token) for `query --import`.
 
 Example: `hdc run service homeassistant deploy -- --instance a --destroy-existing`
+
+```bash
+hdc run service homeassistant query -- --import --yes
+```
 
 ## Kali desktop in this repo
 
@@ -1512,6 +1520,29 @@ hdc run infrastructure discord query -- --import --yes --require-vault
 hdc run infrastructure discord maintain -- --app hermes --dry-run
 ```
 
+## Slack in this repo
+
+- **Config:** [`clumps/infrastructure/slack/config.json`](clumps/infrastructure/slack/config.json) (copy from [`config.example.json`](clumps/infrastructure/slack/config.example.json); keep local config in hdc-private).
+- **Schema:** [`apps/hdc-cli/schema/slack.config.schema.json`](apps/hdc-cli/schema/slack.config.schema.json).
+- **Docs:** [`docs/manually-deployed/slack.md`](docs/manually-deployed/slack.md), [`docs/manually-deployed/manager-notifications.md`](docs/manually-deployed/manager-notifications.md).
+
+| Verb | Summary |
+| --- | --- |
+| `query` | Diff App Manifest apps vs config; `--import --yes` merges live metadata into hdc-private config |
+| `deploy` | Create managed apps via App Manifest API; store signing secret / client credentials in vault |
+| `maintain` | Update managed manifests (interactivity URL, scopes); rotate config tokens; portal checklist |
+
+Vault: `HDC_SLACK_CONFIG_TOKEN` / `HDC_SLACK_CONFIG_REFRESH_TOKEN` (App Configuration Tokens); deploy writes `HDC_SLACK_HDC_APP_SIGNING_SECRET` (+ client id/secret). After workspace install: `HDC_SLACK_BOT_TOKEN`, `HDC_SLACK_DECISION_CHANNEL`. Interactive Approve/Deny: hdc-web `POST /api/slack/interactions`; notification channel id `slack-hdc-app`. Legacy plain-text webhooks remain as `slack-incoming-webhook` (`HDC_AGENTS_SLACK_WEBHOOK_URL`).
+
+Examples:
+
+```bash
+hdc run infrastructure slack deploy -- --dry-run
+hdc run infrastructure slack deploy --
+hdc run infrastructure slack query --
+hdc run infrastructure slack maintain --
+```
+
 ## Twilio in this repo
 
 - **Config:** [`clumps/infrastructure/twilio/config.json`](clumps/infrastructure/twilio/config.json) (copy from [`config.example.json`](clumps/infrastructure/twilio/config.example.json); keep local config in hdc-private).
@@ -1588,12 +1619,13 @@ Before merging substantive CLI changes, run `npm run test:coverage` and keep thr
 
 ## Agent team (hdc-agent-server fleet)
 
-Nine role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor). The **hdc** platform is human/operator-owned — fleet agents must not write that repo.
+Ten role-specific agents under [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) coordinate HDC operations with shared state in **hdc-private** `operations/`. Runtime: LiteLLM tool loop + scripted dispatcher (not Cursor). The **hdc** platform is human/operator-owned — fleet agents must not write that repo.
 
 | Agent | Role | Repository |
 | --- | --- | --- |
 | [`hdc-manager`](apps/hdc-agent-server/agents/hdc-manager.md) | Task triage, A2A assignment, Discord escalation, `hdc_clumps_sync` on fleet host | — |
 | [`hdc-monitor`](apps/hdc-agent-server/agents/hdc-monitor.md) | Uptime Kuma, Proxmox health digests | — |
+| [`hdc-maintainer`](apps/hdc-agent-server/agents/hdc-maintainer.md) | OS update cadence, reboot/upgrade approval tasks | — |
 | [`hdc-sre-ops`](apps/hdc-agent-server/agents/hdc-sre-ops.md) | Approved deploy/maintain on live systems | hdc-private |
 | [`hdc-sre-engineer`](apps/hdc-agent-server/agents/hdc-sre-engineer.md) | Package scripts, manifests, examples (git commit/push) | hdc-clumps |
 | [`hdc-qa`](apps/hdc-agent-server/agents/hdc-qa.md) | Clump validation (`hdc_validate_clump`), quality digests | — |
@@ -1612,7 +1644,7 @@ Shared skills: [`apps/hdc-agent-server/skills/`](apps/hdc-agent-server/skills/).
 
 **IP allocations:** Before assigning a static address for a new Proxmox guest, read `hdc-private/operations/ip-allocations.md` — pick the workload's IP group and **Next free** address, then cross-check BIND and inventory. Site IPs live in **hdc-private** only, not in the public hdc repo.
 
-**Discord alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). Message headers attribute **system** (`HDC_OPS_SYSTEM_ID`, else legacy `HDC_OPS_DISCORD_HOST`, else OS hostname) and **application** (`HDC_OPS_NOTIFY_APP`, else `HDC_AGENT_ROLE`, else `cli`).
+**Discord / Slack alerts:** CLI `hdc run … deploy|maintain` summaries use vault `HDC_OPS_DISCORD_WEBHOOK_URL` (disable with `HDC_OPS_DISCORD_NOTIFY=0` or `--no-discord-notify`). The hdc-agents fleet (scheduler, `hdc_notify_discord`, manager escalations) uses `HDC_AGENTS_DISCORD_WEBHOOK_URL` (`notify-discord.mjs --webhook-vault-key HDC_AGENTS_DISCORD_WEBHOOK_URL`). When set, the same ops paths also post to Slack via incoming webhook `HDC_AGENTS_SLACK_WEBHOOK_URL` (CLI prefers `HDC_OPS_SLACK_WEBHOOK_URL` then agents) — channel id `slack-incoming-webhook`. Prefer the Slack HDC app (`slack-hdc-app`) for interactive Approve/Deny: bot token `HDC_SLACK_BOT_TOKEN`, channel `HDC_SLACK_DECISION_CHANNEL`, interactions on hdc-web `POST /api/slack/interactions`. Register/maintain the app with `hdc run infrastructure slack …` — see [manager-notifications.md](docs/manually-deployed/manager-notifications.md). Message headers attribute **system** (`HDC_OPS_SYSTEM_ID`, else legacy `HDC_OPS_DISCORD_HOST`, else OS hostname) and **application** (`HDC_OPS_NOTIFY_APP`, else `HDC_AGENT_ROLE`, else `cli`).
 
 Legacy alias: [`hdc-ops`](apps/hdc-agent-server/agents/hdc-ops.md) → prefer **hdc-sre-ops** / **hdc-manager**. Role id **`hdc-sre`** is deprecated.
 
@@ -1637,6 +1669,7 @@ hdc run service hdc-agents maintain --
 | Automation conventions | [`.cursor/rules/hdc-automation.mdc`](.cursor/rules/hdc-automation.mdc) |
 | Inventory naming | [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc) |
 | Nagios + manual docs | [`.cursor/rules/hdc-nagios-monitoring.mdc`](.cursor/rules/hdc-nagios-monitoring.mdc) |
+| Agent knowledge (OKF) | [`../hdc-private/ai-docs/index.md`](../hdc-private/ai-docs/index.md) |
 | Agent team | [`apps/hdc-agent-server/skills/hdc-agent-team/`](apps/hdc-agent-server/skills/hdc-agent-team/SKILL.md), [`apps/hdc-agent-server/agents/`](apps/hdc-agent-server/agents/) |
 | Multi-agent architecture | [`docs/multi-agent-ops.md`](docs/multi-agent-ops.md) |
 | Claude Code entry point | [`CLAUDE.md`](CLAUDE.md); thin pointers under `.claude/skills/` and `.claude/agents/` |

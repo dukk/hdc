@@ -3,7 +3,7 @@
  * hdc-web-server — LAN web UI + JSON API (ported from hdc-runner web UI).
  *
  * Port: HDC_WEB_PORT (default 9120)
- * Auth: encrypted htpasswd (default) or Keycloak OIDC (optional) → hdc_web_session cookie;
+ * Auth: encrypted htpasswd and/or Keycloak OIDC (default both) → hdc_web_session cookie;
  *       HDC_WEB_API_TOKEN Bearer for agents
  */
 import { createServer } from "node:http";
@@ -61,6 +61,17 @@ import {
   verifyDiscordInteractionSignature,
 } from "./lib/discord-interactions.mjs";
 import {
+  handleSlackInteractionPayload,
+  parseSlackInteractionPayload,
+  resolveSlackSigningSecret,
+  verifySlackInteractionSignature,
+} from "./lib/slack-interactions.mjs";
+import {
+  handleSlackEventsPayload,
+  handleSlackSlashCommand,
+  parseSlackSlashForm,
+} from "./lib/slack-prompt.mjs";
+import {
   resolveRoots,
   resolveSessionSecret,
   resolveApiToken,
@@ -68,6 +79,11 @@ import {
   resolveAdminPassword,
 } from "./lib/env.mjs";
 import { ensureHtpasswdStore, verifyUser } from "./lib/htpasswd.mjs";
+import {
+  defaultWebConfigAuth,
+  passwordLoginEnabledForMode,
+  resolveAuthConfig,
+} from "./lib/web-config.mjs";
 import {
   resolveOidcConfig,
   fetchOidcDiscovery,
@@ -131,11 +147,7 @@ function loadWebConfig(metaRoot) {
       enabled: true,
       host: "0.0.0.0",
       port: 9120,
-      auth: {
-        mode: "htpasswd",
-        htpasswd_file: ".htpasswd.enc",
-        admin_username: "admin",
-      },
+      auth: defaultWebConfigAuth(),
       allowed_verbs: ["query", "maintain"],
       max_concurrent_jobs: 1,
     };
@@ -145,40 +157,20 @@ function loadWebConfig(metaRoot) {
 
 /**
  * @param {ReturnType<typeof loadWebConfig>} webConfig
- */
-function resolveAuthConfig(webConfig) {
-  const auth =
-    webConfig.auth && typeof webConfig.auth === "object"
-      ? /** @type {Record<string, unknown>} */ (webConfig.auth)
-      : {};
-  const mode = typeof auth.mode === "string" && auth.mode.trim() ? auth.mode.trim() : "htpasswd";
-  const htpasswdFile =
-    typeof auth.htpasswd_file === "string" && auth.htpasswd_file.trim()
-      ? auth.htpasswd_file.trim()
-      : ".htpasswd.enc";
-  const adminUsername =
-    typeof auth.admin_username === "string" && auth.admin_username.trim()
-      ? auth.admin_username.trim()
-      : "admin";
-  return { mode, htpasswdFile, adminUsername };
-}
-
-/**
- * @param {ReturnType<typeof loadWebConfig>} webConfig
  * @param {string} metaRoot
  * @param {string} sessionSecret
- * @returns {{ passwordLoginEnabled: boolean; htpasswdStore: Map<string, string> | null }}
+ * @returns {{ passwordLoginEnabled: boolean; htpasswdStore: Map<string, string> | null; authMode: string }}
  */
 function bootstrapHtpasswdAuth(webConfig, metaRoot, sessionSecret) {
   const { mode, htpasswdFile, adminUsername } = resolveAuthConfig(webConfig);
-  if (mode === "oidc") {
-    return { passwordLoginEnabled: false, htpasswdStore: null };
+  if (!passwordLoginEnabledForMode(mode)) {
+    return { passwordLoginEnabled: false, htpasswdStore: null, authMode: mode };
   }
   if (!sessionSecret) {
     process.stderr.write(
       "[hdc-web-server] warning: HDC_WEB_UI_SESSION_SECRET not set — password login disabled\n",
     );
-    return { passwordLoginEnabled: false, htpasswdStore: null };
+    return { passwordLoginEnabled: false, htpasswdStore: null, authMode: mode };
   }
 
   const filePath = join(metaRoot, htpasswdFile);
@@ -201,7 +193,7 @@ function bootstrapHtpasswdAuth(webConfig, metaRoot, sessionSecret) {
     }
   }
 
-  return { passwordLoginEnabled: true, htpasswdStore: result.store };
+  return { passwordLoginEnabled: true, htpasswdStore: result.store, authMode: mode };
 }
 
 /**
@@ -317,9 +309,117 @@ async function handleRequest(
     } catch {
       return jsonResponse(res, 400, { error: "invalid JSON body" });
     }
-    const result = handleDiscordInteractionPayload({
+    const result = await handleDiscordInteractionPayload({
       body,
       privateRoot: PRIVATE_ROOT,
+    });
+    return jsonResponse(res, result.status, result.body);
+  }
+
+  // Slack Interactivity (public; authenticated via signing secret HMAC)
+  if (path === "/api/slack/interactions" && req.method === "POST") {
+    const signingSecret = resolveSlackSigningSecret();
+    if (!signingSecret) {
+      return jsonResponse(res, 503, { error: "Slack interactions not configured" });
+    }
+    let raw;
+    try {
+      raw = await readRawBody(req);
+    } catch {
+      return jsonResponse(res, 400, { error: "invalid request body" });
+    }
+    const signature = String(req.headers["x-slack-signature"] ?? "");
+    const timestamp = String(req.headers["x-slack-request-timestamp"] ?? "");
+    if (
+      !verifySlackInteractionSignature({
+        signingSecret,
+        signatureHeader: signature,
+        timestampHeader: timestamp,
+        rawBody: raw,
+      })
+    ) {
+      return jsonResponse(res, 401, { error: "invalid request signature" });
+    }
+    const payload = parseSlackInteractionPayload(raw);
+    if (!payload) {
+      return jsonResponse(res, 400, { error: "invalid Slack payload" });
+    }
+    const result = await handleSlackInteractionPayload({
+      payload,
+      privateRoot: PRIVATE_ROOT,
+      env: process.env,
+    });
+    return jsonResponse(res, result.status, result.body);
+  }
+
+  // Slack Events API (public; signing secret HMAC; url_verification + event_callback)
+  if (path === "/api/slack/events" && req.method === "POST") {
+    const signingSecret = resolveSlackSigningSecret();
+    if (!signingSecret) {
+      return jsonResponse(res, 503, { error: "Slack events not configured" });
+    }
+    let raw;
+    try {
+      raw = await readRawBody(req);
+    } catch {
+      return jsonResponse(res, 400, { error: "invalid request body" });
+    }
+    const signature = String(req.headers["x-slack-signature"] ?? "");
+    const timestamp = String(req.headers["x-slack-request-timestamp"] ?? "");
+    if (
+      !verifySlackInteractionSignature({
+        signingSecret,
+        signatureHeader: signature,
+        timestampHeader: timestamp,
+        rawBody: raw,
+      })
+    ) {
+      return jsonResponse(res, 401, { error: "invalid request signature" });
+    }
+    /** @type {Record<string, unknown>} */
+    let body = {};
+    try {
+      body = raw.length ? JSON.parse(raw.toString("utf8")) : {};
+    } catch {
+      return jsonResponse(res, 400, { error: "invalid JSON body" });
+    }
+    const result = await handleSlackEventsPayload({
+      body,
+      privateRoot: PRIVATE_ROOT,
+      env: process.env,
+    });
+    return jsonResponse(res, result.status, result.body);
+  }
+
+  // Slack slash commands (public; signing secret HMAC)
+  if (path === "/api/slack/commands" && req.method === "POST") {
+    const signingSecret = resolveSlackSigningSecret();
+    if (!signingSecret) {
+      return jsonResponse(res, 503, { error: "Slack commands not configured" });
+    }
+    let raw;
+    try {
+      raw = await readRawBody(req);
+    } catch {
+      return jsonResponse(res, 400, { error: "invalid request body" });
+    }
+    const signature = String(req.headers["x-slack-signature"] ?? "");
+    const timestamp = String(req.headers["x-slack-request-timestamp"] ?? "");
+    if (
+      !verifySlackInteractionSignature({
+        signingSecret,
+        signatureHeader: signature,
+        timestampHeader: timestamp,
+        rawBody: raw,
+      })
+    ) {
+      return jsonResponse(res, 401, { error: "invalid request signature" });
+    }
+    const fields = parseSlackSlashForm(raw);
+    const result = await handleSlackSlashCommand({
+      fields,
+      privateRoot: PRIVATE_ROOT,
+      env: process.env,
     });
     return jsonResponse(res, result.status, result.body);
   }
@@ -451,6 +551,7 @@ async function handleRequest(
       meta_root: META_ROOT,
       oidc_configured: oidc.configured,
       password_login_enabled: htpasswdAuth.passwordLoginEnabled,
+      auth_mode: htpasswdAuth.authMode,
     });
   }
 
@@ -458,6 +559,9 @@ async function handleRequest(
     path.startsWith("/api/") &&
     path !== "/api/health" &&
     path !== "/api/discord/interactions" &&
+    path !== "/api/slack/interactions" &&
+    path !== "/api/slack/events" &&
+    path !== "/api/slack/commands" &&
     path !== "/api/auth/login" &&
     path !== "/api/auth/oidc/login" &&
     path !== "/api/auth/oidc/callback" &&

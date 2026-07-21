@@ -96,6 +96,7 @@ Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc
 | --- | --- | --- | --- |
 | `hdc-manager` | Orchestrate | Task files, per-route notifications, A2A delegation | Hourly triage loop + A2A + on demand |
 | `hdc-monitor` | **Monitor** | Query-only + digests/tasks | 4 h sweep + A2A |
+| `hdc-maintainer` | **Maintain** (plan) | Query-only + digests/tasks | Daily scan + A2A |
 | `hdc-sre-ops` | **Deploy / Maintain** (live ops) | Full hdc CLI on `approved` tasks; hdc-private writes | Per approved task (A2A from manager) |
 | `hdc-sre-engineer` | **Build** (packages) | hdc-clumps scripts; `hdc_request_research` / `hdc_web_*` / `hdc_validate_clump`; read-only `query` | Failure reports, package scaffolds, unknown-capability tasks |
 | `hdc-qa` | **Build** (quality) | `hdc_validate_clump`, query/health, QA digests, augmentors | After scaffold/repair; before sre-ops deploy |
@@ -105,7 +106,7 @@ Handoffs: clump script failure → `hdc-sre-engineer` (commit/push git) → `hdc
 | `hdc-research` | **Build** (discovery) | Read-only + `hdc_web_*`; augmentors | Queued topics (operator, manager, or sre-engineer `hdc_request_research`) + weekly brief |
 | `hdc-ops` | Legacy alias | — | Deprecated; defers to sre-ops/manager |
 
-Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged). A2A ports: **9200–9206**, **9208–9209** (no 9207).
+Legacy role id **`hdc-sre`** → **`hdc-sre-ops`** (port 9202 unchanged). A2A ports: **9200–9206**, **9207** (maintainer), **9208–9209**.
 
 ### Build roles (revised 2026-07-16)
 

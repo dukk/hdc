@@ -104,7 +104,7 @@ if (toolAllowed("hdc_run")) {
 if (toolAllowed("hdc_clumps_sync")) {
   server.tool(
     "hdc_clumps_sync",
-    "Clone or pull hdc-clumps package repos into the local cache (manager only). Use init on first bootstrap; sync after git updates. Optional ref overrides branch/tag/commit for rollback.",
+    "Clone or pull hdc-clumps package repos into the local cache (manager only). Omit ref to sync the configured pin. Pass ref (branch/tag/commit; use main for latest) to checkout; persist defaults true and writes the pin to hdc-private .hdc/clumps-repos.json. Set persist false for a one-shot try.",
     {
       action: z
         .enum(["init", "sync"])
@@ -114,8 +114,12 @@ if (toolAllowed("hdc_clumps_sync")) {
       ref: z
         .string()
         .optional()
-        .describe("One-shot ref override (branch, tag, or commit) for rollback"),
-      dry_run: z.boolean().optional().describe("Plan only; do not clone or pull"),
+        .describe('Branch, tag, or commit (e.g. "main" for latest). Persisted by default.'),
+      persist: z
+        .boolean()
+        .optional()
+        .describe("When ref is set, write lasting pin to hdc-private (default true). false = one-shot."),
+      dry_run: z.boolean().optional().describe("Plan only; do not clone, pull, or persist"),
     },
     async (args) => handleHdcClumpsSync(args),
   );

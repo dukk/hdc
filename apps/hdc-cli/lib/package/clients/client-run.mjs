@@ -6,10 +6,10 @@ import { parseArgvFlags } from "../parse-argv-flags.mjs";
 import { runOperationReportTail } from "../operation-report.mjs";
 import { repoRoot } from "../../paths.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../vault-access.mjs";
-import { queryLinuxDisk, queryLinuxUpgradableCount } from "./client-disk-linux.mjs";
+import { queryLinuxDisk, queryLinuxRebootRequired, queryLinuxUpgradableCount } from "./client-disk-linux.mjs";
 import { maintainLinuxHost } from "./client-maintain-linux.mjs";
 import { queryWindowsDisk } from "./client-disk-windows.mjs";
-import { maintainWindowsHost, queryWindowsPendingUpdates } from "./client-maintain-windows.mjs";
+import { maintainWindowsHost, queryWindowsPendingUpdates, queryWindowsRebootRequired } from "./client-maintain-windows.mjs";
 import {
   ensureWindowsOllamaViaMeshcentral,
   pullWindowsOllamaModelsViaMeshcentral,
@@ -323,9 +323,11 @@ export async function runClientVerb(opts) {
         if (verb === "query") {
           if (!ollamaScoped) {
             const pending = queryWindowsPendingUpdates(conn);
+            const reboot = queryWindowsRebootRequired(conn);
             row.updates = pending;
-            row.ok = pending.ok;
-            if (!pending.ok) ok = false;
+            row.reboot_required = reboot.ok ? reboot.reboot_required === true : null;
+            row.ok = pending.ok && reboot.ok;
+            if (!pending.ok || !reboot.ok) ok = false;
           } else {
             row.ok = true;
           }
@@ -417,9 +419,12 @@ export async function runClientVerb(opts) {
         }
         if (verb === "query") {
           const up = queryLinuxUpgradableCount(target, spawnSync, process.env);
+          const reboot = queryLinuxRebootRequired(target, spawnSync, process.env);
           row.updates = up;
-          row.ok = up.ok;
-          if (!up.ok) ok = false;
+          row.upgradable_count = up.upgradable_count;
+          row.reboot_required = reboot.ok ? reboot.reboot_required === true : null;
+          row.ok = up.ok && reboot.ok;
+          if (!up.ok || !reboot.ok) ok = false;
         } else {
           const maintain = await maintainLinuxHost({
             target,

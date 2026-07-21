@@ -4,7 +4,7 @@
 import { createPublicKey, verify } from "node:crypto";
 
 import { OPS_DISCORD_PUBLIC_KEY_ENV } from "../../hdc-cli/lib/ops-discord-notify.mjs";
-import { patchTaskApi, readTask } from "./tasks.mjs";
+import { applyTaskDecision, parseDecisionActionId } from "./task-decision.mjs";
 
 export const DISCORD_INTERACTION_PING = 1;
 export const DISCORD_INTERACTION_MESSAGE_COMPONENT = 3;
@@ -69,90 +69,19 @@ export function verifyDiscordInteractionSignature(opts) {
   }
 }
 
-/**
- * @param {string} customId
- * @returns {{ action: "approve" | "deny"; taskId: string } | null}
- */
-export function parseDecisionCustomId(customId) {
-  const s = String(customId ?? "").trim();
-  const m = s.match(/^hdc:(approve|deny):([A-Za-z0-9][A-Za-z0-9._-]*)$/);
-  if (!m) return null;
-  return {
-    action: /** @type {"approve" | "deny"} */ (m[1]),
-    taskId: m[2],
-  };
-}
+/** @deprecated Use parseDecisionActionId from task-decision.mjs */
+export const parseDecisionCustomId = parseDecisionActionId;
 
 /**
  * @param {string} privateRoot
  * @param {{ action: "approve" | "deny"; taskId: string }} decision
  * @returns {{ ok: boolean; status: string; message: string; already?: boolean }}
  */
-export function applyDiscordTaskDecision(privateRoot, decision) {
-  let current;
-  try {
-    current = readTask(privateRoot, decision.taskId);
-  } catch {
-    return {
-      ok: false,
-      status: "missing",
-      message: `Task \`${decision.taskId}\` not found.`,
-    };
-  }
-
-  const terminal = new Set(["approved", "blocked", "done"]);
-  if (terminal.has(current.status)) {
-    return {
-      ok: true,
-      status: current.status,
-      already: true,
-      message: `Task \`${decision.taskId}\` already **${current.status}** (no change).`,
-    };
-  }
-
-  if (decision.action === "approve") {
-    const result = patchTaskApi(
-      privateRoot,
-      decision.taskId,
-      { status: "approved", needs_decision: false },
-      { user: "discord", sessionOnly: false },
-    );
-    if (!result.ok) {
-      return {
-        ok: false,
-        status: current.status,
-        message: `Failed to approve \`${decision.taskId}\`: ${result.error ?? "unknown"}`,
-      };
-    }
-    return {
-      ok: true,
-      status: "approved",
-      message: `Approved task \`${decision.taskId}\` via Discord.`,
-    };
-  }
-
-  const result = patchTaskApi(
-    privateRoot,
-    decision.taskId,
-    {
-      status: "blocked",
-      needs_decision: false,
-      blocked_reason: "Operator declined via Discord",
-    },
-    { user: "discord", sessionOnly: false },
-  );
-  if (!result.ok) {
-    return {
-      ok: false,
-      status: current.status,
-      message: `Failed to deny \`${decision.taskId}\`: ${result.error ?? "unknown"}`,
-    };
-  }
-  return {
-    ok: true,
-    status: "blocked",
-    message: `Denied task \`${decision.taskId}\` via Discord.`,
-  };
+export async function applyDiscordTaskDecision(privateRoot, decision) {
+  return applyTaskDecision(privateRoot, decision, {
+    user: "discord",
+    denyReason: "Operator declined via Discord",
+  });
 }
 
 /**
@@ -175,7 +104,7 @@ export function buildUpdatedDecisionContent(originalContent, outcomeLine) {
  * @param {string} opts.privateRoot
  * @returns {{ status: number; body: Record<string, unknown> }}
  */
-export function handleDiscordInteractionPayload(opts) {
+export async function handleDiscordInteractionPayload(opts) {
   const body = opts.body && typeof opts.body === "object" ? /** @type {Record<string, unknown>} */ (opts.body) : {};
   const type = Number(body.type);
 
@@ -212,7 +141,7 @@ export function handleDiscordInteractionPayload(opts) {
     };
   }
 
-  const result = applyDiscordTaskDecision(opts.privateRoot, parsed);
+  const result = await applyDiscordTaskDecision(opts.privateRoot, parsed);
   const messageObj =
     body.message && typeof body.message === "object"
       ? /** @type {Record<string, unknown>} */ (body.message)

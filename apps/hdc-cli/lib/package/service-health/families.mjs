@@ -96,6 +96,7 @@ export const PACKAGE_FAMILIES = {
   cloudflare: "infra-api",
   "cloudflare-workers": "infra-api",
   discord: "infra-api",
+  slack: "infra-api",
   twilio: "infra-api",
   openrouter: "infra-api",
   smtp2go: "infra-api",

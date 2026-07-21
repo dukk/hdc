@@ -42,8 +42,8 @@ describe("notifications-config", () => {
     });
     expect(cfg.channels.email.to).toBe("ops@example.invalid");
     expect(cfg.routes.needs_decision).toEqual(["email"]);
-    expect(cfg.routes.mailbox_spoof).toEqual(["email", "slack"]);
-    expect(cfg.channels.slack.enabled).toBe(true);
+    expect(cfg.routes.mailbox_spoof).toEqual(["email", "slack-incoming-webhook"]);
+    expect(cfg.channels["slack-incoming-webhook"].enabled).toBe(true);
   });
 
   it("buildNotificationsJson round-trips", () => {
@@ -75,10 +75,10 @@ describe("ops-notify", () => {
     expect(text).toContain("https://agents.example.invalid/tasks");
   });
 
-  it("sendNotify slack posts webhook JSON", async () => {
+  it("sendNotify slack-incoming-webhook posts webhook JSON", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
     const result = await sendNotify({
-      channel: "slack",
+      channel: "slack-incoming-webhook",
       title: "Test",
       message: "hello",
       channelConfig: { enabled: true, webhook_vault_key: "HDC_AGENTS_SLACK_WEBHOOK_URL" },
@@ -86,12 +86,12 @@ describe("ops-notify", () => {
       fetchFn: fetchMock,
     });
     expect(result.ok).toBe(true);
-    expect(result.mode).toBe("slack");
+    expect(result.mode).toBe("slack-incoming-webhook");
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.text).toContain("hello");
   });
 
-  it("sendNotifyRoute succeeds when one channel delivers", async () => {
+  it("sendNotifyRoute normalizes legacy slack channel id", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "" }));
     const config = normalizeNotificationsConfig({
       notifications: {
@@ -113,7 +113,7 @@ describe("ops-notify", () => {
       fetchFn: fetchMock,
     });
     expect(result.ok).toBe(true);
-    expect(result.results.slack?.ok).toBe(true);
+    expect(result.results["slack-incoming-webhook"]?.ok).toBe(true);
     expect(result.results.teams?.skipped).toBe(true);
   });
 

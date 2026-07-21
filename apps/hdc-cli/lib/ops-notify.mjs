@@ -18,7 +18,10 @@ import {
   MANAGER_ROUTE_KEYS,
   NOTIFY_CHANNEL_IDS,
   normalizeNotificationsConfig,
+  normalizeNotifyChannelId,
 } from "./notifications-config.mjs";
+import { sendOpsSlackIncomingWebhookMessage } from "./ops-slack-incoming-webhook.mjs";
+import { sendOpsSlackAppMessage } from "./ops-slack-app-notify.mjs";
 
 export { MANAGER_ROUTE_KEYS, NOTIFY_CHANNEL_IDS, normalizeNotificationsConfig };
 
@@ -102,7 +105,8 @@ async function resolveVaultOrEnv(channelConfig, vaultKey, env, getSecret) {
  * @returns {Promise<{ ok: boolean; mode?: string; skipped?: boolean; error?: string }>}
  */
 export async function sendNotify(opts) {
-  const channel = opts.channel;
+  const channel =
+    normalizeNotifyChannelId(opts.channel, { warn: false }) ?? opts.channel;
   const env = opts.env ?? process.env;
   const title = String(opts.title ?? "HDC").trim() || "HDC";
   const rawMessage = redactIpsFromText(String(opts.message ?? ""));
@@ -179,33 +183,47 @@ export async function sendNotify(opts) {
         ? { ok: true, mode: "email" }
         : { ok: false, error: result.message };
     }
-    case "slack": {
-      const url = await resolveVaultOrEnv(
-        channelConfig,
-        "webhook_vault_key",
-        env,
-        opts.getSecret,
-      );
-      if (!url) return { ok: false, skipped: true, error: "slack webhook not configured" };
-      const fetchFn = opts.fetchFn ?? fetch;
+    case "slack-incoming-webhook": {
       const text = appendDecisionFooter(
         { taskId: opts.taskId, decision: opts.decision, publicUrl: opts.publicUrl },
         body,
       );
-      try {
-        const res = await fetchFn(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (!res.ok) {
-          const snippet = (await res.text()).slice(0, 200);
-          return { ok: false, error: `Slack HTTP ${res.status}: ${snippet}` };
-        }
-        return { ok: true, mode: "slack" };
-      } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-      }
+      const webhookKey =
+        typeof channelConfig.webhook_vault_key === "string" &&
+        channelConfig.webhook_vault_key.trim()
+          ? channelConfig.webhook_vault_key.trim()
+          : "HDC_AGENTS_SLACK_WEBHOOK_URL";
+      return sendOpsSlackIncomingWebhookMessage({
+        content: text,
+        env,
+        getSecret: opts.getSecret,
+        webhookVaultKey: webhookKey,
+        fetchFn: opts.fetchFn,
+      });
+    }
+    case "slack-hdc-app": {
+      return sendOpsSlackAppMessage({
+        title,
+        message: rawMessage,
+        decision: opts.decision === true,
+        taskId: opts.taskId,
+        publicUrl: opts.publicUrl,
+        env,
+        getSecret: opts.getSecret,
+        botTokenVaultKey:
+          typeof channelConfig.bot_token_vault_key === "string"
+            ? channelConfig.bot_token_vault_key.trim()
+            : undefined,
+        channelId:
+          typeof channelConfig.channel_id === "string"
+            ? channelConfig.channel_id.trim()
+            : undefined,
+        channelEnv:
+          typeof channelConfig.channel_env === "string"
+            ? channelConfig.channel_env.trim()
+            : undefined,
+        fetchFn: opts.fetchFn,
+      });
     }
     case "teams": {
       const url = await resolveVaultOrEnv(

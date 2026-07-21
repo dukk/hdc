@@ -129,6 +129,17 @@ async function main() {
     taskId,
   });
 
+  for (const [channelId, channelResult] of Object.entries(result.results)) {
+    if (channelResult.ok) continue;
+    if (channelResult.skipped) {
+      stderr.write(
+        `notify: ${channelId} skipped${channelResult.error ? `: ${channelResult.error}` : ""}\n`,
+      );
+      continue;
+    }
+    stderr.write(`notify: ${channelId} failed: ${channelResult.error || "unknown error"}\n`);
+  }
+
   if (!result.ok) {
     stderr.write(`notify: no channel delivered for route ${route}\n`);
     stdout.write(JSON.stringify({ ok: false, route, results: result.results }) + "\n");

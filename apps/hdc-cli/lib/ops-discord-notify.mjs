@@ -31,6 +31,8 @@ const IPV6_RE =
 
 const here = dirname(fileURLToPath(import.meta.url));
 const notifyDiscordScript = join(here, "notify-discord.mjs");
+const notifySlackAppScript = join(here, "notify-slack-app.mjs");
+const notifySlackWebhookScript = join(here, "notify-slack-incoming-webhook.mjs");
 
 /**
  * @typedef {import("hdc/package/operation-report.mjs").OperationReportContext} OperationReportContext
@@ -487,12 +489,42 @@ export function opsDiscordNotifySkippedByFlags(flags) {
 }
 
 /**
+ * @param {string} script
+ * @param {string} title
+ * @param {string} message
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {{ ok: boolean; skipped?: boolean; error?: string }}
+ */
+function spawnSlackNotifyScript(script, title, message, env) {
+  try {
+    const slackArgs = [script, "--title", title, "--message", message];
+    const sr = spawnSync(process.execPath, slackArgs, {
+      env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (sr.status === 0) return { ok: true };
+    if (sr.status === 2) {
+      const err = (sr.stderr || sr.stdout || "").trim();
+      return { ok: false, skipped: true, error: err || "slack not configured" };
+    }
+    const err = (sr.stderr || sr.stdout || "").trim();
+    return { ok: false, error: err || `exit ${sr.status ?? 1}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Best-effort Discord post, then Slack mirror (HDC app first, else Incoming Webhook).
+ * Discord and Slack failures are independent; return value reflects Discord outcome.
+ *
  * @param {object} opts
  * @param {string} opts.title
  * @param {string} opts.message
  * @param {NodeJS.ProcessEnv} [opts.env]
  * @param {boolean} [opts.silent]
- * @returns {{ ok: boolean; skipped?: boolean; error?: string }}
+ * @returns {{ ok: boolean; skipped?: boolean; error?: string; slack?: { ok: boolean; skipped?: boolean; error?: string } }}
  */
 export function sendOpsDiscordNotifyBestEffort(opts) {
   const title = String(opts.title ?? "").trim();
@@ -503,18 +535,40 @@ export function sendOpsDiscordNotifyBestEffort(opts) {
   /** @type {string[]} */
   const args = [notifyDiscordScript, "--title", title, "--message", message];
   if (opts.silent === true) args.push("--silent");
+
+  /** @type {{ ok: boolean; skipped?: boolean; error?: string }} */
+  let discordResult;
   try {
     const r = spawnSync(process.execPath, args, {
       env,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (r.status === 0) return { ok: true };
-    const err = (r.stderr || r.stdout || "").trim();
-    return { ok: false, error: err || `exit ${r.status ?? 1}` };
+    if (r.status === 0) discordResult = { ok: true };
+    else {
+      const err = (r.stderr || r.stdout || "").trim();
+      discordResult = { ok: false, error: err || `exit ${r.status ?? 1}` };
+    }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    discordResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+
+  let slackResult = spawnSlackNotifyScript(notifySlackAppScript, title, message, env);
+  // Fall back to Incoming Webhook when the app is unconfigured (skip) or hard-fails
+  // (e.g. channel_not_found) so CLI ops still mirror to Slack.
+  if (!slackResult.ok) {
+    const webhookResult = spawnSlackNotifyScript(
+      notifySlackWebhookScript,
+      title,
+      message,
+      env,
+    );
+    if (webhookResult.ok || slackResult.skipped) {
+      slackResult = webhookResult;
+    }
+  }
+
+  return { ...discordResult, slack: slackResult };
 }
 
 /**

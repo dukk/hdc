@@ -36,3 +36,20 @@ export function queryLinuxUpgradableCount(target, spawnSync, env) {
   const n = parseInt(`${r.stdout ?? ""}`.trim(), 10);
   return { ok: r.status === 0, upgradable_count: Number.isFinite(n) ? n : null };
 }
+
+/**
+ * @param {{ user: string; host: string }} target
+ * @param {typeof import("node:child_process").spawnSync} spawnSync
+ * @param {NodeJS.ProcessEnv} env
+ */
+export function queryLinuxRebootRequired(target, spawnSync, env) {
+  const { identities } = discoverLocalSshMaterial();
+  const r = sshSpawn(target, ["test", "-f", "/var/run/reboot-required"], {
+    spawnSync,
+    env,
+    mode: "pubkey",
+    identities,
+    timeoutMs: 60_000,
+  });
+  return { ok: r.status === 0 || r.status === 1, reboot_required: r.status === 0 };
+}

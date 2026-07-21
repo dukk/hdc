@@ -20,6 +20,15 @@ Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\A
 
 const REBOOT_SCRIPT = `Restart-Computer -Force`.trim();
 
+export function queryWindowsRebootRequired(conn) {
+  const script = buildWinRmInvokeScript({ ...conn, remoteScript: REBOOT_REQUIRED_SCRIPT });
+  const r = runLocalPowerShell({ scriptBody: script });
+  if (r.status !== 0) {
+    return { ok: false, message: r.stderr || r.stdout || "WinRM reboot query failed" };
+  }
+  return { ok: true, reboot_required: r.stdout.toLowerCase().includes("true") };
+}
+
 /**
  * @param {object} conn
  */

@@ -14,9 +14,11 @@ Authorization: Bearer <token>
 
 Authenticated as synthetic user `api-token`.
 
-### Password login (web UI, default)
+### Password login (web UI)
 
 Human login uses an encrypted htpasswd file at `{metaRoot}/.htpasswd.enc` (AES-256-GCM, key from `HDC_WEB_UI_SESSION_SECRET`). On first start the server creates an `admin` user (configurable) with `HDC_WEB_ADMIN_PASSWORD` or a generated password.
+
+Default `auth.mode` is **`both`**: password login and OIDC SSO can be enabled together. Set `auth.mode` to `oidc` in `web-config.json` for SSO-only sites.
 
 ```http
 POST /api/auth/login
@@ -27,9 +29,9 @@ Content-Type: application/json
 
 On success, sets `hdc_web_session` HttpOnly cookie (24h). Rate-limited after repeated failures.
 
-Requires `HDC_WEB_UI_SESSION_SECRET`. Set `auth.mode` to `oidc` in `web-config.json` to disable password login.
+Requires `HDC_WEB_UI_SESSION_SECRET`. Disabled when `auth.mode` is `oidc`.
 
-### OIDC SSO (optional)
+### OIDC SSO (optional, can run alongside password login)
 
 When fully configured, humans may also use Keycloak (Authorization Code + PKCE) via the BFF:
 
@@ -44,11 +46,14 @@ Env: `HDC_WEB_OIDC_ISSUER`, `HDC_WEB_OIDC_CLIENT_ID`, `HDC_WEB_OIDC_CLIENT_SECRE
 | Method | Path | Response |
 |--------|------|----------|
 | GET | `/api/health` | `{"ok":true}` |
-| GET | `/api/auth/me` | `{user, password_login_enabled, oidc_configured, …}` (`user` may be null) |
+| GET | `/api/auth/me` | `{user, password_login_enabled, oidc_configured, auth_mode, …}` (`user` may be null) |
 | POST | `/api/auth/login` | Password login; sets cookie |
 | GET | `/api/auth/oidc/login` | 302 to IdP |
 | GET | `/api/auth/oidc/callback` | 302 to app with session cookie |
 | POST | `/api/discord/interactions` | Discord Interactions (Ed25519-verified). Requires `HDC_OPS_DISCORD_PUBLIC_KEY`. Handles PING and hdc-ops Approve/Deny message components (`custom_id` `hdc:approve:<taskId>` / `hdc:deny:<taskId>`), patching task status like the Tasks UI (`approved` / `blocked`). |
+| POST | `/api/slack/interactions` | Slack Interactivity (HMAC signing-secret verified). Requires `HDC_SLACK_HDC_APP_SIGNING_SECRET`. Handles Block Kit Approve/Deny (`action_id` `hdc:approve:<taskId>` / `hdc:deny:<taskId>`), patching task status like the Tasks UI (`approved` / `blocked`). When `HDC_SLACK_DECISION_AUTHORIZED_USERS` (or hdc-agents `decision_authorized_users`) is set, only listed Slack usernames / `U…` ids may approve or deny. |
+| POST | `/api/slack/events` | Slack Events API (HMAC signing-secret verified). Handles `url_verification`, `app_mention`, and DM `message.im`. Creates an audit task and enqueues hdc-manager `/internal/operator-prompt`; the manager replies in-thread. Same operator allowlist as Approve/Deny. |
+| POST | `/api/slack/commands` | Slack slash command `/hdc` (HMAC signing-secret verified). Ephemeral ack then manager turn + channel reply. Same operator allowlist. |
 
 ## Routes
 
@@ -60,7 +65,7 @@ Env: `HDC_WEB_OIDC_ISSUER`, `HDC_WEB_OIDC_CLIENT_ID`, `HDC_WEB_OIDC_CLIENT_SECRE
 | GET | `/api/auth/oidc/callback` | — | OIDC redirect; sets cookie |
 | POST | `/api/auth/login` | `{username, password}` | Password login; sets cookie; 429 when rate-limited |
 | POST / GET | `/api/auth/logout` | — | Clears cookie; may return `logout_url` for IdP end-session |
-| GET | `/api/auth/me` | — | `{user, install_root, private_root, meta_root, password_login_enabled, oidc_configured}` |
+| GET | `/api/auth/me` | — | `{user, install_root, private_root, meta_root, password_login_enabled, oidc_configured, auth_mode}` |
 
 ### Schedules
 
@@ -103,8 +108,10 @@ Default `allowed_verbs`: `query`, `maintain` only. `deploy` and `teardown` are n
 
 | Method | Path |
 |--------|------|
-| GET | `/api/inventory/:category` | `systems`, `services`, `networks`, `targets` |
-| GET | `/api/inventory/:category/:id` | Full sidecar JSON |
+| GET | `/api/inventory/:category` | `systems`, `services`, `networks`, `targets`, `domains` |
+| GET | `/api/inventory/:category/:id` | Full sidecar JSON (domains: manual + automated merge) |
+
+The web UI **Domains** tab lists merged domain summaries (`dns`, `website`, `mail`, `renewal_usd`, `expires_at`, `purpose`, `notes`). The Inventory tab also exposes the `domains` category.
 
 ### Agent tasks
 

@@ -403,15 +403,81 @@ describe("ops-discord-notify", () => {
       expect(sendOpsDiscordNotifyBestEffort({ title: "", message: "" }).skipped).toBe(true);
     });
 
-    it("forwards --silent to notify script", () => {
+    it("forwards --silent to notify script and fans out Slack", () => {
       spawnSyncMock.mockClear();
-      sendOpsDiscordNotifyBestEffort({
+      spawnSyncMock.mockImplementation(() => ({
+        status: 0,
+        stdout: "",
+        stderr: "",
+        pid: 1,
+        output: [null, "", ""],
+        signal: null,
+      }));
+      const r = sendOpsDiscordNotifyBestEffort({
         title: "Job OK",
         message: "done",
         silent: true,
       });
-      const args = spawnSyncMock.mock.calls[0]?.[1];
-      expect(args).toContain("--silent");
+      expect(r.ok).toBe(true);
+      expect(spawnSyncMock).toHaveBeenCalledTimes(2);
+      const discordArgs = spawnSyncMock.mock.calls[0]?.[1];
+      expect(discordArgs).toContain("--silent");
+      expect(String(discordArgs?.[0] ?? "")).toMatch(/notify-discord\.mjs$/);
+      const slackArgs = spawnSyncMock.mock.calls[1]?.[1];
+      // Prefer slack-hdc-app launcher; tests may see app or webhook script depending on skip.
+      expect(String(slackArgs?.[0] ?? "")).toMatch(
+        /notify-slack-(app|incoming-webhook)\.mjs$/,
+      );
+      expect(slackArgs).toContain("Job OK");
+      expect(r.slack?.ok).toBe(true);
+    });
+
+    it("falls back to Incoming Webhook when slack-hdc-app hard-fails", () => {
+      spawnSyncMock.mockClear();
+      spawnSyncMock.mockImplementation((cmd, args) => {
+        const script = String(args?.[0] ?? "");
+        if (script.includes("notify-discord")) {
+          return {
+            status: 0,
+            stdout: "",
+            stderr: "",
+            pid: 1,
+            output: [null, "", ""],
+            signal: null,
+          };
+        }
+        if (script.includes("notify-slack-app")) {
+          return {
+            status: 1,
+            stdout: "",
+            stderr: "channel_not_found",
+            pid: 1,
+            output: [null, "", ""],
+            signal: null,
+          };
+        }
+        return {
+          status: 0,
+          stdout: "",
+          stderr: "notify-slack-incoming-webhook: sent",
+          pid: 1,
+          output: [null, "", ""],
+          signal: null,
+        };
+      });
+      const r = sendOpsDiscordNotifyBestEffort({
+        title: "Job OK",
+        message: "done",
+      });
+      expect(r.ok).toBe(true);
+      expect(r.slack?.ok).toBe(true);
+      expect(spawnSyncMock.mock.calls.length).toBe(3);
+      expect(String(spawnSyncMock.mock.calls[1]?.[1]?.[0] ?? "")).toMatch(
+        /notify-slack-app\.mjs$/,
+      );
+      expect(String(spawnSyncMock.mock.calls[2]?.[1]?.[0] ?? "")).toMatch(
+        /notify-slack-incoming-webhook\.mjs$/,
+      );
     });
   });
 

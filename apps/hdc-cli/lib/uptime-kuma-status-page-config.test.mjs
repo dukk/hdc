@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPublicGroupListForSave,
+  expandStatusPageGroupsFromMonitors,
+  groupsFromConfigMonitors,
   groupsFromPublicGroupList,
   liveStatusPageToConfig,
   statusPageHasDrift,
@@ -30,6 +32,7 @@ const sampleStatusPage = {
   analytics_script_url: null,
   analytics_type: null,
   managed: true,
+  include_all_monitors: false,
   groups: [{ name: "Core", weight: 1, monitors: [{ id: "pi-hole-a" }] }],
 };
 
@@ -167,5 +170,109 @@ describe("uptime-kuma status page config", () => {
       domainNameList: ["status.example.com"],
       autoRefreshInterval: 120,
     });
+  });
+
+  it("groupsFromConfigMonitors buckets by group and sorts", () => {
+    const groups = groupsFromConfigMonitors([
+      {
+        id: "bind-b",
+        name: "BIND B",
+        type: "ping",
+        url: null,
+        hostname: "bind-b",
+        group: "DNS",
+        tags: [],
+        interval: 60,
+        ignore_tls: false,
+        managed: true,
+        notes: null,
+      },
+      {
+        id: "bind-a",
+        name: "BIND A",
+        type: "ping",
+        url: null,
+        hostname: "bind-a",
+        group: "DNS",
+        tags: [],
+        interval: 60,
+        ignore_tls: false,
+        managed: true,
+        notes: null,
+      },
+      {
+        id: "homepage",
+        name: "Homepage",
+        type: "http",
+        url: "http://homepage",
+        hostname: null,
+        group: null,
+        tags: [],
+        interval: 60,
+        ignore_tls: false,
+        managed: true,
+        notes: null,
+      },
+      {
+        id: "orphan-group",
+        name: "Orphan Group",
+        type: "group",
+        url: null,
+        hostname: null,
+        group: null,
+        tags: [],
+        interval: 60,
+        ignore_tls: false,
+        managed: true,
+        notes: null,
+      },
+    ]);
+    expect(groups).toEqual([
+      {
+        name: "DNS",
+        weight: 1,
+        monitors: [
+          { id: "bind-a", send_url: false, url: null },
+          { id: "bind-b", send_url: false, url: null },
+        ],
+      },
+      {
+        name: "Other",
+        weight: 2,
+        monitors: [{ id: "homepage", send_url: false, url: null }],
+      },
+    ]);
+  });
+
+  it("expandStatusPageGroupsFromMonitors only expands when include_all_monitors is true", () => {
+    const monitors = [
+      {
+        id: "bind-a",
+        name: "BIND A",
+        type: "ping",
+        url: null,
+        hostname: "bind-a",
+        group: "DNS",
+        tags: [],
+        interval: 60,
+        ignore_tls: false,
+        managed: true,
+        notes: null,
+      },
+    ];
+    expect(expandStatusPageGroupsFromMonitors(sampleStatusPage, monitors).groups).toEqual(
+      sampleStatusPage.groups,
+    );
+    const expanded = expandStatusPageGroupsFromMonitors(
+      { ...sampleStatusPage, include_all_monitors: true, groups: [] },
+      monitors,
+    );
+    expect(expanded.groups).toEqual([
+      {
+        name: "DNS",
+        weight: 1,
+        monitors: [{ id: "bind-a", send_url: false, url: null }],
+      },
+    ]);
   });
 });

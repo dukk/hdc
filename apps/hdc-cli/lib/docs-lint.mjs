@@ -1,10 +1,28 @@
+import { createRequire } from "node:module";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import Ajv2020 from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
-
 import { parseJsonc, readResolvedPackageConfigJson } from "./json-config-preprocess.mjs";
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Lazy-load ajv so importing this module (via cli-app / MCP) does not require
+ * ajv in fleet container images that never run docs lint.
+ * @returns {{ Ajv2020: typeof import("ajv/dist/2020.js").default; addFormats: typeof import("ajv-formats").default }}
+ */
+function loadAjv() {
+  try {
+    const Ajv2020 = require("ajv/dist/2020.js");
+    const addFormats = require("ajv-formats");
+    return { Ajv2020, addFormats };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `docs lint requires the ajv and ajv-formats packages (devDependencies). Install with npm install, then retry. (${msg})`,
+    );
+  }
+}
 
 /**
  * @param {string} dir
@@ -56,6 +74,7 @@ export function runDocsLint(opts) {
   const schemaDir = join(publicRoot, "apps", "hdc-cli", "schema");
   const schemaFiles = listFilesRecursive(schemaDir, (n) => n.endsWith(".schema.json"));
 
+  const { Ajv2020, addFormats } = loadAjv();
   const ajv = new Ajv2020({
     allErrors: true,
     strict: false,
@@ -151,6 +170,16 @@ export function runDocsLint(opts) {
     /* optional */
   }
 
+  const exampleDomain = join(publicRoot, "operations", "inventory", "domains", "_example.json");
+  try {
+    if (statSync(exampleDomain).isFile()) {
+      checkAgainst(exampleDomain, "inventory.domain.schema.json", dataLevel);
+      checked += 1;
+    }
+  } catch {
+    /* optional */
+  }
+
   /** @type {string[]} */
   const clumpsRoots = [];
   for (const candidate of [
@@ -204,7 +233,7 @@ export function runDocsLint(opts) {
   }
 
   if (privateRoot) {
-    for (const kind of ["systems", "networks", "services", "targets"]) {
+    for (const kind of ["systems", "networks", "services", "targets", "domains"]) {
       const dir = join(privateRoot, "operations", "inventory", kind);
       const schemaKey =
         kind === "systems"
@@ -213,7 +242,9 @@ export function runDocsLint(opts) {
             ? "inventory.network.schema.json"
             : kind === "services"
               ? "inventory.services.schema.json"
-              : "inventory.target.schema.json";
+              : kind === "domains"
+                ? "inventory.domain.schema.json"
+                : "inventory.target.schema.json";
       if (!validators.has(schemaKey)) continue;
       for (const file of listFilesRecursive(dir, (n) => n.endsWith(".json") && !n.startsWith("_"))) {
         checkAgainst(file, schemaKey, dataLevel);
