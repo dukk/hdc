@@ -121,6 +121,36 @@ export async function postSlackChatMessage(opts) {
 }
 
 /**
+ * Resolve the authenticated Slack identity for a bot (or user) token via auth.test.
+ *
+ * @param {object} opts
+ * @param {string} opts.botToken
+ * @param {string} [opts.apiBase]
+ * @param {typeof fetch} [opts.fetchFn]
+ * @returns {Promise<{ userId: string, botId: string }>}
+ */
+export async function fetchSlackAuthIdentity(opts) {
+  const fetchFn = opts.fetchFn ?? fetch;
+  const apiBase = (opts.apiBase || SLACK_API_BASE).replace(/\/$/, "");
+  const botToken = String(opts.botToken ?? "").trim();
+  if (!botToken) throw new Error("botToken is required");
+
+  const res = await fetchFn(`${apiBase}/auth.test`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${botToken}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok === false) {
+    const err = typeof data?.error === "string" ? data.error : `HTTP ${res.status}`;
+    throw new Error(`Slack auth.test failed: ${err}`);
+  }
+  return {
+    userId: typeof data.user_id === "string" ? data.user_id.trim() : "",
+    botId: typeof data.bot_id === "string" ? data.bot_id.trim() : "",
+  };
+}
+
+/**
  * Resolve bot token from env or vault.
  *
  * @param {object} [opts]

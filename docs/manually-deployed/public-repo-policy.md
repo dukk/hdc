@@ -9,12 +9,15 @@ The **hdc** repository on GitHub is public automation and documentation. **Live 
 | Package code (`clumps/**`) | Yes | No (mirror paths only for configs) |
 | `config.example.json` | Yes | Optional copy |
 | `config.json` | **Never** | Yes |
-| `operations/inventory/**` | Only `_example.json` under `systems/`, `services/`, `networks/`, `targets/`, `domains/` | Yes |
+| `operations/inventory/**` | `_example.json` only (all inventory kinds: systems, services, networks, targets, domains, policies, dns) | Live sidecars |
+| `operations/automated/**` | `_example.json` only (`systems/`, `networks/`, `policies/`, `domains/`) | Live overlays |
+| `operations/tasks/`, `proposals/`, `reports/`, `research/` | `_example*.md` templates only | Live ops state |
+| `operations/_example-*.md` | Templates for `ip-allocations`, `delegation-policy`, `task-report` | Live files without `_example-` prefix |
 | `.env` | Only `.env.example` | Yes |
-| DNS zone JSON, operations notes | No | Yes |
-| Deploy/maintain reports | No (gitignored) | Yes |
+| Live DNS zone JSON / site IP tables | **Never** | Yes |
+| Deploy/maintain reports under `clumps/**/reports/` | No (gitignored) | Yes |
 
-Resolution order in the CLI: public file first, then hdc-private merge for the same relative path.
+Resolution order in the CLI: public file first, then hdc-private merge for the same relative path. Top-level ops files use an `_example-` prefix in public hdc so they never shadow live private filenames.
 
 ## Fictional fixtures in public examples
 
@@ -23,6 +26,7 @@ Use RFC 5737 documentation addresses and reserved example domains so published t
 | Use | Example |
 | --- | --- |
 | LAN | `192.0.2.0/24` (`192.0.2.1` gateway, `192.0.2.2` DNS, …) |
+| Documentation MAC | `00:00:5E:00:53:00` (RFC 7042) |
 | DNS zones | `example.invalid`, `hdc.example.invalid`, `home.example.invalid` |
 | Operator email in docs/tests | `ops@example.invalid` |
 | Extra brand domains in WAF examples | `brand-a.example`, `brand-b.example` |
@@ -32,7 +36,7 @@ Do not commit real hostnames, MAC addresses, VMIDs from production, or operator 
 ## Never commit
 
 - `config.json` (any package)
-- `operations/inventory/**` except `_example.json`
+- `operations/**` live sidecars (anything that is not an `_example` / `_example-*` template)
 - `.env` (except `.env.example`)
 - `vault.enc`, `*.pem`, `*.key`, `**/client_secret*.json`
 - Operation reports under `clumps/**/reports/`

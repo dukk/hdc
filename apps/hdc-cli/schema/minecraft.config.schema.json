@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hdc.local/schema/minecraft.config.schema.json",
+  "title": "HDC minecraft service package config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "deployments"],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 2 },
+    "minecraft": {
+      "type": "object",
+      "properties": {
+        "paper": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "version": { "type": "string" },
+            "per_player_mob_spawns": { "type": "boolean" },
+            "keep_spawn_loaded_range": { "type": "integer", "minimum": 1 },
+            "anti_xray": { "type": "boolean" }
+          }
+        },
+        "eula": { "type": "boolean" },
+        "java_heap_min": { "type": "string" },
+        "java_heap": { "type": "string" },
+        "install_dir": { "type": "string" },
+        "java_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "bedrock_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "motd": { "type": "string" },
+        "max_players": { "type": "integer", "minimum": 1 },
+        "online_mode": { "type": "boolean" },
+        "geyser": { "type": "boolean" },
+        "floodgate": { "type": "boolean" },
+        "floodgate_username_prefix": { "type": "string" },
+        "bluemap": {
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "web_port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              }
+            }
+          ]
+        },
+        "essentialsx": { "type": "boolean" },
+        "essentialsx_chat": { "type": "boolean" },
+        "essentialsx_spawn": { "type": "boolean" },
+        "worldedit": { "type": "boolean" },
+        "worldguard": { "type": "boolean" },
+        "vault": { "type": "boolean" },
+        "tree_feller": { "type": "boolean" },
+        "chunky": { "type": "boolean" },
+        "dead_chest": { "type": "boolean" },
+        "decent_holograms": { "type": "boolean" },
+        "drop_heads": { "type": "boolean" },
+        "luckperms": { "type": "boolean" },
+        "protocollib": { "type": "boolean" },
+        "requests": { "type": "boolean" },
+        "signshop": { "type": "boolean" },
+        "silk_spawners": { "type": "boolean" },
+        "vanish_no_packet": { "type": "boolean" },
+        "worldedit_sui": { "type": "boolean" },
+        "server_properties": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        },
+        "whitelist": {
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "enforce": { "type": "boolean" },
+                "players": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "$hdc.include": {
+                        "oneOf": [
+                          { "type": "string" },
+                          {
+                            "type": "object",
+                            "required": ["file"],
+                            "properties": { "file": { "type": "string" } }
+                          }
+                        ]
+                      },
+                      "uuid": { "type": "string" },
+                      "name": { "type": "string" },
+                      "edition": { "enum": ["java", "bedrock"] },
+                      "xuid": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["uuid", "name"],
+            "properties": {
+              "uuid": { "type": "string" },
+              "name": { "type": "string" },
+              "level": { "type": "integer", "minimum": 1, "maximum": 4 },
+              "bypassesPlayerLimit": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "defaults": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id"],
+        "properties": {
+          "system_id": { "type": "string", "pattern": "^vm-minecraft-[a-z]+$" },
+          "mode": { "enum": ["proxmox-qemu"] },
+          "hostname": { "type": "string" },
+          "proxmox": { "type": "object" },
+          "configure": { "type": "object" },
+          "install": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "linux_user": { "type": "string" }
+            }
+          },
+          "minecraft": { "type": "object" }
+        }
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 
 import {
+  fetchSlackAuthIdentity,
   postSlackChatMessage,
   resolveSlackBotToken,
 } from "../../hdc-cli/lib/ops-slack-app-notify.mjs";
@@ -18,6 +19,18 @@ import {
 const seenEventIds = new Map();
 const EVENT_DEDUP_TTL_MS = 10 * 60 * 1000;
 const EVENT_DEDUP_MAX = 500;
+
+const IDENTITY_SUCCESS_TTL_MS = 60 * 60 * 1000;
+const IDENTITY_FAILURE_TTL_MS = 60 * 1000;
+
+/**
+ * @type {{
+ *   identity: { userId: string, botId: string } | null,
+ *   expiresAt: number,
+ *   warnedNonBot: boolean,
+ * } | null}
+ */
+let cachedSelfIdentity = null;
 
 /**
  * @param {string} line
@@ -50,6 +63,60 @@ export function rememberSlackEventId(eventId) {
 /** Clear dedup map (tests). */
 export function clearSlackEventDedup() {
   seenEventIds.clear();
+}
+
+/** Clear cached Slack auth identity (tests). */
+export function clearSlackIdentityCache() {
+  cachedSelfIdentity = null;
+}
+
+/**
+ * Resolve and cache the HDC Slack app's own user_id / bot_id via auth.test.
+ * Failures are cached briefly so a Slack outage does not add a call per event.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {typeof fetch} [fetchFn]
+ * @returns {Promise<{ userId: string, botId: string } | null>}
+ */
+export async function resolveSelfSlackIdentity(env = process.env, fetchFn = fetch) {
+  const now = Date.now();
+  if (cachedSelfIdentity && now < cachedSelfIdentity.expiresAt) {
+    return cachedSelfIdentity.identity;
+  }
+  const botToken = await resolveSlackBotToken({ env });
+  if (!botToken) {
+    cachedSelfIdentity = {
+      identity: null,
+      expiresAt: now + IDENTITY_FAILURE_TTL_MS,
+      warnedNonBot: cachedSelfIdentity?.warnedNonBot ?? false,
+    };
+    return null;
+  }
+  try {
+    const identity = await fetchSlackAuthIdentity({ botToken, fetchFn });
+    const warnedNonBot = cachedSelfIdentity?.warnedNonBot ?? false;
+    if (!identity.botId && !warnedNonBot) {
+      logSlack(
+        "[slack-events] warning: auth.test returned no bot_id — HDC_SLACK_BOT_TOKEN may be a user token (xoxp); self-message filtering relies on user_id only",
+      );
+    }
+    cachedSelfIdentity = {
+      identity,
+      expiresAt: now + IDENTITY_SUCCESS_TTL_MS,
+      warnedNonBot: warnedNonBot || !identity.botId,
+    };
+    return identity;
+  } catch (e) {
+    logSlack(
+      `[slack-events] auth.test failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    cachedSelfIdentity = {
+      identity: null,
+      expiresAt: now + IDENTITY_FAILURE_TTL_MS,
+      warnedNonBot: cachedSelfIdentity?.warnedNonBot ?? false,
+    };
+    return null;
+  }
 }
 
 /**
@@ -306,6 +373,20 @@ export async function handleSlackEventsPayload(opts) {
     return { status: 200, body: { ok: true, ignored: "bot" } };
   }
 
+  const env = opts.env ?? process.env;
+  const selfIdentity = await resolveSelfSlackIdentity(env, opts.fetchFn);
+  const eventBotId = typeof event.bot_id === "string" ? event.bot_id.trim() : "";
+  if (
+    selfIdentity &&
+    ((selfIdentity.userId && userId && userId === selfIdentity.userId) ||
+      (selfIdentity.botId && eventBotId && eventBotId === selfIdentity.botId))
+  ) {
+    logSlack(
+      `[slack-events] ignored=self channel=${channel || "?"} user=${userId || "?"} type=${eventType}`,
+    );
+    return { status: 200, body: { ok: true, ignored: "self" } };
+  }
+
   const isMention = eventType === "app_mention";
   const isIm =
     eventType === "message" &&
@@ -325,7 +406,6 @@ export async function handleSlackEventsPayload(opts) {
     return { status: 200, body: { ok: true, ignored: "empty" } };
   }
 
-  const env = opts.env ?? process.env;
   const auth = await authorizeSlackPromptUser({
     userId,
     env,

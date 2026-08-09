@@ -4,7 +4,7 @@ import { stderr as errout } from "node:process";
 
 import { parseArgvFlags } from "../parse-argv-flags.mjs";
 import { runOperationReportTail } from "../operation-report.mjs";
-import { repoRoot } from "../../paths.mjs";
+import { repoRoot } from "../../../paths.mjs";
 import { createVaultAccess, vaultDepsFromCli } from "../../vault-access.mjs";
 import { queryLinuxDisk, queryLinuxRebootRequired, queryLinuxUpgradableCount } from "./client-disk-linux.mjs";
 import { maintainLinuxHost } from "./client-maintain-linux.mjs";
@@ -41,6 +41,7 @@ import {
 } from "./client-winrm-bootstrap.mjs";
 import { isHostOnline, isWindowsHostOnline, tcpReachability } from "./client-reachability.mjs";
 import { sendWakeOnLan, waitForReachable } from "./client-wol.mjs";
+import { importLinuxClientHardware } from "./client-hardware-import.mjs";
 
 const SERVICE_PORT = { windows: 5986, ubuntu: 22, raspberrypi: 22 };
 
@@ -101,14 +102,30 @@ export async function runClientVerb(opts) {
   const noWinrmBootstrap = flags["no-winrm-bootstrap"] !== undefined;
   const noReport = flags["no-report"] !== undefined;
   const reportPath = flags.report;
+  const importHardware = flags["import-hardware"] !== undefined;
 
   errout.write(`[hdc] ${platform} ${verb}: home client ${verb} (stderr log; JSON on stdout).\n`);
 
   /** @type {Record<string, unknown>[]} */
   let hostResults = [];
   let ok = true;
+  /** @type {{ ok: boolean; imported: Record<string, unknown>[]; message?: string } | null} */
+  let hardwareImport = null;
 
   try {
+    if (verb === "query" && importHardware) {
+      if (platform !== "ubuntu" && platform !== "raspberrypi") {
+        throw new Error("--import-hardware is only supported for ubuntu and raspberrypi clients");
+      }
+      hardwareImport = await importLinuxClientHardware({
+        platform,
+        clumpRoot,
+        flags,
+        log: (line) => errout.write(`[hdc] ${platform} ${verb}: ${line}\n`),
+      });
+      if (!hardwareImport.ok) ok = false;
+    }
+
     const cfg = loadClientConfigFromPackageRoot(clumpRoot);
     const wolDefaults = wolDefaultsFromConfig(cfg);
     const mailRelayDefaults = mailRelayDefaultsFromConfig(cfg);
@@ -469,7 +486,21 @@ export async function runClientVerb(opts) {
     return;
   }
 
-  const payload = { ok, package: platform, verb, hosts: hostResults };
+  const payload = {
+    ok,
+    package: platform,
+    verb,
+    hosts: hostResults,
+    ...(hardwareImport
+      ? {
+          hardware_import: {
+            ok: hardwareImport.ok,
+            imported: hardwareImport.imported,
+            ...(hardwareImport.message ? { message: hardwareImport.message } : {}),
+          },
+        }
+      : {}),
+  };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 
   if (!noReport) {

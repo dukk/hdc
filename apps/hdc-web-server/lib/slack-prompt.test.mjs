@@ -7,6 +7,7 @@ import {
   acceptSlackOperatorPrompt,
   authorizeSlackPromptUser,
   clearSlackEventDedup,
+  clearSlackIdentityCache,
   handleSlackEventsPayload,
   handleSlackSlashCommand,
   parseSlackSlashForm,
@@ -14,9 +15,33 @@ import {
   stripSlackBotMention,
 } from "./slack-prompt.mjs";
 
+/**
+ * @param {string} url
+ * @param {Record<string, unknown>} [auth]
+ * @param {Record<string, unknown>} [users]
+ */
+function mockSlackFetch(auth = { user_id: "UBOT", bot_id: "BBOT" }, users = {}) {
+  return vi.fn(async (url) => {
+    const u = String(url);
+    if (u.includes("auth.test")) {
+      return { ok: true, json: async () => ({ ok: true, ...auth }) };
+    }
+    if (u.includes("users.info")) {
+      const id = new URL(u).searchParams.get("user") ?? "";
+      const user = users[id] ?? { name: "other", id };
+      return { ok: true, json: async () => ({ ok: true, user }) };
+    }
+    if (u.includes("chat.postMessage")) {
+      return { ok: true, json: async () => ({ ok: true }) };
+    }
+    return { ok: true, json: async () => ({ ok: true }), text: async () => "{}" };
+  });
+}
+
 describe("slack-prompt", () => {
   afterEach(() => {
     clearSlackEventDedup();
+    clearSlackIdentityCache();
   });
 
   it("strips bot mentions", () => {
@@ -78,19 +103,160 @@ describe("slack-prompt", () => {
     expect(result.body).toMatchObject({ ignored: "bot" });
   });
 
-  it("rejects unauthorized app_mention, logs, and posts notice", async () => {
-    const fetchFn = vi.fn(async (url, init) => {
-      if (String(url).includes("chat.postMessage")) {
-        return { ok: true, json: async () => ({ ok: true }) };
-      }
-      if (String(url).includes("users.info")) {
+  it("ignores app_mention from self (auth.test user_id)", async () => {
+    const fetchFn = mockSlackFetch({ user_id: "USELF", bot_id: "BSELF" });
+    const result = await handleSlackEventsPayload({
+      body: {
+        type: "event_callback",
+        event_id: "EvSelfMention",
+        event: {
+          type: "app_mention",
+          user: "USELF",
+          text: "<@UBOT> Needs decision: reboot hypervisor-a",
+          channel: "C1",
+          ts: "1.0",
+        },
+      },
+      privateRoot: "/tmp",
+      env: { HDC_SLACK_BOT_TOKEN: "xoxb-test" },
+      fetchFn,
+    });
+    expect(result.body).toMatchObject({ ignored: "self" });
+    expect(fetchFn.mock.calls.some((c) => String(c[0]).includes("chat.postMessage"))).toBe(
+      false,
+    );
+  });
+
+  it("ignores message.im from self", async () => {
+    const fetchFn = mockSlackFetch({ user_id: "USELF", bot_id: "BSELF" });
+    const result = await handleSlackEventsPayload({
+      body: {
+        type: "event_callback",
+        event_id: "EvSelfIm",
+        event: {
+          type: "message",
+          channel_type: "im",
+          user: "USELF",
+          text: "status summary",
+          channel: "D1",
+          ts: "2.0",
+        },
+      },
+      privateRoot: "/tmp",
+      env: { HDC_SLACK_BOT_TOKEN: "xoxb-test" },
+      fetchFn,
+    });
+    expect(result.body).toMatchObject({ ignored: "self" });
+    expect(fetchFn.mock.calls.some((c) => String(c[0]).includes("chat.postMessage"))).toBe(
+      false,
+    );
+  });
+
+  it("still accepts normal user app_mention when auth.test is a different id", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-slack-prompt-"));
+    mkdirSync(join(root, "operations", "tasks"), { recursive: true });
+    const fetchFn = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes("auth.test")) {
         return {
           ok: true,
-          json: async () => ({ ok: true, user: { name: "other", id: "U9" } }),
+          json: async () => ({ ok: true, user_id: "UBOT", bot_id: "BBOT" }),
         };
       }
-      return { ok: true, json: async () => ({ ok: true }), text: async () => "{}" };
+      if (u.includes("users.info")) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, user: { name: "dukk", id: "U1" } }),
+        };
+      }
+      if (u.includes("operator-prompt") || u.includes("manager")) {
+        return {
+          ok: true,
+          status: 202,
+          text: async () => JSON.stringify({ ok: true, enqueued: true }),
+        };
+      }
+      return { ok: true, status: 202, text: async () => "{}", json: async () => ({ ok: true }) };
     });
+    try {
+      const result = await handleSlackEventsPayload({
+        body: {
+          type: "event_callback",
+          event_id: "EvUserMention",
+          event: {
+            type: "app_mention",
+            user: "U1",
+            text: "<@UBOT> what's down?",
+            channel: "C1",
+            ts: "3.0",
+          },
+        },
+        privateRoot: root,
+        env: {
+          HDC_SLACK_BOT_TOKEN: "xoxb-test",
+          HDC_SLACK_DECISION_AUTHORIZED_USERS: "dukk",
+          HDC_WEB_API_TOKEN: "tok",
+          HDC_MANAGER_INTERNAL_URL: "http://manager.test",
+        },
+        fetchFn,
+      });
+      expect(result.body).toEqual({ ok: true });
+      expect(result.body).not.toHaveProperty("ignored");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fail-open: processes user events when auth.test fails", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-slack-prompt-"));
+    mkdirSync(join(root, "operations", "tasks"), { recursive: true });
+    const fetchFn = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes("auth.test")) {
+        return { ok: true, json: async () => ({ ok: false, error: "invalid_auth" }) };
+      }
+      if (u.includes("users.info")) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, user: { name: "dukk", id: "U1" } }),
+        };
+      }
+      return { ok: true, status: 202, text: async () => "{}", json: async () => ({ ok: true }) };
+    });
+    try {
+      const result = await handleSlackEventsPayload({
+        body: {
+          type: "event_callback",
+          event_id: "EvFailOpen",
+          event: {
+            type: "app_mention",
+            user: "U1",
+            text: "<@UBOT> status",
+            channel: "C1",
+            ts: "4.0",
+          },
+        },
+        privateRoot: root,
+        env: {
+          HDC_SLACK_BOT_TOKEN: "xoxb-test",
+          HDC_SLACK_DECISION_AUTHORIZED_USERS: "dukk",
+          HDC_WEB_API_TOKEN: "tok",
+          HDC_MANAGER_INTERNAL_URL: "http://manager.test",
+        },
+        fetchFn,
+      });
+      expect(result.body).toEqual({ ok: true });
+      expect(result.body).not.toHaveProperty("ignored");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unauthorized app_mention, logs, and posts notice", async () => {
+    const fetchFn = mockSlackFetch(
+      { user_id: "UBOT", bot_id: "BBOT" },
+      { U9: { name: "other", id: "U9" } },
+    );
     const result = await handleSlackEventsPayload({
       body: {
         type: "event_callback",

@@ -443,7 +443,7 @@ Drill into one package or verb:
     const scriptAbs = deps.join(cwd, spec.script);
     const relScript = deps.relative(root, scriptAbs).replace(/\\/g, "/");
     const queryNote =
-      verb === "query" || verb === "deploy"
+      verb === "query" || verb === "health" || verb === "deploy"
         ? `On exit 0, stdout from the script is written to the terminal as received (no hdc post-processing).\n\n`
         : "";
     const invokeLine = `${formatRunInvokeLine(deps, m, platform, verb)} [-- <args for ${spec.script}>]`;
@@ -1415,8 +1415,12 @@ async function cmdRun(deps, root, argv) {
         ? r.stdout
         : String(r.stdout)
       : "";
-  if (verb === "query" && stdoutStr) deps.stdoutWrite(stdoutStr);
-  else if ((verb === "deploy" || verb === "teardown") && stdoutStr) deps.stdoutWrite(stdoutStr);
+  if (
+    (verb === "query" || verb === "health" || verb === "deploy" || verb === "teardown") &&
+    stdoutStr
+  ) {
+    deps.stdoutWrite(stdoutStr);
+  }
   throw new CliExit(status);
 }
 

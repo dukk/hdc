@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { repoRoot } from "../../paths.mjs";
+import { repoRoot } from "../../../paths.mjs";
 import { createPackageVaultAccess } from "../package-vault-access.mjs";
 import { loadClumpConfigFromClumpRoot } from "../clump-run-config.mjs";
 import { resolveMeshcentralDeployments } from "hdc/clump/services/meshcentral/lib/deployments.mjs";

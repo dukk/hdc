@@ -128,9 +128,10 @@ describe("loadProxmoxGuestDesired", () => {
     const privateRoot = mkdtempSync(join(tmpdir(), "hdc-priv-"));
     try {
       const sysDir = join(privateRoot, "operations/inventory/systems");
-      mkdirSync(sysDir, { recursive: true });
+      mkdirSync(join(sysDir, "virtual"), { recursive: true });
+      mkdirSync(join(sysDir, "physical"), { recursive: true });
       writeFileSync(
-        join(sysDir, "open-webui-a.json"),
+        join(sysDir, "virtual", "open-webui-a.json"),
         JSON.stringify({
           id: "open-webui-a",
           kind: "system",
@@ -140,7 +141,7 @@ describe("loadProxmoxGuestDesired", () => {
         }),
       );
       writeFileSync(
-        join(sysDir, "pve-a.json"),
+        join(sysDir, "physical", "pve-a.json"),
         JSON.stringify({
           id: "pve-a",
           kind: "system",
@@ -149,7 +150,7 @@ describe("loadProxmoxGuestDesired", () => {
         }),
       );
       writeFileSync(
-        join(sysDir, "lan-1.json"),
+        join(sysDir, "physical", "lan-1.json"),
         JSON.stringify({
           id: "lan-1",
           kind: "system",

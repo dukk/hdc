@@ -1,12 +1,17 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import {
+  MANUAL_SYSTEMS,
+  SYSTEM_CLASSES,
   automatedDomainRel,
   automatedSystemRel,
+  manualCategoryLegacyRels,
   manualSidecarLegacyRels,
   manualSidecarRel,
+  manualSystemSidecarCandidateRels,
 } from "./inventory-paths.mjs";
-import { resolveRepoFile } from "./private-repo.mjs";
+import { hdcPrivateRoot, resolveRepoFile } from "./private-repo.mjs";
 
 /** @param {unknown} v */
 function isObject(v) {
@@ -54,11 +59,9 @@ function readJsonIfExists(publicRoot, rel, env) {
 }
 
 /**
- * Load manual + automated system sidecar by id.
  * @param {string} publicRoot
- * @param {string} systemId
+ * @param {string[]} rels
  * @param {NodeJS.ProcessEnv} [env]
- * @returns {Record<string, unknown> | null}
  */
 function readFirstJson(publicRoot, rels, env) {
   for (const rel of rels) {
@@ -68,17 +71,87 @@ function readFirstJson(publicRoot, rels, env) {
   return null;
 }
 
+/**
+ * Collect *.json stems from a directory (non-recursive).
+ * @param {string} dir
+ * @param {Set<string>} ids
+ */
+function collectJsonStems(dir, ids) {
+  if (!existsSync(dir)) return;
+  let names;
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json") || name.startsWith("_")) continue;
+    try {
+      if (!statSync(join(dir, name)).isFile()) continue;
+    } catch {
+      continue;
+    }
+    ids.add(name.replace(/\.json$/i, ""));
+  }
+}
+
+/**
+ * List manual system ids from public + private inventory (class subdirs + flat legacy).
+ * @param {string} publicRoot
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string[]}
+ */
+export function listManualSystemIds(publicRoot, env = process.env) {
+  /** @type {Set<string>} */
+  const ids = new Set();
+  const privateRoot = hdcPrivateRoot(publicRoot, env);
+  /** @type {string[]} */
+  const roots = [];
+  if (privateRoot) roots.push(privateRoot);
+  roots.push(publicRoot);
+
+  for (const root of roots) {
+    const systemsRoot = join(root, MANUAL_SYSTEMS);
+    for (const cls of SYSTEM_CLASSES) {
+      collectJsonStems(join(systemsRoot, cls), ids);
+    }
+    // Flat legacy under systems/
+    collectJsonStems(systemsRoot, ids);
+    for (const legacy of manualCategoryLegacyRels("systems")) {
+      collectJsonStems(join(root, legacy), ids);
+    }
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Load manual + automated system sidecar by id.
+ * @param {string} publicRoot
+ * @param {string} systemId
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Record<string, unknown> | null}
+ */
 export function resolveSystemById(publicRoot, systemId, env = process.env) {
-  const manual = readFirstJson(
-    publicRoot,
-    [manualSidecarRel("systems", systemId), ...manualSidecarLegacyRels("systems", systemId)],
-    env,
-  );
+  const manual = readFirstJson(publicRoot, manualSystemSidecarCandidateRels(systemId), env);
   const automated = readJsonIfExists(publicRoot, automatedSystemRel(systemId), env);
   if (!manual && !automated) return null;
   if (!manual) return automated;
   if (!automated) return manual;
   return mergeSystemRecords(manual, automated);
+}
+
+/**
+ * Resolve an existing manual system sidecar path (class dirs then legacy).
+ * @param {string} publicRoot
+ * @param {string} systemId
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function resolveManualSystemSidecarFile(publicRoot, systemId, env = process.env) {
+  for (const rel of manualSystemSidecarCandidateRels(systemId)) {
+    const resolved = resolveRepoFile(publicRoot, rel, env);
+    if (resolved.found) return resolved;
+  }
+  return null;
 }
 
 /**

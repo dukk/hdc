@@ -160,16 +160,22 @@ export function runDocsLint(opts) {
   let checked = 0;
   const dataLevel = strict ? "error" : "warning";
 
-  /** @type {{ rel: string[]; schema: string }[]} */
+  /** @type {{ base: string[]; rel: string[]; schema: string }[]} */
   const exampleSidecars = [
-    { rel: ["systems", "_example.json"], schema: "inventory.system.schema.json" },
-    { rel: ["services", "_example.json"], schema: "inventory.services.schema.json" },
-    { rel: ["networks", "_example.json"], schema: "inventory.network.schema.json" },
-    { rel: ["targets", "_example.json"], schema: "inventory.target.schema.json" },
-    { rel: ["domains", "_example.json"], schema: "inventory.domain.schema.json" },
+    { base: ["operations", "inventory"], rel: ["systems", "_example.json"], schema: "inventory.system.schema.json" },
+    { base: ["operations", "inventory"], rel: ["services", "_example.json"], schema: "inventory.services.schema.json" },
+    { base: ["operations", "inventory"], rel: ["networks", "_example.json"], schema: "inventory.network.schema.json" },
+    { base: ["operations", "inventory"], rel: ["targets", "_example.json"], schema: "inventory.target.schema.json" },
+    { base: ["operations", "inventory"], rel: ["domains", "_example.json"], schema: "inventory.domain.schema.json" },
+    { base: ["operations", "inventory"], rel: ["policies", "_example.json"], schema: "inventory.policy.schema.json" },
+    { base: ["operations", "inventory"], rel: ["dns", "_example.json"], schema: "inventory.dns.schema.json" },
+    { base: ["operations", "automated"], rel: ["systems", "_example.json"], schema: "inventory.system.schema.json" },
+    { base: ["operations", "automated"], rel: ["networks", "_example.json"], schema: "inventory.network.schema.json" },
+    { base: ["operations", "automated"], rel: ["policies", "_example.json"], schema: "inventory.policy.schema.json" },
+    { base: ["operations", "automated"], rel: ["domains", "_example.json"], schema: "inventory.domain.schema.json" },
   ];
-  for (const { rel, schema } of exampleSidecars) {
-    const examplePath = join(publicRoot, "operations", "inventory", ...rel);
+  for (const { base, rel, schema } of exampleSidecars) {
+    const examplePath = join(publicRoot, ...base, ...rel);
     try {
       if (statSync(examplePath).isFile()) {
         checkAgainst(examplePath, schema, dataLevel);

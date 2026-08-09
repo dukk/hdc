@@ -28,7 +28,7 @@ function loadManualSidecarAtRel(root, relPath) {
  * @returns {Record<string, unknown> | null}
  */
 export function loadManualSystemSidecar(root, systemId) {
-  return resolveSystemById(root, systemId) ?? loadManualSidecarAtRel(root, manualSidecarRel("systems", systemId));
+  return resolveSystemById(root, systemId);
 }
 
 /**

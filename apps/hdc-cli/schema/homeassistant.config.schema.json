@@ -36,6 +36,10 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "entity_id": { "type": "string" },
+        "managed": {
+          "type": "boolean",
+          "description": "When true, maintain POSTs this automation to HA (opt-in push)"
+        },
         "config": {}
       }
     }

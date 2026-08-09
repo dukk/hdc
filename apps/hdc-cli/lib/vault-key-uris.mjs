@@ -1,4 +1,3 @@
-import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { primaryIpFromSystem } from "hdc/package/inventory-sidecar.mjs";
@@ -20,13 +19,8 @@ import {
 import { discoverManifests, manifestId } from "../manifests.mjs";
 import { clumpsDir, repoRoot } from "../paths.mjs";
 import { loadClumpConfigFromClumpRoot } from "./clump-config.mjs";
-import {
-  MANUAL_SYSTEMS,
-  manualCategoryLegacyRels,
-  manualSidecarLegacyRels,
-  manualSidecarRel,
-} from "./inventory-paths.mjs";
-import { readResolvedRepoJson, resolveRepoFile } from "./private-repo.mjs";
+import { listManualSystemIds, resolveManualSystemSidecarFile } from "./inventory-resolve.mjs";
+import { readResolvedRepoJson } from "./private-repo.mjs";
 
 const PLACEHOLDER_HOST_RE =
   /(?:^|\.)example\.invalid$|REPLACE_DOMAIN|\.example\.test$/i;
@@ -444,33 +438,14 @@ function expandWithNginxAliases(urls, nginxIndex) {
 
 function loadSystemIpMap(publicRoot, env = process.env) {
   const out = new Map();
-  let invDir = resolveRepoFile(publicRoot, MANUAL_SYSTEMS, env);
-  if (!invDir.found) {
-    for (const legacy of manualCategoryLegacyRels("systems")) {
-      invDir = resolveRepoFile(publicRoot, legacy, env);
-      if (invDir.found) break;
-    }
-  }
-  if (!invDir.found) return out;
-  let names;
-  try {
-    names = readdirSync(invDir.path).filter((n) => n.endsWith(".json") && !n.startsWith("_"));
-  } catch {
-    return out;
-  }
-  for (const name of names) {
-    const id = name.replace(/\.json$/, "");
-    let resolved = null;
-    for (const rel of [manualSidecarRel("systems", id), ...manualSidecarLegacyRels("systems", id)]) {
-      resolved = resolveRepoFile(publicRoot, rel, env);
-      if (resolved.found) break;
-    }
+  for (const id of listManualSystemIds(publicRoot, env)) {
+    const resolved = resolveManualSystemSidecarFile(publicRoot, id, env);
     if (!resolved?.found) continue;
     try {
       const data = readResolvedRepoJson(resolved);
-      const id = typeof data.id === "string" ? data.id : name.replace(/\.json$/, "");
+      const sid = typeof data.id === "string" ? data.id : id;
       const ip = primaryIpFromSystem(data);
-      if (ip) out.set(id, ip);
+      if (ip) out.set(sid, ip);
     } catch {
       // ignore
     }

@@ -47,8 +47,9 @@ Example (split Cloudflare zones):
 | --- | --- |
 | [`apps/hdc-cli/`](apps/hdc-cli/) | Node.js CLI (`cli.mjs`), package runtime (`lib/package/`), and shared libraries |
 | **hdc-clumps** (external) | Plugins: `clients/`, `infrastructure/`, `services/` — bootstrap with `hdc clumps init` |
-| [`operations/inventory/`](operations/inventory/) | Authoritative sidecars in **hdc-private** (`systems/`, `networks/`, `services/`, `targets/`, `domains/`); public repo: `_example.json` under each of those folders |
-| [`operations/automated/`](operations/automated/) | Overlay in **hdc-private** (per-file under `systems/`, `networks/`, `policies/`) |
+| [`operations/inventory/`](operations/inventory/) | Authoritative sidecars in **hdc-private**; public repo: `_example.json` for systems, services, networks, targets, domains, policies, dns |
+| [`operations/automated/`](operations/automated/) | Overlay in **hdc-private** (`systems/`, `networks/`, `policies/`, `domains/`); public `_example.json` per folder |
+| [`operations/`](operations/) (tasks, proposals, reports, research, `_example-*.md`) | Live ops state in **hdc-private**; public fictional templates only |
 | [`docs/manually-deployed/`](docs/manually-deployed/) | Human-oriented markdown for gear hdc does not manage end-to-end |
 
 Optional companion `*.md` next to inventory JSON is for humans/agents; **hdc does not read or write those files**.
@@ -117,7 +118,8 @@ hdc maintain daily -- --skip service/trivy --skip-upgrades
 
 ## Inventory
 
-- **Manual sidecars:** `operations/inventory/{systems,networks,services,targets,domains}/*.json`, discriminated by `kind`: `system`, `network`, `target`, `services`, or `domain`. Public hdc keeps one `_example.json` per folder.
+- **Manual sidecars:** `operations/inventory/{systems,networks,services,targets,domains,policies,dns}/` as `*.json`, discriminated by `kind`. **Systems** live under `operations/inventory/systems/{physical,virtual}/<id>.json` (directory must match `system_class`). Public hdc keeps one `_example.json` per folder (plus automated overlays under `operations/automated/`).
+- **Ops templates:** `operations/tasks/`, `proposals/`, `reports/`, `research/`, and top-level `_example-ip-allocations.md` / `_example-delegation-policy.md` / `_example-task-report.md` document fleet file shapes; live copies live only in hdc-private.
 - **Systems** may list `services: [{ "id": "<id>", "nodes"?: ["…"] }]` pointing at `kind: "services"` records under `operations/inventory/services/` (by id only).
 - **Targets:** `kind: "target"` with `automation_target` set to a package manifest id (e.g. `proxmox`, `unifi-network`).
 - **Schemas:** [`inventory.schema.json`](apps/hdc-cli/schema/inventory.schema.json) (union), plus `inventory.system.schema.json`, `inventory.network.schema.json`, `inventory.target.schema.json`, `inventory.services.schema.json`, `inventory.policy.schema.json`.
@@ -125,7 +127,7 @@ hdc maintain daily -- --skip service/trivy --skip-upgrades
 
 ### System id naming
 
-Filename stem must equal `id` (`<id>.json`). Follow [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc):
+Filename stem must equal `id` (`<id>.json`) under `operations/inventory/systems/<system_class>/`. Follow [`.cursor/rules/hdc-inventory-naming.mdc`](.cursor/rules/hdc-inventory-naming.mdc):
 
 | Workload | Prefix | Example |
 | --- | --- | --- |
@@ -178,7 +180,7 @@ Hypervisor bootstrap hosts still use `hdc users bootstrap-hdc` ([`apps/hdc-cli/l
 Maintain JSON payloads should include `hdc_user`, `admin_user`, `clamav`, `clamav_scan_schedule`, `unattended_upgrades`, `crowdsec_agent`, `wazuh_agent`, `mail_relay` (when applicable), and `root_login_disabled` per instance via [`guestBaselineResultFields`](clumps/lib/guest-baseline-report.mjs). **Maintain operation reports** add a **Guest baseline** section automatically when those fields are present.
 
 - **Out of scope (guest baseline):** Proxmox hypervisors (mail relay via `proxmox maintain`), Synology NAS (`synology-nas`), home clients (mail relay via `client-* maintain`), `ubuntu maintain` (bootstrap `hdc` only), **Home Assistant** (HAOS), and **Windows** guests. **Nagios** LXC guests get the local admin user only (skips ClamAV, scan schedule, CrowdSec/Wazuh agents).
-- **Stub services** (`minecraft`, `jenkins`, `audiobookshelf`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
+- **Stub services** (`jenkins`): baseline when `config.json` defines SSH or LXC targets; otherwise reports that baseline was not applied.
 
 Example: set `HDC_ADMIN_USER` in `.env`, then `hdc run service postgresql maintain --`
 
@@ -1075,15 +1077,16 @@ Example: `hdc run service paperclip deploy -- --instance a`
 | Verb | Summary |
 | --- | --- |
 | `deploy` | Proxmox QEMU on configured host (e.g. `pve-h`): import HAOS OVA qcow2, USB passthrough for Zigbee/Z-Wave; when `public_url` is HTTPS, sync nginx-waf `trusted_proxies` into HAOS `configuration.yaml` (`deployments[]`; `--instance a`, `--destroy-existing`, `--usb-id`, `--no-wait-http`, `--skip-reverse-proxy`) |
-| `maintain` | Sync nginx-waf `trusted_proxies` when `public_url` is HTTPS; HTTP probe on port 8123; `--reapply-usb` to refresh USB mapping; `--skip-reverse-proxy` to skip |
+| `maintain` | Sync nginx-waf `trusted_proxies` when `public_url` is HTTPS; HTTP probe on port 8123; POST managed UI automations (`managed: true` in `automations[]`); `--reapply-usb`; `--skip-reverse-proxy`; `--skip-automations`; `--automation <id>` |
 | `query` | Config summary; `--live` for Proxmox guest + HTTP probe; `--import --yes` writes split `integrations/` + UI automations/scripts/scenes into hdc-private |
 | `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
 
-Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override). Vault: `HDC_HOMEASSISTANT_TOKEN` (long-lived access token) for `query --import`.
+Pin `homeassistant.release` (HAOS version). Set static IP in HA UI if deploy HTTP wait fails. When exposed via nginx-waf (`public_url` `https://…`), `deploy`/`maintain` write only `http.trusted_proxies` for `vm-nginx-waf-a`/`vm-nginx-waf-b` LAN IPs (or `homeassistant.trusted_proxies[]` override) — not `homeassistant.external_url` / `internal_url` (those lock General UI settings; set URLs under **Settings → System → Network** and home location under **General**). Vault: `HDC_HOMEASSISTANT_TOKEN` (long-lived access token) for `query --import` and `maintain` automation sync. Author automations under `automations/<id>.json` with `"managed": true`; maintain upserts via `POST /api/config/automation/config/{id}`.
 
 Example: `hdc run service homeassistant deploy -- --instance a --destroy-existing`
 
 ```bash
+hdc run service homeassistant maintain -- --instance a
 hdc run service homeassistant query -- --import --yes
 ```
 
@@ -1165,6 +1168,26 @@ Vault: `HDC_POSTIZ_DB_PASSWORD`, `HDC_POSTIZ_JWT_SECRET` (auto-generated on firs
 
 Example: `hdc run service postiz deploy --`
 
+## Minecraft in this repo
+
+- **Config:** [`clumps/services/minecraft/config.json`](clumps/services/minecraft/config.json) (copy from [`config.example.json`](clumps/services/minecraft/config.example.json); keep local config out of git).
+- **Inventory:** [`operations/inventory/systems/virtual/vm-minecraft-a.json`](operations/inventory/systems/virtual/vm-minecraft-a.json); service sidecar [`operations/inventory/services/minecraft.json`](operations/inventory/services/minecraft.json).
+- **Schema:** [`apps/hdc-cli/schema/minecraft.config.schema.json`](apps/hdc-cli/schema/minecraft.config.schema.json).
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Proxmox QEMU Ubuntu clone, cloud-init static IP, OpenJDK 25 + Paper + Geyser/Floodgate + optional BlueMap/EssentialsX/WorldEdit/WorldGuard/Vault/Tree Feller + legacy Chunky/DeadChest/DecentHolograms/DropHeads/LuckPerms/ProtocolLib/requests/SignShop/SilkSpawners/VanishNoPacket/WorldEditSUI, systemd `minecraft.service` (`Restart=on-failure`; `--instance a`; `--destroy-existing`, `--skip-provision`, `--skip-install`, `--skip-existing`, `--redeploy-existing`) |
+| `maintain` | Re-apply unit / `server.properties` / whitelist / ops / plugins; optional Paper refresh; guest Linux baseline (`--skip-upgrade` keeps Paper jar, still ensures missing plugins) |
+| `query` | Config summary; `--live` for `systemctl` + TCP 25565 (+ BlueMap `:8100`) |
+| `health` | DNS + direct TCP 25565; BlueMap TCP + public HTTPS when enabled |
+| `teardown` | Destroy QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Java clients use TCP **25565**; Windows/Bedrock uses UDP **19132** via Geyser + Floodgate. Do not proxy game ports through nginx-waf. Public hostname `minecraft.dukk.org` needs DNS-only Cloudflare (still CNAME to WAF WAN) plus UniFi port forwards. **BlueMap** listens on guest `:8100` and is published at `https://minecraft.dukk.org` via nginx-waf — keep gray-cloud (orange-cloud still breaks game ports). Heap defaults `-Xms2G -Xmx5G` on an 8 GiB VM. `minecraft.eula` must be `true`. Optional `whitelist` / `ops[]` / `server_properties` (`difficulty`, `view-distance`, `simulation-distance`, `enable-query`) and Paper extras (`per_player_mob_spawns`, `keep_spawn_loaded_range`, `anti_xray`). Optional plugin booleans include `chunky`, `dead_chest`, `decent_holograms`, `drop_heads`, `luckperms`, `protocollib`, `requests` (HTTP API — no extra UniFi forward), `signshop`, `silk_spawners`, `vanish_no_packet` (Hangar VanishNoPacket-Refined), `worldedit_sui`. Whitelist `players[]` may live in `whitelist.json` via `$hdc.include`. Bedrock players use `"edition": "bedrock"` (Xbox gamertag; optional `xuid` / Floodgate `uuid`) — `/whitelist add` cannot resolve them. Maintain writes Floodgate UUIDs + `.Gamertag` names and sets Paper `perform-username-validation: false`.
+
+No vault secrets for v1.
+
+Example: `hdc run service minecraft deploy -- --instance a`
+
 ## LMS (LM Studio) in this repo
 
 - **Config:** [`clumps/services/lms/config.json`](clumps/services/lms/config.json) (copy from [`config.example.json`](clumps/services/lms/config.example.json); keep local config out of git).
@@ -1207,7 +1230,7 @@ Example: `hdc run service llama-cpp deploy -- --instance a --destroy-existing`
 
 - **Config:** per-clump `config.json` under `clumps/clients/{windows,ubuntu,raspberrypi}/` (copy from each `config.example.json`; keep local config out of git).
 - **Packages:** [`clumps/clients/windows/`](clumps/clients/windows/), [`clumps/clients/ubuntu/`](clumps/clients/ubuntu/) (manifest id `client-ubuntu`), [`clumps/clients/raspberrypi/`](clumps/clients/raspberrypi/).
-- **Inventory:** manual `operations/inventory/systems/*.json` with `automation_targets: ["client"]`, `access.nodes[]` with `ip`, `mac`, and `ssh` or `winrm` as needed.
+- **Inventory:** manual `operations/inventory/systems/{physical,virtual}/*.json` with `automation_targets: ["client"]`, `access.nodes[]` with `ip`, `mac`, and `ssh` or `winrm` as needed.
 - **Schema:** [`apps/hdc-cli/schema/client.config.schema.json`](apps/hdc-cli/schema/client.config.schema.json).
 - **Docs:** [`docs/manually-deployed/client-winrm.md`](docs/manually-deployed/client-winrm.md), [`docs/manually-deployed/client-wol.md`](docs/manually-deployed/client-wol.md).
 

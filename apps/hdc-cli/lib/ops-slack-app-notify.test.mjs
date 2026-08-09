@@ -4,6 +4,7 @@ import {
   SLACK_BOT_TOKEN_KEY,
   SLACK_DECISION_CHANNEL_ENV,
   buildSlackDecisionBlocks,
+  fetchSlackAuthIdentity,
   formatSlackAppText,
   isSlackChannelId,
   normalizeSlackChannelRef,
@@ -15,6 +16,51 @@ import {
 } from "./ops-slack-app-notify.mjs";
 
 describe("ops-slack-app-notify", () => {
+  describe("fetchSlackAuthIdentity", () => {
+    it("returns user_id and bot_id from auth.test", async () => {
+      const fetchFn = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          user_id: "USELF",
+          bot_id: "BSELF",
+        }),
+      }));
+      await expect(
+        fetchSlackAuthIdentity({ botToken: "xoxb-test", fetchFn }),
+      ).resolves.toEqual({ userId: "USELF", botId: "BSELF" });
+      expect(fetchFn).toHaveBeenCalledWith(
+        "https://slack.com/api/auth.test",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "Bearer xoxb-test",
+          }),
+        }),
+      );
+    });
+
+    it("returns empty botId for user tokens", async () => {
+      const fetchFn = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ ok: true, user_id: "UUSER" }),
+      }));
+      await expect(
+        fetchSlackAuthIdentity({ botToken: "xoxp-test", fetchFn }),
+      ).resolves.toEqual({ userId: "UUSER", botId: "" });
+    });
+
+    it("throws on API error", async () => {
+      const fetchFn = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ ok: false, error: "invalid_auth" }),
+      }));
+      await expect(
+        fetchSlackAuthIdentity({ botToken: "xoxb-bad", fetchFn }),
+      ).rejects.toThrow(/auth\.test failed: invalid_auth/);
+    });
+  });
+
   describe("normalizeSlackChannelRef / isSlackChannelId", () => {
     it("strips leading hash and detects ids", () => {
       expect(normalizeSlackChannelRef("#hdc")).toBe("hdc");

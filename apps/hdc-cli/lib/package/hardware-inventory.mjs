@@ -6,7 +6,12 @@ import {
   resolveRepoFile,
   writeResolvedRepoJson,
 } from "../private-repo.mjs";
-import { manualSidecarLegacyRels, manualSidecarRel } from "../inventory-paths.mjs";
+import {
+  manualSystemSidecarCandidateRels,
+  manualSystemSidecarRel,
+  normalizeSystemClass,
+} from "../inventory-paths.mjs";
+import { resolveManualSystemSidecarFile } from "../inventory-resolve.mjs";
 import { loadManualSystemSidecar } from "./inventory-sidecar.mjs";
 
 /** @param {unknown} v */
@@ -15,28 +20,44 @@ function isObject(v) {
 }
 
 /**
- * Resolve write target for operations/inventory/systems/<id>.json (prefer hdc-private for new).
- * Prefers an existing canonical sidecar; never writes to legacy inventory/manual paths.
+ * Resolve write target for operations/inventory/systems/<class>/<id>.json (prefer hdc-private for new).
+ * Prefers an existing sidecar (class dir or flat legacy); new creates use system_class subdirectory.
+ * Never writes to older inventory/manual paths.
  * @param {string} publicRoot
  * @param {string} systemId
+ * @param {{ systemClass?: string }} [opts]
  */
-export function resolveSystemSidecarWrite(publicRoot, systemId) {
-  const rel = manualSidecarRel("systems", systemId);
-  const existing = resolveRepoFile(publicRoot, rel);
-  if (existing.found) return existing;
+export function resolveSystemSidecarWrite(publicRoot, systemId, opts = {}) {
+  const existing = resolveManualSystemSidecarFile(publicRoot, systemId);
+  if (existing?.found) {
+    // Prefer in-place update when already under a class dir; migrate flat/legacy on write.
+    const rel = existing.rel.replace(/\\/g, "/");
+    const underClass =
+      /\/systems\/(physical|virtual)\/[^/]+\.json$/i.test(rel) ||
+      /^operations\/inventory\/systems\/(physical|virtual)\//i.test(rel);
+    if (underClass) return existing;
+  }
 
-  // If only a legacy path exists, still write to the canonical operations path.
-  for (const legacyRel of manualSidecarLegacyRels("systems", systemId)) {
-    const legacy = resolveRepoFile(publicRoot, legacyRel);
+  const cls = normalizeSystemClass(opts.systemClass) ?? "physical";
+  const rel = manualSystemSidecarRel(systemId, cls);
+
+  // Probe preferredNewFilePath metadata via a non-existent flat resolve (private root).
+  const probe = resolveRepoFile(publicRoot, rel);
+  if (probe.found) return probe;
+
+  // If only a legacy/flat path exists, write to the canonical class path (migration).
+  for (const candidateRel of manualSystemSidecarCandidateRels(systemId)) {
+    if (candidateRel === rel) continue;
+    const legacy = resolveRepoFile(publicRoot, candidateRel);
     if (legacy.found) {
       const path = preferredNewFilePath(publicRoot, rel);
       return {
         path,
         rel,
         found: false,
-        source: path.includes("hdc-private") || path !== existing.publicPath ? "private" : "public",
-        privateRoot: existing.privateRoot,
-        publicPath: existing.publicPath,
+        source: path.includes("hdc-private") || path !== probe.publicPath ? "private" : "public",
+        privateRoot: probe.privateRoot,
+        publicPath: probe.publicPath,
       };
     }
   }
@@ -46,9 +67,9 @@ export function resolveSystemSidecarWrite(publicRoot, systemId) {
     path,
     rel,
     found: false,
-    source: path.includes("hdc-private") || path !== existing.publicPath ? "private" : "public",
-    privateRoot: existing.privateRoot,
-    publicPath: existing.publicPath,
+    source: path.includes("hdc-private") || path !== probe.publicPath ? "private" : "public",
+    privateRoot: probe.privateRoot,
+    publicPath: probe.publicPath,
   };
 }
 
@@ -287,7 +308,9 @@ export function upsertPhysicalSystemHardware(opts) {
     collected_at: collectedAt,
   };
 
-  const resolved = resolveSystemSidecarWrite(publicRoot, id);
+  const resolved = resolveSystemSidecarWrite(publicRoot, id, {
+    systemClass: typeof next.system_class === "string" ? next.system_class : "physical",
+  });
   if (!dryRun) {
     writeResolvedRepoJson(resolved, next);
   }

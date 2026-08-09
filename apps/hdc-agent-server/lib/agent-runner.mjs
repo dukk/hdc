@@ -62,11 +62,16 @@ function openAiToolsForRole(role) {
     });
   }
   if (policy.tools.has("hdc_run")) {
+    const verbs = [...policy.runVerbs];
+    const verbHint =
+      verbs.length > 12
+        ? `${verbs.slice(0, 12).join(", ")}, …`
+        : verbs.join(", ");
     tools.push({
       type: "function",
       function: {
         name: "hdc_run",
-        description: `Run hdc clump verb (allowed: ${[...policy.runVerbs].join(", ")})`,
+        description: `Run hdc clump verb (allowed: ${verbHint})`,
         parameters: {
           type: "object",
           required: ["tier", "clump", "verb"],
@@ -268,24 +273,39 @@ export async function runAgentTurn(opts) {
 
   const skillText = loadSkillsForRole(opts.hdcRoot, role);
   const rulesText = loadAutomationRules(opts.hdcRoot);
-  const system = [
-    stripFrontmatter(loadRolePrompt(opts.hdcRoot, role)),
-    "",
-    skillText ? `---\n${skillText}` : "",
-    rulesText ? `---\n## Fleet rules\n${rulesText}` : "",
-    "",
-    "You act only through the provided hdc tools. Prefer query over maintain. Never invent IPs or secrets.",
-    "When finished, reply with a concise summary of actions and findings.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const slackOperator =
+    typeof opts.message === "string" &&
+    opts.message.includes("Interactive operator message via Slack");
+  const tools = slackOperator
+    ? openAiToolsForRole(role).filter((t) =>
+        ["hdc_list", "hdc_help", "hdc_run", "hdc_notify_discord"].includes(
+          String(t?.function?.name ?? ""),
+        ),
+      )
+    : openAiToolsForRole(role);
+  const system = slackOperator
+    ? [
+        "You are the HDC manager answering an interactive Slack operator.",
+        "Use hdc tools for live status. Prefer query over maintain.",
+        "Never invent IPs or secrets. End with a concise Slack-sized summary under ~2000 characters.",
+      ].join("\n")
+    : [
+        stripFrontmatter(loadRolePrompt(opts.hdcRoot, role)),
+        "",
+        skillText ? `---\n${skillText}` : "",
+        rulesText ? `---\n## Fleet rules\n${rulesText}` : "",
+        "",
+        "You act only through the provided hdc tools. Prefer query over maintain. Never invent IPs or secrets.",
+        "When finished, reply with a concise summary of actions and findings.",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
   /** @type {object[]} */
   const messages = [
     { role: "system", content: system },
     { role: "user", content: opts.message },
   ];
-  const tools = openAiToolsForRole(role);
 
   for (let round = 0; round < maxRounds; round++) {
     const response = await chatCompletion({

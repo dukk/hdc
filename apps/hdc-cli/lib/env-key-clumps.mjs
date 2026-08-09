@@ -103,6 +103,7 @@ export const ENV_KEY_TO_PACKAGE_ID = {
   "HDC_VAULTWARDEN_ADMIN_TOKEN": "vaultwarden",
   "HDC_VIKUNJA_DB_PASSWORD": "vikunja",
   "HDC_VIKUNJA_JWT_SECRET": "vikunja",
+  "HDC_WADDLE_VIEW_CONTROLLER_SESSION_SECRET": "waddle-view-controller",
   "HDC_WALLABAG_DB_PASSWORD": "wallabag",
   "HDC_WALLABAG_SECRET": "wallabag",
   "HDC_WINRM_PASSWORD_": "windows",

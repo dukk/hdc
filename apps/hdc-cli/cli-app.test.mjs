@@ -291,6 +291,25 @@ describe("runCli", () => {
     expect(existsSync(join(root, "inventory/manual/targets/tgt.json"))).toBe(false);
   });
 
+  it("run health relays stdout like query", async () => {
+    root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
+    writeTree(root, {
+      "clumps/services/tgt/manifest.json": JSON.stringify({
+        id: "tgt",
+        verbs: { health: { script: "run.mjs" } },
+      }),
+      "clumps/services/tgt/health/run.mjs": "process.exit(0)\n",
+    });
+    const capture = { logLines: [], errorLines: [], warnLines: [], stdoutChunks: [] };
+    const deps = createMemoryCliDeps({
+      root,
+      capture,
+      spawnSync: vi.fn().mockReturnValue({ status: 0, stdout: '{"ok":true,"verb":"health"}\n' }),
+    });
+    expect(await runCli(["run", "service", "tgt", "health"], deps)).toBe(0);
+    expect((capture.stdoutChunks ?? []).join("")).toContain('"verb":"health"');
+  });
+
   it("secrets path and missing subcommand", async () => {
     root = mkdtempSync(join(tmpdir(), "hdc-cli-"));
     const capture = { logLines: [], errorLines: [], warnLines: [] };

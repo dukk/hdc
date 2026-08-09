@@ -6,7 +6,7 @@
   "hosted_on_system_id": "hypervisor-a",
   "tags": ["proxmox", "example"],
   "automation_targets": ["example-package", "proxmox"],
-  "notes": "Fictional template system for public hdc. Copy to hdc-private with real ids and IPs.",
+  "notes": "Fictional template system for public hdc. Live sidecars live under operations/inventory/systems/{physical|virtual}/<id>.json matching system_class. Copy to hdc-private with real ids and IPs.",
   "last_verified": null,
   "proxmox_cluster": {
     "id": "example-proxmox-cluster",

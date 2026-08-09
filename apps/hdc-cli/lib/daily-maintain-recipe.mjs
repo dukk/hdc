@@ -132,7 +132,7 @@ export function buildDailyStepArgs(step, opts = {}) {
     return args;
   }
   if (step.tier === "service") {
-    if (DOCKER_COMPOSE_MAINTAIN_IDS.includes(step.id) || step.id === "plex") {
+    if (DOCKER_COMPOSE_MAINTAIN_IDS.includes(step.id) || step.id === "plex" || step.id === "minecraft" || step.id === "vllm") {
       args.push("--skip-upgrade");
     }
     if (APT_UPGRADE_MAINTAIN_IDS.includes(step.id)) {
@@ -309,7 +309,9 @@ export function dailyRecipeSteps() {
     note: "synopkg upgrade when behind",
   });
 
-  for (const id of ["minecraft", "jenkins"]) {
+  steps.push(maintainService("minecraft", ["--skip-upgrade"]));
+
+  for (const id of ["jenkins"]) {
     steps.push({
       tier: "service",
       id,

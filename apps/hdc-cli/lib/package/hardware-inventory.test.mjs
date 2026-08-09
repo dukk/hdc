@@ -80,13 +80,13 @@ describe("hardwareFromProxmoxNodeStatus", () => {
 });
 
 describe("resolveSystemSidecarWrite / upsert", () => {
-  it("writes under operations/inventory/systems", () => {
+  it("writes under operations/inventory/systems/physical", () => {
     const root = mkdtempSync(join(tmpdir(), "hdc-hw-"));
-    mkdirSync(join(root, "operations", "inventory", "systems"), { recursive: true });
+    mkdirSync(join(root, "operations", "inventory", "systems", "physical"), { recursive: true });
     process.env.HDC_PRIVATE_ROOT = root;
 
     const resolved = resolveSystemSidecarWrite(root, "pve-a");
-    expect(resolved.rel).toBe("operations/inventory/systems/pve-a.json");
+    expect(resolved.rel).toBe("operations/inventory/systems/physical/pve-a.json");
 
     const result = upsertPhysicalSystemHardware({
       publicRoot: root,
@@ -97,13 +97,68 @@ describe("resolveSystemSidecarWrite / upsert", () => {
       accessNode: { ip: "192.0.2.11" },
       source: "proxmox",
     });
-    expect(result.rel).toBe("operations/inventory/systems/pve-a.json");
+    expect(result.rel).toBe("operations/inventory/systems/physical/pve-a.json");
     expect(existsSync(result.path)).toBe(true);
     const data = JSON.parse(readFileSync(result.path, "utf8"));
     expect(data.system_class).toBe("physical");
     expect(data.hardware).toEqual([{ type: "memory", total_gb: 32 }]);
     expect(data.access.nodes[0].ip).toBe("192.0.2.11");
     expect(data.automation_targets).toContain("proxmox");
+
+    delete process.env.HDC_PRIVATE_ROOT;
+  });
+
+  it("updates in place when sidecar already under class dir", () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-hw-"));
+    const dir = join(root, "operations", "inventory", "systems", "physical");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "pve-b.json"),
+      JSON.stringify({
+        schema_version: 1,
+        id: "pve-b",
+        kind: "system",
+        system_class: "physical",
+        hardware: [{ type: "cpu", model: "old" }],
+      }),
+    );
+    process.env.HDC_PRIVATE_ROOT = root;
+
+    const result = upsertPhysicalSystemHardware({
+      publicRoot: root,
+      systemId: "pve-b",
+      hardware: [{ type: "memory", total_gb: 64 }],
+      source: "proxmox",
+    });
+    expect(result.rel).toBe("operations/inventory/systems/physical/pve-b.json");
+    expect(result.created).toBe(false);
+
+    delete process.env.HDC_PRIVATE_ROOT;
+  });
+
+  it("reads flat legacy path then writes class dir on upsert", () => {
+    const root = mkdtempSync(join(tmpdir(), "hdc-hw-"));
+    const flatDir = join(root, "operations", "inventory", "systems");
+    mkdirSync(flatDir, { recursive: true });
+    writeFileSync(
+      join(flatDir, "nas-a.json"),
+      JSON.stringify({
+        schema_version: 1,
+        id: "nas-a",
+        kind: "system",
+        system_class: "physical",
+      }),
+    );
+    process.env.HDC_PRIVATE_ROOT = root;
+
+    const result = upsertPhysicalSystemHardware({
+      publicRoot: root,
+      systemId: "nas-a",
+      hardware: [{ type: "memory", total_gb: 16 }],
+      source: "synology-nas",
+    });
+    expect(result.rel).toBe("operations/inventory/systems/physical/nas-a.json");
+    expect(existsSync(result.path)).toBe(true);
 
     delete process.env.HDC_PRIVATE_ROOT;
   });

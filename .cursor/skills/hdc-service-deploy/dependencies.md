@@ -78,7 +78,7 @@ Reference sites: `glances`, `paperless-ngx`, `twenty`, `uptime-kuma`, `n8n`, `op
 4. **nginx-waf:** add `sites[]` entry with `proxy_pass` to `http://<guest-ip>:<port>`; `client_ip: cloudflare` when behind Cloudflare.
 5. **cloudflare:** A record to WAF WAN IP (proxied) if used.
 6. **nagios:** `run service nagios maintain --` after BIND has the A record.
-7. **homeassistant only:** after nginx-waf site is live, configure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs and set `homeassistant.external_url` — see [homeassistant README](../../../clumps/services/homeassistant/README.md). Without this, `https://ha.example.invalid` returns **400**.
+7. **homeassistant only:** after nginx-waf site is live, ensure HA `http.trusted_proxies` for `vm-nginx-waf-a` / `vm-nginx-waf-b` LAN IPs (`deploy`/`maintain` write this automatically) and set external/internal URL under **Settings → System → Network** in the HA UI — see [homeassistant README](../../../clumps/services/homeassistant/README.md). Without trusted_proxies, `https://ha.example.invalid` returns **400**. Do not put `homeassistant:` keys in `configuration.yaml` (locks General UI settings including location).
 
 See [vaultwarden README](../../../clumps/services/vaultwarden/README.md) and [n8n README](../../../clumps/services/n8n/README.md) for step lists.
 
