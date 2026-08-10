@@ -9,6 +9,9 @@ import {
   buildAppDumpScript,
   buildAppDumpSystemdUnits,
   ensureAppDumpSchedule,
+  minecraftAppDumpOnCalendar,
+  minecraftDumpCommands,
+  minecraftDumpPruneCommands,
   postgresqlDumpCommands,
   vaultwardenDumpCommands,
 } from "./app-dump-schedule.mjs";
@@ -40,6 +43,15 @@ describe("buildAppDumpScript", () => {
     const script = buildAppDumpScript({ ...SPEC, retainDays: 14 });
     expect(script).toContain("-mtime +13 -delete");
   });
+
+  it("uses custom pruneCommands when provided", () => {
+    const script = buildAppDumpScript({
+      ...SPEC,
+      pruneCommands: ['echo prune-custom'],
+    });
+    expect(script).toContain("echo prune-custom");
+    expect(script).not.toContain("-mtime +");
+  });
 });
 
 describe("buildAppDumpSystemdUnits", () => {
@@ -54,12 +66,48 @@ describe("buildAppDumpSystemdUnits", () => {
     expect(units.onCalendar).toMatch(/^\*-\*-\* \d{2}:\d{2}:00$/);
   });
 
+  it("honors onCalendar and randomizedDelaySec overrides", () => {
+    const units = buildAppDumpSystemdUnits({
+      ...SPEC,
+      name: "minecraft",
+      onCalendar: "*-*-* 00/6:15:00",
+      randomizedDelaySec: 300,
+    });
+    expect(units.onCalendar).toBe("*-*-* 00/6:15:00");
+    expect(units.timerUnit).toContain("OnCalendar=*-*-* 00/6:15:00");
+    expect(units.timerUnit).toContain("RandomizedDelaySec=300");
+  });
+
   it("staggers differently than the ClamAV scan for the same system", () => {
     const a = buildAppDumpSystemdUnits(SPEC);
     const b = buildAppDumpSystemdUnits({ ...SPEC, systemId: "vaultwarden-a" });
     // deterministic per system id
     expect(buildAppDumpSystemdUnits(SPEC).onCalendar).toBe(a.onCalendar);
     expect(a.onCalendar).not.toBe(b.onCalendar);
+  });
+});
+
+describe("minecraft dump helpers", () => {
+  it("builds 6-hour OnCalendar with staggered minute", () => {
+    const cal = minecraftAppDumpOnCalendar("vm-minecraft-a", 6);
+    expect(cal).toMatch(/^\*-\*-\* 00\/6:\d{2}:00$/);
+    expect(minecraftAppDumpOnCalendar("vm-minecraft-a", 6)).toBe(cal);
+  });
+
+  it("dump commands flush via RCON and tar worlds", () => {
+    const joined = minecraftDumpCommands("/opt/minecraft").join("\n");
+    expect(joined).toContain("hdc-minecraft-rcon");
+    expect(joined).toContain("save-all flush");
+    expect(joined).toContain("minecraft-$TS.tar.gz");
+    expect(joined).toContain("world_nether");
+    expect(joined).toContain("--exclude='./plugins/*.jar'");
+  });
+
+  it("prune keeps newest per day", () => {
+    const joined = minecraftDumpPruneCommands(7).join("\n");
+    expect(joined).toContain("retain = int(sys.argv[2])");
+    expect(joined).toContain("minecraft-");
+    expect(joined).toContain("by_day");
   });
 });
 

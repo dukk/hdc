@@ -132,6 +132,26 @@
               "description": "Directory beside config.json holding plugin config sidecars (default plugin-configs)"
             }
           }
+        },
+        "stop_warning": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "In-game say + delay before systemd stop/restart (localhost RCON)",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "seconds": { "type": "integer", "minimum": 0, "maximum": 300 },
+            "message": { "type": "string" }
+          }
+        },
+        "backup": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "In-guest world dumps under /var/backups/hdc/minecraft",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+            "retain_daily": { "type": "integer", "minimum": 1, "maximum": 90 }
+          }
         }
       }
     },

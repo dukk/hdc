@@ -1,8 +1,8 @@
 /**
- * Application-level dump schedule: nightly systemd timer on the guest writing
- * consistent app dumps (pg_dumpall, sqlite .backup, …) into a guest path that
- * vzdump already snapshots. Guest-disk backups of a live database can snapshot
- * corruption; these dumps give a restorable second layer.
+ * Application-level dump schedule: systemd timer on the guest writing
+ * consistent app dumps (pg_dumpall, sqlite .backup, minecraft worlds, …) into
+ * a guest path that vzdump already snapshots. Guest-disk backups of a live
+ * database can snapshot corruption; these dumps give a restorable second layer.
  */
 import { flagGet } from "./parse-argv-flags.mjs";
 import { staggerOffsetFromSystemId } from "./guest-systemd-unit-ensure.mjs";
@@ -37,9 +37,12 @@ export function appDumpOutputDir(name) {
 /**
  * @typedef {object} AppDumpSpec
  * @property {string} systemId
- * @property {string} name short app slug (postgresql, vaultwarden)
+ * @property {string} name short app slug (postgresql, vaultwarden, minecraft)
  * @property {string[]} dumpCommands shell lines; may use $OUT (output dir) and $TS (timestamp)
- * @property {number} [retainDays] prune dump files older than this many days (default 7)
+ * @property {number} [retainDays] prune dump files older than this many days (default 7); ignored when pruneCommands set
+ * @property {string} [onCalendar] override systemd OnCalendar (default: staggered daily)
+ * @property {number} [randomizedDelaySec] timer RandomizedDelaySec (default 900)
+ * @property {string[]} [pruneCommands] replace default find -mtime prune lines
  */
 
 /**
@@ -53,6 +56,10 @@ export function buildAppDumpScript(spec) {
   const retainDays = Number.isInteger(spec.retainDays) && /** @type {number} */ (spec.retainDays) > 0
     ? /** @type {number} */ (spec.retainDays)
     : APP_DUMP_DEFAULT_RETAIN_DAYS;
+  const pruneCommands =
+    Array.isArray(spec.pruneCommands) && spec.pruneCommands.length
+      ? spec.pruneCommands
+      : [`find "$OUT" -type f -mtime +${retainDays - 1} -delete`];
   return [
     "#!/bin/bash",
     `# hdc-generated app dump for ${spec.name} — do not edit (re-pushed by maintain)`,
@@ -62,13 +69,13 @@ export function buildAppDumpScript(spec) {
     'mkdir -p "$OUT"',
     'chmod 700 "$OUT"',
     ...spec.dumpCommands,
-    `find "$OUT" -type f -mtime +${retainDays - 1} -delete`,
+    ...pruneCommands,
     "",
   ].join("\n");
 }
 
 /**
- * systemd service + timer bodies for the dump job (daily, staggered per system).
+ * systemd service + timer bodies for the dump job (daily staggered unless onCalendar set).
  *
  * @param {AppDumpSpec} spec
  * @returns {{ name: string; serviceUnit: string; timerUnit: string; onCalendar: string; scriptPath: string }}
@@ -76,9 +83,15 @@ export function buildAppDumpScript(spec) {
 export function buildAppDumpSystemdUnits(spec) {
   const unitName = `hdc-dump-${spec.name}`;
   const scriptPath = appDumpScriptPath(spec.name);
-  // Different salt than hdc-clamscan so the two nightly jobs do not collide.
-  const { hour, minute } = staggerOffsetFromSystemId(`${spec.systemId}:app-dump`, 1440);
-  const onCalendar = `*-*-* ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  let onCalendar =
+    typeof spec.onCalendar === "string" && spec.onCalendar.trim() ? spec.onCalendar.trim() : "";
+  if (!onCalendar) {
+    // Different salt than hdc-clamscan so the two nightly jobs do not collide.
+    const { hour, minute } = staggerOffsetFromSystemId(`${spec.systemId}:app-dump`, 1440);
+    onCalendar = `*-*-* ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  }
+  const delayRaw = Number(spec.randomizedDelaySec);
+  const randomizedDelaySec = Number.isFinite(delayRaw) && delayRaw >= 0 ? Math.trunc(delayRaw) : 900;
   const serviceUnit = [
     "[Unit]",
     `Description=HDC app dump (${spec.name})`,
@@ -93,12 +106,12 @@ export function buildAppDumpSystemdUnits(spec) {
   ].join("\n");
   const timerUnit = [
     "[Unit]",
-    `Description=HDC daily app dump timer (${spec.name})`,
+    `Description=HDC app dump timer (${spec.name})`,
     "",
     "[Timer]",
     `OnCalendar=${onCalendar}`,
     "Persistent=true",
-    "RandomizedDelaySec=900",
+    `RandomizedDelaySec=${randomizedDelaySec}`,
     "",
     "[Install]",
     "WantedBy=timers.target",
@@ -162,7 +175,7 @@ export function ensureAppDumpSchedule(opts) {
     return {
       ok: true,
       skipped: false,
-      message: `daily dump at ${units.onCalendar} → ${appDumpOutputDir(spec.name)}`,
+      message: `dump at ${units.onCalendar} → ${appDumpOutputDir(spec.name)}`,
       on_calendar: units.onCalendar,
       output_dir: appDumpOutputDir(spec.name),
     };
@@ -199,5 +212,98 @@ export function vaultwardenDumpCommands(volumeName = "vaultwarden_vaultwarden-da
     'sqlite3 "file:$DATA/db.sqlite3?mode=ro" ".backup \'$OUT/db-$TS.sqlite3\'"',
     'gzip -f "$OUT/db-$TS.sqlite3"',
     'tar -C "$DATA" -czf "$OUT/data-$TS.tar.gz" --exclude=./db.sqlite3 --exclude=./db.sqlite3-wal --exclude=./db.sqlite3-shm --exclude=./icon_cache .',
+  ];
+}
+
+/**
+ * OnCalendar for Minecraft world dumps every N hours (staggered minute).
+ *
+ * @param {string} systemId
+ * @param {number} [intervalHours]
+ * @returns {string}
+ */
+export function minecraftAppDumpOnCalendar(systemId, intervalHours = 6) {
+  const hours = Number.isFinite(Number(intervalHours))
+    ? Math.min(24, Math.max(1, Math.trunc(Number(intervalHours))))
+    : 6;
+  const { minute } = staggerOffsetFromSystemId(`${systemId}:minecraft-dump`, 60);
+  return `*-*-* 00/${hours}:${String(minute).padStart(2, "0")}:00`;
+}
+
+/**
+ * Dump commands for Paper Minecraft: flush via RCON, tar worlds + config/plugins.
+ *
+ * @param {string} [installDir]
+ * @returns {string[]}
+ */
+export function minecraftDumpCommands(installDir = "/opt/minecraft") {
+  const dir = String(installDir || "/opt/minecraft").replace(/'/g, "");
+  return [
+    `INSTALL_DIR='${dir}'`,
+    "RCON=/usr/local/sbin/hdc-minecraft-rcon",
+    "if systemctl is-active --quiet minecraft 2>/dev/null; then",
+    '  "$RCON" save-off 2>/dev/null || true',
+    '  "$RCON" "save-all flush" 2>/dev/null || true',
+    "  sleep 2",
+    "fi",
+    'PATHS=()',
+    "for p in world world_nether world_the_end server.properties whitelist.json ops.json banned-ips.json banned-players.json config plugins; do",
+    '  if [ -e "$INSTALL_DIR/$p" ]; then PATHS+=("$p"); fi',
+    "done",
+    'if [ "${#PATHS[@]}" -eq 0 ]; then',
+    '  echo "minecraft dump: nothing to archive under $INSTALL_DIR" >&2',
+    "else",
+    '  tar -C "$INSTALL_DIR" -czf "$OUT/minecraft-$TS.tar.gz" \\',
+    "    --exclude='./plugins/*.jar' \\",
+    "    --exclude='./plugins/BlueMap/web/maps' \\",
+    "    --exclude='./plugins/BlueMap/data' \\",
+    "    --exclude='./cache' \\",
+    "    --exclude='./libraries' \\",
+    "    --exclude='./versions' \\",
+    "    --exclude='./logs' \\",
+    "    --exclude='./.rcon.password' \\",
+    '    "${PATHS[@]}"',
+    "fi",
+    "if systemctl is-active --quiet minecraft 2>/dev/null; then",
+    '  "$RCON" save-on 2>/dev/null || true',
+    "fi",
+  ];
+}
+
+/**
+ * Keep newest minecraft-YYYYMMDD-*.tar.gz per calendar day for the last retainDaily days.
+ *
+ * @param {number} [retainDaily]
+ * @returns {string[]}
+ */
+export function minecraftDumpPruneCommands(retainDaily = 7) {
+  const days =
+    Number.isInteger(retainDaily) && retainDaily > 0 ? retainDaily : APP_DUMP_DEFAULT_RETAIN_DAYS;
+  return [
+    `python3 - "$OUT" ${days} <<'PY'`,
+    "import re, sys",
+    "from datetime import datetime, timedelta, timezone",
+    "from pathlib import Path",
+    "out = Path(sys.argv[1])",
+    "retain = int(sys.argv[2])",
+    "pat = re.compile(r'^minecraft-(\\d{8})-')",
+    "files = sorted(out.glob('minecraft-*.tar.gz'), key=lambda p: p.name, reverse=True)",
+    "by_day = {}",
+    "for f in files:",
+    "    m = pat.match(f.name)",
+    "    if not m:",
+    "        f.unlink(missing_ok=True)",
+    "        continue",
+    "    day = m.group(1)",
+    "    if day in by_day:",
+    "        f.unlink(missing_ok=True)",
+    "    else:",
+    "        by_day[day] = f",
+    "cutoff = datetime.now(timezone.utc).date() - timedelta(days=retain - 1)",
+    "for day, f in by_day.items():",
+    "    d = datetime.strptime(day, '%Y%m%d').date()",
+    "    if d < cutoff:",
+    "        f.unlink(missing_ok=True)",
+    "PY",
   ];
 }
