@@ -44,6 +44,7 @@ export const HEALTH_PATHS = {
   crowdsec: "/",
   greenbone: "/",
   affine: "/",
+  apprise: "/status",
 };
 
 /**
@@ -80,6 +81,7 @@ export const DEFAULT_PORTS = {
   immich: 2283,
   nginx: 80,
   "nginx-waf": 443,
+  apprise: 8000,
 };
 
 /**
@@ -90,7 +92,9 @@ export const PACKAGE_FAMILIES = {
   vaultwarden: "docker-lxc",
   n8n: "docker-lxc",
   homepage: "docker-lxc",
+  apprise: "docker-lxc",
   keycloak: "docker-lxc",
+  apprise: "docker-lxc",
   "nginx-waf": "self-edge",
   nginx: "self-edge",
   cloudflare: "infra-api",

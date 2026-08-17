@@ -140,3 +140,53 @@ describe("homeassistant reverse proxy config", () => {
     expect(ips).toEqual(["192.0.2.40", "192.0.2.41"]);
   });
 });
+
+describe("homeassistant HAOS managed YAML", () => {
+  const baseYaml = [
+    "default_config:",
+    "frontend:",
+    "  themes: !include_dir_merge_named themes",
+    "",
+  ].join("\n");
+
+  it("mergeHaosManagedYaml strips reverse-proxy http and adds notify.apprise", async () => {
+    const {
+      HDC_APPRISE_NOTIFY_BEGIN,
+      HDC_REVERSE_PROXY_BEGIN,
+      mergeHaosManagedYaml,
+    } = await import("hdc/clump/services/homeassistant/lib/haos-reverse-proxy-config.mjs");
+    const withHttp = mergeHomeAssistantConfigurationYaml(
+      baseYaml,
+      buildReverseProxyConfigurationBlock({ trustedProxies: ["192.0.2.40"] }),
+    );
+    const { yaml, skippedApprise } = mergeHaosManagedYaml(withHttp, {
+      appriseNotify: {
+        name: "apprise",
+        configUrl: "http://apprise-a.home.example.invalid:8000/get/ha",
+      },
+    });
+    expect(skippedApprise).toBe(false);
+    expect(yaml).not.toContain(HDC_REVERSE_PROXY_BEGIN);
+    expect(yaml).not.toContain("trusted_proxies:");
+    expect(yaml).toContain(HDC_APPRISE_NOTIFY_BEGIN);
+    expect(yaml).toContain("platform: apprise");
+    expect(yaml).toContain("http://apprise-a.home.example.invalid:8000/get/ha");
+    expect(yaml).not.toContain("homeassistant:");
+  });
+
+  it("skips apprise notify when a foreign notify key exists", async () => {
+    const { mergeHaosManagedYaml, HDC_APPRISE_NOTIFY_BEGIN } = await import(
+      "hdc/clump/services/homeassistant/lib/haos-reverse-proxy-config.mjs"
+    );
+    const foreign = `${baseYaml}notify:\n  - name: smtp\n    platform: smtp\n`;
+    const { yaml, skippedApprise } = mergeHaosManagedYaml(foreign, {
+      appriseNotify: {
+        name: "apprise",
+        configUrl: "http://apprise-a.home.example.invalid:8000/get/ha",
+      },
+    });
+    expect(skippedApprise).toBe(true);
+    expect(yaml).not.toContain(HDC_APPRISE_NOTIFY_BEGIN);
+    expect(yaml).toContain("platform: smtp");
+  });
+});

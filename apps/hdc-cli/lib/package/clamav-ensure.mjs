@@ -6,6 +6,7 @@ import {
   clamavDaemonInstalledCheckCommand,
   clamavDaemonPackageInstallCommand,
   clamavEnableServicesCommandForProfile,
+  parseClamavProfileName,
   resolveClamavProfile,
 } from "./clamav-resource-profile.mjs";
 
@@ -108,8 +109,11 @@ export async function ensureClamav({ exec, log, flags, memoryMb }) {
     return { ok: true, skipped: true, message: "skipped by flag" };
   }
 
-  const profile = resolveClamavProfile(memoryMb);
-  log.info(`${exec.label}: ClamAV profile ${profile}${memoryMb ? ` (memory_mb=${memoryMb})` : ""}`);
+  const fromFlag = parseClamavProfileName(flagGet(flags ?? {}, "clamav-profile", "clamav_profile"));
+  const profile = fromFlag || resolveClamavProfile(memoryMb);
+  log.info(
+    `${exec.label}: ClamAV profile ${profile}${fromFlag ? " (--clamav-profile)" : ""}${memoryMb ? ` (memory_mb=${memoryMb})` : ""}`,
+  );
 
   const check = exec.run(clamavInstalledCheckCommand(), { capture: true });
   const alreadyInstalled = check.status === 0;

@@ -64,6 +64,11 @@
         "silk_spawners": { "type": "boolean" },
         "vanish_no_packet": { "type": "boolean" },
         "worldedit_sui": { "type": "boolean" },
+        "spark": {
+          "type": "boolean",
+          "description": "Paper 1.21+ bundles spark; true records that we use the bundled profiler (no plugin jar)"
+        },
+        "clamav_profile": { "enum": ["lean", "standard", "full"] },
         "server_properties": {
           "type": "object",
           "additionalProperties": {

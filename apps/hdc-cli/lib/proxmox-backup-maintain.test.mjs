@@ -20,6 +20,7 @@ import {
   parseBackupScheduleParts,
   resolveBackupSpec,
   storageSupportsBackup,
+  liveGuestMatchesBackupTarget,
   weekdayGapDays,
 } from "hdc/clump/infrastructure/proxmox/lib/proxmox-backup-maintain.mjs";
 import {
@@ -265,6 +266,24 @@ describe("proxmox backup maintain", () => {
     expect(row?.hostId).toBe("pve-b");
     expect(row?.vmid).toBeNull();
     expect(row?.lookupName).toBe("bind-a");
+  });
+
+  it("liveGuestMatchesBackupTarget accepts lookup name and vm- system id", () => {
+    expect(liveGuestMatchesBackupTarget("ha", { systemId: "vm-homeassistant-a", lookupName: "ha" })).toBe(
+      true,
+    );
+    expect(liveGuestMatchesBackupTarget("bind-a", { systemId: "vm-bind-a", lookupName: "bind-a" })).toBe(
+      true,
+    );
+    expect(
+      liveGuestMatchesBackupTarget("ha-legacy", { systemId: "vm-postgres-a", lookupName: "postgres-a" }),
+    ).toBe(false);
+    expect(
+      liveGuestMatchesBackupTarget("audiobookshelf-a", {
+        systemId: "llama-cpp-b",
+        lookupName: "llama-cpp-b",
+      }),
+    ).toBe(false);
   });
 
   it("storageSupportsBackup checks content types", () => {

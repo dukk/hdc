@@ -14,6 +14,7 @@ import {
   clamavAptPackagesForProfile,
   clamavConfigApplyCommandForProfile,
   clamavEnableServicesCommandForProfile,
+  parseClamavProfileName,
   resolveClamavProfile,
 } from "hdc/package/clamav-resource-profile.mjs";
 import { listSshTargetsFromPackageConfig } from "hdc/package/maintain-clamav-only.mjs";
@@ -120,6 +121,27 @@ describe("apt-lock-wait", () => {
     expect(probeIdx).toBeGreaterThanOrEqual(0);
     expect(installIdx).toBeGreaterThan(probeIdx);
   });
+
+  it("ensureClamav honours --clamav-profile over memory_mb", async () => {
+    const exec = {
+      label: "ssh test@host",
+      run: vi.fn((cmd) => {
+        if (String(cmd).includes("dpkg -s clamav ")) return { status: 0, stdout: "", stderr: "" };
+        return { status: 0, stdout: "", stderr: "" };
+      }),
+    };
+    const log = { info: vi.fn() };
+    const result = await ensureClamav({
+      exec,
+      log,
+      memoryMb: 16384,
+      flags: { "clamav-profile": "lean" },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.profile).toBe("lean");
+    const cmds = exec.run.mock.calls.map((c) => String(c[0]));
+    expect(cmds.some((c) => c.includes("mask clamav-daemon"))).toBe(true);
+  });
 });
 
 describe("clamav-resource-profile", () => {
@@ -131,6 +153,12 @@ describe("clamav-resource-profile", () => {
     expect(resolveClamavProfile(4096)).toBe("standard");
     expect(resolveClamavProfile(8191)).toBe("standard");
     expect(resolveClamavProfile(8192)).toBe("full");
+  });
+
+  it("parseClamavProfileName accepts lean/standard/full", () => {
+    expect(parseClamavProfileName("lean")).toBe("lean");
+    expect(parseClamavProfileName("FULL")).toBe("full");
+    expect(parseClamavProfileName("nope")).toBeUndefined();
   });
 
   it("lean profile packages exclude daemon", () => {

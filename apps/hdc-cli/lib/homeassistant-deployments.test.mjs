@@ -40,6 +40,23 @@ describe("homeassistant deployments", () => {
     const expanded = expandDeployment(norm.deployments[0], norm);
     expect(expanded.systemId).toBe("vm-homeassistant-a");
     expect(expanded.proxmox.qemu.usb[0].id).toBe("1a86:55d4");
+    expect(expanded.homeassistant.apprise).toBeNull();
+  });
+
+  it("expandDeployment reads homeassistant.apprise from root config", () => {
+    const withApprise = structuredClone(sample);
+    withApprise.homeassistant.apprise = {
+      enabled: true,
+      name: "apprise",
+      config_url: "http://apprise-a.home.example.invalid:8000/get/ha",
+    };
+    const norm = normalizeHomeassistantConfig(withApprise);
+    const expanded = expandDeployment(norm.deployments[0], norm);
+    expect(expanded.homeassistant.apprise).toEqual({
+      enabled: true,
+      name: "apprise",
+      configUrl: "http://apprise-a.home.example.invalid:8000/get/ha",
+    });
   });
 
   it("resolveHomeassistantDeployments filters by instance", () => {

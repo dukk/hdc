@@ -304,9 +304,18 @@ export async function ensureGuestLinuxBaseline(opts) {
   const csOk = crowdsec_agent.ok || crowdsec_agent.skipped;
   const wzOk = wazuh_agent.ok || wazuh_agent.skipped;
 
+  const guestResourcesPublic =
+    guest_resources && typeof guest_resources === "object" && !Array.isArray(guest_resources)
+      ? Object.fromEntries(
+          Object.entries(/** @type {Record<string, unknown>} */ (guest_resources)).filter(
+            ([k]) => k !== "authorization",
+          ),
+        )
+      : guest_resources;
+
   return {
     ok: guestResourcesOk && guestStartupOk && guestTagsOk && usersOk && clamavOk && mailOk && scanOk && uuOk && csOk && wzOk,
-    guest_resources,
+    guest_resources: guestResourcesPublic,
     guest_startup,
     guest_tags,
     hdc_user: hdcUser,

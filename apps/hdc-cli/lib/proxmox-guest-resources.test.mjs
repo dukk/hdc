@@ -4,6 +4,7 @@ import {
   applyQemuGuestResources,
   guestResourceOptsFromBlock,
   noRebootFromFlags,
+  parseGuestCpuType,
   parseGuestResourceSizing,
   rebootRequestedFromFlags,
   resolveRebootAfterResourceApply,
@@ -36,14 +37,27 @@ describe("proxmox-guest-resources", () => {
     });
   });
 
+  describe("parseGuestCpuType", () => {
+    it("accepts host and rejects junk", () => {
+      expect(parseGuestCpuType({ cpu: "host" })).toBe("host");
+      expect(parseGuestCpuType({ cpu: "x86-64-v2" })).toBe("x86-64-v2");
+      expect(parseGuestCpuType({ cpu: "not a type" })).toBeUndefined();
+      expect(parseGuestCpuType({ memory_mb: 4096, cores: 4 })).toBeUndefined();
+    });
+  });
+
   describe("guestResourceOptsFromBlock", () => {
     it("includes reboot when flag set", () => {
       const opts = guestResourceOptsFromBlock({ memory_mb: 1024, cores: 1 }, { reboot: "1" });
       expect(opts).toEqual({ memoryMb: 1024, cores: 1, reboot: true });
     });
 
-    it("returns undefined when sizing invalid", () => {
-      expect(guestResourceOptsFromBlock({}, {})).toBeUndefined();
+    it("includes cpu when qemu block sets it", () => {
+      const opts = guestResourceOptsFromBlock(
+        { memory_mb: 1024, cores: 1, cpu: "host" },
+        {},
+      );
+      expect(opts?.cpu).toBe("host");
     });
   });
 
@@ -99,6 +113,56 @@ describe("proxmox-guest-resources", () => {
         apiOpts.authorization,
         true,
         expect.stringContaining("memory=4096"),
+      );
+    });
+
+    it("PUTs cpu and stop/starts running guest when CPU type changes", async () => {
+      vi.mocked(pveHttp.pveJsonRequest).mockImplementation(async (method, _base, path) => {
+        if (method === "GET" && path.endsWith("/config")) {
+          return { data: { memory: 4096, cores: 4 } };
+        }
+        if (method === "GET" && path.endsWith("/status/current")) {
+          return { data: { status: "running" } };
+        }
+        if (method === "POST" && path.endsWith("/status/stop")) {
+          return { data: "UPID:hypervisor-a:0003:stop" };
+        }
+        if (method === "POST" && path.endsWith("/status/start")) {
+          return { data: "UPID:hypervisor-a:0004:start" };
+        }
+        return {};
+      });
+      vi.spyOn(pveHttp, "waitForPveTask").mockResolvedValue(undefined);
+
+      const result = await applyQemuGuestResources({
+        ...apiOpts,
+        cpu: "host",
+        rebootOnChange: true,
+      });
+      expect(result.changed).toBe(true);
+      expect(pveHttp.pveJsonRequest).toHaveBeenCalledWith(
+        "PUT",
+        apiOpts.apiBase,
+        "/nodes/hypervisor-a/qemu/200/config",
+        apiOpts.authorization,
+        true,
+        expect.stringContaining("cpu=host"),
+      );
+      expect(pveHttp.pveJsonRequest).toHaveBeenCalledWith(
+        "POST",
+        apiOpts.apiBase,
+        "/nodes/hypervisor-a/qemu/200/status/stop",
+        apiOpts.authorization,
+        true,
+        expect.anything(),
+      );
+      expect(pveHttp.pveJsonRequest).toHaveBeenCalledWith(
+        "POST",
+        apiOpts.apiBase,
+        "/nodes/hypervisor-a/qemu/200/status/start",
+        apiOpts.authorization,
+        true,
+        expect.anything(),
       );
     });
 

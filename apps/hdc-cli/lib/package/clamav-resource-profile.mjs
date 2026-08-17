@@ -17,6 +17,16 @@ export function resolveClamavProfile(memoryMb) {
 }
 
 /**
+ * @param {unknown} raw
+ * @returns {ClamavProfile | undefined}
+ */
+export function parseClamavProfileName(raw) {
+  const s = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (s === "lean" || s === "standard" || s === "full") return s;
+  return undefined;
+}
+
+/**
  * @param {ClamavProfile} profile
  * @returns {string[]}
  */

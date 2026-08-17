@@ -3,6 +3,7 @@ import {
   applyLxcGuestResources,
   applyQemuGuestResources,
   noRebootFromFlags,
+  parseGuestCpuType,
   parseGuestResourceSizing,
   rebootRequestedFromFlags,
 } from "hdc/clump/infrastructure/proxmox/lib/proxmox-guest-resources.mjs";
@@ -27,7 +28,7 @@ function deploymentProxmoxBlock(deployment) {
 }
 
 /**
- * Sync memory_mb / cores from clump config onto a live Proxmox guest (no destroy).
+ * Sync memory_mb / cores / optional qemu cpu from clump config onto a live Proxmox guest (no destroy).
  *
  * @param {object} opts
  * @param {Record<string, unknown>} opts.deployment merged deployment (mode + proxmox)
@@ -60,6 +61,7 @@ export async function syncProxmoxGuestResourcesOnMaintain(opts) {
   const hostId = typeof px.host_id === "string" ? px.host_id.trim() : "";
   const block = guestType === "lxc" && px.lxc && typeof px.lxc === "object" ? px.lxc : px.qemu;
   const sizing = parseGuestResourceSizing(block);
+  const cpu = parseGuestCpuType(block);
   if (!sizing) {
     return { ok: true, skipped: true, message: "no memory_mb/cores in proxmox config" };
   }
@@ -76,7 +78,7 @@ export async function syncProxmoxGuestResourcesOnMaintain(opts) {
   const dryRun = flagGet(flags, "dry-run", "dry_run") !== undefined;
   if (dryRun) {
     log(
-      `[dry-run] would set ${guestType} ${vmid} on ${hostId}: memory=${sizing.memoryMb} cores=${sizing.cores}`,
+      `[dry-run] would set ${guestType} ${vmid} on ${hostId}: memory=${sizing.memoryMb} cores=${sizing.cores}${cpu ? ` cpu=${cpu}` : ""}`,
     );
     return {
       ok: true,
@@ -84,7 +86,7 @@ export async function syncProxmoxGuestResourcesOnMaintain(opts) {
       guest_type: guestType,
       vmid,
       host_id: hostId,
-      applied: { memory: sizing.memoryMb, cores: sizing.cores },
+      applied: { memory: sizing.memoryMb, cores: sizing.cores, ...(cpu ? { cpu } : {}) },
     };
   }
 
@@ -108,6 +110,7 @@ export async function syncProxmoxGuestResourcesOnMaintain(opts) {
     vmid,
     memoryMb: sizing.memoryMb,
     cores: sizing.cores,
+    cpu,
     reboot,
     rebootOnChange,
     log,
