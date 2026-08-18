@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInstallScript } from "hdc/clump/services/postiz/lib/postiz-install.mjs";
+import { buildInstallScript, buildRestartScript, postizNginxServerConf } from "hdc/clump/services/postiz/lib/postiz-install.mjs";
 
 describe("postiz install script", () => {
   it("expands PNPM_BIN in systemd ExecStart (not literal ${PNPM_BIN})", () => {
@@ -22,6 +22,16 @@ describe("postiz install script", () => {
     expect(script).toContain(
       "find /tmp -maxdepth 1 -type d \\( -name 'postiz-app-*' -o -name 'postiz-*' \\)",
     );
+  });
+
+  it("guest nginx forwards WAF proto instead of $scheme", () => {
+    const conf = postizNginxServerConf();
+    expect(conf).toContain("proxy_set_header X-Forwarded-Proto $postiz_fwd_proto;");
+    expect(conf).not.toContain("X-Forwarded-Proto $scheme;");
+    const script = buildRestartScript("/opt/postiz", "JWT_SECRET=x\n");
+    expect(script).toContain("postiz-forwarded-proto.conf");
+    expect(script).toContain("ALTER USER postiz WITH PASSWORD");
+    expect(script).toContain("HDC_POSTIZ_DB_PLACEHOLDER");
   });
 
   it("resolves temporal binary after tarball extract", () => {

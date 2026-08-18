@@ -8,6 +8,10 @@ import {
   resolveBaseUrl,
   resolveAccessUrl,
 } from "hdc/clump/services/postiz/lib/postiz-render.mjs";
+import {
+  installMailRelayExampleMock,
+  restoreMailRelayExampleMock,
+} from "../test/mock-mail-relay-example.mjs";
 
 describe("postiz render", () => {
   it("normalizePublicUrl strips trailing slash", () => {
@@ -43,6 +47,37 @@ describe("postiz render", () => {
     );
     expect(env).toContain("X_API_KEY=abc");
     expect(env).toContain("NOT_SECURED=false");
+    expect(env).toContain("NEXT_PUBLIC_BACKEND_URL=https://postiz.example.invalid/api");
+  });
+
+  it("renderPostizEnv maps mail.enabled to Postiz EMAIL_* keys", () => {
+    installMailRelayExampleMock();
+    try {
+      const env = renderPostizEnv(
+        {
+          mail: {
+            enabled: true,
+            to: "ops@example.invalid",
+            from: "noreply@hdc.example.invalid",
+          },
+        },
+        "db",
+        "jwt",
+        "https://postiz.example.invalid",
+      );
+      expect(env).toContain("EMAIL_PROVIDER=nodemailer");
+      expect(env).toContain("EMAIL_HOST=postfix-relay.home.example.invalid");
+      expect(env).toContain("EMAIL_PORT=25");
+      expect(env).toContain("EMAIL_SECURE=false");
+      expect(env).toContain("EMAIL_FROM_ADDRESS=noreply@hdc.example.invalid");
+      expect(env).toContain("EMAIL_FROM_NAME=Postiz");
+      expect(env).not.toContain("SMTP_HOST=");
+      expect(env).not.toContain("SMTP_USER=");
+      expect(env).not.toContain("EMAIL_USER=");
+      expect(env).not.toContain("EMAIL_PASS=");
+    } finally {
+      restoreMailRelayExampleMock();
+    }
   });
 
   it("listenPort defaults to 80", () => {

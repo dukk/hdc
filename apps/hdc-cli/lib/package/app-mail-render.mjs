@@ -239,12 +239,17 @@ export function postizMailEnvEntries(postiz) {
   const recipients = resolveMailRecipients(mail, { from: relay.from });
   if (!recipients) return {};
 
+  const fromName =
+    typeof mail?.from_name === "string" && mail.from_name.trim()
+      ? mail.from_name.trim()
+      : "Postiz";
   return {
-    SMTP_HOST: relay.host,
-    SMTP_PORT: String(relay.port),
-    SMTP_FROM: recipients.from,
-    SMTP_USER: "",
-    SMTP_PASSWORD: "",
+    EMAIL_PROVIDER: "nodemailer",
+    EMAIL_HOST: relay.host,
+    EMAIL_PORT: String(relay.port),
+    EMAIL_SECURE: "false",
+    EMAIL_FROM_ADDRESS: recipients.from,
+    EMAIL_FROM_NAME: fromName.replace(/[\n\r]/g, ""),
   };
 }
 
