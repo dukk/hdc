@@ -30,6 +30,8 @@ export function deriveHealthStatus(layers) {
     ((pub && pub.ok === false && !pub.skipped) || (waf && waf.ok === false && !waf.skipped)) &&
     !edgeOk;
 
+  // Edge up + origin down is degraded, not healthy (e.g. public/WAF ok, direct timeout, SSH denied).
+  if (edgeOk && originFail && !originOk) return "degraded";
   if (edgeOk) return "healthy";
   if (originOk && edgeFail) return "degraded";
   if (originOk && !pub?.skipped && pub?.ok !== true && !waf?.ok) {

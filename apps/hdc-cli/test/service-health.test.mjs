@@ -28,6 +28,19 @@ describe("service-health status", () => {
     expect(statusIsOk("degraded")).toBe(true);
   });
 
+  it("marks degraded when edge is ok but origin fails", () => {
+    expect(
+      deriveHealthStatus({
+        dns: { ok: true, skipped: false },
+        public: { ok: true, skipped: false },
+        waf: { ok: true, skipped: false },
+        direct: { ok: false, skipped: false },
+        guest: { ok: false, skipped: false },
+      }),
+    ).toBe("degraded");
+    expect(statusIsOk("degraded")).toBe(true);
+  });
+
   it("marks down when origin fails", () => {
     expect(
       deriveHealthStatus({
