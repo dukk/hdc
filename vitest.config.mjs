@@ -50,6 +50,9 @@ export default defineConfig({
 
     environment: "node",
 
+    // Leave cores free for interactive workloads (agents run this after every CLI change).
+    maxWorkers: 4,
+
     setupFiles: ["apps/hdc-cli/test/vitest-setup.mjs"],
 
     include: [

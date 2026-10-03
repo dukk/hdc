@@ -24,6 +24,10 @@
         "java_heap_min": { "type": "string" },
         "java_heap": { "type": "string" },
         "java_jvm_args": { "type": "string" },
+        "java_jvm_args_extra": {
+          "type": "string",
+          "description": "Appended after Aikar defaults (or after java_jvm_args when that replaces them)"
+        },
         "install_dir": { "type": "string" },
         "java_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "bedrock_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
