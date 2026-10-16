@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAcpitableArgs,
+  buildHostSmbiosProbeScript,
   buildOemTableDumpScript,
   formatSmbios1Param,
   parseHostSmbiosOutput,
@@ -25,8 +26,10 @@ describe("proxmox-oem-windows-apply", () => {
       family: "Family",
     });
     expect(s).toContain("uuid=11111111-2222-3333-4444-555555555555");
-    expect(s).toContain("manufacturer=Dell Inc.");
-    expect(s).toContain("serial=ABC123");
+    expect(s).toContain(`manufacturer=${Buffer.from("Dell Inc.").toString("base64")}`);
+    expect(s).toContain("base64=1");
+    expect(s).toContain(`serial=${Buffer.from("ABC123").toString("base64")}`);
+    expect(formatSmbios1Param({ product: "NAB5", version: "OEM" })).toBe("product=NAB5,version=OEM");
   });
 
   it("buildAcpitableArgs joins acpitable file args", () => {
@@ -47,5 +50,35 @@ HDC_SMBIOS_END`;
     expect(f.manufacturer).toBe("ACME");
     expect(f.product).toBe("Box");
     expect(f.serial).toBe("SN1");
+  });
+
+  it("buildHostSmbiosProbeScript quotes case patterns containing spaces (valid bash)", () => {
+    const script = buildHostSmbiosProbeScript();
+    expect(script).toContain('*"Product Name:"*)');
+    expect(script).toContain('*"Serial Number:"*)');
+    expect(script).not.toMatch(/\*Product Name:\*\)/);
+  });
+
+  it("applyOemLicenseToVmConfig sets args through setArgs (root-only) and smbios via API", async () => {
+    /** @type {string[]} */
+    const setArgsCalls = [];
+    const { applyOemLicenseToVmConfig } = await import(
+      "hdc/clump/infrastructure/proxmox/lib/proxmox-oem-windows-apply.mjs"
+    );
+    await expect(
+      applyOemLicenseToVmConfig({
+        apiBase: "http://127.0.0.1:9/api2/json",
+        node: "pve-a",
+        vmid: 9001,
+        authorization: "x",
+        rejectUnauthorized: false,
+        tablePaths: ["/etc/pve/nodes/pve-a/qemu-server/MSDM_table"],
+        smbios: {},
+        setArgs: async (a) => {
+          setArgsCalls.push(a);
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(setArgsCalls).toEqual(["-acpitable file=/etc/pve/nodes/pve-a/qemu-server/MSDM_table"]);
   });
 });

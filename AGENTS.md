@@ -202,6 +202,24 @@ Set `asterisk.twilio.termination_domain` from Twilio Elastic SIP Trunk; vault `H
 
 Example: `hdc run service asterisk deploy -- --instance a`
 
+## FreePBX in this repo
+
+- **Config:** [`clumps/services/freepbx/config.json`](clumps/services/freepbx/config.json) (copy from [`config.example.json`](clumps/services/freepbx/config.example.json); keep local config out of git).
+- **Inventory:** [`operations/inventory/systems/virtual/vm-freepbx-a.json`](operations/inventory/systems/virtual/vm-freepbx-a.json); service sidecar [`operations/inventory/services/freepbx.json`](operations/inventory/services/freepbx.json).
+- **Schema:** [`apps/hdc-cli/schema/freepbx.config.schema.json`](apps/hdc-cli/schema/freepbx.config.schema.json).
+- **Replaces the live Asterisk guest.** Package scripts under `clumps/services/asterisk/` stay. An empty `deployments` array on the Asterisk config is a no-op.
+
+| Verb | Summary |
+| --- | --- |
+| `deploy` | Debian 12 cloud template + QEMU clone + FreePBX 17 installer + Twilio PJSIP trunk (`--instance a`, `--build-template`, `--destroy-existing`, `--redeploy-existing`, `--skip-install`, `--reinstall`). `--backup-guest <name-or-vmid>` snapshot-backups that guest and exits |
+| `maintain` | Re-apply NAT, RTP, and Twilio trunk; guest baseline without unattended-upgrades (`--enable-unattended-upgrades`, `--clamav-scan`) |
+| `query` | Config summary; `--live` for `fwconsole`, PJSIP registrations, and admin HTTP |
+| `teardown` | Destroy the QEMU guest (`--dry-run`, `--yes`, `--instance`) |
+
+Vault: `HDC_FREEPBX_ADMIN_PASSWORD` and `HDC_FREEPBX_DEBIAN_PASSWORD` (generated on first deploy if missing); Twilio `HDC_TWILIO_SIP_USERNAME` / `HDC_TWILIO_SIP_PASSWORD`. RTP defaults to `10000–12499` so existing edge forwards stay valid. Admin UI is LAN HTTPS only. Inbound calls need an extension created in the FreePBX UI.
+
+Example: `hdc run service freepbx deploy -- --instance a`
+
 ## Pi-hole in this repo
 
 - **Config:** [`clumps/services/pi-hole/config.json`](clumps/services/pi-hole/config.json) (copy from [`config.example.json`](clumps/services/pi-hole/config.example.json); keep local config out of git).

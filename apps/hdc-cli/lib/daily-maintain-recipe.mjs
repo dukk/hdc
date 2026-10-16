@@ -63,6 +63,7 @@ const DOCKER_COMPOSE_MAINTAIN_IDS = [
   "postiz",
   "rackula",
   "asterisk",
+  "freepbx",
   "wireguard",
   "postfix-relay",
   "safeline",
@@ -231,7 +232,16 @@ export function dailyRecipeSteps() {
   }
 
   for (const id of DOCKER_COMPOSE_MAINTAIN_IDS) {
-    if (id === "safeline") {
+    if (id === "asterisk") {
+      steps.push({
+        tier: "service",
+        id,
+        verb: "maintain",
+        args: [],
+        requiresConfig: true,
+        skipReason: "torn down — replaced by freepbx; package scripts retained",
+      });
+    } else if (id === "safeline") {
       steps.push(maintainService(id, ["--skip-sites"]));
     } else if (id === "uptime-kuma") {
       steps.push(maintainService(id, ["--skip-monitors", "--skip-upgrade"]));

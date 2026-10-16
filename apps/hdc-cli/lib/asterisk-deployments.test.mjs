@@ -70,6 +70,13 @@ describe("asterisk deployments", () => {
     expect(list[0].install.enabled).toBe(false);
   });
 
+  it("empty deployments[] is a retired no-op", () => {
+    const cfg = { ...baseCfg, deployments: [] };
+    expect(normalizeAsteriskConfig(cfg).deployments).toEqual([]);
+    expect(resolveAsteriskDeployments(cfg, {})).toEqual([]);
+    expect(resolveAsteriskDeployments(cfg, { instance: "a" })).toEqual([]);
+  });
+
   it("configure-only requires ssh host", () => {
     expect(() =>
       normalizeAsteriskConfig({
