@@ -4,7 +4,7 @@ import { sshRemote } from "./pve-pct-remote.mjs";
 
 /**
  * Ubuntu cloud templates often use serial0 + vga=serial0, which can stall first boot
- * when no serial console is attached. Prefer std VGA and drop serial0, then refresh cloud-init.
+ * when no serial console is attached. Prefer qxl (SPICE) VGA and drop serial0, then refresh cloud-init.
  *
  * @param {object} opts
  * @param {string} opts.user PVE SSH user
@@ -19,7 +19,7 @@ export function repairUbuntuQemuConsole(opts) {
   const log = opts.log ?? ((line) => errout.write(`${line}\n`));
   const verifyIso = opts.verifyIso9660 === true;
   const parts = [
-    `qm set ${vmid} -vga std -delete serial0 -cpu host || true`,
+    `qm set ${vmid} -vga qxl -delete serial0 -cpu host || true`,
     `qm cloudinit update ${vmid}`,
   ];
   if (verifyIso) {
@@ -32,7 +32,7 @@ export function repairUbuntuQemuConsole(opts) {
   }
   const cmd = parts.join("; ");
   log(
-    `Repairing Ubuntu QEMU console on vmid ${vmid} (vga=std, cpu=host, drop serial0, cloudinit update${verifyIso ? ", verify ISO9660" : ""}) …`,
+    `Repairing Ubuntu QEMU console on vmid ${vmid} (vga=qxl, cpu=host, drop serial0, cloudinit update${verifyIso ? ", verify ISO9660" : ""}) …`,
   );
   const r = sshRemote(user, host, cmd, { capture: true });
   const ok = r.status === 0;
