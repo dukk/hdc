@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import {
   vaultwardenCollectionIdFromEnv,
   vaultwardenOrganizationIdFromEnv,
@@ -24,7 +24,7 @@ let processBwOrgItems = null;
 /** @type {Array<Record<string, unknown>> | null} */
 let processBwOrgFullItems = null;
 
-/** @type {{ command: string; prefixArgs: string[] } | null} */
+/** @type {{ command: string; prefixArgs: string[]; shell?: boolean } | null} */
 let cachedBwCommand = null;
 
 /** @type {Promise<string> | null} */
@@ -57,69 +57,135 @@ export function getProcessBwSession() {
  * @property {(...args: unknown[]) => void} warn
  * @property {(q: string, opts?: { mask?: boolean }) => Promise<string>} readLineQuestion
  * @property {typeof spawnSync} [spawnSync]
+ * @property {(path: string) => boolean} [existsSync] test hook (defaults to node:fs existsSync)
+ * @property {NodeJS.Platform} [platform] test hook (defaults to process.platform)
  */
 
 /**
  * When HDC_BW_EXECUTABLE points at an npm shim (.cmd/.ps1), run node + bw.js instead.
  * @param {string} override
  * @param {NodeJS.ProcessEnv} env
+ * @param {(path: string) => boolean} exists
  * @returns {{ command: string; prefixArgs: string[] } | null}
  */
-function resolveBwFromExecutableOverride(override, env) {
-  if (process.platform !== "win32") return null;
+function resolveBwFromExecutableOverride(override, env, exists) {
   if (!/\.(cmd|bat|ps1)$/i.test(override)) return null;
   const npmDir = join(override, "..");
   const bwJs = join(npmDir, "node_modules/@bitwarden/cli/build/bw.js");
-  if (!existsSync(bwJs)) return null;
+  if (!exists(bwJs)) return null;
   const node = typeof env.NODE === "string" && env.NODE.trim() ? env.NODE.trim() : process.execPath;
   return { command: node, prefixArgs: [bwJs] };
 }
 
 /**
- * Resolve how to invoke `bw` without a shell (npm shims on Windows need node + bw.js).
+ * Case-insensitive env lookup (a copied Windows env object may use `Path`, not `PATH`).
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} name
+ */
+function envValueCi(env, name) {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === name);
+  return key ? String(env[key] ?? "") : "";
+}
+
+/**
+ * Windows-only: native bw.exe locations, in preference order (PATH, winget, npm prefix).
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string[]}
+ */
+function windowsBwExeCandidates(env) {
+  /** @type {string[]} */
+  const out = [];
+  for (const dir of envValueCi(env, "PATH").split(delimiter)) {
+    const d = dir.trim().replace(/^"|"$/g, "");
+    if (d) out.push(join(d, "bw.exe"));
+  }
+  const localAppData = envValueCi(env, "LOCALAPPDATA");
+  if (localAppData) {
+    out.push(join(localAppData, "Microsoft/WinGet/Links/bw.exe"));
+    const pkgs = join(localAppData, "Microsoft/WinGet/Packages");
+    try {
+      for (const name of readdirSync(pkgs)) {
+        if (/^Bitwarden\.CLI_/i.test(name)) out.push(join(pkgs, name, "bw.exe"));
+      }
+    } catch {
+      /* no winget packages dir */
+    }
+  }
+  const appData = envValueCi(env, "APPDATA");
+  if (appData) out.push(join(appData, "npm/bw.exe"));
+  return [...new Set(out)];
+}
+
+/**
+ * Quote one argument for `cmd.exe /d /s /c` (used only when bw is a .cmd/.bat shim).
+ * Secrets never reach here: passwords go via BW_PASSWORD / --passwordenv, API keys via env.
+ * @param {string} arg
+ */
+export function quoteCmdArg(arg) {
+  const s = String(arg);
+  if (/[\r\n%!"^]/.test(s)) {
+    throw new Error(
+      "bw argument contains characters that cannot be passed safely through a .cmd shim; install native bw.exe (winget install Bitwarden.CLI) or set HDC_BW_EXECUTABLE to bw.exe",
+    );
+  }
+  return /^[A-Za-z0-9_\-.:/\\@=+,]+$/.test(s) ? s : `"${s}"`;
+}
+
+/**
+ * Resolve how to invoke `bw`. On Windows prefer a native bw.exe, then npm `node bw.js`;
+ * a bare .cmd/.bat shim is used only as a last resort, via shell:true with quoted args
+ * (Node >= 18.20.2 / 20.12.2 refuses to spawn .cmd/.bat without a shell, CVE-2024-27980).
  * @param {VaultwardenCliDeps} deps
- * @returns {{ command: string; prefixArgs: string[] }}
+ * @returns {{ command: string; prefixArgs: string[]; shell?: boolean }}
  */
 function resolveBwCommandUncached(deps) {
+  const spawn = deps.spawnSync ?? spawnSync;
+  const exists = deps.existsSync ?? existsSync;
+  const isWin = (deps.platform ?? process.platform) === "win32";
+  /** @param {string} cmd @param {string[]} prefix @param {boolean} [shell] */
+  const works = (cmd, prefix, shell = false) => {
+    const argv = [...prefix, "--version"];
+    const r = spawn(shell ? quoteCmdArg(cmd) : cmd, shell ? argv.map(quoteCmdArg) : argv, {
+      encoding: "utf8",
+      env: deps.env,
+      shell,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return r.status === 0;
+  };
+
   const override = String(deps.env.HDC_BW_EXECUTABLE ?? "").trim();
   if (override) {
-    const shim = resolveBwFromExecutableOverride(override, deps.env);
+    if (!isWin) return { command: override, prefixArgs: [] };
+    const shim = resolveBwFromExecutableOverride(override, deps.env, exists);
     if (shim) return shim;
-    return { command: override, prefixArgs: [] };
+    if (exists(override)) {
+      if (/\.(cmd|bat)$/i.test(override)) return { command: override, prefixArgs: [], shell: true };
+      return { command: override, prefixArgs: [] };
+    }
+    deps.warn(`[hdc] HDC_BW_EXECUTABLE not found (${override}); auto-detecting bw.`);
   }
 
-  const spawn = deps.spawnSync ?? spawnSync;
-
-  if (process.platform === "win32") {
-    const bwJs = join(deps.env.APPDATA ?? "", "npm/node_modules/@bitwarden/cli/build/bw.js");
-    if (existsSync(bwJs)) {
-      const r = spawn(process.execPath, [bwJs, "--version"], {
-        encoding: "utf8",
-        env: deps.env,
-        shell: false,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      if (r.status === 0) {
-        return { command: process.execPath, prefixArgs: [bwJs] };
+  if (isWin) {
+    for (const exe of windowsBwExeCandidates(deps.env)) {
+      if (exists(exe) && works(exe, [])) return { command: exe, prefixArgs: [] };
+    }
+    const bwJs = join(envValueCi(deps.env, "APPDATA"), "npm/node_modules/@bitwarden/cli/build/bw.js");
+    if (exists(bwJs) && works(process.execPath, [bwJs])) {
+      return { command: process.execPath, prefixArgs: [bwJs] };
+    }
+    for (const dir of envValueCi(deps.env, "PATH").split(delimiter)) {
+      const d = dir.trim().replace(/^"|"$/g, "");
+      if (!d) continue;
+      for (const shimName of ["bw.cmd", "bw.bat"]) {
+        const shim = join(d, shimName);
+        if (exists(shim) && works(shim, [], true)) return { command: shim, prefixArgs: [], shell: true };
       }
     }
   }
 
-  /** @type {string[]} */
-  const candidates = ["bw", "bw.exe"];
-  if (process.platform === "win32") {
-    const npmDir = join(deps.env.APPDATA ?? "", "npm");
-    candidates.push(join(npmDir, "bw.exe"));
-  }
-  for (const exe of candidates) {
-    if (exe.includes("npm") && !existsSync(exe)) continue;
-    const r = spawn(exe, ["--version"], {
-      encoding: "utf8",
-      env: deps.env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (r.status === 0) return { command: exe, prefixArgs: [] };
+  for (const exe of ["bw", "bw.exe"]) {
+    if (works(exe, [])) return { command: exe, prefixArgs: [] };
   }
 
   deps.error(
@@ -130,7 +196,7 @@ function resolveBwCommandUncached(deps) {
 
 /**
  * @param {VaultwardenCliDeps} deps
- * @returns {{ command: string; prefixArgs: string[] }}
+ * @returns {{ command: string; prefixArgs: string[]; shell?: boolean }}
  */
 export function resolveBwCommand(deps) {
   if (cachedBwCommand) return cachedBwCommand;
@@ -153,7 +219,7 @@ export function resolveBwExecutable(deps) {
  * @param {{ capture?: boolean; session?: string; password?: string; apiKey?: { clientId: string; clientSecret: string }; allowMissing?: boolean; stdin?: string }} [opts]
  */
 function spawnBw(deps, bwArgs, opts = {}) {
-  const { command, prefixArgs } = resolveBwCommand(deps);
+  const { command, prefixArgs, shell = false } = resolveBwCommand(deps);
   const spawn = deps.spawnSync ?? spawnSync;
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...deps.env };
@@ -166,10 +232,11 @@ function spawnBw(deps, bwArgs, opts = {}) {
     env.BW_CLIENTSECRET = opts.apiKey.clientSecret;
   }
   if (opts.session) env.BW_SESSION = opts.session;
-  const r = spawn(command, [...prefixArgs, ...bwArgs], {
+  const argv = [...prefixArgs, ...bwArgs];
+  const r = spawn(shell ? quoteCmdArg(command) : command, shell ? argv.map(quoteCmdArg) : argv, {
     encoding: "utf8",
     env,
-    shell: false,
+    shell,
     input: opts.stdin,
     stdio: opts.stdin
       ? ["pipe", opts.capture ? "pipe" : "inherit", opts.capture ? "pipe" : "inherit"]
@@ -356,7 +423,10 @@ function bwLoginCheck(deps) {
  */
 function bwLogin(deps, email, masterPassword) {
   deps.log(`[hdc] vaultwarden: logging in as ${email}`);
-  const r = spawnBw(deps, ["login", email, masterPassword, "--raw"], { capture: true, password: masterPassword });
+  const r = spawnBw(deps, ["login", email, "--passwordenv", "BW_PASSWORD", "--raw"], {
+    capture: true,
+    password: masterPassword,
+  });
   if (!r.ok) {
     throw new Error(`bw login failed: ${r.stderr || r.stdout || "invalid credentials"}`);
   }

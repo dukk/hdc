@@ -62,12 +62,14 @@
                   "required": ["model_name", "provider", "model"],
                   "properties": {
                     "model_name": { "type": "string" },
-                    "provider": { "enum": ["ollama", "openai", "openrouter", "auto_router"] },
+                    "provider": { "enum": ["ollama", "ollama_chat", "openai", "openrouter", "auto_router"] },
                     "model": { "type": "string" },
                     "ollama_backend_id": { "type": "string" },
                     "openai_backend_id": { "type": "string" },
                     "order": { "type": "integer", "minimum": 1 },
                     "weight": { "type": "number", "exclusiveMinimum": 0 },
+                    "timeout": { "type": "number", "exclusiveMinimum": 0, "description": "Per-deployment request timeout (seconds)" },
+                    "stream_timeout": { "type": "number", "exclusiveMinimum": 0, "description": "Per-deployment streaming timeout (seconds)" },
                     "complexity_router_config": { "type": "object" },
                     "complexity_router_default_model": { "type": "string" }
                   }

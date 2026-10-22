@@ -148,6 +148,12 @@ describe("uptime-kuma config", () => {
       }),
     ).toBeNull();
     expect(warnings.some((w) => w.includes("docker"))).toBe(true);
+    const portCfg = liveMonitorRowToConfig(
+      { id: 3, type: "port", name: "Minecraft Java", hostname: "192.0.2.51", port: 25565 },
+      null,
+      byId,
+    );
+    expect(portCfg).toMatchObject({ type: "port", hostname: "192.0.2.51", port: 25565 });
   });
 
   it("collectTagsCatalogFromRows builds unique tag catalog by name only", () => {
@@ -240,6 +246,26 @@ describe("uptime-kuma config", () => {
     expect(payload.hostname).toBe("192.0.2.2");
     expect(payload.accepted_statuscodes).toEqual(["200-299"]);
     expect(payload.conditions).toEqual([]);
+  });
+
+  it("monitorToSocketPayload builds port monitor", () => {
+    const payload = monitorToSocketPayload({
+      id: "minecraft-java",
+      name: "Minecraft Java",
+      type: "port",
+      url: null,
+      hostname: "192.0.2.51",
+      port: 25565,
+      group: "Personal",
+      tags: [],
+      interval: 20,
+      ignore_tls: false,
+      managed: true,
+      notes: null,
+    });
+    expect(payload.type).toBe("port");
+    expect(payload.hostname).toBe("192.0.2.51");
+    expect(payload.port).toBe(25565);
   });
 });
 

@@ -1,3 +1,4 @@
+import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bwGetPassword,
@@ -10,6 +11,7 @@ import {
   clearBwSessionProcessCache,
   ensureBwUnlocked,
   normalizeLoginUris,
+  quoteCmdArg,
   resolveBwCollectionId,
   resolveBwCommand,
   resolveBwExecutable,
@@ -80,6 +82,83 @@ describe("vaultwarden-cli", () => {
       },
     });
     expect(resolveBwExecutable(deps)).toBe("bw");
+  });
+
+  describe("Windows bw resolution", () => {
+    const PATH_DIR = join("C:", "tools", "bin");
+    const NPM_DIR = join("C:", "Users", "u", "AppData", "Roaming", "npm");
+    const LOCAL = join("C:", "Users", "u", "AppData", "Local");
+    const BW_JS = join(NPM_DIR, "node_modules/@bitwarden/cli/build/bw.js");
+    const BW_CMD = join(NPM_DIR, "bw.cmd");
+
+    function winDeps(/** @type {string[]} */ files, /** @type {Record<string, unknown>} */ o = {}) {
+      const deps = makeDeps({
+        ...o,
+        envVars: { Path: [PATH_DIR, NPM_DIR].join(delimiter), APPDATA: join(NPM_DIR, ".."), LOCALAPPDATA: LOCAL, ...(o.envVars ?? {}) },
+      });
+      const set = new Set(files);
+      return { ...deps, platform: "win32", existsSync: (/** @type {string} */ f) => set.has(f) };
+    }
+
+    it("prefers native bw.exe on PATH over npm bw.js / bw.cmd", () => {
+      const exe = join(PATH_DIR, "bw.exe");
+      const deps = winDeps([exe, BW_JS, BW_CMD]);
+      expect(resolveBwCommand(deps)).toEqual({ command: exe, prefixArgs: [] });
+    });
+
+    it("finds winget Links bw.exe when not on PATH", () => {
+      const exe = join(LOCAL, "Microsoft/WinGet/Links/bw.exe");
+      const deps = winDeps([exe, BW_CMD]);
+      expect(resolveBwCommand(deps).command).toBe(exe);
+    });
+
+    it("falls back to node + npm bw.js when no bw.exe exists", () => {
+      const deps = winDeps([BW_JS, BW_CMD], { responses: { [`${BW_JS} --version`]: { status: 0 } } });
+      expect(resolveBwCommand(deps)).toEqual({ command: process.execPath, prefixArgs: [BW_JS] });
+    });
+
+    it("runs a bare .cmd shim via shell with quoted args and password only in env", async () => {
+      const shim = join("C:", "Program Files", "bw", "bw.cmd");
+      const deps = winDeps([shim], {
+        envVars: { HDC_BW_EXECUTABLE: shim },
+        responses: {
+          "config server https://vault.example.test": { status: 0 },
+          "login --check": { status: 1 },
+          "login ops@example.test --passwordenv BW_PASSWORD --raw": { status: 0 },
+          "unlock --passwordenv BW_PASSWORD --raw": { status: 0, stdout: "session-cmd" },
+          [`list items --collectionid ${COLL_ID}`]: { status: 0, stdout: "[]" },
+        },
+      });
+      expect(resolveBwCommand(deps)).toEqual({ command: shim, prefixArgs: [], shell: true });
+      const session = await ensureBwUnlocked(deps, vi.fn(async () => "master pass&x"), vi.fn(async () => {}));
+      expect(session).toBe("session-cmd");
+      for (const [cmd, args, opts] of deps.spawnSync.mock.calls) {
+        expect(cmd).toBe(`"${shim}"`);
+        expect(opts.shell).toBe(true);
+        expect(args.join(" ")).not.toContain("master pass");
+      }
+      const loginCall = deps.spawnSync.mock.calls.find((c) => c[1][0] === "login" && c[1][1] === "ops@example.test");
+      expect(loginCall?.[2].env.BW_PASSWORD).toBe("master pass&x");
+    });
+
+    it("warns and auto-detects when HDC_BW_EXECUTABLE is missing", () => {
+      const exe = join(PATH_DIR, "bw.exe");
+      const deps = winDeps([exe], { envVars: { HDC_BW_EXECUTABLE: join(NPM_DIR, "missing", "bw.cmd") } });
+      expect(resolveBwCommand(deps).command).toBe(exe);
+      expect(deps._capture.warn.some((m) => m.includes("HDC_BW_EXECUTABLE not found"))).toBe(true);
+    });
+
+    it("uses a PATH bw.cmd via shell as last resort", () => {
+      const deps = winDeps([BW_CMD]);
+      expect(resolveBwCommand(deps)).toEqual({ command: BW_CMD, prefixArgs: [], shell: true });
+    });
+  });
+
+  it("quoteCmdArg quotes spaces/metacharacters and rejects unsafe characters", () => {
+    expect(quoteCmdArg("list")).toBe("list");
+    expect(quoteCmdArg("a b&c")).toBe('"a b&c"');
+    expect(() => quoteCmdArg("100%")).toThrow(/bw\.exe/);
+    expect(() => quoteCmdArg('say "hi"')).toThrow();
   });
 
   it("resolveBwOrganizationId trusts env id without list organizations", () => {
