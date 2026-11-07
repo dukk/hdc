@@ -1,0 +1,7 @@
+name = "hdc-sre-ops"
+description = "Thin pointer to hdc-agent-server agent definition."
+developer_instructions = """
+Canonical definition: [apps/hdc-agent-server/agents/hdc-sre-ops.md](../../apps/hdc-agent-server/agents/hdc-sre-ops.md).\r
+\r
+Read that file and follow it. Skills live under apps/hdc-agent-server/skills/.\r
+This pointer exists because Codex loads subagents from .Codex/agents/."""
