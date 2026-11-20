@@ -7,7 +7,11 @@ import {
   obtainMissingCertificates,
   parseCertSanOutput,
   sansMissingFromLive,
+  selectCertbotAccountId,
+  defaultAcmeDirectoryUrl,
+  acmeAccountStorageDir,
 } from "hdc/clump/services/nginx-waf/lib/letsencrypt.mjs";
+import { parseCertHaDistribute } from "hdc/clump/services/nginx-waf/lib/cert-ha.mjs";
 import {
   parseAcmeSettings,
   resolveSiteAcmeSettings,
@@ -215,5 +219,148 @@ describe("obtainMissingCertificates SAN expand", () => {
     });
     expect(result).toEqual({ obtained: ["mail.a.example"], expanded: [], skipped: [] });
     expect(exec.commands.some((c) => c.includes("certbot certonly"))).toBe(true);
+  });
+});
+
+describe("selectCertbotAccountId", () => {
+  it("prefers the account most renewal confs already use", () => {
+    expect(
+      selectCertbotAccountId(
+        ["ce15c0cf6012ece95b3c35c7a24ee1d5", "8822fb257b3e1daec6a0476e730efb74"],
+        ["8822fb257b3e1daec6a0476e730efb74", "8822fb257b3e1daec6a0476e730efb74", "ce15c0cf6012ece95b3c35c7a24ee1d5"],
+      ),
+    ).toBe("8822fb257b3e1daec6a0476e730efb74");
+  });
+
+  it("falls back to a stable existing id when no renewal conf references one", () => {
+    expect(selectCertbotAccountId(["b-acc", "a-acc"], [])).toBe("a-acc");
+  });
+
+  it("returns empty when the node has no accounts yet", () => {
+    expect(selectCertbotAccountId([], ["ignored"])).toBe("");
+  });
+});
+
+describe("defaultAcmeDirectoryUrl / acmeAccountStorageDir", () => {
+  it("maps production and custom ACME URLs to certbot account paths", () => {
+    expect(defaultAcmeDirectoryUrl(parseAcmeSettings({ provider: "lets_encrypt" }))).toBe(
+      "https://acme-v02.api.letsencrypt.org/directory",
+    );
+    expect(
+      acmeAccountStorageDir("https://acme-v02.api.letsencrypt.org/directory"),
+    ).toBe("/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory");
+    expect(
+      acmeAccountStorageDir("https://ca.hdc.dukk.org/acme/acme/directory"),
+    ).toBe("/etc/letsencrypt/accounts/ca.hdc.dukk.org/acme/acme/directory");
+  });
+});
+
+describe("buildCertonlyCommand account flag", () => {
+  it("passes --account so non-interactive certbot does not prompt when two accounts exist", () => {
+    const acme = parseAcmeSettings({ provider: "lets_encrypt" });
+    const cmd = buildCertonlyCommand({
+      acme,
+      email: "hdc@example.com",
+      certName: "home.dukk.org",
+      sans: ["home.dukk.org"],
+      accountId: "8822fb257b3e1daec6a0476e730efb74",
+    });
+    expect(cmd).toContain("--account '8822fb257b3e1daec6a0476e730efb74'");
+    expect(cmd).toContain("--non-interactive");
+  });
+});
+
+describe("obtainMissingCertificates ACME retarget", () => {
+  const groupAcme = parseAcmeSettings({ provider: "lets_encrypt", challenge: "http-01", webroot: "/var/www/letsencrypt" });
+  /** @type {any} */
+  const global = { acme: groupAcme, challenge: "http-01", webroot: "/var/www/letsencrypt", dnsZone: "hdc.example.invalid" };
+  const log = { info: () => {} };
+  const site = {
+    id: "homepage",
+    host_names: ["home.dukk.org"],
+    tls: { enabled: true, cert_name: "home.dukk.org", certificate: { provider: "lets_encrypt", challenge: "http-01" } },
+  };
+
+  /**
+   * @param {{ failCertbot?: boolean, renewalServer?: string, issuer?: string, expired?: boolean, accounts?: string[], usedAccount?: string }} opts
+   */
+  function createRetargetExec(opts = {}) {
+    /** @type {string[]} */
+    const commands = [];
+    return {
+      label: "mock",
+      commands,
+      /** @param {string} cmd */
+      run(cmd) {
+        commands.push(cmd);
+        if (cmd.includes("openssl x509") && cmd.includes("subjectAltName")) {
+          return { status: 0, stdout: "DNS:home.dukk.org", stderr: "" };
+        }
+        if (cmd.includes("openssl x509") && cmd.includes("-issuer")) {
+          return { status: 0, stdout: opts.issuer ?? "issuer=O = DUKK HDC Internal CA, CN = Intermediate", stderr: "" };
+        }
+        if (cmd.includes("openssl x509") && cmd.includes("-checkend")) {
+          return { status: opts.expired ? 1 : 0, stdout: "", stderr: "" };
+        }
+        if (cmd.startsWith("test -f /etc/letsencrypt/live/")) {
+          return { status: 0, stdout: "", stderr: "" };
+        }
+        if (cmd.includes("awk -F=") && cmd.includes("server")) {
+          return { status: 0, stdout: opts.renewalServer ?? "https://ca.hdc.dukk.org/acme/acme/directory", stderr: "" };
+        }
+        if (cmd.includes("ls -1") && cmd.includes("/etc/letsencrypt/accounts/")) {
+          return { status: 0, stdout: (opts.accounts ?? ["ce15old", "8822new"]).join("\n"), stderr: "" };
+        }
+        if (cmd.includes("for f in /etc/letsencrypt/renewal")) {
+          return { status: 0, stdout: `${opts.usedAccount ?? "8822new"}\n`, stderr: "" };
+        }
+        if (cmd.includes("certbot certonly")) {
+          if (opts.failCertbot) return { status: 1, stdout: "", stderr: "Some challenges have failed." };
+          return { status: 0, stdout: "Certificate obtained", stderr: "" };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    };
+  }
+
+  it("reissues with --force-renewal and the node's own account when the lineage is still on step-ca", () => {
+    const exec = createRetargetExec({});
+    const result = obtainMissingCertificates({
+      exec,
+      log,
+      global,
+      email: "hdc@example.com",
+      sites: [site],
+    });
+    expect(result).toEqual({ obtained: [], expanded: ["home.dukk.org"], skipped: [] });
+    const certbot = exec.commands.find((c) => c.includes("certbot certonly"));
+    expect(certbot).toContain("--force-renewal");
+    expect(certbot).not.toContain("--expand");
+    expect(certbot).toContain("--account '8822new'");
+    expect(certbot).toContain("--webroot");
+  });
+
+  it("throws when HTTP-01 for a retargeted name fails", () => {
+    const exec = createRetargetExec({ failCertbot: true });
+    expect(() =>
+      obtainMissingCertificates({
+        exec,
+        log,
+        global,
+        email: "hdc@example.com",
+        sites: [site],
+      }),
+    ).toThrow(/certificate obtain failed for: home\.dukk\.org/);
+  });
+});
+
+describe("parseCertHaDistribute", () => {
+  it("keeps named cert copy targets", () => {
+    expect(
+      parseCertHaDistribute([
+        { id: "mosquitto-a", host: "10.0.0.35", user: "root", cert_names: ["mqtt.hdc.dukk.org"] },
+        { host: "bad", cert_names: [] },
+      ]),
+    ).toEqual([{ id: "mosquitto-a", host: "10.0.0.35", user: "root", certNames: ["mqtt.hdc.dukk.org"] }]);
   });
 });
