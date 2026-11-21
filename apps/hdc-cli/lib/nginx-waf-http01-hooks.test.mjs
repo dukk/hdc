@@ -19,6 +19,7 @@ describe("HTTP-01 peer hooks", () => {
     expect(sh).toContain("'10.0.0.41'");
     expect(sh).toContain("acme-http01-put");
     expect(sh).toContain("/etc/hdc/nginx-waf-certs/id_ed25519");
+    expect(sh).toContain("UserKnownHostsFile=");
     expect(sh).toContain("for peer in");
     expect(ACME_HTTP01_AUTH_HOOK_PATH).toBe("/etc/letsencrypt/hdc-acme-auth-hook.sh");
   });

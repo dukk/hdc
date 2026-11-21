@@ -36,8 +36,12 @@ export function finishHalfConfiguredCrowdsecCommand() {
     '      chmod 755 "$POLICY"',
     "      CREATED=1",
     "    fi",
+    "    systemctl mask --runtime crowdsec.service 2>/dev/null || true",
     "    dpkg --configure crowdsec",
+    "    cfg_rc=$?",
+    "    systemctl unmask --runtime crowdsec.service 2>/dev/null || true",
     '    if [ "$CREATED" = 1 ]; then rm -f "$POLICY"; fi',
+    '    if [ "$cfg_rc" -ne 0 ]; then exit "$cfg_rc"; fi',
     "    ;;",
     "esac",
   ].join("\n");
