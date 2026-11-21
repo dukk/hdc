@@ -131,6 +131,22 @@ export async function ensureCrowdsecAgent(opts) {
       enrollKey = "";
     }
   }
+  const already = opts.exec.run(crowdsecAgentInstalledCheckCommand(), { capture: true }).status === 0;
+
+  // Finish a leftover iF/unpacked package even if enroll cannot proceed (missing token or LAPI down).
+  // Otherwise apt stays stuck and later installs (including wazuh-agent) fail.
+  if (!already) {
+    const lock = await waitForAptLock(opts.exec, opts.log);
+    if (!lock.ok) {
+      return { ok: false, skipped: false, message: lock.message };
+    }
+    const repair = opts.exec.run(finishHalfConfiguredCrowdsecCommand(), { capture: true });
+    if (repair.status !== 0) {
+      const detail = `${repair.stderr}${repair.stdout}`.trim() || `exit ${repair.status}`;
+      if (opts.log.warn) opts.log.warn(`${opts.exec.label}: CrowdSec dpkg repair failed: ${detail}`);
+    }
+  }
+
   if (!enrollKey) {
     return {
       ok: true,
@@ -139,15 +155,7 @@ export async function ensureCrowdsecAgent(opts) {
     };
   }
 
-  const already = opts.exec.run(crowdsecAgentInstalledCheckCommand(), { capture: true }).status === 0;
-
   try {
-    if (!already) {
-      const lock = await waitForAptLock(opts.exec, opts.log);
-      if (!lock.ok) {
-        return { ok: false, skipped: false, message: lock.message };
-      }
-    }
     opts.log.info(`${opts.exec.label}: ensuring CrowdSec agent → ${lapiUrl}`);
     const cmd = crowdsecAgentEnrollCommand(lapiUrl, enrollKey);
     const r = opts.exec.run(cmd, { capture: true });

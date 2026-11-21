@@ -17,7 +17,8 @@ describe("HTTP-01 peer hooks", () => {
     expect(sh).toContain('echo -n "$CERTBOT_VALIDATION" > "$WEBROOT/$CERTBOT_TOKEN"');
     expect(sh).toContain("'10.0.0.40'");
     expect(sh).toContain("'10.0.0.41'");
-    expect(sh).toContain("$HOOK_USER@$peer");
+    expect(sh).toContain("acme-http01-put");
+    expect(sh).toContain("/etc/hdc/nginx-waf-certs/id_ed25519");
     expect(sh).toContain("for peer in");
     expect(ACME_HTTP01_AUTH_HOOK_PATH).toBe("/etc/letsencrypt/hdc-acme-auth-hook.sh");
   });
@@ -27,7 +28,7 @@ describe("HTTP-01 peer hooks", () => {
     expect(sh).toContain(ACME_HTTP01_WEBROOT);
     expect(sh).toContain('rm -f "$WEBROOT/$CERTBOT_TOKEN"');
     expect(sh).toContain("'10.0.0.40'");
-    expect(sh).toContain("$HOOK_USER@$peer");
+    expect(sh).toContain("acme-http01-clear");
     expect(ACME_HTTP01_CLEANUP_HOOK_PATH).toBe("/etc/letsencrypt/hdc-acme-cleanup-hook.sh");
   });
 
