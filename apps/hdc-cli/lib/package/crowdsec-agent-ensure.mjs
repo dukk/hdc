@@ -1,4 +1,5 @@
 import { flagGet } from "./parse-argv-flags.mjs";
+import { finishHalfConfiguredCrowdsecCommand } from "./wazuh-agent-ensure.mjs";
 import { waitForAptLock } from "./apt-lock-wait.mjs";
 import {
   guestAgentBlockEnabled,
@@ -42,7 +43,7 @@ export function crowdsecAgentSkippedByFlags(flags) {
 
 /** @returns {string} */
 export function crowdsecAgentInstalledCheckCommand() {
-  return "command -v crowdsec >/dev/null 2>&1 && test -f /etc/crowdsec/config.yaml";
+  return "dpkg-query -W -f='${Status}' crowdsec 2>/dev/null | grep -qx 'install ok installed' && test -f /etc/crowdsec/config.yaml";
 }
 
 /**
@@ -55,6 +56,7 @@ export function crowdsecAgentEnrollCommand(lapiUrl, enrollKey) {
   return [
     "set -euo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
+    finishHalfConfiguredCrowdsecCommand(),
     "if ! command -v crowdsec >/dev/null 2>&1; then",
     "  curl -s https://packagecloud.io/install/repositories/crowdsec/crowdsec/script.deb.sh | bash",
     "  apt-get install -y -qq crowdsec",

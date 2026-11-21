@@ -19,7 +19,28 @@ export function wazuhAgentSkippedByFlags(flags) {
 
 /** @returns {string} */
 export function wazuhAgentInstalledCheckCommand() {
-  return "dpkg -s wazuh-agent >/dev/null 2>&1";
+  // dpkg -s succeeds for ic/rc (purged, config files left) and would skip a real install.
+  return "dpkg-query -W -f='${Status}' wazuh-agent 2>/dev/null | grep -qx 'install ok installed'";
+}
+
+/** Finish a half-configured crowdsec package without starting it, so apt can install other packages. */
+export function finishHalfConfiguredCrowdsecCommand() {
+  return [
+    "STATUS=$(dpkg-query -W -f='${Status}' crowdsec 2>/dev/null || true)",
+    'case "$STATUS" in',
+    "  *half-configured*|*unpacked*|*half-installed*)",
+    "    POLICY=/usr/sbin/policy-rc.d",
+    "    CREATED=0",
+    '    if [ ! -e "$POLICY" ]; then',
+    "      printf '#!/bin/sh\\nexit 101\\n' > \"$POLICY\"",
+    '      chmod 755 "$POLICY"',
+    "      CREATED=1",
+    "    fi",
+    "    dpkg --configure crowdsec",
+    '    if [ "$CREATED" = 1 ]; then rm -f "$POLICY"; fi',
+    "    ;;",
+    "esac",
+  ].join("\n");
 }
 
 /** @returns {string} */
@@ -54,7 +75,8 @@ export function wazuhAgentInstallCommand(managerHost, registrationPassword, agen
   const versionEnv = version ? `WAZUH_AGENT_VERSION='${version.replace(/'/g, `'\\''`)}'` : "";
   return [
     "export DEBIAN_FRONTEND=noninteractive",
-    "if ! dpkg -s wazuh-agent >/dev/null 2>&1; then",
+    finishHalfConfiguredCrowdsecCommand(),
+    "if ! " + wazuhAgentInstalledCheckCommand() + "; then",
     "  rm -f /etc/apt/sources.list.d/wazuh.list",
     "  apt-get install -y -qq ca-certificates curl gnupg",
     "  install -d -m 0755 /etc/apt/keyrings",
