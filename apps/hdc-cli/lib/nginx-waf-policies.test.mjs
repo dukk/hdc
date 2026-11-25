@@ -97,4 +97,50 @@ describe("nginx-waf-policies", () => {
     expect(plan.modsecurityProfiles.length).toBeGreaterThan(0);
     expect(plan.usesModsecurity).toBe(true);
   });
+  it("concatenates multiple rate_limit policies and collects conn_limit plus auth bearer hash", () => {
+    const site = {
+      id: "okf-mcp",
+      host_names: ["okf.lab.jdlxp.com"],
+      upstream: "http://10.0.0.26:8080",
+      policies: [
+        { type: "conn_limit", zone_name: "jdlxp_okf_conn", limit: 20 },
+      ],
+      locations: [
+        {
+          path: "/mcp",
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_mcp_ip", rate: "30r/s", burst: 60 },
+            {
+              type: "rate_limit",
+              zone_name: "jdlxp_okf_mcp_auth",
+              key_source: "auth_bearer_hash",
+              rate: "20r/s",
+              burst: 40,
+            },
+          ],
+        },
+      ],
+    };
+    const sitePlan = resolveSitePolicyPlan(site, catalog, "okf-mcp");
+    const locPlan = resolveLocationPolicyPlan(site, site.locations[0], 0, catalog, sitePlan);
+    expect(locPlan.rate_limits).toHaveLength(2);
+    expect(locPlan.rate_limits.map((r) => r.zoneName)).toEqual([
+      "jdlxp_okf_mcp_ip",
+      "jdlxp_okf_mcp_auth",
+    ]);
+    expect(locPlan.rate_limits[1].key).toBe("$hdc_auth_bearer_hash");
+    expect(locPlan.conn_limit.zoneName).toBe("jdlxp_okf_conn");
+    expect(locPlan.conn_limit.limit).toBe(20);
+
+    const plan = collectGroupPolicyPlan([site], catalog);
+    expect(plan.authBearerHash).toBe(true);
+    expect(plan.rateLimitZones.map((z) => z.zoneName).sort()).toEqual([
+      "jdlxp_okf_mcp_auth",
+      "jdlxp_okf_mcp_ip",
+    ]);
+    expect(plan.connLimitZones).toEqual([
+      expect.objectContaining({ zoneName: "jdlxp_okf_conn", limit: 20, key: "$binary_remote_addr" }),
+    ]);
+  });
+
 });

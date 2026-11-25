@@ -5,9 +5,19 @@ import {
   renderExploitPathMap,
   renderHdcNginxInclude,
   renderHdcNginxMaps,
+  renderConnLimitZones,
+  renderAuthBearerHashDirectives,
+  renderRetryAfterMap,
+  retryAfterMapForSite,
+  siteUsesRequestLimits,
+  normalizeLocationPath,
+  normalizeRetryAfterPattern,
+  escapeRegexMetaInLocationPath,
+  escapeRegexDollars,
   renderModsecurityMainConf,
   renderProxyHeaders,
   renderDefaultCatchAllVhost,
+  renderAcmeChallengeLocation,
   renderSiteUploadDirectives,
   renderSiteVhost,
   renderTrustedGeo,
@@ -19,7 +29,7 @@ import {
   tlsDomainsFromSites,
   validateTrustedCidrs,
 } from "hdc/clump/services/nginx-waf/lib/nginx-waf-render.mjs";
-import { resolveSitePolicyPlan } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
+import { collectGroupPolicyPlan, resolveSitePolicyPlan } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
 import { mergePolicyDefinitions } from "hdc/clump/services/nginx-waf/lib/nginx-waf-policies.mjs";
 
 const testPolicyCatalog = mergePolicyDefinitions(
@@ -344,6 +354,36 @@ describe("nginx-waf render", () => {
     expect(vhost).toContain("listen 443 ssl");
   });
 
+  it("peer proxies :80 ACME challenges to the cert-primary with the original Host", () => {
+    const vhost = renderWithCatalog(sampleSite, { acmeChallengeProxy: "http://10.0.0.40" });
+    const http80 = vhost.slice(vhost.indexOf("listen 80;"), vhost.indexOf("listen 443"));
+    expect(http80).toContain("location ^~ /.well-known/acme-challenge/ {\n        proxy_pass http://10.0.0.40;");
+    expect(http80).toContain("proxy_set_header Host $host;");
+    expect(http80).not.toContain("root /var/www/letsencrypt;");
+  });
+
+  it("cert-primary keeps serving the ACME webroot on :80", () => {
+    const vhost = renderWithCatalog(sampleSite);
+    const http80 = vhost.slice(vhost.indexOf("listen 80;"), vhost.indexOf("listen 443"));
+    expect(http80).toContain("root /var/www/letsencrypt;");
+    expect(http80).not.toContain("proxy_pass http://10.0.0.40");
+  });
+
+  it("default catch-all: peer proxies ACME, primary serves webroot, none by default", () => {
+    const peer = renderDefaultCatchAllVhost({ acmeChallengeProxy: "http://10.0.0.40" });
+    const http80 = peer.slice(0, peer.indexOf("listen 443"));
+    expect(http80).toContain("proxy_pass http://10.0.0.40;");
+    expect(http80).toContain("proxy_set_header Host $host;");
+    const primary = renderDefaultCatchAllVhost({ acmeWebroot: "/var/www/letsencrypt" });
+    expect(primary.slice(0, primary.indexOf("listen 443"))).toContain("root /var/www/letsencrypt;");
+    expect(renderDefaultCatchAllVhost()).not.toContain("acme-challenge");
+  });
+
+  it("renderAcmeChallengeLocation rejects non-http proxy targets", () => {
+    expect(() => renderAcmeChallengeLocation({ acmeChallengeProxy: "https://10.0.0.40/x;" })).toThrow();
+    expect(renderAcmeChallengeLocation({})).toBe("");
+  });
+
   it("renderDefaultCatchAllVhost uses default_server and static root", () => {
     const vhost = renderDefaultCatchAllVhost();
     expect(vhost).toContain("listen 80 default_server;");
@@ -383,4 +423,161 @@ describe("nginx-waf render", () => {
     expect(vhost).not.toContain("client_max_body_size");
     expect(vhost).not.toMatch(/proxy_read_timeout \d/);
   });
+  it("renders multiple limit_req zones, limit_conn, 429 Retry-After, and return locations", () => {
+    const site = {
+      id: "okf-mcp",
+      host_names: ["okf.lab.jdlxp.com"],
+      listen: [80, 443],
+      upstream: "http://10.0.0.26:8080",
+      client_ip: "cloudflare",
+      tls: { enabled: true, http_redirect: true, cert_name: "okf.lab.jdlxp.com" },
+      policies: [
+        "modsecurity-default",
+        { type: "cloudflare_origin", require_headers: true, deny_status: 403 },
+        { type: "server_tokens", enabled: false },
+        { type: "conn_limit", zone_name: "jdlxp_okf_conn", key: "$binary_remote_addr", limit: 20 },
+      ],
+      rate_limit_status: 429,
+      conn_limit_status: 429,
+      rate_limit_log_level: "warn",
+      conn_limit_log_level: "warn",
+      retry_after: {
+        default: 2,
+        paths: [{ pattern: "~*^/(auth|signin|sign-in|login|oauth|invite)", seconds: 60 }],
+      },
+      locations: [
+        {
+          path: "/mcp",
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_mcp_ip", rate: "30r/s", burst: 60, nodelay: true },
+            {
+              type: "rate_limit",
+              zone_name: "jdlxp_okf_mcp_auth",
+              key_source: "auth_bearer_hash",
+              rate: "20r/s",
+              burst: 40,
+              nodelay: true,
+            },
+          ],
+        },
+        {
+          path: "/login",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        {
+          path: "/auth",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        {
+          path: "/signin",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        {
+          path: "/sign-in",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        {
+          path: "/oauth",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        {
+          path: "/invite",
+          return: 404,
+          policies: [
+            { type: "rate_limit", zone_name: "jdlxp_okf_auth_ip", rate: "10r/m", burst: 5, nodelay: true },
+          ],
+        },
+        { path: "/", return: 404 },
+      ],
+    };
+
+    expect(siteUsesRequestLimits(site, testPolicyCatalog)).toBe(true);
+
+    const vhost = renderWithCatalog(site);
+    expect(vhost).toContain("limit_req zone=jdlxp_okf_mcp_ip burst=60 nodelay;");
+    expect(vhost).toContain("limit_req zone=jdlxp_okf_mcp_auth burst=40 nodelay;");
+    expect(vhost).toContain("limit_req zone=jdlxp_okf_auth_ip burst=5 nodelay;");
+    expect(vhost).toContain("limit_conn jdlxp_okf_conn 20;");
+    expect(vhost).toContain("error_log /var/log/nginx/error.log warn;");
+    expect(vhost).toContain("limit_req_status 429;");
+    expect(vhost).toContain("limit_conn_status 429;");
+    expect(vhost).toContain("limit_req_log_level warn;");
+    expect(vhost).toContain("limit_conn_log_level warn;");
+    expect(vhost).toContain("error_page 429 = @hdc_429_okf_mcp;");
+    expect(vhost).toContain("location @hdc_429_okf_mcp");
+    expect(vhost).toContain("add_header Retry-After $hdc_retry_after_okf_mcp always;");
+    expect(vhost).toContain('return 429');
+    expect(vhost).toContain("location /login");
+    expect(vhost).toContain("location /oauth");
+    expect(vhost).toContain("location /invite");
+    expect(vhost).toContain("try_files /__hdc_waf_absent__ =404;");
+    expect(vhost).toContain("location /mcp");
+    expect(vhost).toContain("proxy_pass http://10.0.0.26:8080");
+    expect(vhost).toContain('if ($http_cf_connecting_ip = "") { return 403; }');
+    expect(vhost).toContain("real_ip_header CF-Connecting-IP;");
+    expect(vhost).not.toMatch(/Authorization/);
+
+    const plan = collectGroupPolicyPlan([site], testPolicyCatalog);
+    expect(plan.authBearerHash).toBe(true);
+    expect(plan.connLimitZones).toEqual(
+      expect.arrayContaining([expect.objectContaining({ zoneName: "jdlxp_okf_conn", limit: 20 })]),
+    );
+    const maps = renderHdcNginxMaps({
+      websocketMapEnabled: false,
+      blockCommonExploits: false,
+      rateLimitZones: plan.rateLimitZones,
+      connLimitZones: plan.connLimitZones,
+      authBearerHash: plan.authBearerHash,
+      retryAfterMaps: [retryAfterMapForSite(site)],
+    });
+    expect(maps).toContain("limit_req_zone $binary_remote_addr zone=jdlxp_okf_mcp_ip:10m rate=30r/s;");
+    expect(maps).toContain("limit_req_zone $hdc_auth_bearer_hash zone=jdlxp_okf_mcp_auth:10m rate=20r/s;");
+    expect(maps).toContain("limit_req_zone $binary_remote_addr zone=jdlxp_okf_auth_ip:10m rate=10r/m;");
+    expect(maps).toContain("limit_conn_zone $binary_remote_addr zone=jdlxp_okf_conn:10m;");
+    expect(maps).toContain("perl_require /etc/nginx/hdc/auth_bearer_hash.pl;");
+    expect(maps).toContain("perl_set $hdc_auth_bearer_hash");
+    expect(maps).toContain("map $uri $hdc_retry_after_okf_mcp");
+    expect(maps).toContain("default 2;");
+    expect(maps).toContain("~*^/(auth|signin|sign-in|login|oauth|invite) 60;");
+    expect(maps).not.toMatch(/Authorization/);
+  });
+
+  it("normalizeLocationPath inserts a space after regex modifiers", () => {
+    expect(normalizeLocationPath("~*^/(auth|login)(/|$)")).toBe("~* ^/(auth|login)(/|$)");
+    expect(normalizeLocationPath("~* ^/login")).toBe("~* ^/login");
+    expect(normalizeLocationPath("^~/mcp")).toBe("^~ /mcp");
+    expect(normalizeLocationPath("=/exact")).toBe("= /exact");
+    expect(normalizeLocationPath("/mcp")).toBe("/mcp");
+    expect(normalizeRetryAfterPattern("~* ^/(auth|login)(/|$)")).toBe("~*^/(auth|login)(/|$)");
+    expect(normalizeRetryAfterPattern("~*^/(auth|login)(/|$)")).toBe("~*^/(auth|login)(/|$)");
+    expect(escapeRegexMetaInLocationPath("~* ^/(auth|login)(/|$)")).toBe("~* ^/(auth|login)(/|\\$)");
+    expect(escapeRegexDollars("~*^/(auth|login)(/|$)")).toBe("~*^/(auth|login)(/|\\$)");
+    expect(escapeRegexMetaInLocationPath("/mcp")).toBe("/mcp");
+  });
+
+  it("renderConnLimitZones and auth hash helpers emit expected directives", () => {
+    expect(renderConnLimitZones([{ zoneName: "jdlxp_okf_conn", key: "$binary_remote_addr" }])).toContain(
+      "limit_conn_zone $binary_remote_addr zone=jdlxp_okf_conn:10m;",
+    );
+    expect(renderAuthBearerHashDirectives()).toContain("perl_set $hdc_auth_bearer_hash");
+    expect(renderRetryAfterMap({ variable: "$hdc_retry_after_okf_mcp", defaultSeconds: 2, rules: [] })).toContain(
+      "default 2;",
+    );
+  });
+
 });
